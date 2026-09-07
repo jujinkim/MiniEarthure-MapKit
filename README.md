@@ -104,3 +104,32 @@ view contract in `spec/FORMAT.md`; generated v6 hashes remain unchanged.
 
 Renderer attachment batches contain at most 512 triangles. Materials are shared
 within each cell and released with its meshes; callers still own frame admission.
+
+## Optional occupied-volume generation
+
+Pure Rust `generate_with_occupancy(input, max_solids)` runs the same generator and
+returns `GeneratedOccupancy { chunk, solids }`. `chunk` retains the exact generated
+v6 representation and hash. The typed, in-memory sidecar is not serialized into
+packages or chunk JSON and is not yet exposed by the Godot/package adapters.
+Normal `generate(input)` does not collect solids.
+
+`OccupiedSolid` carries an object ID and either an axis-aligned integer box or a
+triangular footprint extruded from bottom to top height. Buildings reuse the exact
+roof triangulation, preserving concave notches. Asset proxies and vegetation trunks
+reuse the same centers, rotations and odd-size rounding as their collision faces.
+Full solids are retained when their horizontal AABB overlaps the cell, including
+buildings that enclose the cell without a local wall. Overlapping cells may report
+the same full solid; do not infer unique ownership from a sidecar entry.
+
+Vegetation still uses its existing center-owned generation policy. A query near a
+cell edge must include neighboring owner cells for protruding trunks. This API does
+not change or repair clipped cross-cell vegetation collision. Terrain and road,
+bridge and tunnel surfaces remain triangle geometry; callers need both triangles
+and occupied solids for clearance. Sidecars alone do not establish safe placement.
+
+The caller supplies a solid count cap (0 through 200,000); exceeding it returns
+`E_BUDGET`, never a partial success. This cap covers retained sidecar records, not
+whole generation scratch, document, triangle or allocator bytes. Callers must
+reserve those separately and hold reservations until canceled workers terminate.
+Cell assembly, memory planning, solid intersection and admission remain application
+responsibilities. Generation has no engine, filesystem, clock or network dependency.

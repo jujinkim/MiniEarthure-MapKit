@@ -662,7 +662,9 @@ pub struct GenerationInput<'a> {
 }
 mod cost;
 mod generation;
+mod occupancy;
+pub use occupancy::{GeneratedOccupancy, OccupiedSolid, SolidShape};
 mod overview;
 pub use overview::{overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource};
 pub use cost::{estimate_generation, GenerationCost};
-pub use generation::generate;
+pub use generation::{generate, generate_with_occupancy};

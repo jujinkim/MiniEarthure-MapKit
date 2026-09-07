@@ -1,11 +1,19 @@
 use super::*;
+use crate::occupancy::Occupancy;
 
 struct Builder {
     chunk: GeneratedChunk,
     bounds: Bounds,
     max: usize,
+    occupancy: Option<Occupancy>,
 }
 impl Builder {
+    fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()> {
+        if let Some(occupancy) = &mut self.occupancy {
+            occupancy.push(id, shape, &self.bounds)?;
+        }
+        Ok(())
+    }
     /// Clip collision and display geometry together. Integer interpolation fixes byte identity.
     fn triangle(
         &mut self,
@@ -98,6 +106,7 @@ impl Builder {
             min[1] + size[1] as i64,
             min[2] + size[2] as i64,
         ];
+        self.solid(id, SolidShape::Box { min, max })?;
         let v = [
             [min[0], min[1], min[2]],
             [max[0], min[1], min[2]],
@@ -181,6 +190,25 @@ fn road_contains(p: Point, r: &Road, extra: i64) -> bool {
     })
 }
 pub fn generate(input: GenerationInput<'_>) -> Result<GeneratedChunk> {
+    generate_internal(input, None).map(|result| result.chunk)
+}
+
+/// Optional occupied-volume sidecar; does not change generated v6 bytes or hashes.
+/// See `GeneratedOccupancy` for cell ownership and completeness requirements.
+pub fn generate_with_occupancy(
+    input: GenerationInput<'_>,
+    max_solids: usize,
+) -> Result<GeneratedOccupancy> {
+    if max_solids > 200_000 {
+        return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
+    }
+    generate_internal(input, Some(Occupancy { solids: Vec::new(), max: max_solids }))
+}
+
+fn generate_internal(
+    input: GenerationInput<'_>,
+    occupancy: Option<Occupancy>,
+) -> Result<GeneratedOccupancy> {
     let mut document = input.document.clone();
     document.normalize();
     document.validate()?;
@@ -195,6 +223,7 @@ pub fn generate(input: GenerationInput<'_>) -> Result<GeneratedChunk> {
         },
         bounds: bounds.clone(),
         max: input.max_triangles.min(2_000_000),
+        occupancy,
     };
     let descriptor = d.heightmaps.iter().find(|h| h.cell == input.cell);
     if descriptor.is_some() != input.heightgrid.is_some() {
@@ -273,6 +302,13 @@ pub fn generate(input: GenerationInput<'_>) -> Result<GeneratedChunk> {
     for building in &d.buildings {
         let top = building.base_cm + building.height_cm as i64;
         for t in polygon_triangles(&building.footprint)? {
+            if b.occupancy.is_some() {
+                b.solid(&building.id, SolidShape::TriangularPrism {
+                    footprint: t.map(|i| building.footprint[i]),
+                    bottom_cm: building.base_cm,
+                    top_cm: top,
+                })?;
+            }
             b.triangle(
                 t.map(|i| [building.footprint[i][0], top, building.footprint[i][1]]),
                 Surface::Concrete,
@@ -387,5 +423,8 @@ pub fn generate(input: GenerationInput<'_>) -> Result<GeneratedChunk> {
             });
         }
     }
-    Ok(b.chunk)
+    Ok(GeneratedOccupancy {
+        chunk: b.chunk,
+        solids: b.occupancy.map_or_else(Vec::new, |value| value.solids),
+    })
 }
