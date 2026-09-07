@@ -585,22 +585,29 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     })
 }
 impl Package {
-    pub fn generate(&self, cell: Cell, max_triangles: usize) -> Result<GeneratedChunk> {
-        let grid = self
-            .document
-            .heightmaps
-            .iter()
-            .find(|h| h.cell == cell)
+    fn generation_heightgrid(&self, cell: Cell) -> Result<Option<HeightGrid>> {
+        self.document.heightmaps.iter().find(|h| h.cell == cell)
             .map(|h| decode_heightmap(h, self.document.cell_size_cm, &self.files[&h.path]))
-            .transpose()?;
+            .transpose()
+    }
+    pub fn generate(&self, cell: Cell, max_triangles: usize) -> Result<GeneratedChunk> {
+        let grid = self.generation_heightgrid(cell)?;
         generate(GenerationInput {
-            document: &self.document,
-            cell,
-            heightgrid: grid.as_ref(),
-            max_triangles,
+            document: &self.document, cell, heightgrid: grid.as_ref(), max_triangles,
         })
     }
+    /// Uses the identical package terrain decoder and generator as ordinary chunks.
+    pub fn generate_with_occupancy(&self, cell: Cell, max_triangles: usize, max_solids: usize) -> Result<GeneratedOccupancy> {
+        if max_solids > MAX_OCCUPIED_SOLIDS {
+            return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
+        }
+        let grid = self.generation_heightgrid(cell)?;
+        mapkit_core::generate_with_occupancy(GenerationInput {
+            document: &self.document, cell, heightgrid: grid.as_ref(), max_triangles,
+        }, max_solids)
+    }
 }
+
 /// No overwrite: caller must choose a new output. A temporary sibling is never a valid package.
 pub fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path

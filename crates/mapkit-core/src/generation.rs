@@ -199,7 +199,7 @@ pub fn generate_with_occupancy(
     input: GenerationInput<'_>,
     max_solids: usize,
 ) -> Result<GeneratedOccupancy> {
-    if max_solids > 200_000 {
+    if max_solids > MAX_OCCUPIED_SOLIDS {
         return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
     }
     generate_internal(input, Some(Occupancy { solids: Vec::new(), max: max_solids }))

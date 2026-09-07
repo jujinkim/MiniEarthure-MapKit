@@ -29,14 +29,17 @@ impl MapKitPackedGeometry {
 }
 
 pub fn response(result: mapkit_core::Result<GeneratedChunk>) -> VarDictionary {
-    match result.and_then(pack) {
+    respond(result.and_then(pack))
+}
+pub(super) fn respond(result: mapkit_core::Result<VarDictionary>) -> VarDictionary {
+    match result {
         Ok(data) => vdict! { "ok" => true, "data" => &data },
         Err(error) => vdict! { "ok" => false, "error" => &vdict! {
             "code" => error.code.as_str(), "message" => error.message.as_str()
         } },
     }
 }
-fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
+pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
     let hash = chunk.hash()?;
     let mut vertices = Vec::with_capacity(chunk.triangles.len() * 9);
     let mut surfaces = Vec::with_capacity(chunk.triangles.len());

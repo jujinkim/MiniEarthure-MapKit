@@ -1,5 +1,7 @@
 use crate::{error, Bounds, GeneratedChunk, Point, Result, Vertex};
 
+pub const MAX_OCCUPIED_SOLIDS: usize = 200_000;
+
 /// Full (unclipped) solid primitives from the same generation operations as faces.
 /// Concave building footprints remain a union of triangular prisms, not an AABB.
 #[derive(Debug, Clone, PartialEq, Eq)]

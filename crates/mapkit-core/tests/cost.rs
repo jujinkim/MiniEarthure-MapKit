@@ -11,6 +11,12 @@ fn assert_bound(d: &MapDocument, cell: Cell, grid: Option<&HeightGrid>) {
         max_triangles: 500_000,
     })
     .unwrap();
+    let occupied = generate_with_occupancy(GenerationInput {
+        document: d, cell, heightgrid: grid, max_triangles: 500_000,
+    }, MAX_OCCUPIED_SOLIDS).unwrap();
+    assert!(occupied.solids.len() as u64 <= cost.occupied_solids, "{cell:?}");
+    assert!(occupied.solids.iter().all(|s| s.object_id.len() as u64 <= cost.max_object_id_bytes));
+    assert_eq!(chunk, occupied.chunk);
     assert!(chunk.triangles.len() as u64 <= cost.triangles, "{cell:?}");
     assert!(chunk.objects.len() as u64 <= cost.objects, "{cell:?}");
     for triangle in &chunk.triangles {

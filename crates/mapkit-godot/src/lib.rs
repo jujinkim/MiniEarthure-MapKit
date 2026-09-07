@@ -1,4 +1,5 @@
 mod packed;
+mod occupied;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
 use mapkit_package::{pack_bytes, read, read_bytes, read_project, write_new, Package};
@@ -173,6 +174,16 @@ impl MapKitBridge {
         packed::response(self.package.as_ref()
             .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
             .and_then(|p| p.generate(Cell { x, y }, 500_000)))
+    }
+    #[func]
+    fn generate_chunk_occupied_packed(&self, x: i32, y: i32, max_solids: i64) -> VarDictionary {
+        occupied::response(if !(0..=mapkit_core::MAX_OCCUPIED_SOLIDS as i64).contains(&max_solids) {
+            Err(mapkit_core::error("E_BUDGET", "invalid occupied solid allowance"))
+        } else {
+            self.package.as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| p.generate_with_occupancy(Cell { x, y }, 500_000, max_solids as usize))
+        })
     }
     #[func]
     fn generate_chunk(&self, x: i32, y: i32) -> GString {

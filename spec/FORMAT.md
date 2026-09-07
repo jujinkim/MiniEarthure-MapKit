@@ -101,3 +101,33 @@ between collision and presentation. `godot/chunk_data.gd` obtains and reads view
 the common renderer also accepts the existing JSON form for editor callers.
 This view is an engine adapter, not a new package or generated hash contract.
 Generated hashing streams canonical members without retaining a whole JSON tree.
+
+## Optional native occupied-volume view v1
+
+This is an in-memory Godot adapter contract, outside `.memap` and generated v6
+serialization/hash. `generate_chunk_occupied_packed(x, y, max_solids)` returns the
+normal `{ok,data}` envelope. `data` contains `chunk`, `generated_sha256` and an
+immutable `MapKitPackedOccupancy` RefCounted owner. `occupancy.view()` returns:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `occupancy_version` | int | Exactly 1 |
+| `shape_kinds` | PackedByteArray | One tag per solid: 0 box, 1 triangular prism |
+| `shape_values_cm` | PackedInt64Array | Exactly eight integers per solid |
+| `object_indices` | PackedInt32Array | One valid index into object_ids per solid |
+| `object_ids` | PackedStringArray | Stable source/generated object IDs |
+
+Box record: `[min_x,min_height,min_y,max_x,max_height,max_y,0,0]`.
+Prism record: `[x0,y0,x1,y1,x2,y2,bottom_height,top_height]`.
+Units are exact local centimeters. Boxes/prisms are full, unclipped volumes;
+prism winding does not change occupancy. Concave buildings are unions of prisms.
+Unknown versions/tags, nonzero reserved fields, malformed lengths/indices and
+invalid extents must be rejected. Consumer views have separate COW array wrappers.
+A shape tag describes geometry, not ownership or spawnability.
+
+The generation allowance is 0 through `MAX_OCCUPIED_SOLIDS` (200000); limits fail
+without partial output. `estimate_chunk.occupied_solids` bounds optional records
+before generation, independent of its triangle cap. Application reservations must
+include original geometry, sidecar, temporary packing arrays and retained native
+arrays; the count API alone does not enforce memory limits. Tree-owner neighbor
+queries, full target-cell assembly and collision readiness are caller obligations.

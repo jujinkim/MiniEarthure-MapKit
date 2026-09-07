@@ -64,6 +64,27 @@ func _initialize() -> void:
     altered[0] += 999
     check(c.geometry.view().vertices_cm[0] == original, "native owner isolates mutations in consumer views")
     check(not bridge.generate_chunk_packed(-1, 0).ok, "packed generation rejects invalid cell")
+    var occupied: Dictionary = bridge.generate_chunk_occupied_packed(0, 0, 2)
+    check(occupied.ok and occupied.data.generated_sha256 == first.data.generated_sha256, "occupied package generation preserves world hash")
+    var solids: Dictionary = occupied.data.occupancy.view()
+    check(solids.occupancy_version == 1 and solids.shape_kinds == PackedByteArray([1, 1]), "building remains two triangular prisms")
+    check(solids.shape_values_cm is PackedInt64Array and solids.shape_values_cm.size() == 16, "fixed eight-integer solid records")
+    check(estimate.data.occupied_solids >= solids.shape_kinds.size(), "native occupancy planning bounds sidecar count")
+    check(solids.object_ids[solids.object_indices[0]] == "building-1", "occupied object identity")
+    var changed_solids: PackedInt64Array = solids.shape_values_cm
+    var original_solid: int = changed_solids[0]
+    changed_solids[0] += 77
+    check(occupied.data.occupancy.view().shape_values_cm[0] == original_solid, "occupied owner isolates consumer mutation")
+    check(not bridge.generate_chunk_occupied_packed(0, 0, 1).ok, "solid count limit fails without partial output")
+    check(not bridge.generate_chunk_occupied_packed(0, 0, -1).ok and not bridge.generate_chunk_occupied_packed(0, 0, 200001).ok, "invalid allowances rejected")
+    check(not bridge.generate_chunk_occupied_packed(-1, 0, 2).ok, "occupied path rejects invalid cell")
+    var orchard: Dictionary = bridge.generate_chunk_occupied_packed(1, 1, 1000)
+    check(orchard.ok, "occupied orchard generation")
+    var trunks: Dictionary = orchard.data.occupancy.view()
+    check(trunks.shape_kinds.size() > 0, "orchard solid fixture is nonempty")
+    for i in trunks.shape_kinds.size():
+        check(trunks.shape_kinds[i] == 0 and trunks.shape_values_cm[i * 8 + 6] == 0 and trunks.shape_values_cm[i * 8 + 7] == 0, "box tag and reserved zero fields")
+        check(trunks.shape_values_cm[i * 8 + 4] - trunks.shape_values_cm[i * 8 + 1] == 400, "trunk full height preserved")
     var window: Dictionary = JSON.parse_string(bridge.cell_window(102400, 102400))
     check(window.ok and window.data.cells.size() == 4, "map-edge 3x3 contains existing cells only")
     check(window.data.cell.x == 1 and window.data.cell.y == 1, "maximum edge belongs to last cell")

@@ -7,6 +7,8 @@ use super::*;
 pub struct GenerationCost {
     pub triangles: u64,
     pub objects: u64,
+    /// Upper bound for optional occupied-volume records, independent of face clipping.
+    pub occupied_solids: u64,
     pub height_samples: u64,
     pub max_object_id_bytes: u64,
 }
@@ -50,6 +52,7 @@ pub fn estimate_generation(
     let mut cost = GenerationCost {
         triangles: 0,
         objects: 0,
+        occupied_solids: 0,
         height_samples: if descriptor.is_some() { side * side } else { 0 },
         max_object_id_bytes: 7,
     };
@@ -81,6 +84,9 @@ pub fn estimate_generation(
     for building in &d.buildings {
         let shape = bounds(building.footprint.iter().copied(), 0);
         let n = building.footprint.len() as u64;
+        if clip_factor(&shape, &area) != 0 {
+            cost.occupied_solids = cost.occupied_solids.saturating_add(n - 2);
+        }
         add(
             (n - 2 + 2 * n) * clip_factor(&shape, &area),
             building.id.len(),
@@ -111,6 +117,7 @@ pub fn estimate_generation(
         // exceed this even when the domain bounds span many cells.
         candidates = candidates.min(300_000);
         cost.objects = cost.objects.saturating_add(candidates);
+        cost.occupied_solids = cost.occupied_solids.saturating_add(candidates);
         add(candidates.saturating_mul(12 * 5), zone.id.len() + 42);
     }
     for placement in &d.placements {
@@ -138,6 +145,9 @@ pub fn estimate_generation(
                     center[1] - half[1] + size[2] as i64,
                 ],
             };
+            if clip_factor(&shape, &area) != 0 {
+                cost.occupied_solids = cost.occupied_solids.saturating_add(1);
+            }
             add(12 * clip_factor(&shape, &area), placement.id.len());
         }
         if d.cell_at([placement.position[0], placement.position[2]]) == Some(cell) {
