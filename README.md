@@ -23,7 +23,7 @@ document, then pack the directory to another destination. `examples/minimal` is
 an original synthetic fixture from an unknown third-party producer, including
 crossing ground/bridge surfaces and an orchard. No external data or game assets.
 
-Godot 4.7.1 integration: mount this repository at `addons/mapkit`, build
+Godot 4.7.1 integration: mount this repository at `addons/mapkit` or a nested addon path, build
 `cargo build --locked -p mapkit-godot`, then import the consuming Godot project.
 Native Windows uses its own Rust build; Android requires the Android Rust target
 and toolchain. Host code must not load `godot/chunk_renderer.gd`.
@@ -35,3 +35,9 @@ separate from collision registration, which belongs to the game.
 See [format specification](spec/FORMAT.md), generated JSON Schemas in `spec/`, and
 [test cases](crates/mapkit-package/tests/package_contract.rs). API exports use
 explicit typed boundaries; JSON is restricted to adapters. No CI/CD is included.
+
+Native library paths are relative to `mapkit.gdextension`, so the same addon also
+works nested inside another runtime. `MapKitBridge.open_package_bytes` accepts
+an already acquired package snapshot; the application owns transfer, cache and
+snapshot lifetimes. `cell_window` supplies validated local cell topology and
+scale/contracts without requiring the application to copy generator constants.

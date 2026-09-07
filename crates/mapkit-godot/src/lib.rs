@@ -70,6 +70,40 @@ impl MapKitBridge {
             info
         }))
     }
+    /// The caller owns transfer/cache/session snapshot policy. MapKit only validates bytes.
+    #[func]
+    fn open_package_bytes(&mut self, bytes: PackedByteArray) -> GString {
+        self.package = None;
+        response(read_bytes(bytes.as_slice()).map(|p| {
+            let info = serde_json::to_value(&p.inspection).unwrap();
+            self.package = Some(p);
+            info
+        }))
+    }
+    /// Map topology is owned by MapKit; callers never reimplement cell-index constants.
+    #[func]
+    fn cell_window(&self, x_cm: i64, y_cm: i64) -> GString {
+        response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| {
+                    let cell = p
+                        .document
+                        .cell_at([x_cm, y_cm])
+                        .ok_or_else(|| mapkit_core::error("E_CELL", "position outside map"))?;
+                    Ok(serde_json::json!({
+                        "cell": cell, "cells": p.document.window([x_cm, y_cm]),
+                        "bounds": p.document.bounds, "cell_bounds": p.document.cell_bounds(cell)?,
+                        "cell_size_cm": p.document.cell_size_cm,
+                        "world_scale": mapkit_core::WORLD_SCALE,
+                        "package_format_version": mapkit_core::PACKAGE_VERSION,
+                        "recipe_version": mapkit_core::RECIPE_VERSION,
+                        "generated_format_version": mapkit_core::GENERATED_VERSION,
+                    }))
+                }),
+        )
+    }
     #[func]
     fn open_project(&mut self, path: GString) -> GString {
         self.package = None;
