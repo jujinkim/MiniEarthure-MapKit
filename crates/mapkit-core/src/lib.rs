@@ -623,5 +623,7 @@ pub struct GenerationInput<'a> {
 }
 mod cost;
 mod generation;
+mod overview;
+pub use overview::{overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource};
 pub use cost::{estimate_generation, GenerationCost};
 pub use generation::generate;

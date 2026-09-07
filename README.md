@@ -82,3 +82,18 @@ conservative policy inputs, not allocator/RSS measurements. Validation retains o
 four edges per decoded heightmap instead of every full grid. Payload reads are capped
 at the declared uncompressed size plus one byte, rejecting mismatches. Full payload
 hash checks still run; lazy file-backed payload access remains future work.
+
+## Compact map overview
+
+Pure core `overview(document)` exposes a borrowed `MapOverview` v1 containing map
+ID/bounds, road ID/kind/centerlines, building ID/footprints, source/license labels
+and a custom-asset flag. It preserves selection geometry without copying terrain,
+asset metadata, procedural zones or editor provenance. Full data and license notices
+remain in the original document/package. Entries sort by stable IDs/labels.
+
+`MapOverview.cost()` counts escaped JSON bytes, points, records and text bytes
+without retaining JSON output. `to_json(max_bytes)` rejects before serialization
+when the JSON body exceeds its allowance. Native Godot exposes `overview_cost()`
+and `overview_json(max_json_bytes)`; the adapter adds a small response envelope.
+Application owners combine these counts with package residency and their own
+container/rendering overhead. This replaces neither generation nor world hashes.

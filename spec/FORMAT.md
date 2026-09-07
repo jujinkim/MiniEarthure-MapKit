@@ -75,3 +75,13 @@ E_JSON, E_DOCUMENT, E_VERSION, E_ID, E_GEOMETRY, E_PATH, E_REFERENCE, E_HASH,
 E_ZIP, E_MANIFEST, E_HEIGHTMAP, E_SEAM, E_ASSET, E_LIMIT, E_BUDGET, E_CELL,
 E_SPAWN, E_RELEASE, E_IO, E_STATE and E_USAGE. No partially validated package is
 reported as accepted. `pack` and `unpack` never overwrite existing destinations.
+
+### Read-only overview API (version 1)
+
+`MapOverview` is an optional derived read API, not a package entry or editable
+source. Fields are `version`, `map_id`, `bounds`, `roads` (`id`, `kind`, `points`),
+`buildings` (`id`, `footprint`), `attributions` (`source`, `license`) and
+`has_custom_assets`. Coordinates retain the document's integer-centimetre axes.
+The original package remains authoritative for provenance, complete attribution
+notices, asset descriptors and all generation data. Overview output cannot be used
+as a replacement MapDocument or change `world_content_hash`.

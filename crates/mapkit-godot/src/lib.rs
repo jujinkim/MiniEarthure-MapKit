@@ -132,6 +132,23 @@ impl MapKitBridge {
         )
     }
     #[func]
+    fn overview_cost(&self) -> GString {
+        response(self.package.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .and_then(|p| mapkit_core::overview(&p.document)?.cost())
+            .map(|cost| serde_json::json!(cost)))
+    }
+    #[func]
+    fn overview_json(&self, max_json_bytes: i64) -> GString {
+        let result = self.package.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .and_then(|p| mapkit_core::overview(&p.document)?.to_json(max_json_bytes.max(0) as u64));
+        match result {
+            Ok(body) => GString::from(format!("{{\"ok\":true,\"data\":{body}}}").as_str()),
+            Err(error) => response(Err(error)),
+        }
+    }
+    #[func]
     fn document_json(&self) -> GString {
         response(
             self.package
