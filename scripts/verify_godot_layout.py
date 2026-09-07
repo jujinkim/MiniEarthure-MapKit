@@ -46,12 +46,14 @@ func _initialize() -> void:
     check(estimate.data.triangles >= first.data.chunk.triangles.size() and estimate.data.objects >= first.data.chunk.objects.size(), "estimated output bounds actual geometry")
     var packed: Dictionary = bridge.generate_chunk_packed(0, 0)
     check(packed.ok and packed.data.generated_sha256 == first.data.generated_sha256, "packed view preserves generated hash")
+    var data = load("res://addons/outer_runtime/mapkit/chunk_data.gd")
     var c: Dictionary = packed.data.chunk
     check(c.packed_version == 1 and not c.has("triangles"), "no per-triangle Dictionary allocation")
     c.merge(c.geometry.view())
     check(c.vertices_cm is PackedInt64Array and c.vertices_cm.size() == first.data.chunk.triangles.size() * 9, "exact packed coordinates")
     for i in first.data.chunk.triangles.size():
         var t: Dictionary = first.data.chunk.triangles[i]
+        check(data.object_id(c, i) == t.object_id and data.object_id(first.data.chunk, i) == t.object_id, "public triangle identity adapter matches packed and JSON paths")
         check(["asphalt", "concrete", "dirt", "gravel", "grass"][c.surface_indices[i]] == t.surface, "surface preserved")
         check(c.object_ids[c.object_indices[i]] == t.object_id and bool(c.spawnable[i]) == t.spawnable, "triangle identity and spawnability preserved")
         for v in 3:
