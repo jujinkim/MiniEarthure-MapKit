@@ -117,7 +117,7 @@ func run() -> void:
     while not RENDERER.advance(shared): pass
     assert(shared.root.get_child_count() == 3 and shared.materials.is_empty())
     var material_id: int = shared.root.get_child(0).material_override.get_instance_id()
-    var material_ref := weakref(shared.root.get_child(0).material_override)
+    var material_ref: WeakRef = weakref(shared.root.get_child(0).material_override)
     for mesh in shared.root.get_children(): assert(mesh.material_override.get_instance_id() == material_id)
     RENDERER.cancel(shared)
     await process_frame
