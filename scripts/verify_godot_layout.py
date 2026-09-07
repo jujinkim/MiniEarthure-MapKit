@@ -26,8 +26,12 @@ func _initialize() -> void:
     if not opened.ok:
         quit(1)
         return
+    var estimate: Dictionary = JSON.parse_string(bridge.estimate_chunk(0, 0))
+    check(estimate.ok, "estimate without materializing a chunk")
+    check(not JSON.parse_string(bridge.estimate_chunk(-1, 0)).ok, "estimate rejects outside cell")
     var first: Dictionary = JSON.parse_string(bridge.generate_chunk(0, 0))
     check(first.ok, "generate initial chunk")
+    check(estimate.data.triangles >= first.data.chunk.triangles.size() and estimate.data.objects >= first.data.chunk.objects.size(), "estimated output bounds actual geometry")
     var window: Dictionary = JSON.parse_string(bridge.cell_window(102400, 102400))
     check(window.ok and window.data.cells.size() == 4, "map-edge 3x3 contains existing cells only")
     check(window.data.cell.x == 1 and window.data.cell.y == 1, "maximum edge belongs to last cell")

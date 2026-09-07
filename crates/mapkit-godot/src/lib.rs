@@ -128,6 +128,15 @@ impl MapKitBridge {
         )
     }
     #[func]
+    fn estimate_chunk(&self, x: i32, y: i32) -> GString {
+        response(
+            self.package.as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| mapkit_core::estimate_generation(&p.document, Cell { x, y }, 500_000))
+                .map(|cost| serde_json::json!(cost))
+        )
+    }
+    #[func]
     fn generate_chunk(&self, x: i32, y: i32) -> GString {
         response(
             self.package

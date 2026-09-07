@@ -621,5 +621,7 @@ pub struct GenerationInput<'a> {
     pub heightgrid: Option<&'a HeightGrid>,
     pub max_triangles: usize,
 }
+mod cost;
 mod generation;
+pub use cost::{estimate_generation, GenerationCost};
 pub use generation::generate;
