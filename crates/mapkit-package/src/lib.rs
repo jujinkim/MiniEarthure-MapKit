@@ -16,6 +16,8 @@ pub const MAX_ENTRY_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILES: usize = 8192;
+mod read_cost;
+pub use read_cost::{inspect_read_cost, ReadCost};
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -53,6 +55,8 @@ pub struct Inspection {
     pub base_data_bytes: u64,
     pub user_asset_bytes: u64,
     pub cell_count: usize,
+    pub retained_memory_bytes: u64,
+    pub validation_peak_bytes: u64,
 }
 pub struct Package {
     pub manifest: PackageManifest,
@@ -257,11 +261,21 @@ pub fn decode_heightmap(h: &Heightmap, cell_size: u32, bytes: &[u8]) -> Result<H
     })
 }
 fn validate_heightmaps(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
-    let grids: BTreeMap<_, _> = d
-        .heightmaps
-        .iter()
-        .map(|h| decode_heightmap(h, d.cell_size_cm, &files[&h.path]).map(|g| (h.cell, (h, g))))
-        .collect::<Result<_>>()?;
+    // Keep only seams, rather than every decoded map-sized grid at once.
+    // Direction order: west, east, south, north (local y grows north).
+    let mut grids = BTreeMap::new();
+    for h in &d.heightmaps {
+        let g = decode_heightmap(h, d.cell_size_cm, &files[&h.path])?;
+        let edges: [Vec<i64>; 4] = [
+            (0..g.side).map(|i| g.heights_cm[i * g.side]).collect(),
+            (0..g.side)
+                .map(|i| g.heights_cm[i * g.side + g.side - 1])
+                .collect(),
+            g.heights_cm[..g.side].to_vec(),
+            g.heights_cm[(g.side - 1) * g.side..].to_vec(),
+        ];
+        grids.insert(h.cell, (h, edges));
+    }
     for c in d.cells() {
         for n in [Cell { x: c.x + 1, y: c.y }, Cell { x: c.x, y: c.y + 1 }] {
             if !d.has_cell(n) {
@@ -284,16 +298,16 @@ fn validate_heightmaps(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Re
             for i in 0..count {
                 let av = a.map_or(d.terrain_base_cm, |(_, g)| {
                     if c.x != n.x {
-                        g.heights_cm[i * g.side + g.side - 1]
+                        g[1][i]
                     } else {
-                        g.heights_cm[(g.side - 1) * g.side + i]
+                        g[3][i]
                     }
                 });
                 let bv = b.map_or(d.terrain_base_cm, |(_, g)| {
                     if c.x != n.x {
-                        g.heights_cm[i * g.side]
+                        g[0][i]
                     } else {
-                        g.heights_cm[i]
+                        g[2][i]
                     }
                 });
                 if av != bv {
@@ -414,6 +428,25 @@ pub fn read(path: &Path) -> Result<Package> {
     read_bytes(&bounded_read(path, MAX_PACKAGE_BYTES)?)
 }
 pub fn read_bytes(bytes: &[u8]) -> Result<Package> {
+    read_bytes_with_budget(bytes, u64::MAX)
+}
+/// Reject conservative validation working-set estimates before inflating payloads.
+/// This policy limit supplements, and never relaxes, the format's hard limits.
+pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package> {
+    // Bound central-directory setup too, before ZipArchive allocates its index.
+    if bytes.len() as u64 * 4 + 8 * 1024 * 1024 > memory_limit {
+        return Err(error(
+            "E_MEMORY_BUDGET",
+            "package index exceeds memory allowance",
+        ));
+    }
+    let cost = inspect_read_cost(bytes)?;
+    if cost.validation_peak_bytes > memory_limit {
+        return Err(error(
+            "E_MEMORY_BUDGET",
+            "package validation exceeds memory allowance",
+        ));
+    }
     if bytes.len() as u64 > MAX_PACKAGE_BYTES {
         return Err(error("E_LIMIT", "compressed package exceeds profile"));
     }
@@ -467,7 +500,7 @@ pub fn read_bytes(bytes: &[u8]) -> Result<Package> {
         let expected = entry.size();
         let mut data = vec![];
         (&mut entry)
-            .take(limit + 1)
+            .take(expected + 1)
             .read_to_end(&mut data)
             .map_err(zip_error)?;
         if data.len() as u64 != expected || data.len() as u64 > limit {
@@ -541,6 +574,8 @@ pub fn read_bytes(bytes: &[u8]) -> Result<Package> {
         base_data_bytes: total - user_asset_bytes,
         user_asset_bytes,
         cell_count: document.cells().len(),
+        retained_memory_bytes: cost.retained_memory_bytes,
+        validation_peak_bytes: cost.validation_peak_bytes,
     };
     Ok(Package {
         manifest,

@@ -65,3 +65,20 @@ account separately for package/document residency, generator scratch work, JSON 
 Godot containers, collision, renderer buffers and assets. It must keep reservations
 until canceled workers and attachment resources have actually released ownership.
 The current cost API does not by itself enforce a session memory limit.
+
+## Package validation memory policy
+
+`inspect_read_cost(bytes)` reads ZIP metadata without inflating payloads and returns
+conservative retained/validation-peak byte estimates. `read_bytes_with_budget(bytes,
+limit)` checks the index and full validation allowance before inflation. Godot exposes
+`open_package_bytes_budgeted(bytes, limit)`; failed opens clear the previous package.
+Inspection results include `retained_memory_bytes` and `validation_peak_bytes` so
+application owners can combine package residency with cell-work reservations.
+
+The existing unbudgeted API preserves the public format profile; applications opt
+into a smaller working-set allowance. Estimates include payload vectors, structured
+JSON/GLB processing, metadata, bounded image decoding and terrain seams. They are
+conservative policy inputs, not allocator/RSS measurements. Validation retains only
+four edges per decoded heightmap instead of every full grid. Payload reads are capped
+at the declared uncompressed size plus one byte, rejecting mismatches. Full payload
+hash checks still run; lazy file-backed payload access remains future work.

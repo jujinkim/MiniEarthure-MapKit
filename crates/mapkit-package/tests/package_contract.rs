@@ -296,3 +296,98 @@ fn external_asset_uri_is_rejected() {
         "E_ASSET"
     );
 }
+
+#[test]
+fn validation_budget_rejects_before_inflating_payloads() {
+    let bytes = package(document());
+    let cost = inspect_read_cost(&bytes).unwrap();
+    let accepted = read_bytes_with_budget(&bytes, cost.validation_peak_bytes).unwrap();
+    assert_eq!(
+        accepted.inspection.retained_memory_bytes,
+        cost.retained_memory_bytes
+    );
+    assert_eq!(
+        accepted.inspection.world_content_hash,
+        read_bytes(&bytes).unwrap().inspection.world_content_hash
+    );
+    assert_eq!(
+        read_bytes_with_budget(&bytes, cost.validation_peak_bytes - 1)
+            .err()
+            .unwrap()
+            .code,
+        "E_MEMORY_BUDGET"
+    );
+    let mut corrupt = bytes.clone();
+    let position = {
+        let mut zip = zip::ZipArchive::new(Cursor::new(&bytes)).unwrap();
+        let entry = zip.by_index(1).unwrap();
+        entry.data_start() as usize
+    };
+    corrupt[position] ^= 0xff;
+    assert_eq!(inspect_read_cost(&corrupt).unwrap(), cost);
+    assert_eq!(
+        read_bytes_with_budget(&corrupt, cost.validation_peak_bytes - 1)
+            .err()
+            .unwrap()
+            .code,
+        "E_MEMORY_BUDGET"
+    );
+    assert_ne!(
+        read_bytes_with_budget(&corrupt, cost.validation_peak_bytes)
+            .err()
+            .unwrap()
+            .code,
+        "E_MEMORY_BUDGET"
+    );
+}
+
+fn slope_png(cell_x: usize, cell_y: usize, break_west: bool) -> Vec<u8> {
+    let mut bytes = vec![];
+    let mut samples = Vec::new();
+    for y in 0..257 {
+        for x in 0..257 {
+            let height = (cell_x * 256
+                + x
+                + cell_y * 256
+                + y
+                + usize::from(break_west && x == 0 && y == 127)) as u16;
+            samples.extend_from_slice(&height.to_be_bytes());
+        }
+    }
+    {
+        let mut encoder = png::Encoder::new(&mut bytes, 257, 257);
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::Sixteen);
+        encoder
+            .write_header()
+            .unwrap()
+            .write_image_data(&samples)
+            .unwrap();
+    }
+    bytes
+}
+#[test]
+fn boundary_only_validation_preserves_both_seam_directions() {
+    let mut d = document();
+    let mut files = BTreeMap::new();
+    for y in 0..2 {
+        for x in 0..2 {
+            let path = format!("terrain/{x}-{y}.png");
+            d.heightmaps.push(Heightmap {
+                cell: Cell { x, y },
+                path: path.clone(),
+                spacing_cm: 200,
+                offset_cm: 0,
+                step_cm: 1,
+                source_accuracy_cm: None,
+            });
+            files.insert(path, slope_png(x as usize, y as usize, false));
+        }
+    }
+    d.heightmaps.reverse();
+    let bytes = pack_bytes(d.clone(), files.clone()).unwrap();
+    let cost = inspect_read_cost(&bytes).unwrap();
+    assert!(read_bytes_with_budget(&bytes, cost.validation_peak_bytes).is_ok());
+    files.insert("terrain/1-0.png".into(), slope_png(1, 0, true));
+    assert_eq!(pack_bytes(d, files).err().unwrap().code, "E_SEAM");
+}

@@ -70,6 +70,19 @@ impl MapKitBridge {
             info
         }))
     }
+    /// Caller-supplied validation allowance, checked before payload inflation.
+    #[func]
+    fn open_package_bytes_budgeted(&mut self, bytes: PackedByteArray, memory_limit: i64) -> GString {
+        self.package = None;
+        if memory_limit <= 0 {
+            return response(Err(mapkit_core::error("E_MEMORY_BUDGET", "positive memory allowance required")));
+        }
+        response(mapkit_package::read_bytes_with_budget(bytes.as_slice(), memory_limit as u64).map(|p| {
+            let info = serde_json::to_value(&p.inspection).unwrap();
+            self.package = Some(p);
+            info
+        }))
+    }
     /// The caller owns transfer/cache/session snapshot policy. MapKit only validates bytes.
     #[func]
     fn open_package_bytes(&mut self, bytes: PackedByteArray) -> GString {

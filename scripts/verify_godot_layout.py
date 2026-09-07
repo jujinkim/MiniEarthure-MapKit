@@ -26,6 +26,12 @@ func _initialize() -> void:
     if not opened.ok:
         quit(1)
         return
+    var peak: int = int(opened.data.validation_peak_bytes)
+    check(opened.data.retained_memory_bytes > 0 and peak >= opened.data.retained_memory_bytes, "inspection exposes working-set estimates")
+    var rejected: Dictionary = JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak - 1))
+    check(not rejected.ok and rejected.error.code == "E_MEMORY_BUDGET", "native validation memory gate")
+    check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "budget failure clears prior package")
+    check(JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak)).ok, "native budgeted retry")
     var estimate: Dictionary = JSON.parse_string(bridge.estimate_chunk(0, 0))
     check(estimate.ok, "estimate without materializing a chunk")
     check(not JSON.parse_string(bridge.estimate_chunk(-1, 0)).ok, "estimate rejects outside cell")
