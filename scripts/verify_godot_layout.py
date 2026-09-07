@@ -35,6 +35,9 @@ func _initialize() -> void:
     check(window.data.generated_format_version == 6, "public generated contract")
     var outside: Dictionary = JSON.parse_string(bridge.cell_window(-1, 0))
     check(not outside.ok and outside.error.code == "E_CELL", "outside-map request rejected")
+    var options: Dictionary = JSON.parse_string(bridge.spawn_options(25600, 25600))
+    check(options.ok and options.data.surfaces.size() == 3, "ground, bridge and terrain options at crossing")
+    check(options.data.surfaces.all(func(item): return item.surface_id != "building-1"), "roofs never become automatic spawn surfaces")
     bytes.fill(0)
     var source := FileAccess.open("res://fixture.memap", FileAccess.WRITE)
     source.store_buffer(bytes)
@@ -45,6 +48,38 @@ func _initialize() -> void:
     check(not JSON.parse_string(corrupt.open_package_bytes(bytes)).ok, "corrupt acquired bytes rejected")
     print("mapkit_nested_binding: " + ("PASS" if failures.is_empty() else str(failures)))
     quit(0 if failures.is_empty() else 1)
+'''
+
+
+RENDER_PROBE = '''extends SceneTree
+const RENDERER = preload("res://addons/outer_runtime/mapkit/chunk_renderer.gd")
+func _initialize() -> void:
+    run.call_deferred()
+func run() -> void:
+    var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
+    assert(JSON.parse_string(bridge.open_package(ProjectSettings.globalize_path("res://fixture.memap"))).ok)
+    var generated: Dictionary = JSON.parse_string(bridge.generate_chunk(1, 1))
+    var parent := Node3D.new()
+    root.add_child(parent)
+    var job := RENDERER.begin(generated.data.chunk, parent)
+    var steps := 0
+    while not job.done:
+        var before := int(job.triangle)
+        RENDERER.advance(job)
+        if int(job.triangle) > before:
+            assert(int(job.triangle) - before <= 128)
+        steps += 1
+    assert(steps > 2 and job.root.get_child_count() > 0)
+    RENDERER.cancel(job)
+    assert(RENDERER.advance(job) and parent.get_child_count() == 0)
+    var cancelled := RENDERER.begin(generated.data.chunk, parent)
+    RENDERER.advance(cancelled)
+    RENDERER.cancel(cancelled)
+    assert(RENDERER.advance(cancelled) and parent.get_child_count() == 0)
+    parent.queue_free()
+    await process_frame
+    print("mapkit_incremental_renderer: PASS")
+    quit(0)
 '''
 
 
@@ -65,8 +100,11 @@ def main():
         shutil.copyfile(built_library, addon / 'target/debug' / library)
         (project / 'project.godot').write_text('config_version=5\n[application]\nconfig/name="MapKit Nested Probe"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
         (project / 'probe.gd').write_text(PROBE)
+        (project / 'renderer_probe.gd').write_text(RENDER_PROBE)
+        shutil.copyfile(ROOT / 'godot/chunk_renderer.gd', addon / 'chunk_renderer.gd')
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
         subprocess.run([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], check=True, timeout=60)
+        subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://renderer_probe.gd'], check=True, timeout=30)
         subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://probe.gd'], check=True, timeout=30)
 
 

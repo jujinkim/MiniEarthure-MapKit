@@ -41,3 +41,11 @@ works nested inside another runtime. `MapKitBridge.open_package_bytes` accepts
 an already acquired package snapshot; the application owns transfer, cache and
 snapshot lifetimes. `cell_window` supplies validated local cell topology and
 scale/contracts without requiring the application to copy generator constants.
+
+`MapKitBridge.spawn_options(x_cm, y_cm)` returns only valid spawnable surfaces at
+the chosen point, including separate bridge/ground heights and excluding roofs.
+The shared renderer supports `begin(chunk, parent)`, `advance(job)` and `cancel(job)`.
+One advance attaches at most 128 triangles or eight tree canopies; callers own
+scheduling/time budgets. `attach` remains a synchronous convenience using the same
+renderer. The native-layout probe also tests renderer batching/cancellation in a
+separate renderer process, without any private game dependency.
