@@ -1,5 +1,6 @@
 extends RefCounted
 ## Display only. Call advance() per admitted batch; the owner controls frame budgets.
+const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
 const TRIANGLES_PER_BATCH := 128
@@ -11,7 +12,7 @@ static func begin(chunk: Dictionary, parent: Node3D) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	return {"root": root, "chunk": chunk, "triangle": 0, "object": 0, "done": false, "cancelled": false}
+	return {"root": root, "chunk": DATA.view(chunk), "triangle": 0, "object": 0, "done": false, "cancelled": false}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled:
@@ -22,14 +23,14 @@ static func advance(job: Dictionary) -> bool:
 		return true
 	var chunk: Dictionary = job.chunk
 	var offset := int(job.triangle)
-	if offset < chunk.triangles.size():
-		var key := str(chunk.triangles[offset].surface)
+	if offset < DATA.count(chunk):
+		var key := DATA.surface(chunk, offset)
 		var surface := SurfaceTool.new()
 		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-		var end := mini(offset + TRIANGLES_PER_BATCH, chunk.triangles.size())
-		while offset < end and str(chunk.triangles[offset].surface) == key:
+		var end := mini(offset + TRIANGLES_PER_BATCH, DATA.count(chunk))
+		while offset < end and DATA.surface(chunk, offset) == key:
 			for index in [0, 2, 1]:
-				var point := scene_position(chunk.triangles[offset].vertices[index])
+				var point := DATA.scene_vertex(chunk, offset, index)
 				surface.set_uv(Vector2(point.x, point.z))
 				surface.add_vertex(point)
 			offset += 1

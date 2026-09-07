@@ -44,6 +44,24 @@ func _initialize() -> void:
     var first: Dictionary = JSON.parse_string(bridge.generate_chunk(0, 0))
     check(first.ok, "generate initial chunk")
     check(estimate.data.triangles >= first.data.chunk.triangles.size() and estimate.data.objects >= first.data.chunk.objects.size(), "estimated output bounds actual geometry")
+    var packed: Dictionary = bridge.generate_chunk_packed(0, 0)
+    check(packed.ok and packed.data.generated_sha256 == first.data.generated_sha256, "packed view preserves generated hash")
+    var c: Dictionary = packed.data.chunk
+    check(c.packed_version == 1 and not c.has("triangles"), "no per-triangle Dictionary allocation")
+    c.merge(c.geometry.view())
+    check(c.vertices_cm is PackedInt64Array and c.vertices_cm.size() == first.data.chunk.triangles.size() * 9, "exact packed coordinates")
+    for i in first.data.chunk.triangles.size():
+        var t: Dictionary = first.data.chunk.triangles[i]
+        check(["asphalt", "concrete", "dirt", "gravel", "grass"][c.surface_indices[i]] == t.surface, "surface preserved")
+        check(c.object_ids[c.object_indices[i]] == t.object_id and bool(c.spawnable[i]) == t.spawnable, "triangle identity and spawnability preserved")
+        for v in 3:
+            for axis in 3:
+                check(c.vertices_cm[i * 9 + v * 3 + axis] == int(t.vertices[v][axis]), "integer centimetres preserved")
+    var altered: PackedInt64Array = c.vertices_cm
+    var original: int = c.vertices_cm[0]
+    altered[0] += 999
+    check(c.geometry.view().vertices_cm[0] == original, "native owner isolates mutations in consumer views")
+    check(not bridge.generate_chunk_packed(-1, 0).ok, "packed generation rejects invalid cell")
     var window: Dictionary = JSON.parse_string(bridge.cell_window(102400, 102400))
     check(window.ok and window.data.cells.size() == 4, "map-edge 3x3 contains existing cells only")
     check(window.data.cell.x == 1 and window.data.cell.y == 1, "maximum edge belongs to last cell")
@@ -74,7 +92,7 @@ func _initialize() -> void:
 func run() -> void:
     var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
     assert(JSON.parse_string(bridge.open_package(ProjectSettings.globalize_path("res://fixture.memap"))).ok)
-    var generated: Dictionary = JSON.parse_string(bridge.generate_chunk(1, 1))
+    var generated: Dictionary = bridge.generate_chunk_packed(1, 1)
     var parent := Node3D.new()
     root.add_child(parent)
     var job := RENDERER.begin(generated.data.chunk, parent)
@@ -117,7 +135,8 @@ def main():
         (project / 'project.godot').write_text('config_version=5\n[application]\nconfig/name="MapKit Nested Probe"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
         (project / 'probe.gd').write_text(PROBE)
         (project / 'renderer_probe.gd').write_text(RENDER_PROBE)
-        shutil.copyfile(ROOT / 'godot/chunk_renderer.gd', addon / 'chunk_renderer.gd')
+        for name in ('chunk_renderer.gd', 'chunk_data.gd'):
+            shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
         subprocess.run([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], check=True, timeout=60)
         subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://renderer_probe.gd'], check=True, timeout=30)

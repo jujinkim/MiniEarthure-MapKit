@@ -585,7 +585,25 @@ pub struct GeneratedChunk {
 }
 impl GeneratedChunk {
     pub fn hash(&self) -> Result<String> {
-        Ok(sha256(&canonical(self)?))
+        // Canonical top-level keys in lexical order; buffer only one object/triangle.
+        // This is byte-identical to canonical(self), without a whole serde Value tree.
+        let mut hash = Sha256::new();
+        hash.update(b"{\"cell\":");
+        hash.update(canonical(&self.cell)?);
+        hash.update(b",\"format_version\":");
+        hash.update(canonical(&self.format_version)?);
+        hash.update(b",\"objects\":[");
+        for (index, object) in self.objects.iter().enumerate() {
+            if index > 0 { hash.update(b","); }
+            hash.update(canonical(object)?);
+        }
+        hash.update(b"],\"triangles\":[");
+        for (index, triangle) in self.triangles.iter().enumerate() {
+            if index > 0 { hash.update(b","); }
+            hash.update(canonical(triangle)?);
+        }
+        hash.update(b"]}");
+        Ok(format!("{:x}", hash.finalize()))
     }
     pub fn spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
         for t in &self.triangles {

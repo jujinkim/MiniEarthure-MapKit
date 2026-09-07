@@ -85,3 +85,19 @@ source. Fields are `version`, `map_id`, `bounds`, `roads` (`id`, `kind`, `points
 The original package remains authoritative for provenance, complete attribution
 notices, asset descriptors and all generation data. Overview output cannot be used
 as a replacement MapDocument or change `world_content_hash`.
+
+
+### Godot packed generated view v1
+
+`generate_chunk_packed(x,y)` returns a native Dictionary response with the same
+`generated_sha256`, generated v6 `format_version`, cell and object records as the
+JSON API. `chunk.geometry` is an immutable native owner. `geometry.view()` returns
+consumer-local packed array wrappers: `vertices_cm` (Int64, nine coordinates per
+triangle, original vertex order), `surface_indices` (bytes: asphalt=0, concrete=1,
+dirt=2, gravel=3, grass=4), `object_indices` (Int32), `object_ids` (strings) and
+`spawnable` (bytes 0/1). Arrays preserve triangle order and integer centimetres.
+Different views detach on mutation; retain the owner, never share mutable views
+between collision and presentation. `godot/chunk_data.gd` obtains and reads views;
+the common renderer also accepts the existing JSON form for editor callers.
+This view is an engine adapter, not a new package or generated hash contract.
+Generated hashing streams canonical members without retaining a whole JSON tree.

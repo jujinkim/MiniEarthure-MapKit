@@ -97,3 +97,7 @@ when the JSON body exceeds its allowance. Native Godot exposes `overview_cost()`
 and `overview_json(max_json_bytes)`; the adapter adds a small response envelope.
 Application owners combine these counts with package residency and their own
 container/rendering overhead. This replaces neither generation nor world hashes.
+
+Godot runtime generation can use `generate_chunk_packed` and immutable native
+geometry ownership to avoid per-triangle JSON/Dictionary copies. See the packed
+view contract in `spec/FORMAT.md`; generated v6 hashes remain unchanged.

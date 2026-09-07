@@ -1,3 +1,4 @@
+mod packed;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
 use mapkit_package::{pack_bytes, read, read_bytes, read_project, write_new, Package};
@@ -165,6 +166,13 @@ impl MapKitBridge {
                 .and_then(|p| mapkit_core::estimate_generation(&p.document, Cell { x, y }, 500_000))
                 .map(|cost| serde_json::json!(cost))
         )
+    }
+    /// Exact integer centimetres and indexed triangle metadata; no JSON geometry copy.
+    #[func]
+    fn generate_chunk_packed(&self, x: i32, y: i32) -> VarDictionary {
+        packed::response(self.package.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .and_then(|p| p.generate(Cell { x, y }, 500_000)))
     }
     #[func]
     fn generate_chunk(&self, x: i32, y: i32) -> GString {
