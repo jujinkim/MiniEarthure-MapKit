@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PackageManifest",
+  "type": "object",
+  "required": [
+    "assets",
+    "attributions",
+    "bounds",
+    "cell_size_cm",
+    "document",
+    "files",
+    "format",
+    "format_version",
+    "generated_version",
+    "map_id",
+    "provenance",
+    "recipe_version",
+    "revision",
+    "seed",
+    "theme",
+    "world_content_hash"
+  ],
+  "properties": {
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Asset"
+      }
+    },
+    "attributions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Attribution"
+      }
+    },
+    "bounds": {
+      "$ref": "#/definitions/Bounds"
+    },
+    "cell_size_cm": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "document": {
+      "type": "string"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/FileRecord"
+      }
+    },
+    "format": {
+      "type": "string"
+    },
+    "format_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "generated_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "map_id": {
+      "type": "string"
+    },
+    "provenance": {
+      "$ref": "#/definitions/Provenance"
+    },
+    "recipe_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "revision": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "seed": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "theme": {
+      "type": "string"
+    },
+    "world_content_hash": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Asset": {
+      "type": "object",
+      "required": [
+        "attribution",
+        "collision",
+        "id",
+        "path"
+      ],
+      "properties": {
+        "attribution": {
+          "$ref": "#/definitions/Attribution"
+        },
+        "collision": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CollisionBox"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Attribution": {
+      "type": "object",
+      "required": [
+        "license",
+        "notice",
+        "source"
+      ],
+      "properties": {
+        "license": {
+          "type": "string"
+        },
+        "notice": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Bounds": {
+      "type": "object",
+      "required": [
+        "max",
+        "min"
+      ],
+      "properties": {
+        "max": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "min": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "CollisionBox": {
+      "type": "object",
+      "required": [
+        "center",
+        "size_cm"
+      ],
+      "properties": {
+        "center": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "size_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "FileRecord": {
+      "type": "object",
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "build_id",
+        "fingerprint",
+        "first_created",
+        "last_edited",
+        "tool_id",
+        "version"
+      ],
+      "properties": {
+        "build_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "first_created": {
+          "type": "string"
+        },
+        "last_edited": {
+          "type": "string"
+        },
+        "tool_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

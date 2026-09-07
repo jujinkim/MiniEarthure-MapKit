@@ -1,0 +1,191 @@
+{
+  "map_id": "synthetic-crossing",
+  "revision": 1,
+  "bounds": {
+    "min": [
+      0,
+      0
+    ],
+    "max": [
+      102400,
+      102400
+    ]
+  },
+  "cell_size_cm": 51200,
+  "seed": 42,
+  "recipe_version": 1,
+  "theme": "default",
+  "terrain_base_cm": 0,
+  "heightmaps": [],
+  "nodes": [
+    {
+      "id": "west",
+      "position": [
+        0,
+        20,
+        25600
+      ],
+      "level": 0
+    },
+    {
+      "id": "east",
+      "position": [
+        102400,
+        20,
+        25600
+      ],
+      "level": 0
+    },
+    {
+      "id": "south",
+      "position": [
+        25600,
+        700,
+        0
+      ],
+      "level": 1
+    },
+    {
+      "id": "north",
+      "position": [
+        25600,
+        700,
+        102400
+      ],
+      "level": 1
+    }
+  ],
+  "roads": [
+    {
+      "id": "ground-road",
+      "from": "west",
+      "to": "east",
+      "points": [
+        [
+          0,
+          20,
+          25600
+        ],
+        [
+          51200,
+          20,
+          25600
+        ],
+        [
+          102400,
+          20,
+          25600
+        ]
+      ],
+      "widths_cm": [
+        800,
+        800
+      ],
+      "surfaces": [
+        "asphalt",
+        "gravel"
+      ],
+      "kind": "ground",
+      "clearance_cm": null,
+      "sidewalk_cm": null
+    },
+    {
+      "id": "bridge-road",
+      "from": "south",
+      "to": "north",
+      "points": [
+        [
+          25600,
+          700,
+          0
+        ],
+        [
+          25600,
+          700,
+          102400
+        ]
+      ],
+      "widths_cm": [
+        600
+      ],
+      "surfaces": [
+        "concrete"
+      ],
+      "kind": "bridge",
+      "clearance_cm": null,
+      "sidewalk_cm": null
+    }
+  ],
+  "buildings": [
+    {
+      "id": "building-1",
+      "footprint": [
+        [
+          30000,
+          30000
+        ],
+        [
+          32000,
+          30000
+        ],
+        [
+          32000,
+          34000
+        ],
+        [
+          30000,
+          34000
+        ]
+      ],
+      "base_cm": 0,
+      "height_cm": 1500,
+      "usage": "residential",
+      "material": "concrete",
+      "roof": "flat"
+    }
+  ],
+  "zones": [
+    {
+      "id": "orchard-1",
+      "polygon": [
+        [
+          55000,
+          55000
+        ],
+        [
+          65000,
+          55000
+        ],
+        [
+          65000,
+          65000
+        ],
+        [
+          55000,
+          65000
+        ]
+      ],
+      "kind": "orchard",
+      "spacing_cm": 1000,
+      "density_per_mille": 1000,
+      "exclusions": []
+    }
+  ],
+  "assets": [],
+  "placements": [],
+  "attributions": [
+    {
+      "source": "Synthetic fixture",
+      "license": "MIT",
+      "notice": "No external map or asset data"
+    }
+  ],
+  "provenance": {
+    "tool_id": "third-party-example",
+    "version": "1",
+    "build_id": "example",
+    "fingerprint": "untrusted-and-accepted",
+    "first_created": "2026-09-07T00:00:00Z",
+    "last_edited": "2026-09-07T00:00:00Z"
+  }
+}

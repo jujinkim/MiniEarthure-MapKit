@@ -1,0 +1,25 @@
+# Remaining implementation and acceptance work
+
+This repository is a working development foundation, not a completed game cutover.
+
+- Generator: terrain grids, width/surface road ribbons, simple building shells,
+  forest/orchard lattice, explicit asset box proxies and layered surface lookup.
+  Tunnel walls/ceiling geometry exists, but terrain cuts, terrain-conforming road
+  cross-sections, junction topology/meshes, sidewalks, full-footprint vegetation
+  clearance and solid building volume semantics are not complete. Do not use
+  prototype tunnels or overlapping geometry as production driving fixtures.
+- Static GLB restrictions/header checks are implemented. Full structural GLB and
+  WebP decoding/validation, custom asset rendering and asset performance budgets
+  remain incomplete. PNG heightmaps are decoded and checked, image assets only
+  receive bounded header validation before renderer work.
+- Common Godot renderer uses simple material colors and basic tree canopies;
+  streaming attachment budgeting, LOD/material libraries and incremental preview
+  invalidation are not complete. No claim of 4 ms attachment is made.
+- Package I/O currently holds complete payloads in memory and validates terrain
+  seams up front. Lazy I/O, structural inspection under 3 s and peak memory
+  accounting need implementation before game admission uses this adapter.
+- Native Windows/Android hash parity, native Windows exports, representative
+  10x10 km mixed-use 50 MB benchmark, and real hardware driving are unverified.
+- GameRuntime integration, ENet transfer/resume, fair scheduling, collision-ready
+  admission, memory/LRU policy, release lock and protocol-7 game cutover remain
+  outstanding. The existing game still runs its original protocol.

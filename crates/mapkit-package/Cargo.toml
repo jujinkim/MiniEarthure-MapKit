@@ -1,0 +1,14 @@
+[package]
+name = "mapkit-package"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mapkit-core = { path = "../mapkit-core" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+schemars.workspace = true
+zip = { version = "=0.6.6", default-features = false, features = ["deflate"] }
+png = "0.17"

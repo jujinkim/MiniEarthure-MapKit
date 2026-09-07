@@ -1,0 +1,569 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MapDocument",
+  "type": "object",
+  "required": [
+    "assets",
+    "attributions",
+    "bounds",
+    "buildings",
+    "cell_size_cm",
+    "heightmaps",
+    "map_id",
+    "nodes",
+    "placements",
+    "provenance",
+    "recipe_version",
+    "revision",
+    "roads",
+    "seed",
+    "terrain_base_cm",
+    "theme",
+    "zones"
+  ],
+  "properties": {
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Asset"
+      }
+    },
+    "attributions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Attribution"
+      }
+    },
+    "bounds": {
+      "$ref": "#/definitions/Bounds"
+    },
+    "buildings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Building"
+      }
+    },
+    "cell_size_cm": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "heightmaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Heightmap"
+      }
+    },
+    "map_id": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RoadNode"
+      }
+    },
+    "placements": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Placement"
+      }
+    },
+    "provenance": {
+      "$ref": "#/definitions/Provenance"
+    },
+    "recipe_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "revision": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "roads": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Road"
+      }
+    },
+    "seed": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "terrain_base_cm": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "theme": {
+      "type": "string"
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Zone"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "Asset": {
+      "type": "object",
+      "required": [
+        "attribution",
+        "collision",
+        "id",
+        "path"
+      ],
+      "properties": {
+        "attribution": {
+          "$ref": "#/definitions/Attribution"
+        },
+        "collision": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CollisionBox"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Attribution": {
+      "type": "object",
+      "required": [
+        "license",
+        "notice",
+        "source"
+      ],
+      "properties": {
+        "license": {
+          "type": "string"
+        },
+        "notice": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Bounds": {
+      "type": "object",
+      "required": [
+        "max",
+        "min"
+      ],
+      "properties": {
+        "max": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "min": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "Building": {
+      "type": "object",
+      "required": [
+        "base_cm",
+        "footprint",
+        "height_cm",
+        "id",
+        "material",
+        "roof",
+        "usage"
+      ],
+      "properties": {
+        "base_cm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "footprint": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "height_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "material": {
+          "type": "string"
+        },
+        "roof": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Cell": {
+      "type": "object",
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "y": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "CollisionBox": {
+      "type": "object",
+      "required": [
+        "center",
+        "size_cm"
+      ],
+      "properties": {
+        "center": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "size_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "Heightmap": {
+      "type": "object",
+      "required": [
+        "cell",
+        "offset_cm",
+        "path",
+        "spacing_cm",
+        "step_cm"
+      ],
+      "properties": {
+        "cell": {
+          "$ref": "#/definitions/Cell"
+        },
+        "offset_cm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "path": {
+          "type": "string"
+        },
+        "source_accuracy_cm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "spacing_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "step_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Placement": {
+      "type": "object",
+      "required": [
+        "asset_id",
+        "id",
+        "position",
+        "quarter_turns"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "quarter_turns": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "build_id",
+        "fingerprint",
+        "first_created",
+        "last_edited",
+        "tool_id",
+        "version"
+      ],
+      "properties": {
+        "build_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "first_created": {
+          "type": "string"
+        },
+        "last_edited": {
+          "type": "string"
+        },
+        "tool_id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Road": {
+      "type": "object",
+      "required": [
+        "from",
+        "id",
+        "kind",
+        "points",
+        "surfaces",
+        "to",
+        "widths_cm"
+      ],
+      "properties": {
+        "clearance_cm": {
+          "description": "Required for tunnel/underpass; portals connect only explicit graph nodes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "from": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/RoadKind"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "sidewalk_cm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "surfaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Surface"
+          }
+        },
+        "to": {
+          "type": "string"
+        },
+        "widths_cm": {
+          "description": "One width/surface per centreline segment.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoadKind": {
+      "type": "string",
+      "enum": [
+        "ground",
+        "elevated",
+        "bridge",
+        "underpass",
+        "tunnel"
+      ]
+    },
+    "RoadNode": {
+      "type": "object",
+      "required": [
+        "id",
+        "level",
+        "position"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "Surface": {
+      "type": "string",
+      "enum": [
+        "asphalt",
+        "concrete",
+        "dirt",
+        "gravel",
+        "grass"
+      ]
+    },
+    "Zone": {
+      "type": "object",
+      "required": [
+        "density_per_mille",
+        "exclusions",
+        "id",
+        "kind",
+        "polygon",
+        "spacing_cm"
+      ],
+      "properties": {
+        "density_per_mille": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/ZoneKind"
+        },
+        "polygon": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "spacing_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ZoneKind": {
+      "type": "string",
+      "enum": [
+        "forest",
+        "orchard"
+      ]
+    }
+  }
+}

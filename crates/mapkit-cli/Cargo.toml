@@ -1,0 +1,15 @@
+[package]
+name = "mapkit-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mapkit-core = { path = "../mapkit-core" }
+mapkit-package = { path = "../mapkit-package" }
+serde_json.workspace = true
+schemars.workspace = true
+
+[[bin]]
+name = "mapkit"
+path = "src/main.rs"

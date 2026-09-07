@@ -1,0 +1,15 @@
+[workspace]
+members = ["crates/mapkit-core", "crates/mapkit-package", "crates/mapkit-cli", "crates/mapkit-godot"]
+default-members = ["crates/mapkit-core", "crates/mapkit-package", "crates/mapkit-cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+schemars = "0.8"

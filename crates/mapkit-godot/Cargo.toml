@@ -1,0 +1,14 @@
+[package]
+name = "mapkit-godot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mapkit-core = { path = "../mapkit-core" }
+mapkit-package = { path = "../mapkit-package" }
+serde_json.workspace = true
+godot = { version = "0.5.5", features = ["api-4-7", "experimental-threads"] }
