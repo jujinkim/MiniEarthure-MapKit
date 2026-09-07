@@ -101,3 +101,6 @@ container/rendering overhead. This replaces neither generation nor world hashes.
 Godot runtime generation can use `generate_chunk_packed` and immutable native
 geometry ownership to avoid per-triangle JSON/Dictionary copies. See the packed
 view contract in `spec/FORMAT.md`; generated v6 hashes remain unchanged.
+
+Renderer attachment batches contain at most 512 triangles. Materials are shared
+within each cell and released with its meshes; callers still own frame admission.

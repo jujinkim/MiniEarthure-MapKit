@@ -3,7 +3,7 @@ extends RefCounted
 const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
-const TRIANGLES_PER_BATCH := 128
+const TRIANGLES_PER_BATCH := 512
 
 static func scene_position(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.00125
@@ -12,7 +12,7 @@ static func begin(chunk: Dictionary, parent: Node3D) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	return {"root": root, "chunk": DATA.view(chunk), "triangle": 0, "object": 0, "done": false, "cancelled": false}
+	return {"root": root, "chunk": DATA.view(chunk), "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled:
@@ -20,6 +20,7 @@ static func advance(job: Dictionary) -> bool:
 	if not is_instance_valid(job.root) or job.root.is_queued_for_deletion():
 		job.cancelled = true
 		job.chunk = {}
+		job.materials = {}
 		return true
 	var chunk: Dictionary = job.chunk
 	var offset := int(job.triangle)
@@ -37,11 +38,13 @@ static func advance(job: Dictionary) -> bool:
 		surface.generate_normals()
 		var mesh := MeshInstance3D.new()
 		mesh.mesh = surface.commit()
-		var material := StandardMaterial3D.new()
-		material.albedo_color = COLORS.get(key, Color.GRAY)
-		material.roughness = 0.9
-		material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		mesh.material_override = material
+		if not job.materials.has(key):
+			var material := StandardMaterial3D.new()
+			material.albedo_color = COLORS.get(key, Color.GRAY)
+			material.roughness = 0.9
+			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+			job.materials[key] = material
+		mesh.material_override = job.materials[key]
 		job.root.add_child(mesh)
 		job.triangle = offset
 	elif int(job.object) < chunk.objects.size():
@@ -64,11 +67,13 @@ static func advance(job: Dictionary) -> bool:
 	else:
 		job.done = true
 		job.chunk = {}
+		job.materials = {}
 	return job.done
 
 static func cancel(job: Dictionary) -> void:
 	job.cancelled = true
 	job.chunk = {}
+	job.materials = {}
 	if is_instance_valid(job.root) and not job.root.is_queued_for_deletion():
 		var parent: Node = job.root.get_parent()
 		if parent != null:

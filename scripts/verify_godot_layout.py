@@ -101,7 +101,7 @@ func run() -> void:
         var before := int(job.triangle)
         RENDERER.advance(job)
         if int(job.triangle) > before:
-            assert(int(job.triangle) - before <= 128)
+            assert(int(job.triangle) - before <= RENDERER.TRIANGLES_PER_BATCH)
         steps += 1
     assert(steps > 2 and job.root.get_child_count() > 0)
     RENDERER.cancel(job)
@@ -110,6 +110,19 @@ func run() -> void:
     RENDERER.advance(cancelled)
     RENDERER.cancel(cancelled)
     assert(RENDERER.advance(cancelled) and parent.get_child_count() == 0)
+    var triangles: Array = []
+    for i in range(RENDERER.TRIANGLES_PER_BATCH * 2 + 1):
+        triangles.append({"surface": "grass", "vertices": [[0, 0, 0], [100, 0, 0], [0, 0, 100]]})
+    var shared := RENDERER.begin({"cell": {"x": 0, "y": 0}, "triangles": triangles, "objects": []}, parent)
+    while not RENDERER.advance(shared): pass
+    assert(shared.root.get_child_count() == 3 and shared.materials.is_empty())
+    var material_id: int = shared.root.get_child(0).material_override.get_instance_id()
+    var material_ref := weakref(shared.root.get_child(0).material_override)
+    for mesh in shared.root.get_children(): assert(mesh.material_override.get_instance_id() == material_id)
+    RENDERER.cancel(shared)
+    await process_frame
+    await process_frame
+    assert(material_ref.get_ref() == null)
     parent.queue_free()
     await process_frame
     print("mapkit_incremental_renderer: PASS")
