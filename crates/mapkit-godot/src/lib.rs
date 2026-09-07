@@ -235,6 +235,28 @@ impl MapKitBridge {
             Ok(serde_json::json!({"position_cm":position,"window":p.document.window([x_cm,y_cm])}))
         }))
     }
+    /// Exact local bounds without serializing the full editing document.
+    #[func]
+    fn map_bounds(&self) -> PackedInt64Array {
+        self.package.as_ref().map(|p| PackedInt64Array::from(&[
+            p.document.bounds.min[0], p.document.bounds.min[1],
+            p.document.bounds.max[0], p.document.bounds.max[1]][..])).unwrap_or_default()
+    }
+    /// Caller must reserve generation cost and invoke on its bounded worker.
+    #[func]
+    fn surface_probe(&self, x_cm: i64, y_cm: i64, surface: GString) -> GString {
+        response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first")).and_then(|p| {
+            let point = [x_cm, y_cm];
+            let cell = p.document.cell_at(point).ok_or_else(||mapkit_core::error("E_SPAWN","outside map"))?;
+            let sample = p.generate(cell, 500_000)?.surface_probe(&SpawnRequest { position_cm: point, surface_id: surface.to_string() })?;
+            let is_road = p.document.roads.iter().any(|r| r.id == sample.surface_id);
+            let blocked_by_building = p.document.buildings.iter().any(|b|
+                mapkit_core::point_in_polygon(point, &b.footprint) && sample.position_cm[1] >= b.base_cm
+                && sample.position_cm[1] <= b.base_cm + b.height_cm as i64);
+            Ok(serde_json::json!({"position_cm":sample.position_cm,"normal_q":sample.normal_q,
+                "surface_id":sample.surface_id,"is_road":is_road,"blocked_by_building":blocked_by_building}))
+        }))
+    }
     #[func]
     fn canonical_document(&self) -> GString {
         self.package

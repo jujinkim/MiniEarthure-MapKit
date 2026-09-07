@@ -542,6 +542,13 @@ pub struct SpawnRequest {
     pub position_cm: Point,
     pub surface_id: String,
 }
+/// Quantized geometric contact, independent of vehicle or race policy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+pub struct SurfaceProbe {
+    pub position_cm: Vertex,
+    pub normal_q: [i32; 3], // Upward unit normal in millionths, using portable math.
+    pub surface_id: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GameReleaseIdentity {
@@ -606,6 +613,20 @@ impl GeneratedChunk {
         Ok(format!("{:x}", hash.finalize()))
     }
     pub fn spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
+        self.surface_triangle(request).map(|(_, position)| position)
+    }
+    pub fn surface_probe(&self, request: &SpawnRequest) -> Result<SurfaceProbe> {
+        let (triangle, position_cm) = self.surface_triangle(request)?;
+        let [a, b, c] = triangle.vertices;
+        let u = std::array::from_fn::<_, 3, _>(|i| b[i] as i128 - a[i] as i128);
+        let v = std::array::from_fn::<_, 3, _>(|i| c[i] as i128 - a[i] as i128);
+        let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]].map(|v| v as f64);
+        let length = libm::sqrt(n.iter().map(|v| v*v).sum());
+        let sign = if n[1] < 0.0 { -1.0 } else { 1.0 };
+        Ok(SurfaceProbe { position_cm, surface_id: request.surface_id.clone(),
+            normal_q: n.map(|v| libm::round(v / length * sign * 1_000_000.0) as i32) })
+    }
+    fn surface_triangle(&self, request: &SpawnRequest) -> Result<(&Triangle, Vertex)> {
         for t in &self.triangles {
             if !t.spawnable || t.object_id != request.surface_id {
                 continue;
@@ -620,7 +641,7 @@ impl GeneratedChunk {
             let wc = cross(flat(a), flat(b), request.position_cm);
             let h =
                 a[1] + ((wb * (b[1] - a[1]) as i128 + wc * (c[1] - a[1]) as i128) / area) as i64;
-            return Ok([request.position_cm[0], h, request.position_cm[1]]);
+            return Ok((t, [request.position_cm[0], h, request.position_cm[1]]));
         }
         Err(error(
             "E_SPAWN",
