@@ -64,6 +64,15 @@ func _initialize() -> void:
     altered[0] += 999
     check(c.geometry.view().vertices_cm[0] == original, "native owner isolates mutations in consumer views")
     check(not bridge.generate_chunk_packed(-1, 0).ok, "packed generation rejects invalid cell")
+    var query: Dictionary = JSON.parse_string(bridge.query_cells(51199, 100, 51199, 100, 2))
+    check(query.ok and query.data.geometry_cells.size() == 1 and query.data.occupancy_cells.size() == 2, "query includes neighbor tree owner counts")
+    if query.ok and query.data.geometry_cells.size() == 1 and query.data.occupancy_cells.size() == 2:
+        check(int(query.data.geometry_cells[0].x) == 0 and int(query.data.geometry_cells[0].y) == 0 and int(query.data.occupancy_cells[0].x) == 0 and int(query.data.occupancy_cells[0].y) == 0 and int(query.data.occupancy_cells[1].x) == 1 and int(query.data.occupancy_cells[1].y) == 0, "query includes neighbor tree owner coordinates")
+    check(not JSON.parse_string(bridge.query_cells(51199, 100, 51199, 100, 1)).ok, "query union enforces cell cap")
+    check(not JSON.parse_string(bridge.query_cells(0, 0, 1, 1, -1)).ok, "negative query allowance rejected")
+    check(not JSON.parse_string(bridge.query_cells(2, 0, 1, 1, 4)).ok, "reversed query bounds rejected")
+    var seam: Dictionary = JSON.parse_string(bridge.query_cells(51200, 51200, 51200, 51200, 4))
+    check(seam.ok and seam.data.geometry_cells.size() == 4, "closed corner includes all four cells")
     var occupied: Dictionary = bridge.generate_chunk_occupied_packed(0, 0, 2)
     check(occupied.ok and occupied.data.generated_sha256 == first.data.generated_sha256, "occupied package generation preserves world hash")
     var solids: Dictionary = occupied.data.occupancy.view()

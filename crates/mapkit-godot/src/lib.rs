@@ -168,6 +168,20 @@ impl MapKitBridge {
                 .map(|cost| serde_json::json!(cost))
         )
     }
+    /// Bounded broad-phase plan; callers estimate and reserve each required cell.
+    #[func]
+    fn query_cells(&self, min_x: i64, min_y: i64, max_x: i64, max_y: i64, max_cells: i64) -> GString {
+        response(self.package.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .and_then(|p| {
+                if !(1..=16_384).contains(&max_cells) {
+                    return Err(mapkit_core::error("E_BUDGET", "invalid query cell allowance"));
+                }
+                p.document.query_cells(&mapkit_core::Bounds {
+                    min: [min_x, min_y], max: [max_x, max_y],
+                }, max_cells as usize)
+            }).map(|plan| serde_json::json!(plan)))
+    }
     /// Exact integer centimetres and indexed triangle metadata; no JSON geometry copy.
     #[func]
     fn generate_chunk_packed(&self, x: i32, y: i32) -> VarDictionary {

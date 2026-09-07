@@ -382,8 +382,8 @@ fn generate_internal(
                 };
                 let position = b.chunk.spawn(&request)?;
                 b.box_shape(
-                    [position[0], position[1] + 200, position[2]],
-                    [40, 400, 40],
+                    [position[0], position[1] + i64::from(crate::query::TREE_PROXY_SIZE_CM[1] / 2), position[2]],
+                    crate::query::TREE_PROXY_SIZE_CM,
                     &id,
                 )?;
                 b.chunk.objects.push(GeneratedObject {

@@ -663,6 +663,8 @@ pub struct GenerationInput<'a> {
 mod cost;
 mod generation;
 mod occupancy;
+mod query;
+pub use query::QueryCells;
 pub use occupancy::{GeneratedOccupancy, OccupiedSolid, SolidShape, MAX_OCCUPIED_SOLIDS};
 mod overview;
 pub use overview::{overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource};

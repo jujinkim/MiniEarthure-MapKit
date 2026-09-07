@@ -131,3 +131,22 @@ before generation, independent of its triangle cap. Application reservations mus
 include original geometry, sidecar, temporary packing arrays and retained native
 arrays; the count API alone does not enforce memory limits. Tree-owner neighbor
 queries, full target-cell assembly and collision readiness are caller obligations.
+
+### Bounded query-cell planning
+
+`MapDocument::query_cells(bounds,max_cells)` and Godot
+`query_cells(min_x,min_y,max_x,max_y,max_cells)` return `geometry_cells` and
+`occupancy_cells`, each a unique row-major array of `{x,y}`. Bounds are closed
+local-centimetre rectangles, including zero-area queries. Exact seams include both
+adjacent cells; results are clipped to existing map cells. Entirely outside
+queries may have empty geometry results but still require nearby tree owners.
+`occupancy_cells` includes geometry cells and the 20 cm horizontal halo required
+by recipe-v1 centre-owned tree collision proxies. This halo shares the generator's
+proxy size. Buildings and manual proxies already retain full overlapping volumes.
+
+The caller supplies a union cap from 1 through 16384. Invalid query bounds return
+`E_QUERY`; invalid topology returns `E_DOCUMENT`/`E_LIMIT`; invalid allowances or
+excess cell counts return `E_BUDGET` before result allocation. No partial plans.
+Generation hashes and package versions are unchanged. Callers must estimate and
+reserve all required cells before generation, then check actual support and
+clearance; this broad-phase plan grants no collision readiness or vehicle admission.
