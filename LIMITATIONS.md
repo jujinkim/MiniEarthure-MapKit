@@ -2,6 +2,12 @@
 
 This repository is a working development foundation, not a completed game cutover.
 
+- K01 public metadata/CLI/Schema audit is implemented. Schema success alone does
+  not validate a package; calendar, graph, references, bytes and payloads require
+  semantic checks. K02 reproducibility and K03 deeper input/asset audits remain
+  separate work. Repacking malformed metadata now requires an explicit source
+  edit; the toolkit never silently changes saved originals.
+
 - Generator: terrain grids, width/surface road ribbons, simple building shells,
   forest/orchard lattice, explicit asset box proxies and layered surface lookup.
   Tunnel walls/ceiling geometry exists, but terrain cuts, terrain-conforming road
@@ -20,6 +26,6 @@ This repository is a working development foundation, not a completed game cutove
   accounting need implementation before game admission uses this adapter.
 - Native Windows/Android hash parity, native Windows exports, representative
   10x10 km mixed-use 50 MB benchmark, and real hardware driving are unverified.
-- GameRuntime integration, ENet transfer/resume, fair scheduling, collision-ready
-  admission, memory/LRU policy, release lock and protocol-7 game cutover remain
-  outstanding. The existing game still runs its original protocol.
+- Game transport, collision admission, session memory/cache policy and release
+  acceptance belong to consumers and are not certified by this standalone tool's
+  tests. This repository does not declare a completed game cutover.

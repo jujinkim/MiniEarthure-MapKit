@@ -3,6 +3,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
 pub const RECIPE_VERSION: u32 = 1;
@@ -46,6 +47,7 @@ impl Bounds {
 #[derive(
     Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, JsonSchema,
 )]
+#[serde(deny_unknown_fields)]
 pub struct Cell {
     pub x: i32,
     pub y: i32,
@@ -53,18 +55,28 @@ pub struct Cell {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Provenance {
+    #[schemars(length(min = 1), regex(pattern = r"\S"))]
     pub tool_id: String,
+    #[schemars(length(min = 1), regex(pattern = r"\S"))]
     pub version: String,
+    #[schemars(length(min = 1), regex(pattern = r"\S"))]
     pub build_id: String,
+    /// Untrusted producer label; never authentication or an allowlist key.
+    #[schemars(length(min = 1), regex(pattern = r"\S"))]
     pub fingerprint: String,
+    #[schemars(schema_with = "metadata::timestamp_schema")]
     pub first_created: String,
+    #[schemars(schema_with = "metadata::timestamp_schema")]
     pub last_edited: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Attribution {
+    #[schemars(length(min = 1), regex(pattern = r"\S"))]
     pub source: String,
+    #[schemars(length(min = 1), regex(pattern = r"\S"))]
     pub license: String,
+    /// May be empty; multiline notices are preserved without normalization.
     pub notice: String,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
@@ -169,12 +181,17 @@ pub struct Placement {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    #[schemars(length(min = 1, max = 128))]
     pub map_id: String,
     pub revision: u32,
     pub bounds: Bounds,
+    #[schemars(range(min = 200, max = 102400))]
     pub cell_size_cm: u32,
+    #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
+    #[schemars(range(min = 1, max = 1))]
     pub recipe_version: u32,
+    #[schemars(regex(pattern = "^default$"))]
     pub theme: String,
     pub terrain_base_cm: i64,
     pub heightmaps: Vec<Heightmap>,
@@ -308,6 +325,10 @@ impl MapDocument {
         let fail = |m: &str| Err(error("E_GEOMETRY", m));
         if self.recipe_version != RECIPE_VERSION {
             return Err(error("E_VERSION", "unsupported recipe"));
+        }
+        self.provenance.validate()?;
+        for (index, attribution) in self.attributions.iter().enumerate() {
+            attribution.validate(&format!("attributions[{index}]"))?;
         }
         if self.seed > 9_007_199_254_740_991 {
             return Err(error(
@@ -445,11 +466,12 @@ impl MapDocument {
         }
         let assets: BTreeSet<_> = self.assets.iter().map(|a| &a.id).collect();
         for a in &self.assets {
+            a.attribution
+                .validate(&format!("asset {} attribution", a.id))?;
             if !safe_path(&a.path)
                 || ![".glb", ".png", ".webp"]
                     .iter()
                     .any(|e| a.path.ends_with(e))
-                || a.attribution.license.is_empty()
                 || a.collision.iter().any(|b| {
                     b.size_cm.contains(&0)
                         || b.size_cm.iter().any(|v| *v > 100_000)

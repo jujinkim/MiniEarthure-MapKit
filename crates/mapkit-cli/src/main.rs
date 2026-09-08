@@ -12,7 +12,13 @@ fn run() -> Result<()> {
     match arg(0)? {
         "inspect" | "validate" if args.len() == 2 => {
             let p = read(Path::new(arg(1)?))?;
-            println!("{}", String::from_utf8(canonical(&p.inspection)?).unwrap());
+            let mut output =
+                serde_json::to_value(&p.inspection).map_err(|e| error("E_JSON", e.to_string()))?;
+            if arg(0)? == "inspect" {
+                output["manifest"] = serde_json::to_value(&p.manifest)
+                    .map_err(|e| error("E_JSON", e.to_string()))?;
+            }
+            println!("{}", String::from_utf8(canonical(&output)?).unwrap());
         }
         "pack" if args.len() == 3 => {
             let (document, files) = read_project(Path::new(arg(1)?))?;

@@ -23,27 +23,40 @@ pub use read_cost::{inspect_read_cost, ReadCost};
 #[serde(deny_unknown_fields)]
 pub struct FileRecord {
     pub path: String,
+    #[schemars(range(max = 134217728))]
     pub size: u64,
+    #[schemars(length(equal = 64), regex(pattern = "^[0-9a-f]{64}$"))]
     pub sha256: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackageManifest {
+    #[schemars(regex(pattern = "^memap$"))]
     pub format: String,
+    #[schemars(range(min = 1, max = 1))]
     pub format_version: u32,
+    #[schemars(range(min = 1, max = 1))]
     pub recipe_version: u32,
+    #[schemars(range(min = 6, max = 6))]
     pub generated_version: u32,
+    #[schemars(length(min = 1, max = 128))]
     pub map_id: String,
     pub revision: u32,
     pub bounds: Bounds,
+    #[schemars(range(min = 200, max = 102400))]
     pub cell_size_cm: u32,
+    #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
+    #[schemars(regex(pattern = "^default$"))]
     pub theme: String,
+    #[schemars(regex(pattern = r"^document\.json$"))]
     pub document: String,
+    #[schemars(length(min = 1, max = 8192))]
     pub files: Vec<FileRecord>,
     pub assets: Vec<Asset>,
     pub attributions: Vec<Attribution>,
     pub provenance: Provenance,
+    #[schemars(length(equal = 64), regex(pattern = "^[0-9a-f]{64}$"))]
     pub world_content_hash: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

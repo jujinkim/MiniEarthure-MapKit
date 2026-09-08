@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Probe relocatable native bindings without loading a renderer or game repository."""
 import argparse
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -32,6 +33,15 @@ func _initialize() -> void:
     check(not rejected.ok and rejected.error.code == "E_MEMORY_BUDGET", "native validation memory gate")
     check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "budget failure clears prior package")
     check(JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak)).ok, "native budgeted retry")
+    var bad_bytes := FileAccess.get_file_as_bytes("res://invalid-metadata.memap")
+    var metadata_rejected: Dictionary = JSON.parse_string(bridge.open_package_bytes(bad_bytes))
+    check(not metadata_rejected.ok and metadata_rejected.error.code == "E_PROVENANCE", "independent invalid provenance rejected at native package boundary")
+    check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "metadata failure clears previously open package")
+    check(JSON.parse_string(bridge.open_package_bytes(bytes)).ok, "valid unknown producer retry after metadata failure")
+    var document: Dictionary = JSON.parse_string(bridge.document_json()).data
+    document.provenance.last_edited = "tomorrow"
+    var invalid_document: Dictionary = JSON.parse_string(bridge.validate_document(JSON.stringify(document)))
+    check(not invalid_document.ok and invalid_document.error.code == "E_PROVENANCE", "editor document validation shares metadata contract")
     var overview_cost: Dictionary = JSON.parse_string(bridge.overview_cost())
     check(overview_cost.ok, "overview allocation counts")
     var overview: Dictionary = JSON.parse_string(bridge.overview_json(int(overview_cost.data.json_bytes)))
@@ -201,6 +211,10 @@ def main():
         for name in ('chunk_renderer.gd', 'chunk_data.gd'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
+        invalid = json.loads((ROOT / 'examples/minimal/document.json').read_text())
+        invalid['provenance']['last_edited'] = 'tomorrow'
+        (project / 'invalid-document.json').write_text(json.dumps(invalid))
+        subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'invalid-metadata.memap'), str(project / 'invalid-document.json')], check=True, timeout=30)
         subprocess.run([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], check=True, timeout=60)
         subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://renderer_probe.gd'], check=True, timeout=30)
         subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://probe.gd'], check=True, timeout=30)

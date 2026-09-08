@@ -70,11 +70,88 @@ Current tooling profile: package <=512 MiB, expanded payload <=1 GiB, each file
 limits, not a proof of runtime memory compliance. Generation has an explicit
 triangle budget (CLI/bridge default 500000), and zone candidate budget.
 
-Errors use `{code,message}`; CLI errors go to stderr with exit 1. Codes:
-E_JSON, E_DOCUMENT, E_VERSION, E_ID, E_GEOMETRY, E_PATH, E_REFERENCE, E_HASH,
-E_ZIP, E_MANIFEST, E_HEIGHTMAP, E_SEAM, E_ASSET, E_LIMIT, E_BUDGET, E_CELL,
-E_SPAWN, E_RELEASE, E_IO, E_STATE and E_USAGE. No partially validated package is
-reported as accepted. `pack` and `unpack` never overwrite existing destinations.
+Errors use `{code,message}`; CLI errors go to stderr with exit 1. The complete
+[error catalog](ERRORS.md) defines codes and caller actions. No partially validated
+package is reported as accepted. Every file-producing command preserves existing
+destinations; `unpack` requires a new directory and an existing parent directory.
+
+## Public authoring contract audit (K01)
+
+The checked-in Draft 7 [document](document.schema.json) and
+[manifest](manifest.schema.json) schemas are generated from the exact public Rust
+types with `mapkit schema document|manifest NEW_OUTPUT.json`. Both reject unknown
+object fields, including nested cells. Required collections may be empty; optional
+typed fields (for example `clearance_cm`) may be omitted or null. A package reader
+still performs all semantic and payload checks after deserialization.
+
+Schema success is **structural validation only**, never package acceptance. JSON
+Schema cannot detect duplicate JSON keys after a generic parser has discarded
+them, nor require integer lexical notation instead of `1.0`/`1e0`. Graph references,
+polygon validity, case-folded paths, byte limits, manifest/document equality,
+calendar/chronology, payload decode/seams and digest recomputation are semantic
+checks performed by MapKit. Schema `maxLength` counts characters; the 128-byte
+map/object ID limits are additionally checked by the core. Generated schemas
+describe simple fixed-version/theme/seed/size limits as well as field shapes.
+
+### Producer and source metadata
+
+All six provenance fields are required and must mirror the document in the
+manifest. `tool_id`, `version`, `build_id` and `fingerprint` are nonblank Unicode
+labels without control characters. Values are preserved exactly; there is no tool
+registry, known-fingerprint list, signature verification or authentication. Never
+use a matching fingerprint as permission to skip package checks. Unknown tools
+and arbitrary nonblank fingerprints, including the independent example, work.
+
+`first_created` and `last_edited` describe supplied creation and edit instants.
+K01 replaces the previous unchecked-string behavior with a bounded
+[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339#section-5.6) profile: Gregorian
+years 0001–9999, `T`/`t`, hour 00–23, minute/second 00–59, optional 1–9 fractional
+digits, and `Z`/`z` or a numeric offset through ±23:59. Leap seconds and unknown
+offset `-00:00` are unsupported. Calendar validity and last-edit ≥ creation are
+checked using integer UTC instants, including fractions and offset date rollover.
+Future timestamps are allowed: validation/packing does not read the current clock.
+Editors preserve first creation when editing and explicitly supply last edit.
+The core neither repairs nor rewrites malformed metadata or original files.
+
+Top-level `attributions` may be empty for wholly original work. Every listed
+record and every asset's required `attribution` needs nonblank source and license
+labels without control characters. License is a supplied label, not an SPDX-only
+allowlist or a claim of verified legal rights. `notice` is required but may be
+empty; Unicode and tab/CR/LF text are preserved, other control characters fail.
+Source URLs are descriptive text, never fetched. Asset paths remain local-only.
+Existing total document/manifest byte limits bound metadata; no clock-derived
+defaults or new notice-size cap is introduced.
+
+These metadata checks refine v1 validation; supported geometry and its generated
+v6/world hashes do not change. Provenance and top-level attribution edits preserve
+world/generated identity. Asset attribution remains content-bound as above.
+Previously accepted malformed metadata now fails with `E_PROVENANCE` or
+`E_ATTRIBUTION`; saved originals are never automatically migrated.
+
+### CLI contract
+
+| Command | Success (exit 0) |
+| --- | --- |
+| `inspect PACKAGE` | One JSON object: existing inspection fields plus `manifest`, including inventory, versions, producer metadata and attribution. Full validation precedes output. |
+| `validate PACKAGE` | One JSON inspection object after the same full validation. |
+| `pack PROJECT NEW_PACKAGE` | Validated package, atomically installed without replacement; one JSON inspection object. Reads referenced files from `PROJECT/document.json`; unrelated project files are not exported. |
+| `unpack PACKAGE NEW_DIRECTORY` | Source document and referenced payloads; empty stdout. Manifest is regenerated when repacking. |
+| `generate-chunk PACKAGE X Y NEW_JSON` | Canonical generated v6 JSON at the new output; one lowercase SHA-256 line on stdout. X/Y are signed 32-bit integer cell indices; invalid/outside cells fail. |
+| `schema document\|manifest NEW_JSON` | Generated Draft 7 Schema file; empty stdout. |
+
+Inspection fields are `package_sha256`, `world_content_hash`, `package_bytes`,
+`expanded_bytes`, `base_data_bytes`, `user_asset_bytes`, `cell_count`,
+`retained_memory_bytes` and `validation_peak_bytes`. Base/user bytes count expanded
+data (base includes manifest), not shares of compressed ZIP bytes. Working-set
+values are conservative estimates. `inspect` is currently eager, not a cheap
+manifest-only check and not evidence of a 3-second/50-MB target.
+
+The stdlib-only `examples/third_party.py NEW_PACKAGE [DOCUMENT.json]` writes the
+same synthetic example without MapKit imports or a binary. Use the CLI to validate
+the result. `scripts/check_contract.py` tests Schema generation, all CLI commands,
+independent creation, unpack/edit/repack/generation and metadata failure paths.
+Reproducibility across ZIP implementations/platforms, deeper hostile asset/container
+validation, geometry completeness and platform hash parity remain separate audits.
 
 ### Read-only overview API (version 1)
 

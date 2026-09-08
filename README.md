@@ -36,6 +36,25 @@ See [format specification](spec/FORMAT.md), generated JSON Schemas in `spec/`, a
 [test cases](crates/mapkit-package/tests/package_contract.rs). API exports use
 explicit typed boundaries; JSON is restricted to adapters. No CI/CD is included.
 
+The [K01 public contract](spec/FORMAT.md#public-authoring-contract-audit-k01)
+defines producer/source validation, Schema versus semantic validation, CLI output
+and the [error catalog](spec/ERRORS.md). `inspect` includes the validated manifest;
+unknown producer fingerprints have no trust privileges. Independently create a
+fixture with `python3 examples/third_party.py /tmp/third-party.memap`.
+
+Run the public CLI/Schema regression with a separate development environment:
+
+```sh
+python3 -m venv /tmp/mapkit-contract-env
+/tmp/mapkit-contract-env/bin/pip install jsonschema==4.26.0
+/tmp/mapkit-contract-env/bin/python scripts/check_contract.py
+python3 scripts/check_architecture.py
+```
+
+`jsonschema` is only a check dependency; the producer uses Python's standard
+library and core/CLI builds remain independent of Python, Godot and game code.
+Cargo tests also fail if checked-in schemas differ from their derived Rust types.
+
 Native library paths are relative to `mapkit.gdextension`, so the same addon also
 works nested inside another runtime. `MapKitBridge.open_package_bytes` accepts
 an already acquired package snapshot; the application owns transfer, cache and
@@ -45,7 +64,7 @@ scale/contracts without requiring the application to copy generator constants.
 `MapKitBridge.spawn_options(x_cm, y_cm)` returns only valid spawnable surfaces at
 the chosen point, including separate bridge/ground heights and excluding roofs.
 The shared renderer supports `begin(chunk, parent)`, `advance(job)` and `cancel(job)`.
-One advance attaches at most 128 triangles or eight tree canopies; callers own
+One advance attaches at most 512 triangles or eight tree canopies; callers own
 scheduling/time budgets. `attach` remains a synchronous convenience using the same
 renderer. The native-layout probe also tests renderer batching/cancellation in a
 separate renderer process, without any private game dependency.

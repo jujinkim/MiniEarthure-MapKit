@@ -44,7 +44,7 @@ fn provenance_does_not_change_world_or_generated_hash() {
     let a = read_bytes(&package(document())).unwrap();
     let mut d = document();
     d.provenance.tool_id = "unknown-tool".into();
-    d.provenance.last_edited = "tomorrow".into();
+    d.provenance.last_edited = "2026-09-08T00:00:00Z".into();
     let b = read_bytes(&package(d)).unwrap();
     assert_ne!(a.inspection.package_sha256, b.inspection.package_sha256);
     assert_eq!(

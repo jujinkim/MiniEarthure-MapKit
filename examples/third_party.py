@@ -15,8 +15,8 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def produce(output):
-    document = json.loads((Path(__file__).parent / 'minimal/document.json').read_text())
+def produce(output, document_path=None):
+    document = json.loads(Path(document_path or Path(__file__).parent / 'minimal/document.json').read_text())
     for field in ('nodes', 'roads', 'buildings', 'zones', 'assets', 'placements'):
         document[field].sort(key=lambda obj: obj['id'])
     document['heightmaps'].sort(key=lambda h: (h['cell']['x'], h['cell']['y']))
@@ -38,4 +38,4 @@ def produce(output):
 
 
 if __name__ == '__main__':
-    produce(sys.argv[1])
+    produce(*sys.argv[1:])
