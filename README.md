@@ -49,11 +49,19 @@ python3 -m venv /tmp/mapkit-contract-env
 /tmp/mapkit-contract-env/bin/pip install jsonschema==4.26.0
 /tmp/mapkit-contract-env/bin/python scripts/check_contract.py
 python3 scripts/check_architecture.py
+python3 scripts/check_reproducibility.py
 ```
 
 `jsonschema` is only a check dependency; the producer uses Python's standard
 library and core/CLI builds remain independent of Python, Godot and game code.
 Cargo tests also fail if checked-in schemas differ from their derived Rust types.
+
+The [K02 reproducibility audit](spec/FORMAT.md#reproducible-authoring-and-container-audit-k02)
+covers fixed JSON/ZIP exports, exact file inventory and size limits, editable-source
+roundtrips and metadata-independent generation. Its CLI check uses only Python's
+standard library and temporary synthetic files. A foreign ZIP implementation can
+produce different package bytes with the same canonical entries and world hash;
+native OS parity and deeper asset defenses remain separate acceptance work.
 
 Native library paths are relative to `mapkit.gdextension`, so the same addon also
 works nested inside another runtime. `MapKitBridge.open_package_bytes` accepts

@@ -64,7 +64,7 @@ full grid dimensions and generation clips to map bounds.
 
 ## Resource limits and errors
 
-Current tooling profile: package <=512 MiB, expanded payload <=1 GiB, each file
+Current tooling profile: package <=512 MiB, expanded entries including manifest <=1 GiB, each file
 <=128 MiB, manifest <=4 MiB, document <=32 MiB, <=8192 payload files, <=16384 cells,
 <=200000 document objects. Tooling reads payloads into memory; these are admission
 limits, not a proof of runtime memory compliance. Generation has an explicit
@@ -150,8 +150,66 @@ The stdlib-only `examples/third_party.py NEW_PACKAGE [DOCUMENT.json]` writes the
 same synthetic example without MapKit imports or a binary. Use the CLI to validate
 the result. `scripts/check_contract.py` tests Schema generation, all CLI commands,
 independent creation, unpack/edit/repack/generation and metadata failure paths.
-Reproducibility across ZIP implementations/platforms, deeper hostile asset/container
-validation, geometry completeness and platform hash parity remain separate audits.
+The independent producer also reads referenced payloads relative to its supplied
+document, and fills omitted optional fields with their canonical null values.
+It is an authoring example, not a substitute for the reader's complete validation.
+
+## Reproducible authoring and container audit (K02)
+
+Canonical export normalizes the typed document before writing or hashing it:
+`nodes`, `roads`, `buildings`, `zones`, `assets`, `placements` sort by ID;
+heightmaps sort by `(cell.x, cell.y)`; top-level attributions sort by
+`(source, license, notice)`. Ordered geometry arrays (points, polygon vertices,
+segment widths/surfaces, exclusions and collision records) keep their input order.
+Omitted nullable road/heightmap fields serialize as null. Unicode strings retain
+their codepoints (no Unicode normalization). All six provenance strings and
+attribution notices retain their supplied text; timestamps are never regenerated.
+
+The file inventory contains each referenced payload path exactly once, even when
+several asset descriptors use that file. It includes the canonical document and
+excludes the manifest. Hashes are lowercase SHA-256 of the exact expanded bytes.
+The writer checks the 32 MiB document, 128 MiB other-entry, 4 MiB manifest, 8192
+payload-count and 1 GiB total limits **including the manifest**, then the compressed
+512 MiB limit. Limits are inclusive. Reader and exporter apply the same limits;
+failure returns no accepted package. User-asset size counts unique asset paths.
+
+Local ZIP filenames, flags and compression methods must agree with their central
+records; non-descriptor CRC/sizes must agree as well. These checks run in the
+non-inflating admission pass. Streaming data descriptors and ZIP64 size sentinels
+remain supported by the ZIP adapter. This is a container consistency check, not
+completion of the deeper hostile-container/asset-decoder audit (K03).
+
+Readers accept valid noncanonical JSON spacing/key/object order and legal foreign
+ZIP payload ordering, timestamps, permissions, stored/DEFLATE choices and comments.
+The manifest must still be first in both physical and central order at offset zero,
+all inventory/metadata/hash relations must hold, and every semantic check applies.
+`unpack` preserves expanded source/payload bytes. Explicit re-export regenerates
+normalized document and manifest bytes and the fixed container profile above.
+No source file or existing output is overwritten or silently migrated.
+
+Same normalized source plus identical referenced payload bytes produces identical
+ZIP bytes with the locked MapKit exporter. Source path, file modification time,
+permissions, process, locale and timezone do not enter the output. Different ZIP
+implementations/compressor versions may emit different DEFLATE streams/container
+headers while representing the same world: byte identity across unrelated writers
+is not required for acceptance. The independent Python producer agrees on canonical
+entry bytes/world identity, and each producer is tested for repeated byte equality.
+Native OS parity of the locked exporter remains part of final platform acceptance.
+
+Provenance and top-level attribution edits change package identity but preserve
+world identity and generated geometry. `map_id`, `revision`, per-asset attribution,
+source-accuracy and other document fields remain world-content-bound under v1;
+this audit does not broaden the metadata exclusions. A referenced asset or terrain
+byte change changes world identity even when a visual asset has the same collision
+proxy. Geometry/terrain changes are separately checked against generated output.
+
+`scripts/check_reproducibility.py` runs a small four-cell multi-payload fixture
+through real CLI pack/unpack/generate operations, an independent Python producer,
+stored/streaming/ZIP64 containers and metadata/geometry/payload edits. Rust tests
+retain the existing v1 golden package/world hashes, exact inventory rejection,
+local-header inconsistencies and inclusive size/count limits without GiB allocations.
+Cross-platform generation, detailed asset defense and full geometry acceptance
+remain separate gates in [LIMITATIONS](../LIMITATIONS.md).
 
 ### Read-only overview API (version 1)
 

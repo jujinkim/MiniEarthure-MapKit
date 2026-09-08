@@ -18,6 +18,7 @@ pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILES: usize = 8192;
 mod read_cost;
 pub use read_cost::{inspect_read_cost, ReadCost};
+mod export_limits;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -373,6 +374,7 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
         }
         files.insert(p, bytes);
     }
+    export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     Ok((d, files))
@@ -384,12 +386,9 @@ pub fn pack_bytes(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> R
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
         return Err(error("E_REFERENCE", "unexpected or missing file"));
     }
-    if files.len() > MAX_FILES
-        || files.values().any(|b| b.len() as u64 > MAX_ENTRY_BYTES)
-        || files.values().map(|b| b.len() as u64).sum::<u64>() > MAX_EXPANDED_BYTES
-    {
-        return Err(error("E_LIMIT", "package input exceeds limits"));
-    }
+    let payload_size = export_limits::payload_size(
+        files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)),
+    )?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     let manifest = PackageManifest {
@@ -417,6 +416,8 @@ pub fn pack_bytes(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> R
         provenance: d.provenance.clone(),
         world_content_hash: content_hash(&d, &files)?,
     };
+    let manifest_bytes = canonical(&manifest)?;
+    export_limits::including_manifest(payload_size, manifest_bytes.len() as u64)?;
     let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     let options = FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
@@ -426,7 +427,7 @@ pub fn pack_bytes(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> R
     writer
         .start_file("manifest.json", options)
         .map_err(zip_error)?;
-    writer.write_all(&canonical(&manifest)?).map_err(io)?;
+    writer.write_all(&manifest_bytes).map_err(io)?;
     for (path, bytes) in files {
         writer.start_file(path, options).map_err(zip_error)?;
         writer.write_all(&bytes).map_err(io)?;

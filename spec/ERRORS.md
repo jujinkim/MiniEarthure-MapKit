@@ -17,7 +17,7 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 | `E_PATH` | Unsafe/reserved/duplicate/case-colliding path or disallowed file type/link. |
 | `E_REFERENCE` | Missing/extra payload, duplicate inventory record or unmatched document reference. |
 | `E_HASH` | Payload size/digest or world content digest mismatch. |
-| `E_ZIP` | Invalid ZIP, unsupported compression/encryption or inflation/CRC failure. |
+| `E_ZIP` | Invalid ZIP, disagreeing local/central headers, unsupported compression/encryption or inflation/CRC failure. |
 | `E_MANIFEST` | Wrong manifest location, document path or disagreement with source metadata. |
 | `E_HEIGHTMAP` | Invalid PNG terrain encoding, dimensions or height samples. |
 | `E_SEAM` | Restored terrain/road boundary contract mismatch. |

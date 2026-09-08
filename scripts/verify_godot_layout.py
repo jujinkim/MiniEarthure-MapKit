@@ -38,6 +38,11 @@ func _initialize() -> void:
     check(not metadata_rejected.ok and metadata_rejected.error.code == "E_PROVENANCE", "independent invalid provenance rejected at native package boundary")
     check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "metadata failure clears previously open package")
     check(JSON.parse_string(bridge.open_package_bytes(bytes)).ok, "valid unknown producer retry after metadata failure")
+    var bad_container := FileAccess.get_file_as_bytes("res://invalid-container.memap")
+    var container_rejected: Dictionary = JSON.parse_string(bridge.open_package_bytes_budgeted(bad_container, peak))
+    check(not container_rejected.ok and container_rejected.error.code == "E_ZIP", "local ZIP header identity must match central inventory before inflation")
+    check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "container failure clears previously open package")
+    check(JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak)).ok, "retry after container rejection preserves the same budget")
     var document: Dictionary = JSON.parse_string(bridge.document_json()).data
     document.provenance.last_edited = "tomorrow"
     var invalid_document: Dictionary = JSON.parse_string(bridge.validate_document(JSON.stringify(document)))
@@ -211,6 +216,9 @@ def main():
         for name in ('chunk_renderer.gd', 'chunk_data.gd'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
+        inconsistent = bytearray((project / 'fixture.memap').read_bytes())
+        inconsistent[30] ^= 1  # first physical filename; central manifest is unchanged
+        (project / 'invalid-container.memap').write_bytes(inconsistent)
         invalid = json.loads((ROOT / 'examples/minimal/document.json').read_text())
         invalid['provenance']['last_edited'] = 'tomorrow'
         (project / 'invalid-document.json').write_text(json.dumps(invalid))

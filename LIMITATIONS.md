@@ -4,8 +4,10 @@ This repository is a working development foundation, not a completed game cutove
 
 - K01 public metadata/CLI/Schema audit is implemented. Schema success alone does
   not validate a package; calendar, graph, references, bytes and payloads require
-  semantic checks. K02 reproducibility and K03 deeper input/asset audits remain
-  separate work. Repacking malformed metadata now requires an explicit source
+  semantic checks. K02 canonical export/container/inventory audit and scoped Mac
+  regressions are implemented; locked-exporter native OS byte parity remains
+  unverified. K03 deeper input/asset auditing remains separate implementation
+  work. Repacking malformed metadata now requires an explicit source
   edit; the toolkit never silently changes saved originals.
 
 - Generator: terrain grids, width/surface road ribbons, simple building shells,
