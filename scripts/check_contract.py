@@ -146,6 +146,8 @@ def main():
     emitted = set()
     for path in (ROOT / 'crates').glob('*/src/*.rs'):
         emitted.update(re.findall(r'"(E_[A-Z_]+)"', path.read_text()))
+    for path in (ROOT / 'godot').glob('*.gd'):
+        emitted.update(re.findall(r'"(E_[A-Z_]+)"', path.read_text()))
     documented = set(re.findall(r'`(E_[A-Z_]+)`', (ROOT / 'spec/ERRORS.md').read_text()))
     assert emitted == documented, (emitted - documented, documented - emitted)
     print(f'Public contract: PASS ({calls} CLI calls, two Draft 7 schemas, independent Python producer, error catalog)')

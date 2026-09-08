@@ -1,4 +1,5 @@
 mod packed;
+mod presentation;
 mod occupied;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
@@ -163,8 +164,11 @@ impl MapKitBridge {
         response(
             self.package.as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-                .and_then(|p| mapkit_core::estimate_generation(&p.document, Cell { x, y }, 500_000))
-                .map(|cost| serde_json::json!(cost))
+                .and_then(|p| {
+                    let cell=Cell{x,y};
+                    let mut cost=serde_json::json!(mapkit_core::estimate_generation(&p.document,cell,500_000)?);
+                    cost["presentation_bytes"]=serde_json::json!(presentation::cost(p,cell));Ok(cost)
+                })
         )
     }
     /// Bounded broad-phase plan; callers estimate and reserve each required cell.
@@ -187,6 +191,12 @@ impl MapKitBridge {
         packed::response(self.package.as_ref()
             .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
             .and_then(|p| p.generate(Cell { x, y }, 500_000)))
+    }
+    /// Opt-in presentation bytes for a prepared/restored chunk. Caller reserves estimate first.
+    #[func]
+    fn with_presentation(&self, data: VarDictionary) -> VarDictionary {
+        packed::respond(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
+            .and_then(|p|presentation::decorate(p,data)))
     }
     /// Archive identity and pre-allocation size bound; storage/leases belong to callers.
     #[func]
@@ -244,6 +254,15 @@ impl MapKitBridge {
                     serde_json::json!({"chunk":chunk,"generated_sha256":hash})
                 }),
         )
+    }
+    #[func]
+    fn preview_document_packed(&self, document:GString,x:i32,y:i32)->VarDictionary {
+        packed::respond((|| {
+            let d=engine_document(&document.to_string())?;
+            if !d.assets.is_empty() || !d.heightmaps.is_empty(){return Err(mapkit_core::error("E_STATE","assets/heightmaps require saved project preview"));}
+            let c=mapkit_core::generate(GenerationInput{document:&d,cell:Cell{x,y},heightgrid:None,max_triangles:500_000})?;
+            presentation::decorate_document(&d,&std::collections::BTreeMap::new(),packed::pack(c)?)
+        })())
     }
     #[func]
     fn preview_document(&self, document: GString, x: i32, y: i32) -> GString {

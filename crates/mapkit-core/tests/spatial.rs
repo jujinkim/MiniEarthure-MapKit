@@ -128,7 +128,7 @@ fn anchors_are_owned_once_while_clipped_proxies_keep_the_original_id() {
         max: [201, 1],
     };
     d.cell_size_cm = 400;
-    d.assets.push(Asset {
+    d.assets.push(Asset { convex_collision: vec![], material: None,
         id: "marker".into(),
         path: "assets/marker.png".into(),
         attribution: Attribution {

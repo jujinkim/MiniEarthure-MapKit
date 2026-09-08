@@ -1,4 +1,6 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
+mod convex;
+pub use convex::{CollisionConvex, GeneratedConvex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -6,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 3;
+pub const RECIPE_VERSION: u32 = 4;
 pub const GENERATED_VERSION: u32 = 6;
 pub const WORLD_SCALE: f64 = 0.125;
 pub const DEFAULT_CELL_CM: i64 = 51_200;
@@ -166,6 +168,20 @@ pub struct Asset {
     pub path: String,
     pub attribution: Attribution,
     pub collision: Vec<CollisionBox>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub convex_collision: Vec<CollisionConvex>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<AssetMaterial>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AssetMaterial {
+    pub albedo_rgba: [u8; 4],
+    pub metallic_per_mille: u16,
+    pub roughness_per_mille: u16,
+    pub double_sided: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub albedo_texture: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -201,7 +217,7 @@ pub struct MapDocument {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(range(min = 1, max = 3))]
+    #[schemars(range(min = 1, max = 4))]
     pub recipe_version: u32,
     #[schemars(regex(pattern = "^(default|urban|rural)$"))]
     pub theme: String,
@@ -355,7 +371,7 @@ impl MapDocument {
             ));
         }
         if self.map_id.is_empty() || self.map_id.len() > 128
-            || !(self.theme == "default" || self.recipe_version == 3 && matches!(self.theme.as_str(), "urban" | "rural")) {
+            || !(self.theme == "default" || self.recipe_version >= 3 && matches!(self.theme.as_str(), "urban" | "rural")) {
             return Err(error("E_DOCUMENT", "map ID or unsupported theme"));
         }
         if !(200..=102_400).contains(&self.cell_size_cm) || !self.cell_size_cm.is_multiple_of(200) {
@@ -502,10 +518,18 @@ impl MapDocument {
             }
         }
         let assets: BTreeSet<_> = self.assets.iter().map(|a| &a.id).collect();
+        if self.recipe_version < 4 && self.assets.iter().any(|a| !a.convex_collision.is_empty() || a.material.is_some()) {
+            return Err(error("E_VERSION", "asset extensions require explicit recipe 4"));
+        }
         for a in &self.assets {
             a.attribution
                 .validate(&format!("asset {} attribution", a.id))?;
-            if !safe_path(&a.path)
+            if a.id.starts_with("builtin:") && self.recipe_version >= 4
+                || a.convex_collision.len() > 32 || self.recipe_version >= 4 && a.collision.len() > 1024
+                || a.convex_collision.iter().any(|c| !c.valid(100_000))
+                || a.material.as_ref().is_some_and(|m|m.metallic_per_mille>1000 || m.roughness_per_mille>1000
+                    || m.albedo_texture.as_ref().is_some_and(|id| !self.assets.iter().any(|a| &a.id==id && (a.path.ends_with(".png") || a.path.ends_with(".webp")))))
+                || !safe_path(&a.path)
                 || ![".glb", ".png", ".webp"]
                     .iter()
                     .any(|e| a.path.ends_with(e))
@@ -519,7 +543,7 @@ impl MapDocument {
             }
         }
         for p in &self.placements {
-            if !(assets.contains(&p.asset_id) || self.recipe_version == 3 && placement::builtin(&p.asset_id).is_some())
+            if !(assets.contains(&p.asset_id) || self.recipe_version >= 3 && placement::builtin(&p.asset_id).is_some())
                 || p.quarter_turns > 3
                 || !self.bounds.contains([p.position[0], p.position[2]])
                 || p.position[1].unsigned_abs() > 1_000_000
@@ -580,6 +604,8 @@ pub struct GeneratedObject {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct GeneratedChunk {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub asset_convexes: Vec<GeneratedConvex>,
     /// Recipe-3 convex building parts. Empty is omitted to preserve v1/v2 bytes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub building_prisms: Vec<BuildingPrism>,
@@ -594,6 +620,13 @@ impl GeneratedChunk {
         // This is byte-identical to canonical(self), without a whole serde Value tree.
         let mut hash = Sha256::new();
         hash.update(b"{");
+        if !self.asset_convexes.is_empty() {
+            hash.update(b"\"asset_convexes\":[");
+            for (i,convex) in self.asset_convexes.iter().enumerate() {
+                if i>0 {hash.update(b",");}hash.update(canonical(convex)?);
+            }
+            hash.update(b"],");
+        }
         if !self.building_prisms.is_empty() {
             hash.update(b"\"building_prisms\":[");
             for (i, prism) in self.building_prisms.iter().enumerate() {

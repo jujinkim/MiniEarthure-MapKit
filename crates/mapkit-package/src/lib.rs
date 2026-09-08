@@ -563,6 +563,12 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     })
 }
 impl Package {
+    /// Display estimate for an asset in this already validated immutable snapshot.
+    pub fn asset_presentation_cost(&self, id: &str) -> Result<u64> {
+        let a=self.document.assets.iter().find(|a|a.id==id).ok_or_else(||error("E_REFERENCE","unknown asset"))?;
+        Ok(assets::presentation_cost(&a.path,&self.files[&a.path]))
+    }
+
     fn generation_heightgrid(&self, cell: Cell) -> Result<Option<HeightGrid>> {
         self.document
             .heightmaps

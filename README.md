@@ -211,3 +211,12 @@ and the original [road fixture](examples/roads/document.json). The public native
 probe includes actual floor/portal/wall/ceiling contacts and matching render faces:
 `python3 scripts/verify_godot_layout.py --godot GODOT --probe roads`.
 Native OS/device and representative driving acceptance remain in [LIMITATIONS](LIMITATIONS.md).
+
+
+Recipe 4 adds explicit bounded convex asset proxies and common static GLB/PNG/WebP
+rendering with declarative material overrides. Use `examples/assets` and the
+[public contract](spec/FORMAT.md#recipe-4-common-static-assets-and-explicit-convex-proxies).
+Presentation is opt-in after generation or cache restore; Host can keep CPU-only
+output. Reserve estimates before requesting display bytes. The renderer returns an
+error instead of readiness on an unsupported backend result. See
+[asset provenance](examples/assets/README.md) and [limits](LIMITATIONS.md).

@@ -13,6 +13,7 @@ fn input(d: &MapDocument, cell: Cell) -> GenerationInput<'_> {
 }
 fn contains(solid: &OccupiedSolid, p: Vertex) -> bool {
     match &solid.shape {
+        SolidShape::Convex(c) => c.planes().all(|(n,v)|(0..3).map(|a|n[a]*(p[a]-v[a]) as i128).sum::<i128>()<=0),
         SolidShape::SlopedPrism { .. } => panic!("legacy fixture"),
         SolidShape::Box { min, max } => (0..3).all(|a| min[a] <= p[a] && p[a] <= max[a]),
         SolidShape::TriangularPrism {
@@ -115,7 +116,7 @@ fn rotated_odd_sized_asset_proxies_keep_exact_extents_across_cells() {
     let mut d = document();
     d.zones.clear();
     d.buildings.clear();
-    d.assets.push(Asset {
+    d.assets.push(Asset { convex_collision: vec![], material: None,
         id: "asset".into(),
         path: "asset.glb".into(),
         attribution: Attribution {

@@ -167,7 +167,7 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
         _ => None,
     }
 }
-fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
+pub(crate) fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
     builtin(&p.asset_id)
         .unwrap_or_else(|| {
             d.assets
@@ -198,7 +198,15 @@ fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
         )
         .to_vec();
     }
-    let boxes = proxies(d, p);
+    let mut boxes = proxies(d, p);
+    if let Some(asset)=d.assets.iter().find(|a|a.id==p.asset_id) {
+        for c in &asset.convex_collision {
+            let c=c.placed(p);
+            let min: Vertex=std::array::from_fn(|a|c.vertices.iter().map(|v|v[a]).min().unwrap());
+            let max: Vertex=std::array::from_fn(|a|c.vertices.iter().map(|v|v[a]).max().unwrap());
+            boxes.push(CollisionBox {center:std::array::from_fn(|a|min[a]+(max[a]-min[a])/2),size_cm:std::array::from_fn(|a|(max[a]-min[a]) as u32)});
+        }
+    }
     let min = std::array::from_fn(|a| {
         boxes
             .iter()
@@ -410,6 +418,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
                 .unwrap()
                 .collision
                 .is_empty()
+            && d.assets.iter().find(|a|a.id==p.asset_id).unwrap().convex_collision.is_empty()
         {
             return Err(error(
                 "E_GEOMETRY",
@@ -701,6 +710,9 @@ fn emit_placement(
     } // one owner emits the entire small trunk
     for proxy in proxies(d, p) {
         b.box_shape(proxy.center, proxy.size_cm, &p.id)?;
+    }
+    if let Some(asset)=d.assets.iter().find(|a|a.id==p.asset_id) {
+        for shape in &asset.convex_collision {b.convex_shape(shape.placed(p), &p.id)?;}
     }
     b.bounds = saved;
     if d.cell_at(xy(p.position)) == Some(cell) {

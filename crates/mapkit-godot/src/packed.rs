@@ -17,6 +17,9 @@ pub struct MapKitPackedGeometry {
     prism_indices: PackedInt32Array,
     materials: PackedStringArray,
     usages: PackedStringArray,
+    convex_vertices: PackedInt64Array,
+    convex_offsets: PackedInt32Array,
+    convex_ids: PackedStringArray,
 }
 #[godot_api]
 impl MapKitPackedGeometry {
@@ -32,6 +35,9 @@ impl MapKitPackedGeometry {
             "building_prism_object_indices" => &self.prism_indices,
             "building_materials" => &self.materials,
             "building_usages" => &self.usages,
+            "asset_convex_vertices_cm" => &self.convex_vertices,
+            "asset_convex_offsets" => &self.convex_offsets,
+            "asset_convex_ids" => &self.convex_ids,
         }
     }
 }
@@ -86,8 +92,19 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         prism_vertices.extend(prism.vertices().iter().flatten().copied());prism_indices.push(id);
         materials[id as usize]=prism.material.as_str().into();usages[id as usize]=prism.usage.as_str().into();
     }
+    let mut convex_vertices=vec![];
+    let mut convex_offsets=vec![0i32];
+    let mut convex_ids=PackedStringArray::new();
+    for c in &chunk.asset_convexes {
+        convex_vertices.extend(c.shape.vertices.iter().flatten().copied());
+        convex_offsets.push(convex_vertices.len() as i32);
+        convex_ids.push(&GString::from(c.object_id.as_str()));
+    }
     let geometry = Gd::from_init_fn(|base| MapKitPackedGeometry {
         base,
+        convex_vertices: PackedInt64Array::from(convex_vertices.as_slice()),
+        convex_offsets: PackedInt32Array::from(convex_offsets.as_slice()),
+        convex_ids,
         vertices: PackedInt64Array::from(vertices.as_slice()),
         surfaces: PackedByteArray::from(surfaces.as_slice()),
         indices: PackedInt32Array::from(object_indices.as_slice()),

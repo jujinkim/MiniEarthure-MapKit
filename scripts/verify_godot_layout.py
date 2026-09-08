@@ -11,6 +11,7 @@ from check_input_defense import asset_package
 import struct
 import zlib
 from road_probe import PROBE as ROAD_PROBE
+from asset_probe import PROBE as ASSET_PROBE
 from placement_probe import PROBE as PLACEMENT_PROBE
 from spatial_terrain_probe import make_fixture as make_terrain_fixture, PROBE as TERRAIN_PROBE
 
@@ -192,7 +193,7 @@ func run() -> void:
     assert(RENDERER.advance(cancelled) and parent.get_child_count() == 0)
     var triangles: Array = []
     for i in range(RENDERER.TRIANGLES_PER_BATCH * 2 + 1):
-        triangles.append({"surface": "grass", "vertices": [[0, 0, 0], [100, 0, 0], [0, 0, 100]]})
+        triangles.append({"object_id": "terrain", "spawnable": true, "surface": "grass", "vertices": [[0, 0, 0], [100, 0, 0], [0, 0, 100]]})
     var shared := RENDERER.begin({"cell": {"x": 0, "y": 0}, "triangles": triangles, "objects": []}, parent)
     while not RENDERER.advance(shared): pass
     assert(shared.root.get_child_count() == 3 and shared.materials.is_empty())
@@ -210,10 +211,18 @@ func run() -> void:
 '''
 
 
+def run_engine(command, timeout):
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+    output = result.stdout.decode(errors='replace')
+    print(output)
+    if result.returncode or 'SCRIPT ERROR:' in output or '\nERROR:' in output:
+        raise RuntimeError('Godot returned an error diagnostic or nonzero status')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--godot', required=True)
-    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads', 'placement'], action='append', help='Run only selected behavioral probes; default runs all')
+    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads', 'placement', 'assets'], action='append', help='Run only selected behavioral probes; default runs all')
     args = parser.parse_args()
     library = {'win32': 'mapkit_godot.dll', 'darwin': 'libmapkit_godot.dylib'}.get(sys.platform, 'libmapkit_godot.so')
     built_library = ROOT / 'target/debug' / library
@@ -232,10 +241,12 @@ def main():
         (project / 'terrain_probe.gd').write_text(TERRAIN_PROBE)
         (project / 'road_probe.gd').write_text(ROAD_PROBE)
         (project / 'placement_probe.gd').write_text(PLACEMENT_PROBE)
+        (project / 'asset_probe.gd').write_text(ASSET_PROBE)
+        subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'assets.memap'), str(ROOT / 'examples/assets/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'placement.memap'), str(ROOT / 'examples/placement/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'roads.memap'), str(ROOT / 'examples/roads/document.json')], check=True, timeout=30)
         make_terrain_fixture(project)
-        for name in ('chunk_renderer.gd', 'chunk_data.gd'):
+        for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
         inconsistent = bytearray((project / 'fixture.memap').read_bytes())
@@ -248,14 +259,14 @@ def main():
         invalid['provenance']['last_edited'] = 'tomorrow'
         (project / 'invalid-document.json').write_text(json.dumps(invalid))
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'invalid-metadata.memap'), str(project / 'invalid-document.json')], check=True, timeout=30)
-        subprocess.run([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], check=True, timeout=60)
-        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd', 'placement': 'placement_probe.gd'}
+        run_engine([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], timeout=60)
+        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd', 'placement': 'placement_probe.gd', 'assets': 'asset_probe.gd'}
         fixture_bytes = (project / 'fixture.memap').read_bytes()
         for probe in args.probe or scripts:
             # Binding deliberately corrupts its source to prove snapshot ownership.
             # Each process gets a fresh fixture even when probes run out of order.
             (project / 'fixture.memap').write_bytes(fixture_bytes)
-            subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://' + scripts[probe]], check=True, timeout=30)
+            run_engine([args.godot, '--headless', '--path', str(project), '--script', 'res://' + scripts[probe]], timeout=30)
 
 
 if __name__ == '__main__':

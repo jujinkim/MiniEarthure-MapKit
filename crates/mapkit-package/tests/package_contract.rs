@@ -284,7 +284,7 @@ fn external_asset_uri_is_rejected() {
     bytes.extend(b"JSON");
     bytes.extend(data);
     let mut d = document();
-    d.assets.push(Asset {
+    d.assets.push(Asset { convex_collision: vec![], material: None,
         id: "custom".into(),
         path: "assets/custom.glb".into(),
         attribution: Attribution {
@@ -415,7 +415,7 @@ fn recipes_are_explicit_preserved_and_manifest_bound() {
     rejected(&bad,"E_MANIFEST");
     let bad=rewrite(&bytes,|entries| {
         let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
-        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=4.into();*b=canonical(&m).unwrap();
+        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=5.into();*b=canonical(&m).unwrap();
     });
     rejected(&bad,"E_VERSION");
 }

@@ -11,7 +11,7 @@ fn document() -> MapDocument {
 }
 fn asset_doc(path: &str) -> MapDocument {
     let mut d = document();
-    d.assets.push(Asset {
+    d.assets.push(Asset { convex_collision: vec![], material: None,
         id: "custom".into(),
         path: path.into(),
         attribution: Attribution {

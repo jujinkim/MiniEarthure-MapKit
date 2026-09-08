@@ -576,3 +576,19 @@ mod tests {
         );
     }
 }
+
+/// Conservative display planning for already validated bytes. No image/GPU load.
+pub(super) fn presentation_cost(path: &str, bytes: &[u8]) -> u64 {
+    let image = |data: &[u8]| -> u64 {
+        if data.starts_with(b"\x89PNG") {u64::from(u32::from_be_bytes(data[16..20].try_into().unwrap()))*u64::from(u32::from_be_bytes(data[20..24].try_into().unwrap()))*24}
+        else {let decoder=image_webp::WebPDecoder::new(Cursor::new(data)).unwrap();let (w,h)=decoder.dimensions();u64::from(w)*u64::from(h)*24}
+    };
+    let base=65536+bytes.len() as u64*32;
+    if !path.ends_with(".glb") {return base+image(bytes);}
+    let n=le(bytes,12).unwrap() as usize;
+    let doc:gltf::json::Root=serde_json::from_slice(&bytes[20..20+n]).unwrap();
+    let doc=gltf::Document::from_json(doc).unwrap();
+    let bin=bytes.get(28+n..).unwrap_or_default();
+    base+doc.nodes().len() as u64*8192+doc.meshes().flat_map(|m|m.primitives()).map(|p|8192+p.get(&gltf::Semantic::Positions).unwrap().count() as u64*256+p.indices().map_or(0,|i|i.count()) as u64*32).sum::<u64>()
+        +doc.images().map(|i|match i.source(){gltf::image::Source::View{view,..}=>image(&bin[view.offset()..view.offset()+view.length()]),_=>0}).sum::<u64>()
+}

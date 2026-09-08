@@ -60,7 +60,7 @@ fn overview_cost_counts_escaped_bytes_and_enforces_boundary() {
 fn overview_reports_custom_assets_without_copying_asset_metadata() {
     let mut d = document();
     assert!(!overview(&d).unwrap().has_custom_assets);
-    d.assets.push(Asset {
+    d.assets.push(Asset { convex_collision: vec![], material: None,
         id: "custom".into(),
         path: "custom.glb".into(),
         attribution: Attribution {

@@ -12,6 +12,8 @@ pub struct MapKitPackedOccupancy {
     indices: PackedInt32Array,
     ids: PackedStringArray,
     slope_tops: PackedInt64Array,
+    convex_vertices: PackedInt64Array,
+    convex_faces: PackedByteArray,
 }
 #[godot_api]
 impl MapKitPackedOccupancy {
@@ -24,6 +26,8 @@ impl MapKitPackedOccupancy {
             "object_indices" => &self.indices,
             "object_ids" => &self.ids,
             "slope_tops_cm" => &self.slope_tops,
+            "convex_vertices_cm" => &self.convex_vertices,
+            "convex_faces" => &self.convex_faces,
         }
     }
 }
@@ -33,6 +37,8 @@ pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionar
         let mut kinds = Vec::with_capacity(result.solids.len());
         let mut values = Vec::with_capacity(result.solids.len() * 8);
         let mut slope_tops=vec![];
+        let mut convex_vertices=vec![];
+        let mut convex_faces=vec![];
         let mut indices = Vec::with_capacity(result.solids.len());
         let mut ids = PackedStringArray::new();
         let mut index = BTreeMap::<&str, i32>::new();
@@ -44,6 +50,11 @@ pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionar
             });
             indices.push(id);
             match &solid.shape {
+                SolidShape::Convex(c) => {
+                    kinds.push(3);
+                    values.extend_from_slice(&[convex_vertices.len() as i64,c.vertices.len() as i64,convex_faces.len() as i64,c.faces.len() as i64,0,0,0,0]);
+                    convex_vertices.extend(c.vertices.iter().flatten().copied());convex_faces.extend(c.faces.iter().flatten().copied());
+                }
                 SolidShape::Box { min, max } => {
                     kinds.push(0);
                     values.extend_from_slice(min);
@@ -68,6 +79,8 @@ pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionar
         }
         let occupancy = Gd::from_init_fn(|base| MapKitPackedOccupancy {
             base,
+            convex_vertices: PackedInt64Array::from(convex_vertices.as_slice()),
+            convex_faces: PackedByteArray::from(convex_faces.as_slice()),
             kinds: PackedByteArray::from(kinds.as_slice()),
             values: PackedInt64Array::from(values.as_slice()),
             indices: PackedInt32Array::from(indices.as_slice()),

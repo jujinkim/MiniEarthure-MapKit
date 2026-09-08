@@ -602,3 +602,80 @@ excess cell counts return `E_BUDGET` before result allocation. No partial plans.
 Generation hashes and package versions are unchanged. Callers must estimate and
 reserve all required cells before generation, then check actual support and
 clearance; this broad-phase plan grants no collision readiness or vehicle admission.
+
+
+### Recipe 4: common static assets and explicit convex proxies
+
+Recipe 4 is an explicit strategy layered on recipe 3. Existing recipe 1–3 source,
+canonical generated hashes and `MKCELL01`/`MKCELL02` archives are preserved. Readers
+never migrate originals. `Asset` adds optional `convex_collision` (default empty,
+omitted) and `material` (default absent, omitted); these fields require recipe 4.
+Each asset keeps its required original attribution/license/notice. New code and
+original procedural fixtures are MIT; imported asset licenses are independent.
+
+A convex proxy is `{vertices,faces}`. Vertices are 4–32 unique local integer
+centimetre `(x,height,y)` points, each component within ±100000. Faces are 4–60
+outward-oriented triangles indexing those vertices with integers 0–31. Every
+vertex must be used. Duplicate/degenerate faces, open or inconsistently oriented
+edges, nonconvexity, zero volume and invalid Euler topology fail `E_ASSET`. Every
+face must support all vertices on its interior side. Validation and quarter-turn
+placement use exact integer predicates; no engine hull generation defines source
+semantics. Up to 32 convexes plus 1024 legacy boxes per recipe-4 asset form a union.
+Existing recipe-3 clearance, bounds/building/road/access rules also cover convex
+extents. A placement still requires a footprint proxy in this authoring profile.
+
+Generated v6 gains optional `asset_convexes` records `{object_id,shape}`, omitted
+when empty and hashed canonically before `building_prisms`. Each overlapping cell
+retains the full convex to preserve solid interiors even when no face enters a
+cell; clipped collision faces remain ordinary nonspawnable concrete triangles.
+Objects retain one anchor owner, so visuals are instantiated once. The geometry
+adapter exposes flat `asset_convex_vertices_cm`, `asset_convex_offsets` (including
+terminal offset) and `asset_convex_ids`; separate views detach on mutation.
+Collision consumers attach the exact convex points alongside existing triangles
+and buildings, under their owning cell's readiness/cancellation budget.
+
+Occupied view tag 3 stores `[vertex_offset,vertex_count,face_offset,face_count,0,0,0,0]`
+in `shape_values_cm`; offsets address `convex_vertices_cm` (Int64 coordinates) and
+`convex_faces` (byte indices). Offsets are nonnegative multiples of three; counts
+and extents must satisfy the same convex profile. Consumers validate lengths,
+indices, topology and all coordinates before spatial rejection. Full integer SAT
+and wheel half-space intersection must use the real convex, never its AABB.
+`MKCELL03` adds a bounded convex section after a possibly empty building section:
+u32 count, then object-ID string, u32 vertex/face counts, little-endian i64 triples
+and u8 index triples. Counts are checked against trusted source estimates and
+remaining bytes before allocation. Old magic/bytes remain unchanged.
+
+`AssetMaterial` is `{albedo_rgba:[u8;4], metallic_per_mille:u16,
+roughness_per_mille:u16,double_sided:bool,albedo_texture?:asset_id}`. Per-mille factors
+are 0–1000. Texture IDs resolve only to declared PNG/WebP assets in the same
+package; no path/URL or shader is evaluated. GLB uses its embedded static glTF
+materials unless this override is present. PNG/WebP placements texture their
+explicit proxy faces (dominant-plane scene-metre UVs; vertical faces include height). GLB coordinates use metres,
+right-handed x-right/y-up/z-back, corresponding to `(map_x,height,-map_y)/100`.
+The common renderer applies placement quarter turns and the shared 0.125 scale.
+Builtin tree canopy/trunk, fence panel and streetlight post/head use original
+procedural shapes and fixed shared material colors.
+
+`with_presentation(generated_data)` explicitly decorates CPU output with validated
+in-memory bytes, material descriptors and proxy-display masks. It does not change
+generation/hash or create GPU resources. Both fresh generation and restored caches
+can be decorated. Callers first reserve `estimate_chunk.presentation_bytes`, which
+includes importer/template/instance/texture planning allowances for local or
+proxy-overlapping assets and their texture dependencies. Host never requests this
+view or loads the renderer, textures or meshes. The core knows no engine or files.
+
+The shared Godot renderer imports validated GLB buffers without filesystem
+extraction or resource-path loading. It accepts only plain Node3D/MeshInstance3D
+results with no scripts, imports image textures in memory, and batches geometry
+and object attachment. Imported templates are released at completion/cancellation;
+instances retain only their shared mesh/material resources. Missing/backend-rejected
+assets produce `job.error` (`E_RENDER_ASSET`) and never `job.done`; consumers must
+reject that generation without acknowledging readiness. Repeated cancel and parent
+removal cannot attach late results. A single engine GLB import cannot be preempted;
+its latency and complete driver/RSS accounting remain reference-platform gates,
+not a promise derived from the batch count or estimate.
+
+The standalone `examples/assets` project and `--probe assets` exercise materials,
+PNG/WebP, actual transforms/solid interiors/seams, mutation isolation and cleanup.
+Editor gestures, full LOD controls and native OS/performance acceptance remain
+separate from this supported static rendering contract.

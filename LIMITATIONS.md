@@ -47,3 +47,14 @@ This repository is a working development foundation, not a completed game cutove
 - Game transport, collision admission, session memory/cache policy and release
   acceptance belong to consumers and are not certified by this standalone tool's
   tests. This repository does not declare a completed game cutover.
+
+
+K07 scoped implementation (2026-09-09): recipe-4 convex proxy authoring, static GLB
+and PNG/WebP display, declarative materials and procedural default assets use the
+shared renderer. Supported bounds and axes are explicit in FORMAT. Visual-only
+placements without a footprint proxy, engine programs/extensions and animations
+are outside this static authoring profile. The caller owns collision admission,
+job/frame scheduling and display-error rejection. Engine GLB import is one
+non-preemptible operation; complete asset/driver memory accounting, native
+Windows/Linux/Android render parity, exported products and reference-map frame/RSS
+acceptance remain unverified. Mac synthetic evidence cannot close those gates.

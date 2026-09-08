@@ -95,6 +95,14 @@ impl Builder {
         self.triangle([v[0], v[1], v[2]], surface, id, spawnable)?;
         self.triangle([v[0], v[2], v[3]], surface, id, spawnable)
     }
+    pub(super) fn convex_shape(&mut self, shape: CollisionConvex, id: &str) -> Result<()> {
+        let area=shape.bounds();
+        if (0..2).any(|a| area.max[a]<self.bounds.min[a] || area.min[a]>self.bounds.max[a]) {return Ok(());}
+        self.solid(id, SolidShape::Convex(shape.clone()))?;
+        for face in &shape.faces {self.triangle(face.map(|i|shape.vertices[i as usize]),Surface::Concrete,id,false)?;}
+        self.chunk.asset_convexes.push(GeneratedConvex {object_id:id.into(),shape});
+        Ok(())
+    }
     pub(super) fn box_shape(&mut self, center: Vertex, size: [u32; 3], id: &str) -> Result<()> {
         let min = [
             center[0] - size[0] as i64 / 2,
@@ -215,7 +223,7 @@ fn generate_internal(
     let d = &document;
     let bounds = d.cell_bounds(input.cell)?;
     let mut b = Builder {
-        chunk: GeneratedChunk {
+        chunk: GeneratedChunk { asset_convexes: vec![],
             building_prisms: vec![],
             format_version: GENERATED_VERSION,
             cell: input.cell,
@@ -306,7 +314,7 @@ fn generate_internal(
         }
     }
     } // Frozen recipe-v1 terrain/road strategy.
-    if d.recipe_version == 3 {
+    if d.recipe_version >= 3 {
         crate::placement::generate(d, input.cell, &mut b)?;
         return Ok(GeneratedOccupancy { chunk: b.chunk, solids: b.occupancy.map_or_else(Vec::new, |v| v.solids) });
     }

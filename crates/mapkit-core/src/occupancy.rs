@@ -6,6 +6,7 @@ pub const MAX_OCCUPIED_SOLIDS: usize = 200_000;
 /// Concave building footprints remain a union of triangular prisms, not an AABB.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SolidShape {
+    Convex(crate::CollisionConvex),
     Box {
         min: Vertex,
         max: Vertex,
@@ -48,6 +49,7 @@ pub(crate) struct Occupancy {
 impl Occupancy {
     pub fn push(&mut self, id: &str, shape: SolidShape, cell: &Bounds) -> Result<()> {
         let (min, max) = match &shape {
+            SolidShape::Convex(c) => {let b=c.bounds();(b.min,b.max)},
             SolidShape::Box { min, max } => ([min[0], min[2]], [max[0], max[2]]),
             SolidShape::TriangularPrism { footprint, .. } | SolidShape::SlopedPrism { footprint, .. } => (
                 std::array::from_fn(|axis| footprint.iter().map(|p| p[axis]).min().unwrap()),

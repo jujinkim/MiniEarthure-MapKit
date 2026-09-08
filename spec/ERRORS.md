@@ -47,3 +47,9 @@ readers never repair original source. `E_LIMIT` bounds endpoint degree (32).
 `E_BUDGET` includes local road planning, live fragment/vertex, subdivision work and
 source-derived output allowances. `E_MANIFEST` includes document/manifest recipe
 mismatch; both supported recipes retain their own source and generated identity.
+
+
+Common renderer jobs use `E_RENDER_ASSET` for missing validated presentation bytes,
+failed image/GLB backend decode, unknown builtins or non-static engine import
+results. This is a presentation-job error, not a CLI package-acceptance result.
+Consumers must reject readiness and retain any already committed driving region.

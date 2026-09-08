@@ -100,7 +100,7 @@ fn source_and_asset_attribution_preserve_notices_and_reject_missing_labels() {
             value["attributions"][0][field] = bad.into();
             let mut changed: MapDocument = serde_json::from_value(value).unwrap();
             assert_eq!(changed.validate().unwrap_err().code, "E_ATTRIBUTION");
-            changed.assets.push(Asset {
+            changed.assets.push(Asset { convex_collision: vec![], material: None,
                 id: "custom".into(),
                 path: "custom.png".into(),
                 attribution: changed.attributions.remove(0),

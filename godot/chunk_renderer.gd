@@ -1,5 +1,6 @@
 extends RefCounted
 ## Display only. Call advance() per admitted batch; the owner controls frame budgets.
+const ASSETS := preload("./asset_library.gd")
 const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
@@ -12,48 +13,84 @@ static func begin(chunk: Dictionary, parent: Node3D) -> Dictionary:
 	var root := Node3D.new()
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	return {"root": root, "chunk": DATA.view(chunk), "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}}
+	return {"root": root, "chunk": DATA.view(chunk), "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled:
 		return true
 	if not is_instance_valid(job.root) or job.root.is_queued_for_deletion():
 		job.cancelled = true
-		job.chunk = {}
-		job.materials = {}
+		dispose(job)
 		return true
 	var chunk: Dictionary = job.chunk
+	var presentation: Dictionary = chunk.get("presentation", {})
+	var sources: Dictionary = presentation.get("assets", {})
 	var offset := int(job.triangle)
 	if offset < DATA.count(chunk):
-		var key := DATA.material_key(chunk, offset)
+		var skipped := 0
+		while offset < DATA.count(chunk) and DATA.object_id(chunk, offset) in presentation.get("hidden_proxies", PackedStringArray()) and skipped < TRIANGLES_PER_BATCH:
+			offset += 1
+			skipped += 1
+		if skipped > 0:
+			job.triangle = offset
+			return false
+		var key := display_material_key(chunk, offset)
 		var surface := SurfaceTool.new()
 		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 		var end := mini(offset + TRIANGLES_PER_BATCH, DATA.count(chunk))
-		while offset < end and DATA.material_key(chunk, offset) == key:
+		while offset < end and display_material_key(chunk, offset) == key and not DATA.object_id(chunk, offset) in presentation.get("hidden_proxies", PackedStringArray()):
+			var normal := (DATA.scene_vertex(chunk, offset, 1) - DATA.scene_vertex(chunk, offset, 0)).cross(DATA.scene_vertex(chunk, offset, 2) - DATA.scene_vertex(chunk, offset, 0)).abs()
 			for index in [0, 2, 1]:
 				var point := DATA.scene_vertex(chunk, offset, index)
-				surface.set_uv(Vector2(point.x, point.z))
+				var uv := Vector2(point.x, point.z)
+				if key.begins_with("asset:") and normal.y < maxf(normal.x, normal.z):
+					uv = Vector2(point.z, point.y) if normal.x > normal.z else Vector2(point.x, point.y)
+				surface.set_uv(uv)
 				surface.add_vertex(point)
 			offset += 1
 		surface.generate_normals()
 		var mesh := MeshInstance3D.new()
 		mesh.mesh = surface.commit()
 		if not job.materials.has(key):
-			var material := StandardMaterial3D.new()
-			material.albedo_color = material_color(key)
-			material.roughness = 0.9
-			material.cull_mode = BaseMaterial3D.CULL_DISABLED
+			var material := ASSETS.material(key.substr(6), sources, job.asset_materials) if key.begins_with("asset:") else StandardMaterial3D.new()
+			if material == null:
+				mesh.free()
+				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
+			if not key.begins_with("asset:"):
+				material.albedo_color = material_color(key)
+				material.roughness = 0.9
+				material.cull_mode = BaseMaterial3D.CULL_DISABLED
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
 		job.root.add_child(mesh)
 		job.triangle = offset
 	elif int(job.object) < chunk.objects.size():
-		var finish := mini(int(job.object) + 8, chunk.objects.size())
+		var finish := mini(int(job.object) + 1, chunk.objects.size())
 		while int(job.object) < finish:
 			var object: Dictionary = chunk.objects[job.object]
 			job.object += 1
-			if str(object.asset_id) != "builtin:tree":
+			var id := str(object.asset_id)
+			if not id.begins_with("builtin:"):
+				if not sources.has(id): return fail(job, "E_RENDER_ASSET", "Presentation bytes are missing")
+				if not str(sources[id].path).ends_with(".glb"): continue # textured proxy faces
+				if not job.templates.has(id):
+					var template := ASSETS.template(id, sources, job.asset_materials)
+					if template == null: return fail(job, "E_RENDER_ASSET", "Validated GLB could not be displayed")
+					job.templates[id] = template
+				var instance: Node3D = job.templates[id].duplicate(0)
+				var anchor := Node3D.new()
+				anchor.set_meta("mapkit_asset_id", id)
+				anchor.set_meta("mapkit_object_id", str(object.id))
+				anchor.position = scene_position(object.position)
+				# glTF metres: x-right, y-up, z-back; local map y points forward.
+				anchor.rotation.y = float(object.quarter_turns) * PI / 2.0
+				anchor.scale = Vector3.ONE * 0.125
+				anchor.add_child(instance)
+				job.root.add_child(anchor)
 				continue
+			if id not in ["builtin:tree", "builtin:fence", "builtin:streetlight"]:
+				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
+			if id != "builtin:tree": continue
 			var canopy := MeshInstance3D.new()
 			var shape := SphereMesh.new()
 			shape.radius = 0.23
@@ -66,11 +103,32 @@ static func advance(job: Dictionary) -> bool:
 			job.root.add_child(canopy)
 	else:
 		job.done = true
-		job.chunk = {}
-		job.materials = {}
+		dispose(job)
 	return job.done
 
+static func display_material_key(chunk: Dictionary, triangle: int) -> String:
+	var presentation: Dictionary = chunk.get("presentation", {})
+	var id := str(presentation.get("proxy_materials", {}).get(DATA.object_id(chunk, triangle), ""))
+	if not id.is_empty():
+		return "asset:" + id if presentation.get("assets", {}).has(id) else id
+	return DATA.material_key(chunk, triangle)
+
+static func dispose(job: Dictionary) -> void:
+	for template: Node in job.templates.values():
+		if is_instance_valid(template): template.free()
+	job.templates = {}
+	job.asset_materials = {}
+	job.materials = {}
+	job.chunk = {}
+
+static func fail(job: Dictionary, code: String, message: String) -> bool:
+	job.error = {"code": code, "message": message}
+	cancel(job)
+	return true
+
 static func material_color(key: String) -> Color:
+	if key.begins_with("builtin:"):
+		return {"builtin:tree": Color("745138"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63")}.get(key, Color.GRAY)
 	if not key.contains(":"):
 		return COLORS.get(key, Color.GRAY)
 	var fields := key.split(":")
@@ -80,8 +138,7 @@ static func material_color(key: String) -> Color:
 
 static func cancel(job: Dictionary) -> void:
 	job.cancelled = true
-	job.chunk = {}
-	job.materials = {}
+	dispose(job)
 	if is_instance_valid(job.root) and not job.root.is_queued_for_deletion():
 		var parent: Node = job.root.get_parent()
 		if parent != null:

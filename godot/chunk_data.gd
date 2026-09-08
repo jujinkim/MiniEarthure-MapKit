@@ -32,14 +32,32 @@ static func material_key(chunk: Dictionary, triangle: int) -> String:
 				return str(prism.material) + ":" + str(prism.usage)
 	return surface(chunk, triangle)
 
-static func prism_count(chunk: Dictionary) -> int:
+static func building_prism_count(chunk: Dictionary) -> int:
 	return chunk.get("building_prism_object_indices", PackedInt32Array()).size() if chunk.has("packed_version") else chunk.get("building_prisms", []).size()
 
+static func prism_count(chunk: Dictionary) -> int:
+	var extra: int = chunk.get("asset_convex_ids", PackedStringArray()).size() if chunk.has("packed_version") else chunk.get("asset_convexes", []).size()
+	return building_prism_count(chunk) + extra
+
 static func prism_id(chunk: Dictionary, index: int) -> String:
+	if index >= building_prism_count(chunk):
+		var extra := index - building_prism_count(chunk)
+		return str(chunk.asset_convex_ids[extra]) if chunk.has("packed_version") else str(chunk.asset_convexes[extra].object_id)
 	return str(chunk.object_ids[chunk.building_prism_object_indices[index]]) if chunk.has("packed_version") else str(chunk.building_prisms[index].object_id)
 
 static func prism_points(chunk: Dictionary, index: int, scale: float) -> PackedVector3Array:
 	var result := PackedVector3Array()
+	if index >= building_prism_count(chunk):
+		var extra := index - building_prism_count(chunk)
+		if chunk.has("packed_version"):
+			var offsets: PackedInt32Array = chunk.asset_convex_offsets
+			var values: PackedInt64Array = chunk.asset_convex_vertices_cm
+			for offset in range(offsets[extra], offsets[extra + 1], 3):
+				result.append(Vector3(values[offset], values[offset + 1], -values[offset + 2]) * (scale / 100.0))
+		else:
+			for v: Array in chunk.asset_convexes[extra].shape.vertices:
+				result.append(Vector3(v[0], v[1], -v[2]) * (scale / 100.0))
+		return result
 	for vertex in 6:
 		if chunk.has("packed_version"):
 			var offset := index * 18 + vertex * 3
