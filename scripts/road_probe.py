@@ -19,6 +19,7 @@ func run() -> void:
     if not opened.ok:
         quit(1)
         return
+    check(JSON.parse_string(bridge.cell_window(0, 0)).data.recipe_version == 2, "window reports the explicit recipe-2 source")
     world = Node3D.new()
     root.add_child(world)
     world.position = Vector3(11, 3, -7)

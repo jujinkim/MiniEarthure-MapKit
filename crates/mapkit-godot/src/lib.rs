@@ -112,7 +112,7 @@ impl MapKitBridge {
                         "cell_size_cm": p.document.cell_size_cm,
                         "world_scale": mapkit_core::WORLD_SCALE,
                         "package_format_version": mapkit_core::PACKAGE_VERSION,
-                        "recipe_version": mapkit_core::RECIPE_VERSION,
+                        "recipe_version": p.document.recipe_version,
                         "generated_format_version": mapkit_core::GENERATED_VERSION,
                     }))
                 }),

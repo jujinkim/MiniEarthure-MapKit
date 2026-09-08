@@ -138,6 +138,7 @@ func _initialize() -> void:
     check(window.ok and window.data.cells.size() == 4, "map-edge 3x3 contains existing cells only")
     check(window.data.cell.x == 1 and window.data.cell.y == 1, "maximum edge belongs to last cell")
     check(window.data.world_scale == 0.125, "public scale contract")
+    check(window.data.recipe_version == 1, "window reports the opened recipe-1 source, not the current recipe")
     check(window.data.generated_format_version == 6, "public generated contract")
     var outside: Dictionary = JSON.parse_string(bridge.cell_window(-1, 0))
     check(not outside.ok and outside.error.code == "E_CELL", "outside-map request rejected")
