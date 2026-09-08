@@ -39,7 +39,7 @@ pub struct PackageManifest {
     pub format: String,
     #[schemars(range(min = 1, max = 1))]
     pub format_version: u32,
-    #[schemars(range(min = 1, max = 1))]
+    #[schemars(range(min = 1, max = 2))]
     pub recipe_version: u32,
     #[schemars(range(min = 6, max = 6))]
     pub generated_version: u32,
@@ -361,7 +361,7 @@ pub fn pack_bytes(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> R
     let manifest = PackageManifest {
         format: "memap".into(),
         format_version: PACKAGE_VERSION,
-        recipe_version: RECIPE_VERSION,
+        recipe_version: d.recipe_version,
         generated_version: GENERATED_VERSION,
         map_id: d.map_id.clone(),
         revision: d.revision,
@@ -488,7 +488,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     let manifest: PackageManifest = json(&files.remove("manifest.json").unwrap())?;
     if manifest.format != "memap"
         || manifest.format_version != PACKAGE_VERSION
-        || manifest.recipe_version != RECIPE_VERSION
+        || !(1..=RECIPE_VERSION).contains(&manifest.recipe_version)
         || manifest.generated_version != GENERATED_VERSION
     {
         return Err(error("E_VERSION", "unsupported package contract"));
@@ -520,7 +520,8 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     if records != references(&document)? || records != files.keys().cloned().collect() {
         return Err(error("E_REFERENCE", "unlisted or missing payload"));
     }
-    if manifest.map_id != document.map_id
+    if manifest.recipe_version != document.recipe_version
+        || manifest.map_id != document.map_id
         || manifest.revision != document.revision
         || manifest.bounds != document.bounds
         || manifest.cell_size_cm != document.cell_size_cm

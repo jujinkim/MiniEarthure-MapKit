@@ -1,0 +1,389 @@
+{
+  "map_id": "synthetic-roads-v2",
+  "revision": 1,
+  "bounds": {
+    "min": [
+      0,
+      0
+    ],
+    "max": [
+      10000,
+      10000
+    ]
+  },
+  "cell_size_cm": 5000,
+  "seed": 42,
+  "recipe_version": 2,
+  "theme": "default",
+  "terrain_base_cm": 0,
+  "heightmaps": [],
+  "nodes": [
+    {
+      "id": "ground-west-from",
+      "position": [
+        0,
+        0,
+        1000
+      ],
+      "level": 0
+    },
+    {
+      "id": "junction",
+      "position": [
+        5000,
+        0,
+        1000
+      ],
+      "level": 0
+    },
+    {
+      "id": "ground-east-to",
+      "position": [
+        10000,
+        0,
+        1000
+      ],
+      "level": 0
+    },
+    {
+      "id": "branch-to",
+      "position": [
+        5000,
+        0,
+        3000
+      ],
+      "level": 0
+    },
+    {
+      "id": "bridge-from",
+      "position": [
+        2500,
+        600,
+        0
+      ],
+      "level": 1
+    },
+    {
+      "id": "bridge-to",
+      "position": [
+        2500,
+        600,
+        3500
+      ],
+      "level": 1
+    },
+    {
+      "id": "elevated-from",
+      "position": [
+        7500,
+        500,
+        0
+      ],
+      "level": 1
+    },
+    {
+      "id": "elevated-to",
+      "position": [
+        7500,
+        1000,
+        3500
+      ],
+      "level": 2
+    },
+    {
+      "id": "underpass-from",
+      "position": [
+        0,
+        0,
+        5000
+      ],
+      "level": 0
+    },
+    {
+      "id": "underpass-to",
+      "position": [
+        10000,
+        0,
+        5000
+      ],
+      "level": 0
+    },
+    {
+      "id": "tunnel-from",
+      "position": [
+        0,
+        0,
+        8000
+      ],
+      "level": 0
+    },
+    {
+      "id": "tunnel-to",
+      "position": [
+        10000,
+        0,
+        8000
+      ],
+      "level": 0
+    }
+  ],
+  "roads": [
+    {
+      "id": "ground-west",
+      "points": [
+        [
+          0,
+          0,
+          1000
+        ],
+        [
+          5000,
+          0,
+          1000
+        ]
+      ],
+      "widths_cm": [
+        600
+      ],
+      "surfaces": [
+        "asphalt"
+      ],
+      "kind": "ground",
+      "clearance_cm": null,
+      "sidewalk_cm": null,
+      "from": "ground-west-from",
+      "to": "junction"
+    },
+    {
+      "id": "ground-east",
+      "points": [
+        [
+          5000,
+          0,
+          1000
+        ],
+        [
+          10000,
+          0,
+          1000
+        ]
+      ],
+      "widths_cm": [
+        1000
+      ],
+      "surfaces": [
+        "gravel"
+      ],
+      "kind": "ground",
+      "clearance_cm": null,
+      "sidewalk_cm": null,
+      "from": "junction",
+      "to": "ground-east-to"
+    },
+    {
+      "id": "branch",
+      "points": [
+        [
+          5000,
+          0,
+          1000
+        ],
+        [
+          5000,
+          0,
+          3000
+        ]
+      ],
+      "widths_cm": [
+        400
+      ],
+      "surfaces": [
+        "dirt"
+      ],
+      "kind": "ground",
+      "clearance_cm": null,
+      "sidewalk_cm": null,
+      "from": "junction",
+      "to": "branch-to"
+    },
+    {
+      "id": "bridge",
+      "points": [
+        [
+          2500,
+          600,
+          0
+        ],
+        [
+          2500,
+          600,
+          3500
+        ]
+      ],
+      "widths_cm": [
+        500
+      ],
+      "surfaces": [
+        "concrete"
+      ],
+      "kind": "bridge",
+      "clearance_cm": null,
+      "sidewalk_cm": null,
+      "from": "bridge-from",
+      "to": "bridge-to"
+    },
+    {
+      "id": "elevated",
+      "points": [
+        [
+          7500,
+          500,
+          0
+        ],
+        [
+          7500,
+          1000,
+          3500
+        ]
+      ],
+      "widths_cm": [
+        500
+      ],
+      "surfaces": [
+        "asphalt"
+      ],
+      "kind": "elevated",
+      "clearance_cm": null,
+      "sidewalk_cm": null,
+      "from": "elevated-from",
+      "to": "elevated-to"
+    },
+    {
+      "id": "underpass",
+      "points": [
+        [
+          0,
+          0,
+          5000
+        ],
+        [
+          1000,
+          0,
+          5000
+        ],
+        [
+          2500,
+          -500,
+          5000
+        ],
+        [
+          7500,
+          -500,
+          5000
+        ],
+        [
+          9000,
+          0,
+          5000
+        ],
+        [
+          10000,
+          0,
+          5000
+        ]
+      ],
+      "widths_cm": [
+        600,
+        600,
+        600,
+        600,
+        600
+      ],
+      "surfaces": [
+        "concrete",
+        "concrete",
+        "concrete",
+        "concrete",
+        "concrete"
+      ],
+      "kind": "underpass",
+      "clearance_cm": 300,
+      "sidewalk_cm": null,
+      "from": "underpass-from",
+      "to": "underpass-to"
+    },
+    {
+      "id": "tunnel",
+      "points": [
+        [
+          0,
+          0,
+          8000
+        ],
+        [
+          1000,
+          0,
+          8000
+        ],
+        [
+          2500,
+          -600,
+          8000
+        ],
+        [
+          7500,
+          -600,
+          8000
+        ],
+        [
+          9000,
+          0,
+          8000
+        ],
+        [
+          10000,
+          0,
+          8000
+        ]
+      ],
+      "widths_cm": [
+        600,
+        600,
+        600,
+        600,
+        600
+      ],
+      "surfaces": [
+        "asphalt",
+        "dirt",
+        "gravel",
+        "concrete",
+        "asphalt"
+      ],
+      "kind": "tunnel",
+      "clearance_cm": 300,
+      "sidewalk_cm": null,
+      "from": "tunnel-from",
+      "to": "tunnel-to"
+    }
+  ],
+  "buildings": [],
+  "zones": [],
+  "assets": [],
+  "placements": [],
+  "attributions": [
+    {
+      "source": "Synthetic fixture",
+      "license": "MIT",
+      "notice": "No external map or asset data"
+    }
+  ],
+  "provenance": {
+    "tool_id": "third-party-example",
+    "version": "1",
+    "build_id": "example",
+    "fingerprint": "untrusted-and-accepted",
+    "first_created": "2026-09-07T00:00:00Z",
+    "last_edited": "2026-09-07T00:00:00Z"
+  }
+}

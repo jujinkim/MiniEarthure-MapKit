@@ -62,6 +62,69 @@ identical restored edge heights, including edges against implicit flat terrain.
 Source accuracy metadata is independent of spacing. Partial map-edge cells retain
 full grid dimensions and generation clips to map bounds.
 
+### Recipe 2 roads and structures (K05)
+
+Readers support recipes 1 and 2; the current recipe constant is 2. Export writes
+**the document's recipe**, and the manifest must agree (`E_MANIFEST`). An unknown
+recipe fails `E_VERSION`. Existing recipe-1 source, package bytes, generation-v6
+bytes and disposable archive keys are preserved. No file is migrated on read or
+save. Choosing recipe 2 is an explicit author edit and changes world identity;
+package v1 and the generated-v6 representation do not change. The reference
+producer and `examples/roads/document.json` demonstrate this choice without any
+private dependency. Editor tool UX remains a separate authoring implementation.
+
+Road graph adjacency is exactly `from`/`to` node identity, including the node's
+position and level; `MapDocument.connected_roads(node_id)` returns sorted incident
+IDs. XY crossings, coincident but distinct nodes and vertical overlap create no
+connection. Levels label graph endpoints; authored elevated/bridge/underpass/tunnel
+centrelines supply the physical heights and ramps between levels.
+
+Ground roads follow the restored piecewise terrain, including longitudinal and
+crossfall changes inside a segment. Their stored height values remain source
+reference elevations; they do not flatten sampled terrain or raise a deck. Use an
+explicit structural kind for an independent vertical profile. Widths and the four
+road materials (asphalt, concrete, dirt, gravel) apply per segment. Grass is also a
+valid authored surface. Ground ribbons and explicit junction aprons partition the
+terrain triangles into one road/terrain surface, without an overlapping grass
+collider or a separate vertical offset. Overlapping ground paint uses normalized
+road-ID/triangle order for deterministic material/ID ownership, not inferred graph
+edges. Source IDs and widths are never rewritten.
+
+At an explicit node or polyline bend, each arm stops at a mouth displaced by the
+largest incident half-width, capped at 45% of its segment length. A convex apron
+joins these mouths through the exact source node. Segment width is exact outside
+this transition; apron triangles interpolate the authored mouth/node elevations
+for structures. Stable incident-road IDs/materials label apron faces. At most 32
+endpoint arms are accepted (`E_LIMIT`). Structural mouths must remain distinct
+perimeter edges of the apron: overlapping/too-short/acute approaches fail
+`E_GEOMETRY`; authors add separated approach points instead of receiving ambiguous
+or overlapping decks. Joined tunnel clearances must agree. Mixed ground/structure
+aprons must match actual local terrain within 1 cm or generation fails
+`E_GEOMETRY`; author a terrain-level approach before the grade. This keeps portal
+connections explicit and avoids accepting a gap between sampled ground and a ramp.
+
+Elevated roads and bridges keep their own drivable deck above/below other surfaces.
+Underpasses cut their entire open corridor out of terrain. Their side walls reach
+at least the supplied clearance and extend to higher restored terrain, subdivided
+at terrain triangles. They have no ceiling. Tunnels keep the authored floor and
+clearance-height ceiling, with side walls and open graph endpoints. Terrain is cut
+where it intrudes below the ceiling, including the portal/grade approach, and is
+retained above the bore. A crossing deck is never removed by a terrain cut. Floors
+are spawnable; walls/ceilings are not. Creator geometry remains responsible for
+clearance against independently authored intersecting structures and buildings.
+All emitted faces use the same renderer/collider stream and cell clipping.
+
+Plan/cut work is bounded before unbounded accumulation: at most 2048 local
+corridor segments, 16384 local arms and combined patches/walls, 16384 live fragments,
+65536 live fragment vertices, and 8000000 subdivision operations. Exceeding a limit
+fails `E_BUDGET`, with no partial returned chunk. Cost estimates expose an additional
+`generation_scratch_bytes` allowance (16 MiB for recipe-2 maps containing roads;
+zero for recipe 1), independent of output counts. Consumers must reserve it through
+worker retirement. Source-derived output counts are also enforced as a generation
+allowance; complex input may fail rather than exceed its estimate. These are
+bounded CPU planning allowances, not completed RSS/GPU/performance calibration.
+Recipe-2 vegetation skips removed terrain; it never invents support over a cut.
+
 ### Spatial/terrain validation refinement (K04)
 
 The grid origin is exactly `bounds.min`, including negative and non-grid-aligned

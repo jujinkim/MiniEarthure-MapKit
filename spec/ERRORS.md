@@ -39,3 +39,11 @@ executes failure cases through the CLI, and checks that invalid input does not
 create accepted outputs. `scripts/check_input_defense.py` and the Rust
 `input_defense` tests exercise the bounded K03 asset/container profile.
 Platform/renderer/allocator acceptance remains in [LIMITATIONS](../LIMITATIONS.md).
+
+Recipe 2 also uses `E_GEOMETRY` for overlapping structural junction mouths,
+mismatched joined tunnel clearances or a ground/structure apron that disagrees
+with restored terrain. Author explicit separated, terrain-level approaches;
+readers never repair original source. `E_LIMIT` bounds endpoint degree (32).
+`E_BUDGET` includes local road planning, live fragment/vertex, subdivision work and
+source-derived output allowances. `E_MANIFEST` includes document/manifest recipe
+mismatch; both supported recipes retain their own source and generated identity.

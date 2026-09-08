@@ -10,6 +10,7 @@ import tempfile
 from check_input_defense import asset_package
 import struct
 import zlib
+from road_probe import PROBE as ROAD_PROBE
 from spatial_terrain_probe import make_fixture as make_terrain_fixture, PROBE as TERRAIN_PROBE
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -210,7 +211,7 @@ func run() -> void:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--godot', required=True)
-    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain'], action='append', help='Run only selected behavioral probes; default runs all')
+    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads'], action='append', help='Run only selected behavioral probes; default runs all')
     args = parser.parse_args()
     library = {'win32': 'mapkit_godot.dll', 'darwin': 'libmapkit_godot.dylib'}.get(sys.platform, 'libmapkit_godot.so')
     built_library = ROOT / 'target/debug' / library
@@ -227,6 +228,8 @@ def main():
         (project / 'probe.gd').write_text(PROBE)
         (project / 'renderer_probe.gd').write_text(RENDER_PROBE)
         (project / 'terrain_probe.gd').write_text(TERRAIN_PROBE)
+        (project / 'road_probe.gd').write_text(ROAD_PROBE)
+        subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'roads.memap'), str(ROOT / 'examples/roads/document.json')], check=True, timeout=30)
         make_terrain_fixture(project)
         for name in ('chunk_renderer.gd', 'chunk_data.gd'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
@@ -242,7 +245,7 @@ def main():
         (project / 'invalid-document.json').write_text(json.dumps(invalid))
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'invalid-metadata.memap'), str(project / 'invalid-document.json')], check=True, timeout=30)
         subprocess.run([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], check=True, timeout=60)
-        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd'}
+        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd'}
         fixture_bytes = (project / 'fixture.memap').read_bytes()
         for probe in args.probe or scripts:
             # Binding deliberately corrupts its source to prove snapshot ownership.

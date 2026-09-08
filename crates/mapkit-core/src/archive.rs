@@ -6,7 +6,7 @@ const HEADER: usize = 156;
 /// The archive revision must change if generation semantics change without a
 /// public recipe/generated version change. Archives are never map source files.
 pub fn archive_key(world: &str, cell: Cell) -> String {
-    sha256(format!("MKCELL01:{RECIPE_VERSION}:{GENERATED_VERSION}:{world}:{}:{}", cell.x, cell.y).as_bytes())
+    sha256(format!("MKCELL01:1:{GENERATED_VERSION}:{world}:{}:{}", cell.x, cell.y).as_bytes())
 }
 pub fn archive_limit(cost: &GenerationCost) -> u64 {
     let id = cost.max_object_id_bytes.max(128);
@@ -108,7 +108,7 @@ mod tests {
         let chunk = GeneratedChunk { format_version: GENERATED_VERSION, cell: Cell { x: -2, y: 3 },
             triangles: vec![Triangle { vertices: [[-1, 0, 0], [1, 0, 0], [0, 1, 1]], surface: Surface::Gravel, object_id: "도로".into(), spawnable: true }],
             objects: vec![GeneratedObject { id: "tree".into(), asset_id: "builtin.tree".into(), position: [1, 2, 3], quarter_turns: 3 }] };
-        let cost = GenerationCost { triangles: 1, objects: 1, occupied_solids: 0, height_samples: 0, max_object_id_bytes: 128 };
+        let cost = GenerationCost { triangles: 1, generation_scratch_bytes: 0, objects: 1, occupied_solids: 0, height_samples: 0, max_object_id_bytes: 128 };
         let key = archive_key(&"a".repeat(64), chunk.cell);
         let bytes = encode_archive(&chunk, &key, archive_limit(&cost)).unwrap();
         assert_eq!(decode_archive(&bytes, &key, chunk.cell, &cost).unwrap(), chunk);

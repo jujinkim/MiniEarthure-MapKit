@@ -78,7 +78,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 1.0,
+      "maximum": 2.0,
       "minimum": 1.0
     },
     "revision": {

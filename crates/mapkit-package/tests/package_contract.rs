@@ -396,3 +396,26 @@ fn boundary_only_validation_preserves_both_seam_directions() {
     files.insert("terrain/1-0.png".into(), slope_png(1, 0, true));
     assert_eq!(pack_bytes(d, files).err().unwrap().code, "E_SEAM");
 }
+
+#[test]
+fn recipes_are_explicit_preserved_and_manifest_bound() {
+    let mut d: MapDocument=serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+    let bytes=package(d.clone()); let p=read_bytes(&bytes).unwrap();
+    assert_eq!(p.manifest.recipe_version,2);
+    assert_eq!(bytes,pack_bytes(p.document.clone(),p.files.clone()).unwrap());
+    let hash=p.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap();
+    d.recipe_version=1; let old=read_bytes(&package(d)).unwrap();
+    assert_eq!(old.manifest.recipe_version,1);
+    assert_ne!(old.inspection.world_content_hash,p.inspection.world_content_hash);
+    assert_ne!(old.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap(),hash);
+    let bad=rewrite(&bytes,|entries| {
+        let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
+        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=1.into();*b=canonical(&m).unwrap();
+    });
+    rejected(&bad,"E_MANIFEST");
+    let bad=rewrite(&bytes,|entries| {
+        let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
+        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=3.into();*b=canonical(&m).unwrap();
+    });
+    rejected(&bad,"E_VERSION");
+}

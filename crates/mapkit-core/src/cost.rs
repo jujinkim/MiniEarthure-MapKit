@@ -6,6 +6,8 @@ use super::*;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationCost {
     pub triangles: u64,
+    /// Bounded recipe-2 road planning/subdivision workspace, separate from output.
+    pub generation_scratch_bytes: u64,
     pub objects: u64,
     /// Upper bound for optional occupied-volume records, independent of face clipping.
     pub occupied_solids: u64,
@@ -51,6 +53,7 @@ pub fn estimate_generation(
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
         triangles: 0,
+        generation_scratch_bytes: if d.recipe_version == 2 && !d.roads.is_empty() { crate::roads::SCRATCH_BYTES } else { 0 },
         objects: 0,
         occupied_solids: 0,
         height_samples: if descriptor.is_some() { side * side } else { 0 },
@@ -78,7 +81,19 @@ pub fn estimate_generation(
                 RoadKind::Underpass => 6,
                 _ => 2,
             };
-            add(count * clip_factor(&shape, &area), r.id.len());
+            if d.recipe_version == 1 {
+                add(count * clip_factor(&shape, &area), r.id.len());
+            } else {
+                // Corridors plus their two aprons. This is a source-derived
+                // output allowance, also enforced by recipe-2 generation.
+                let local = bounds(points.iter().map(|p| [p[0], p[2]]), 10_000);
+                if clip_factor(&local, &area) != 0 {
+                    let span = |axis: usize| ((local.max[axis].min(area.max[axis])
+                        - local.min[axis].max(area.min[axis])).max(0) / spacing + 2) as u64;
+                    let touched = span(0).saturating_mul(span(1));
+                    add(touched.saturating_mul(128).saturating_add(256), r.id.len());
+                }
+            }
         }
     }
     for building in &d.buildings {

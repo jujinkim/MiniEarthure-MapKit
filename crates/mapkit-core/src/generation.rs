@@ -1,7 +1,7 @@
 use super::*;
 use crate::occupancy::Occupancy;
 
-struct Builder {
+pub(super) struct Builder {
     chunk: GeneratedChunk,
     bounds: Bounds,
     max: usize,
@@ -15,7 +15,7 @@ impl Builder {
         Ok(())
     }
     /// Clip collision and display geometry together. Integer interpolation fixes byte identity.
-    fn triangle(
+    pub(super) fn triangle(
         &mut self,
         v: [Vertex; 3],
         surface: Surface,
@@ -91,7 +91,7 @@ impl Builder {
         }
         Ok(())
     }
-    fn quad(&mut self, v: [Vertex; 4], surface: Surface, id: &str, spawnable: bool) -> Result<()> {
+    pub(super) fn quad(&mut self, v: [Vertex; 4], surface: Surface, id: &str, spawnable: bool) -> Result<()> {
         self.triangle([v[0], v[1], v[2]], surface, id, spawnable)?;
         self.triangle([v[0], v[2], v[3]], surface, id, spawnable)
     }
@@ -222,7 +222,9 @@ fn generate_internal(
             objects: vec![],
         },
         bounds: bounds.clone(),
-        max: input.max_triangles.min(2_000_000),
+        max: if d.recipe_version == 2 {
+            estimate_generation(d, input.cell, input.max_triangles)?.triangles as usize
+        } else { input.max_triangles.min(2_000_000) },
         occupancy,
     };
     let descriptor = d.heightmaps.iter().find(|h| h.cell == input.cell);
@@ -250,6 +252,9 @@ fn generate_internal(
             .heightgrid
             .map_or(d.terrain_base_cm, |g| g.heights_cm[y * side + x])
     };
+    if d.recipe_version == 2 {
+        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
+    } else {
     for y in 0..side - 1 {
         for x in 0..side - 1 {
             let px = bounds.min[0] + x as i64 * spacing;
@@ -299,6 +304,7 @@ fn generate_internal(
             }
         }
     }
+    } // Frozen recipe-v1 terrain/road strategy.
     for building in &d.buildings {
         let top = building.base_cm + building.height_cm as i64;
         for t in polygon_triangles(&building.footprint)? {
@@ -380,7 +386,13 @@ fn generate_internal(
                     position_cm: p,
                     surface_id: "terrain".into(),
                 };
-                let position = b.chunk.recipe_v1_spawn(&request)?;
+                let position = if d.recipe_version == 1 {
+                    b.chunk.recipe_v1_spawn(&request)?
+                } else {
+                    // A cut is empty space, never an invented tree support.
+                    let Ok(position) = b.chunk.spawn(&request) else { continue; };
+                    position
+                };
                 b.box_shape(
                     [position[0], position[1] + i64::from(crate::query::TREE_PROXY_SIZE_CM[1] / 2), position[2]],
                     crate::query::TREE_PROXY_SIZE_CM,

@@ -10,12 +10,18 @@ This repository is a working development foundation, not a completed game cutove
   exact supported subset in `spec/FORMAT.md`. Repacking malformed metadata requires an explicit source
   edit; the toolkit never silently changes saved originals.
 
-- Generator: terrain grids, width/surface road ribbons, simple building shells,
-  forest/orchard lattice, explicit asset box proxies and layered surface lookup.
-  Tunnel walls/ceiling geometry exists, but terrain cuts, terrain-conforming road
-  cross-sections, junction topology/meshes, sidewalks, full-footprint vegetation
-  clearance and solid building volume semantics are not complete. Do not use
-  prototype tunnels or overlapping geometry as production driving fixtures.
+- K05 recipe-2 road graph aprons, terrain-conforming ground surfaces and explicit
+  elevated/bridge/underpass/tunnel geometry are implemented. Recipe 1 remains
+  frozen. Authoring constraints (junction arm/approach limits, terrain-level
+  transitions, matching tunnel clearances) and bounded generation failures are
+  specified in `spec/FORMAT.md`. Scoped native Mac collision tests are not full
+  target-platform driving acceptance. Arbitrary intersecting structures still
+  require author-supplied clearance; no implicit crossing connection is generated.
+- Generator work remaining: sidewalks, full-footprint vegetation clearance and
+  solid building volume semantics (K06), user assets/rendering (K07) and native
+  cross-platform/reference-map acceptance (K08/P). Recipe-2 road scratch has an
+  explicit consumer reservation, but complete S04 allocator/RSS/GPU accounting
+  remains separate.
 - K03 validates ZIP envelopes/descriptors/ZIP64 and complete PNG/WebP pixels,
   GLB framing/references/accessor bytes/indices/static node graphs/materials and
   embedded PNGs before admission. It accepts a documented static triangle subset,

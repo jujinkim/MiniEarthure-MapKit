@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 1;
+pub const RECIPE_VERSION: u32 = 2;
 pub const GENERATED_VERSION: u32 = 6;
 pub const WORLD_SCALE: f64 = 0.125;
 pub const DEFAULT_CELL_CM: i64 = 51_200;
@@ -189,7 +189,7 @@ pub struct MapDocument {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(range(min = 1, max = 1))]
+    #[schemars(range(min = 1, max = 2))]
     pub recipe_version: u32,
     #[schemars(regex(pattern = "^default$"))]
     pub theme: String,
@@ -323,7 +323,7 @@ impl MapDocument {
     }
     pub fn validate(&self) -> Result<()> {
         let fail = |m: &str| Err(error("E_GEOMETRY", m));
-        if self.recipe_version != RECIPE_VERSION {
+        if !(1..=RECIPE_VERSION).contains(&self.recipe_version) {
             return Err(error("E_VERSION", "unsupported recipe"));
         }
         self.provenance.validate()?;
@@ -442,6 +442,9 @@ impl MapDocument {
             {
                 return fail("tunnel/underpass requires clearance");
             }
+        }
+        if self.recipe_version == 2 {
+            roads::validate_graph(self)?;
         }
         for b in &self.buildings {
             if !polygon_valid(&b.footprint, &self.bounds)
@@ -655,3 +658,5 @@ pub use generation::{generate, generate_with_occupancy};
 
 mod archive;
 pub use archive::{archive_key, archive_limit, decode_archive, encode_archive};
+
+mod roads;

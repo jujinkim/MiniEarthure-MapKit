@@ -44,7 +44,7 @@ def produce(output, document_path=None):
     files = dict(sorted(files.items()))
     gameplay = {k: v for k, v in document.items() if k not in ('provenance', 'attributions')}
     manifest = {k: document[k] for k in ('map_id', 'revision', 'bounds', 'cell_size_cm', 'seed', 'theme', 'assets', 'attributions', 'provenance')}
-    manifest.update(format='memap', format_version=1, recipe_version=1, generated_version=6,
+    manifest.update(format='memap', format_version=1, recipe_version=document["recipe_version"], generated_version=6,
                     document='document.json', files=[{'path': path, 'size': len(data), 'sha256': digest(data)} for path, data in files.items()],
                     world_content_hash=digest(canonical([gameplay, {path: digest(data) for path, data in files.items() if path != 'document.json'}])))
     with zipfile.ZipFile(output, 'x') as archive:

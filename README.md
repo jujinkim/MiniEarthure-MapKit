@@ -202,3 +202,12 @@ filesystem, clock, locks, cache path, eviction policy or game dependency is adde
 these APIs. Applications own storage, scheduling, memory admission and active leases.
 The standalone native layout probe covers all four example cells, layered surfaces,
 orchard objects, hash equality, wrong coordinates and archive allowance denial.
+
+### Road and multilevel generation
+
+Opt in with `recipe_version: 2`; recipe 1 is still supported without migration.
+See [the road/structure contract](spec/FORMAT.md#recipe-2-roads-and-structures-k05)
+and the original [road fixture](examples/roads/document.json). The public native
+probe includes actual floor/portal/wall/ceiling contacts and matching render faces:
+`python3 scripts/verify_godot_layout.py --godot GODOT --probe roads`.
+Native OS/device and representative driving acceptance remain in [LIMITATIONS](LIMITATIONS.md).
