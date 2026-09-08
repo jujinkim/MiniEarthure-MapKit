@@ -189,6 +189,40 @@ impl MapKitBridge {
             .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
             .and_then(|p| p.generate(Cell { x, y }, 500_000)))
     }
+    /// Archive identity and pre-allocation size bound; storage/leases belong to callers.
+    #[func]
+    fn chunk_archive_info(&self, x: i32, y: i32) -> GString {
+        response((|| {
+            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let cell = Cell { x, y };
+            let cost = mapkit_core::estimate_generation(&p.document, cell, 500_000)?;
+            Ok(serde_json::json!({"key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
+                "max_bytes": mapkit_core::archive_limit(&cost)}))
+        })())
+    }
+    #[func]
+    fn generate_chunk_archived(&self, x: i32, y: i32, max_bytes: i64) -> VarDictionary {
+        packed::respond((|| {
+            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let cell = Cell { x, y };
+            let chunk = p.generate(cell, 500_000)?;
+            let archive = mapkit_core::encode_archive(&chunk,
+                &mapkit_core::archive_key(&p.inspection.world_content_hash, cell), max_bytes.max(0) as u64).ok();
+            let mut data = packed::pack(chunk)?;
+            if let Some(bytes) = archive { data.set("archive", &PackedByteArray::from(bytes.as_slice())); }
+            Ok(data)
+        })())
+    }
+    #[func]
+    fn restore_chunk_archive(&self, x: i32, y: i32, bytes: PackedByteArray) -> VarDictionary {
+        packed::response((|| {
+            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let cell = Cell { x, y };
+            let cost = mapkit_core::estimate_generation(&p.document, cell, 500_000)?;
+            mapkit_core::decode_archive(bytes.as_slice(),
+                &mapkit_core::archive_key(&p.inspection.world_content_hash, cell), cell, &cost)
+        })())
+    }
     #[func]
     fn generate_chunk_occupied_packed(&self, x: i32, y: i32, max_solids: i64) -> VarDictionary {
         occupied::response(if !(0..=mapkit_core::MAX_OCCUPIED_SOLIDS as i64).contains(&max_solids) {

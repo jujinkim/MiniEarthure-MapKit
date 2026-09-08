@@ -87,6 +87,18 @@ func _initialize() -> void:
     check(not bridge.generate_chunk_occupied_packed(0, 0, 1).ok, "solid count limit fails without partial output")
     check(not bridge.generate_chunk_occupied_packed(0, 0, -1).ok and not bridge.generate_chunk_occupied_packed(0, 0, 200001).ok, "invalid allowances rejected")
     check(not bridge.generate_chunk_occupied_packed(-1, 0, 2).ok, "occupied path rejects invalid cell")
+    for x in 2:
+        for y in 2:
+            var archive_info: Dictionary = JSON.parse_string(bridge.chunk_archive_info(x, y))
+            check(archive_info.ok, "archive identity and allocation limit")
+            var saved: Dictionary = bridge.generate_chunk_archived(x, y, archive_info.data.max_bytes)
+            check(saved.ok and saved.data.has("archive"), "native bounded archive generation")
+            var loaded: Dictionary = bridge.restore_chunk_archive(x, y, saved.data.archive)
+            check(loaded.ok and loaded.data.generated_sha256 == saved.data.generated_sha256, "archive roundtrip canonical hash")
+            check(loaded.data.chunk.geometry.view() == saved.data.chunk.geometry.view() and loaded.data.chunk.objects == saved.data.chunk.objects, "archive preserves complete layered geometry and orchard placements")
+            check(not bridge.restore_chunk_archive(x + 1, y, saved.data.archive).ok, "archive coordinate gate")
+            var declined: Dictionary = bridge.generate_chunk_archived(x, y, 1)
+            check(declined.ok and not declined.data.has("archive"), "archive cap preserves generated output")
     var orchard: Dictionary = bridge.generate_chunk_occupied_packed(1, 1, 1000)
     check(orchard.ok, "occupied orchard generation")
     var trunks: Dictionary = orchard.data.occupancy.view()

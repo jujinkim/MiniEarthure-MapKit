@@ -670,3 +670,6 @@ mod overview;
 pub use overview::{overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource};
 pub use cost::{estimate_generation, GenerationCost};
 pub use generation::{generate, generate_with_occupancy};
+
+mod archive;
+pub use archive::{archive_key, archive_limit, decode_archive, encode_archive};

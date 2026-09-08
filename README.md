@@ -152,3 +152,25 @@ Apple Silicon macOS development uses native `libmapkit_godot.dylib` builds.
 The standalone/nested binding and renderer probe supports this platform:
 `python3.12 scripts/verify_godot_layout.py --godot /absolute/Godot`.
 Godot 4.7.2 source checks do not establish signed application distribution.
+
+## Disposable generated-cell archives
+
+The pure-core `archive_key`, `archive_limit`, `encode_archive` and `decode_archive`
+APIs store generated v6 integer geometry and placed objects in a bounded little-endian
+`MKCELL01` archive. The key binds world content hash, recipe/generated versions and
+cell coordinates. The header carries the canonical generated hash; decoding checks
+identity, format, source-derived count/string/byte limits, coordinate magnitudes,
+record tags, truncation/trailing data and the recomputed canonical hash before use.
+This is corruption detection, not authentication or a replacement map format.
+Bump the archive revision if generator semantics change without a public contract bump.
+
+Godot exposes `chunk_archive_info(x, y)`, `generate_chunk_archived(x, y, max_bytes)`
+and `restore_chunk_archive(x, y, bytes)`. The first reports identity and the
+pre-allocation byte bound. Generation returns ordinary packed data plus optional
+`data.archive`; insufficient archive allowance still returns the generated data.
+The caller drops archive bytes after storage. Restored output uses the same native
+immutable geometry owner and isolated COW views as uncached generation. No renderer,
+filesystem, clock, locks, cache path, eviction policy or game dependency is added to
+these APIs. Applications own storage, scheduling, memory admission and active leases.
+The standalone native layout probe covers all four example cells, layered surfaces,
+orchard objects, hash equality, wrong coordinates and archive allowance denial.
