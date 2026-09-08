@@ -6,8 +6,8 @@ This repository is a working development foundation, not a completed game cutove
   not validate a package; calendar, graph, references, bytes and payloads require
   semantic checks. K02 canonical export/container/inventory audit and scoped Mac
   regressions are implemented; locked-exporter native OS byte parity remains
-  unverified. K03 deeper input/asset auditing remains separate implementation
-  work. Repacking malformed metadata now requires an explicit source
+  unverified. K03 bounded container/static-asset defense is implemented; see the
+  exact supported subset in `spec/FORMAT.md`. Repacking malformed metadata requires an explicit source
   edit; the toolkit never silently changes saved originals.
 
 - Generator: terrain grids, width/surface road ribbons, simple building shells,
@@ -16,10 +16,15 @@ This repository is a working development foundation, not a completed game cutove
   cross-sections, junction topology/meshes, sidewalks, full-footprint vegetation
   clearance and solid building volume semantics are not complete. Do not use
   prototype tunnels or overlapping geometry as production driving fixtures.
-- Static GLB restrictions/header checks are implemented. Full structural GLB and
-  WebP decoding/validation, custom asset rendering and asset performance budgets
-  remain incomplete. PNG heightmaps are decoded and checked, image assets only
-  receive bounded header validation before renderer work.
+- K03 validates ZIP envelopes/descriptors/ZIP64 and complete PNG/WebP pixels,
+  GLB framing/references/accessor bytes/indices/static node graphs/materials and
+  embedded PNGs before admission. It accepts a documented static triangle subset,
+  not every glTF feature: sparse/matrix accessors, morphs, skins, animation,
+  extensions, extras, external resources and non-PNG embedded images are rejected.
+  Collision metadata currently supports bounded box primitives; new convex proxy
+  authoring, custom asset rendering and display/performance budgets remain K07.
+  The 256 MiB decoded-image work cap and conservative validation allowances are
+  not complete allocator/RSS accounting; native decoder OS/device checks remain open.
 - Common Godot renderer uses simple material colors and basic tree canopies;
   streaming attachment budgeting, LOD/material libraries and incremental preview
   invalidation are not complete. No claim of 4 ms attachment is made.

@@ -211,6 +211,98 @@ local-header inconsistencies and inclusive size/count limits without GiB allocat
 Cross-platform generation, detailed asset defense and full geometry acceptance
 remain separate gates in [LIMITATIONS](../LIMITATIONS.md).
 
+## Input defense refinement (K03)
+
+Admission has two gates. `inspect_read_cost` checks the complete container envelope
+without inflating payloads or accepting the map. The reader then enforces the
+working-set allowance, fully inflates bounded entries, validates JSON/inventory/
+hashes/document geometry and decodes every referenced asset and terrain image.
+Only the complete result is usable for generation. Container success, a trusted
+producer label or valid checksums never skips detailed validation. Failure returns
+no partial package; native open clears its previous source, and retry requires a
+new successful open. Consumer committed collision belongs to separate owners and
+must survive a failed candidate; failure cannot authorize entering its cells.
+
+### Container profile
+
+The non-inflating pass bounds the EOCD count before allocating the ZIP adapter's
+index. It checks single-disk EOCD and ZIP64 end/locator/central/local fields,
+local-central names/flags/method/CRC/sizes, unique regular portable paths, complete
+extra-field TLVs and exact compressed-data ranges. Entries cover the physical data
+region once: no gaps, hidden entries, overlap, prefix or unaccounted trailing bytes.
+Central records exactly cover their declared region. Standard ZIP comments remain
+allowed. Signed or unsigned 32-bit/ZIP64 streaming descriptors must match central
+CRC and sizes. ZIP64 sentinels require matching extra values. Unicode path override,
+encryption and unsupported flag bits are rejected. Extra-field IDs cannot repeat.
+ZIP64 extensible end data is outside this bounded profile (fixed 44-byte end body).
+
+DEFLATE must reach stream end at exactly its declared compressed boundary, emit
+exactly its declared expanded size and match CRC. A false small expanded size
+fails before appending excess output. The existing count/byte limits, inventory,
+world hash and normalized exporter bytes remain unchanged. Earlier header-only
+acceptance of ambiguous or incomplete containers is explicitly replaced.
+The envelope follows [PKWARE APPNOTE](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT).
+
+### Static asset profile
+
+Asset paths are `.glb`, `.png` or `.webp`. No URLs, data URIs, scripts, PCKs or
+engine scene/material programs are loaded. Attribution URLs remain inert text.
+Collision metadata remains the existing bounded `CollisionBox` primitive list;
+unknown proxy fields/types are rejected by the document contract. New convex
+proxy authoring and renderer support are K07, not introduced by this audit.
+
+- PNG: verify every chunk's CRC, complete IEND with no trailing bytes and complete
+  pixel decompression. APNG chunks fail. Ancillary text/ICC is not decompressed or
+  interpreted. Images have at most 8192 pixels per dimension and 64 MiB decoded
+  pixels. Terrain also requires complete static PNG and its existing 16-bit grid,
+  descriptor and seam checks; direct decode rejects invalid divisors/height ranges.
+- WebP: exact RIFF/chunk lengths, padding, unique supported chunks and static image,
+  feature flags/order and full lossy/lossless pixel decode. Animation is rejected.
+  The same dimension/64 MiB output caps apply before pixel allocation.
+- Referenced asset paths decode once. Embedded PNG buffer ranges decode once per
+  GLB. Cumulative decoded asset-image work is at most 256 MiB per package, inclusive;
+  this is checked before each pixel allocation. Terrain keeps its separate existing
+  grid limits. PNG/GLB/WebP packages reserve a conservative 256 MiB transient image
+  allowance in addition to payload/structured/index costs before inflation.
+- GLB v2: exactly aligned JSON and optional single BIN, declared lengths and zero
+  BIN padding. JSON permits finite floating-point parameters but rejects duplicate
+  keys (also applied before native editor integer normalization). Typed glTF
+  validation runs after guarding unsafe POSITION references in gltf-json 1.4.1.
+  All views/accessors must stay in the embedded buffer with valid component types,
+  alignment/stride/count, finite float values and valid vertex/index relationships.
+  Triangle primitives require float VEC3 POSITION; static normal/tangent/color/UV
+  attributes follow their typed representations. Indices stay within vertices.
+- GLB has at most 8192 records per collection and primitives, one million total
+  accessor elements and one million draw elements. Nodes form acyclic forests with
+  unique parents and valid scene roots, finite transforms and unit rotations;
+  matrix and TRS cannot coexist. Material factors obey declarative glTF ranges.
+  Embedded images must be PNG and pass the same complete decoder. These limits
+  also apply to unused declared records/resources.
+
+Sparse/matrix accessors, non-triangle modes, morph targets, skins, animation,
+cameras, external buffers/images, extensions, extras and script fields are outside
+this static subset and fail explicitly. Header-only acceptance of these unsupported
+or malformed assets is replaced; saved originals are never automatically edited.
+The parser uses [glTF 2.0](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html),
+locked `gltf` 1.4.1 without import/network/image features, `png` 0.17 and
+[`image-webp` 0.2.4](https://docs.rs/image-webp/0.2.4/image_webp/struct.WebPDecoder.html).
+
+Decoded pixels and parsed GLB validation data are temporary; Host does not create
+textures, renderer nodes or GPU resources. Working-set allowances and decoder
+limits are planning controls, not a proof of complete allocator/RSS or display
+memory accounting (some WebP internal allocations are not governed by its memory
+limit). S04/K07/platform performance acceptance remains separate. This changes
+admission, not generation/recipe/world hashing or physics. Valid existing v1
+exports and generated v6 hashes are preserved.
+
+`scripts/check_input_defense.py` independently builds normal, descriptor and ZIP64
+containers, corrupts CRC/size/extra fields, and creates an honestly hashed invalid
+asset. Rust tests add complete/truncated/corrupt/animated image and GLB graph/byte
+regressions, cumulative decode limits, arbitrary truncations/bit mutations and
+container/inflation boundaries. Native probes verify failed-source clearing and
+retry. These deterministic regressions are not exhaustive fuzzing or native OS
+acceptance.
+
 ### Read-only overview API (version 1)
 
 `MapOverview` is an optional derived read API, not a package entry or editable

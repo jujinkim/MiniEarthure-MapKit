@@ -16,6 +16,9 @@ pub const MAX_ENTRY_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILES: usize = 8192;
+mod assets;
+mod container;
+use assets::validate_assets;
 mod read_cost;
 pub use read_cost::{inspect_read_cost, ReadCost};
 mod export_limits;
@@ -85,9 +88,17 @@ fn zip_error(e: impl std::fmt::Display) -> Error {
     error("E_ZIP", e.to_string())
 }
 fn json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
+    serde_json::from_value(json_value::<false>(bytes)?).map_err(|e| error("E_JSON", e.to_string()))
+}
+/// Strict resource JSON: reject duplicate keys and nonfinite numbers while
+/// allowing floating-point parameters. Map documents additionally require integers.
+pub fn parse_resource_json(bytes: &[u8]) -> Result<serde_json::Value> {
+    json_value::<true>(bytes)
+}
+fn json_value<const FLOAT: bool>(bytes: &[u8]) -> Result<serde_json::Value> {
     // Reject duplicate object keys before typed deserialization, including nested metadata.
-    struct Unique;
-    impl<'de> serde::de::Visitor<'de> for Unique {
+    struct Unique<const FLOAT: bool>;
+    impl<'de, const FLOAT: bool> serde::de::Visitor<'de> for Unique<FLOAT> {
         type Value = serde_json::Value;
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             f.write_str("JSON without duplicate keys")
@@ -97,7 +108,7 @@ fn json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
             mut map: A,
         ) -> std::result::Result<Self::Value, A::Error> {
             let mut values = serde_json::Map::new();
-            while let Some((key, value)) = map.next_entry::<String, Strict>()? {
+            while let Some((key, value)) = map.next_entry::<String, Strict<FLOAT>>()? {
                 if values.insert(key, value.0).is_some() {
                     return Err(serde::de::Error::custom("duplicate JSON key"));
                 }
@@ -109,7 +120,7 @@ fn json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
             mut seq: A,
         ) -> std::result::Result<Self::Value, A::Error> {
             let mut values = vec![];
-            while let Some(v) = seq.next_element::<Strict>()? {
+            while let Some(v) = seq.next_element::<Strict<FLOAT>>()? {
                 values.push(v.0);
             }
             Ok(values.into())
@@ -123,8 +134,12 @@ fn json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
         fn visit_u64<E: serde::de::Error>(self, v: u64) -> std::result::Result<Self::Value, E> {
             Ok(v.into())
         }
-        fn visit_f64<E: serde::de::Error>(self, _v: f64) -> std::result::Result<Self::Value, E> {
-            Err(E::custom("only integer JSON numbers supported"))
+        fn visit_f64<E: serde::de::Error>(self, v: f64) -> std::result::Result<Self::Value, E> {
+            if FLOAT && v.is_finite() {
+                Ok(v.into())
+            } else {
+                Err(E::custom("only integer JSON numbers supported"))
+            }
         }
         fn visit_str<E: serde::de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
             Ok(v.into())
@@ -133,15 +148,15 @@ fn json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
             Ok(serde_json::Value::Null)
         }
     }
-    struct Strict(serde_json::Value);
-    impl<'de> Deserialize<'de> for Strict {
+    struct Strict<const FLOAT: bool>(serde_json::Value);
+    impl<'de, const FLOAT: bool> Deserialize<'de> for Strict<FLOAT> {
         fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
-            d.deserialize_any(Unique).map(Strict)
+            d.deserialize_any(Unique::<FLOAT>).map(Strict)
         }
     }
-    let value =
-        serde_json::from_slice::<Strict>(bytes).map_err(|e| error("E_JSON", e.to_string()))?;
-    serde_json::from_value(value.0).map_err(|e| error("E_JSON", e.to_string()))
+    let value = serde_json::from_slice::<Strict<FLOAT>>(bytes)
+        .map_err(|e| error("E_JSON", e.to_string()))?;
+    Ok(value.0)
 }
 fn content_hash(document: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<String> {
     let mut doc = document.clone();
@@ -178,71 +193,20 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
     }
     Ok(paths)
 }
-fn validate_glb(bytes: &[u8]) -> Result<()> {
-    let bad = || error("E_ASSET", "GLB must contain static embedded resources only");
-    if bytes.len() < 20
-        || &bytes[..4] != b"glTF"
-        || u32::from_le_bytes(bytes[4..8].try_into().unwrap()) != 2
-        || u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize != bytes.len()
-    {
-        return Err(bad());
-    }
-    let length = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-    if &bytes[16..20] != b"JSON" || length > bytes.len() - 20 {
-        return Err(bad());
-    }
-    // GLTF JSON permits floating-point material/vertex parameters, unlike map documents.
-    let value: serde_json::Value =
-        serde_json::from_slice(&bytes[20..20 + length]).map_err(|_| bad())?;
-    fn forbidden(v: &serde_json::Value) -> bool {
-        match v {
-            serde_json::Value::Object(o) => o.iter().any(|(k, v)| {
-                matches!(
-                    k.as_str(),
-                    "uri"
-                        | "extensions"
-                        | "extensionsRequired"
-                        | "extensionsUsed"
-                        | "animations"
-                        | "skins"
-                ) || forbidden(v)
-            }),
-            serde_json::Value::Array(a) => a.iter().any(forbidden),
-            _ => false,
-        }
-    }
-    if forbidden(&value) {
-        return Err(bad());
-    }
-    Ok(())
-}
-fn validate_assets(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
-    for a in &d.assets {
-        let bytes = &files[&a.path];
-        if a.path.ends_with(".glb") {
-            validate_glb(bytes)?;
-        } else if a.path.ends_with(".png") {
-            let mut decoder = png::Decoder::new(Cursor::new(bytes));
-            decoder.set_limits(png::Limits {
-                bytes: 64 * 1024 * 1024,
-            });
-            let reader = decoder
-                .read_info()
-                .map_err(|e| error("E_ASSET", e.to_string()))?;
-            if reader.info().width > 8192
-                || reader.info().height > 8192
-                || reader.output_buffer_size() > 64 * 1024 * 1024
-            {
-                return Err(error("E_LIMIT", "image dimensions exceed profile"));
-            }
-        } else if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WEBP" {
-            return Err(error("E_ASSET", "invalid WebP header"));
-        }
-    }
-    Ok(())
-}
 pub fn decode_heightmap(h: &Heightmap, cell_size: u32, bytes: &[u8]) -> Result<HeightGrid> {
+    assets::png_envelope(bytes).map_err(|e| error("E_HEIGHTMAP", e.message))?;
+    if h.spacing_cm < 200
+        || cell_size > 102_400
+        || !cell_size.is_multiple_of(h.spacing_cm)
+        || h.step_cm == 0
+        || h.step_cm > 100
+        || h.offset_cm.unsigned_abs() > 1_000_000
+    {
+        return Err(error("E_HEIGHTMAP", "invalid heightmap decode parameters"));
+    }
     let mut decoder = png::Decoder::new(Cursor::new(bytes));
+    decoder.set_ignore_text_chunk(true);
+    decoder.set_ignore_iccp_chunk(true);
     decoder.set_limits(png::Limits {
         bytes: 8 * 1024 * 1024,
     });
@@ -264,6 +228,9 @@ pub fn decode_heightmap(h: &Heightmap, cell_size: u32, bytes: &[u8]) -> Result<H
     let mut data = vec![0; reader.output_buffer_size()];
     let result = reader
         .next_frame(&mut data)
+        .map_err(|e| error("E_HEIGHTMAP", e.to_string()))?;
+    reader
+        .finish()
         .map_err(|e| error("E_HEIGHTMAP", e.to_string()))?;
     let heights_cm = data[..result.buffer_size()]
         .chunks_exact(2)
@@ -386,9 +353,8 @@ pub fn pack_bytes(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> R
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
         return Err(error("E_REFERENCE", "unexpected or missing file"));
     }
-    let payload_size = export_limits::payload_size(
-        files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)),
-    )?;
+    let payload_size =
+        export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     let manifest = PackageManifest {
@@ -472,7 +438,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     let mut folded = BTreeSet::new();
     let mut total = 0u64;
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(zip_error)?;
+        let entry = archive.by_index(i).map_err(zip_error)?;
         let name = entry.name().to_string();
         if i == 0 && (name != "manifest.json" || entry.header_start() != 0) {
             return Err(error(
@@ -512,11 +478,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
             return Err(error("E_ZIP", "unsupported compression"));
         }
         let expected = entry.size();
-        let mut data = vec![];
-        (&mut entry)
-            .take(expected + 1)
-            .read_to_end(&mut data)
-            .map_err(zip_error)?;
+        let data = container::inflate(bytes, &entry)?;
         if data.len() as u64 != expected || data.len() as u64 > limit {
             return Err(error("E_LIMIT", "ZIP decompressed size mismatch"));
         }
@@ -600,25 +562,42 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
 }
 impl Package {
     fn generation_heightgrid(&self, cell: Cell) -> Result<Option<HeightGrid>> {
-        self.document.heightmaps.iter().find(|h| h.cell == cell)
+        self.document
+            .heightmaps
+            .iter()
+            .find(|h| h.cell == cell)
             .map(|h| decode_heightmap(h, self.document.cell_size_cm, &self.files[&h.path]))
             .transpose()
     }
     pub fn generate(&self, cell: Cell, max_triangles: usize) -> Result<GeneratedChunk> {
         let grid = self.generation_heightgrid(cell)?;
         generate(GenerationInput {
-            document: &self.document, cell, heightgrid: grid.as_ref(), max_triangles,
+            document: &self.document,
+            cell,
+            heightgrid: grid.as_ref(),
+            max_triangles,
         })
     }
     /// Uses the identical package terrain decoder and generator as ordinary chunks.
-    pub fn generate_with_occupancy(&self, cell: Cell, max_triangles: usize, max_solids: usize) -> Result<GeneratedOccupancy> {
+    pub fn generate_with_occupancy(
+        &self,
+        cell: Cell,
+        max_triangles: usize,
+        max_solids: usize,
+    ) -> Result<GeneratedOccupancy> {
         if max_solids > MAX_OCCUPIED_SOLIDS {
             return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
         }
         let grid = self.generation_heightgrid(cell)?;
-        mapkit_core::generate_with_occupancy(GenerationInput {
-            document: &self.document, cell, heightgrid: grid.as_ref(), max_triangles,
-        }, max_solids)
+        mapkit_core::generate_with_occupancy(
+            GenerationInput {
+                document: &self.document,
+                cell,
+                heightgrid: grid.as_ref(),
+                max_triangles,
+            },
+            max_solids,
+        )
     }
 }
 

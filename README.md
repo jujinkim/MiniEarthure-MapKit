@@ -50,6 +50,7 @@ python3 -m venv /tmp/mapkit-contract-env
 /tmp/mapkit-contract-env/bin/python scripts/check_contract.py
 python3 scripts/check_architecture.py
 python3 scripts/check_reproducibility.py
+python3 scripts/check_input_defense.py
 ```
 
 `jsonschema` is only a check dependency; the producer uses Python's standard

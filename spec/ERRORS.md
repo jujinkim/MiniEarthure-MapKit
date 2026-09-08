@@ -17,12 +17,12 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 | `E_PATH` | Unsafe/reserved/duplicate/case-colliding path or disallowed file type/link. |
 | `E_REFERENCE` | Missing/extra payload, duplicate inventory record or unmatched document reference. |
 | `E_HASH` | Payload size/digest or world content digest mismatch. |
-| `E_ZIP` | Invalid ZIP, disagreeing local/central headers, unsupported compression/encryption or inflation/CRC failure. |
+| `E_ZIP` | Invalid/ambiguous ZIP envelope, disagreeing headers/descriptors/ZIP64, gaps/overlaps/trailing bytes, unsupported compression/encryption or incomplete/extra DEFLATE/CRC failure. |
 | `E_MANIFEST` | Wrong manifest location, document path or disagreement with source metadata. |
 | `E_HEIGHTMAP` | Invalid PNG terrain encoding, dimensions or height samples. |
 | `E_SEAM` | Restored terrain/road boundary contract mismatch. |
-| `E_ASSET` | Invalid/unsupported static asset or collision proxy. |
-| `E_LIMIT` | Hard package/document/file/count/expanded-data profile exceeded. |
+| `E_ASSET` | Invalid/unsupported static asset, image decode, GLB graph/accessor/material or collision proxy. |
+| `E_LIMIT` | Hard package/document/file/count/expanded-data, image dimensions/decoded-work or GLB record/element profile exceeded. |
 | `E_BUDGET` | Requested generation, query, overview or occupied-solid allowance exhausted/invalid. |
 | `E_MEMORY_BUDGET` | Package validation or overview working-set allowance exceeded before use. |
 | `E_CELL` | Requested cell or point is outside the available map. |
@@ -36,5 +36,6 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 
 `scripts/check_contract.py` compares this catalog with all four public crates,
 executes failure cases through the CLI, and checks that invalid input does not
-create accepted outputs. These checks do not replace the deeper asset/container
-security audit described in [LIMITATIONS](../LIMITATIONS.md).
+create accepted outputs. `scripts/check_input_defense.py` and the Rust
+`input_defense` tests exercise the bounded K03 asset/container profile.
+Platform/renderer/allocator acceptance remains in [LIMITATIONS](../LIMITATIONS.md).

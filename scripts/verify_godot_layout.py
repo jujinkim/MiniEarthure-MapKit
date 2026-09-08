@@ -7,6 +7,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from check_input_defense import asset_package
+import struct
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = '''extends SceneTree
@@ -43,7 +46,15 @@ func _initialize() -> void:
     check(not container_rejected.ok and container_rejected.error.code == "E_ZIP", "local ZIP header identity must match central inventory before inflation")
     check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "container failure clears previously open package")
     check(JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak)).ok, "retry after container rejection preserves the same budget")
+    var bad_asset := FileAccess.get_file_as_bytes("res://invalid-asset.memap")
+    var asset_rejected: Dictionary = JSON.parse_string(bridge.open_package_bytes(bad_asset))
+    check(not asset_rejected.ok and asset_rejected.error.code == "E_ASSET", "honest inventory with truncated PNG body fails full native decode")
+    check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "asset failure exposes no previously opened source")
+    check(JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak)).ok, "native retry after late asset rejection")
     var document: Dictionary = JSON.parse_string(bridge.document_json()).data
+    var duplicate_json: String = JSON.stringify(document).insert(1, '"map_id":"duplicate",')
+    var duplicate_document: Dictionary = JSON.parse_string(bridge.validate_document(duplicate_json))
+    check(not duplicate_document.ok and duplicate_document.error.code == "E_JSON", "native editor document rejects duplicate keys before engine-number normalization")
     document.provenance.last_edited = "tomorrow"
     var invalid_document: Dictionary = JSON.parse_string(bridge.validate_document(JSON.stringify(document)))
     check(not invalid_document.ok and invalid_document.error.code == "E_PROVENANCE", "editor document validation shares metadata contract")
@@ -219,6 +230,9 @@ def main():
         inconsistent = bytearray((project / 'fixture.memap').read_bytes())
         inconsistent[30] ^= 1  # first physical filename; central manifest is unchanged
         (project / 'invalid-container.memap').write_bytes(inconsistent)
+        ihdr = struct.pack('>IIBBBBB', 2, 2, 8, 6, 0, 0, 0)
+        invalid_png = b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + ihdr + struct.pack('>I', zlib.crc32(b'IHDR' + ihdr))
+        (project / 'invalid-asset.memap').write_bytes(asset_package((project / 'fixture.memap').read_bytes(), invalid_png))
         invalid = json.loads((ROOT / 'examples/minimal/document.json').read_text())
         invalid['provenance']['last_edited'] = 'tomorrow'
         (project / 'invalid-document.json').write_text(json.dumps(invalid))

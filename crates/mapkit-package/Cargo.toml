@@ -12,3 +12,7 @@ sha2.workspace = true
 schemars.workspace = true
 zip = { version = "=0.6.6", default-features = false, features = ["deflate"] }
 png = "0.17"
+gltf = { version = "=1.4.1", default-features = false, features = ["utils", "names"] }
+image-webp = "=0.2.4"
+flate2 = "1"
+crc32fast = "1"

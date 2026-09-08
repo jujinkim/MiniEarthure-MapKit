@@ -12,6 +12,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     if bytes.len() as u64 > MAX_PACKAGE_BYTES {
         return Err(error("E_LIMIT", "compressed package exceeds profile"));
     }
+    container::validate(bytes)?;
     let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(zip_error)?;
     if archive.is_empty() || archive.len() > MAX_FILES + 1 {
         return Err(error("E_LIMIT", "invalid ZIP file count"));
@@ -43,7 +44,6 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
                 "unsafe, duplicate, case-colliding or non-regular ZIP path",
             ));
         }
-        validate_local_header(bytes, &entry)?;
         let limit = if i == 0 {
             MAX_MANIFEST_BYTES
         } else if name == "document.json" {
@@ -66,6 +66,9 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
         if name.ends_with(".json") || name.ends_with(".glb") {
             structured += entry.size();
         }
+        if name.ends_with(".glb") {
+            images = true;
+        } // Embedded PNGs decode too.
         if name.ends_with(".png") {
             pngs += 1;
             images = true;
@@ -84,7 +87,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     let transient = structured * 96
         + bytes.len() as u64 * 2
         + if images {
-            80 * 1024 * 1024
+            256 * 1024 * 1024
         } else {
             8 * 1024 * 1024
         }
@@ -93,40 +96,4 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
         retained_memory_bytes: retained,
         validation_peak_bytes: (retained + transient).max(bytes.len() as u64 * 4 + 8 * 1024 * 1024),
     })
-}
-
-fn validate_local_header(bytes: &[u8], entry: &zip::read::ZipFile<'_>) -> Result<()> {
-    let bad = || error("E_ZIP", "local and central ZIP headers disagree");
-    let start = usize::try_from(entry.header_start()).map_err(|_| bad())?;
-    let central = usize::try_from(entry.central_header_start()).map_err(|_| bad())?;
-    let local = bytes
-        .get(start..start.checked_add(30).ok_or_else(bad)?)
-        .ok_or_else(bad)?;
-    let central = bytes
-        .get(central..central.checked_add(46).ok_or_else(bad)?)
-        .ok_or_else(bad)?;
-    let name_len = u16::from_le_bytes(local[26..28].try_into().unwrap()) as usize;
-    let name_start = start + 30;
-    // Bind both the physical name and the interpretation of its data.
-    if bytes.get(name_start..name_start.checked_add(name_len).ok_or_else(bad)?)
-        != Some(entry.name_raw())
-        || local[6..10] != central[8..12]
-    {
-        return Err(bad());
-    }
-    let flags = u16::from_le_bytes(local[6..8].try_into().unwrap());
-    // Streaming writers defer CRC/sizes to a descriptor. For ZIP64 sentinels,
-    // the adapter supplies central-directory counts, not the sentinel as a size.
-    if flags & 8 == 0 {
-        if local[14..18] != central[16..20] {
-            return Err(bad());
-        }
-        for (offset, expected) in [(18, entry.compressed_size()), (22, entry.size())] {
-            let size = u32::from_le_bytes(local[offset..offset + 4].try_into().unwrap());
-            if size != u32::MAX && u64::from(size) != expected {
-                return Err(bad());
-            }
-        }
-    }
-    Ok(())
 }

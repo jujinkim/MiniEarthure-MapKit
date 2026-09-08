@@ -30,8 +30,7 @@ fn response(result: mapkit_core::Result<serde_json::Value>) -> GString {
     GString::from(serde_json::to_string(&value).unwrap().as_str())
 }
 fn engine_document(text: &str) -> mapkit_core::Result<mapkit_core::MapDocument> {
-    let mut value: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| mapkit_core::error("E_JSON", e.to_string()))?;
+    let mut value = mapkit_package::parse_resource_json(text.as_bytes())?;
     fn integers(v: &mut serde_json::Value) -> mapkit_core::Result<()> {
         match v {
             serde_json::Value::Number(n) if n.is_f64() => {
