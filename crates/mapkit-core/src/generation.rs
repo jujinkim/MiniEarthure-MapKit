@@ -380,7 +380,7 @@ fn generate_internal(
                     position_cm: p,
                     surface_id: "terrain".into(),
                 };
-                let position = b.chunk.spawn(&request)?;
+                let position = b.chunk.recipe_v1_spawn(&request)?;
                 b.box_shape(
                     [position[0], position[1] + i64::from(crate::query::TREE_PROXY_SIZE_CM[1] / 2), position[2]],
                     crate::query::TREE_PROXY_SIZE_CM,

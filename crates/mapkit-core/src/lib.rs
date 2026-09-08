@@ -350,9 +350,7 @@ impl MapDocument {
         {
             return fail("bounds or height out of range");
         }
-        if self.cells().len() > 16_384 {
-            return Err(error("E_LIMIT", "too many cells"));
-        }
+        self.cell_dimensions()?;
         let count = self.nodes.len()
             + self.roads.len()
             + self.buildings.len()
@@ -389,6 +387,20 @@ impl MapDocument {
         {
             if id.is_empty() || id.len() > 128 || !ids.insert(id) {
                 return Err(error("E_ID", "invalid or duplicate object ID"));
+            }
+        }
+        // Generated identities share the same surface/object namespace. Reject
+        // aliases before generation; never repair IDs or depend on cell order.
+        let zone_ids: BTreeSet<_> = self.zones.iter().map(|z| z.id.as_str()).collect();
+        for id in &ids {
+            let generated = id.rsplit_once(':').and_then(|(prefix, y)| {
+                let (zone, x) = prefix.rsplit_once(':')?;
+                let canonical_index = |value: &str| value.parse::<i64>()
+                    .is_ok_and(|index| index.to_string() == value);
+                Some(zone_ids.contains(zone) && canonical_index(x) && canonical_index(y))
+            }).unwrap_or(false);
+            if id.as_str() == "terrain" || generated {
+                return Err(error("E_ID", "object ID aliases a generated terrain or vegetation identity"));
             }
         }
         let nodes: BTreeMap<_, _> = self.nodes.iter().map(|n| (&n.id, n)).collect();
@@ -492,71 +504,6 @@ impl MapDocument {
         }
         Ok(())
     }
-    pub fn cells(&self) -> Vec<Cell> {
-        let size = self.cell_size_cm as i64;
-        if size == 0 {
-            return vec![];
-        }
-        let (nx, ny) = (
-            (self.bounds.max[0] - self.bounds.min[0] + size - 1) / size,
-            (self.bounds.max[1] - self.bounds.min[1] + size - 1) / size,
-        );
-        if nx <= 0 || ny <= 0 || nx.saturating_mul(ny) > 16_384 {
-            return vec![Cell { x: -1, y: -1 }; 16_385];
-        }
-        (0..ny as i32)
-            .flat_map(|y| (0..nx as i32).map(move |x| Cell { x, y }))
-            .collect()
-    }
-    pub fn has_cell(&self, c: Cell) -> bool {
-        let s = self.cell_size_cm as i64;
-        c.x >= 0
-            && c.y >= 0
-            && s > 0
-            && self.bounds.min[0] + c.x as i64 * s < self.bounds.max[0]
-            && self.bounds.min[1] + c.y as i64 * s < self.bounds.max[1]
-    }
-    pub fn cell_at(&self, p: Point) -> Option<Cell> {
-        if !self.bounds.contains(p) {
-            return None;
-        }
-        let s = self.cell_size_cm as i64;
-        Some(Cell {
-            x: ((p[0].min(self.bounds.max[0] - 1) - self.bounds.min[0]) / s) as i32,
-            y: ((p[1].min(self.bounds.max[1] - 1) - self.bounds.min[1]) / s) as i32,
-        })
-    }
-    pub fn window(&self, p: Point) -> Vec<Cell> {
-        let Some(c) = self.cell_at(p) else {
-            return vec![];
-        };
-        (-1..=1)
-            .flat_map(|dy| {
-                (-1..=1).map(move |dx| Cell {
-                    x: c.x + dx,
-                    y: c.y + dy,
-                })
-            })
-            .filter(|c| self.has_cell(*c))
-            .collect()
-    }
-    pub fn cell_bounds(&self, c: Cell) -> Result<Bounds> {
-        if !self.has_cell(c) {
-            return Err(error("E_CELL", "cell outside map"));
-        }
-        let s = self.cell_size_cm as i64;
-        let min = [
-            self.bounds.min[0] + c.x as i64 * s,
-            self.bounds.min[1] + c.y as i64 * s,
-        ];
-        Ok(Bounds {
-            min,
-            max: [
-                (min[0] + s).min(self.bounds.max[0]),
-                (min[1] + s).min(self.bounds.max[1]),
-            ],
-        })
-    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -635,10 +582,15 @@ impl GeneratedChunk {
         Ok(format!("{:x}", hash.finalize()))
     }
     pub fn spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
-        self.surface_triangle(request).map(|(_, position)| position)
+        self.surface_triangle(request, true).map(|(_, position)| position)
+    }
+    /// Frozen recipe-v1 vegetation anchor rounding. Public queries must not
+    /// silently migrate existing generated-v6 objects, collision or hashes.
+    pub(crate) fn recipe_v1_spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
+        self.surface_triangle(request, false).map(|(_, position)| position)
     }
     pub fn surface_probe(&self, request: &SpawnRequest) -> Result<SurfaceProbe> {
-        let (triangle, position_cm) = self.surface_triangle(request)?;
+        let (triangle, position_cm) = self.surface_triangle(request, true)?;
         let [a, b, c] = triangle.vertices;
         let u = std::array::from_fn::<_, 3, _>(|i| b[i] as i128 - a[i] as i128);
         let v = std::array::from_fn::<_, 3, _>(|i| c[i] as i128 - a[i] as i128);
@@ -648,7 +600,7 @@ impl GeneratedChunk {
         Ok(SurfaceProbe { position_cm, surface_id: request.surface_id.clone(),
             normal_q: n.map(|v| libm::round(v / length * sign * 1_000_000.0) as i32) })
     }
-    fn surface_triangle(&self, request: &SpawnRequest) -> Result<(&Triangle, Vertex)> {
+    fn surface_triangle(&self, request: &SpawnRequest, absolute_height: bool) -> Result<(&Triangle, Vertex)> {
         for t in &self.triangles {
             if !t.spawnable || t.object_id != request.surface_id {
                 continue;
@@ -661,8 +613,15 @@ impl GeneratedChunk {
             }
             let wb = cross(flat(a), request.position_cm, flat(c));
             let wc = cross(flat(a), flat(b), request.position_cm);
-            let h =
-                a[1] + ((wb * (b[1] - a[1]) as i128 + wc * (c[1] - a[1]) as i128) / area) as i64;
+            // Quantize the absolute rational height once, toward zero. Rounding
+            // a delta from a triangle-specific origin gave opposite sides of a
+            // shared edge different centimetres (also for cyclic vertex order).
+            let delta = wb * (b[1] - a[1]) as i128 + wc * (c[1] - a[1]) as i128;
+            let h = if absolute_height {
+                ((a[1] as i128 * area + delta) / area) as i64
+            } else {
+                a[1] + (delta / area) as i64
+            };
             return Ok((t, [request.position_cm[0], h, request.position_cm[1]]));
         }
         Err(error(
@@ -682,6 +641,7 @@ pub struct GenerationInput<'a> {
     pub heightgrid: Option<&'a HeightGrid>,
     pub max_triangles: usize,
 }
+mod spatial;
 mod cost;
 mod generation;
 mod occupancy;

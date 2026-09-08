@@ -12,7 +12,7 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 | `E_VERSION` | Unsupported package, recipe or generated contract; use a supported producer/version. |
 | `E_PROVENANCE` | Missing/blank/control-character producer label, invalid supplied timestamp or reversed edit chronology. |
 | `E_ATTRIBUTION` | Invalid source/license label or notice text, including per-asset attribution. |
-| `E_ID` | Empty, oversized or duplicate object ID. |
+| `E_ID` | Empty, oversized, duplicate or reserved generated identity (`terrain` / a declared zone's `zone_id:x:y`). |
 | `E_GEOMETRY` | Invalid coordinates, graph/segment relationship, polygon, dimension or placement. |
 | `E_PATH` | Unsafe/reserved/duplicate/case-colliding path or disallowed file type/link. |
 | `E_REFERENCE` | Missing/extra payload, duplicate inventory record or unmatched document reference. |

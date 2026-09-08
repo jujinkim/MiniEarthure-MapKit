@@ -196,7 +196,8 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
 pub fn decode_heightmap(h: &Heightmap, cell_size: u32, bytes: &[u8]) -> Result<HeightGrid> {
     assets::png_envelope(bytes).map_err(|e| error("E_HEIGHTMAP", e.message))?;
     if h.spacing_cm < 200
-        || cell_size > 102_400
+        || !(200..=102_400).contains(&cell_size)
+        || !cell_size.is_multiple_of(200)
         || !cell_size.is_multiple_of(h.spacing_cm)
         || h.step_cm == 0
         || h.step_cm > 100

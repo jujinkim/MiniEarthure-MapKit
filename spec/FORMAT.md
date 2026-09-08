@@ -62,6 +62,46 @@ identical restored edge heights, including edges against implicit flat terrain.
 Source accuracy metadata is independent of spacing. Partial map-edge cells retain
 full grid dimensions and generation clips to map bounds.
 
+### Spatial/terrain validation refinement (K04)
+
+The grid origin is exactly `bounds.min`, including negative and non-grid-aligned
+origins. Internal ownership intervals are half-open: a point on an internal
+east/north edge belongs to the next cell. The inclusive outer maximum belongs to
+the last (possibly partial) cell. Closed geometry queries include every touching
+cell; this does not duplicate an anchor-owned object. Clipped triangle references
+retain the original object ID. Vegetation uses the global signed lattice and
+`zone_id:x:y` identity; it is independent of processing order and spawn position.
+`terrain` and a declared zone's generated `zone_id:x:y` namespace (canonical signed
+decimal indices, without leading zeros or `+`) are reserved from authored IDs.
+Ambiguous documents fail with `E_ID`; readers never rename or repair source IDs.
+
+Topology helpers fail closed on unvalidated invalid/oversized topology: cell
+lookup returns no owner, enumeration/window is empty and cell bounds return
+`E_CELL`. Validation still rejects the document; an empty result is not acceptance.
+Cell size is 200..102400 cm, divisible by 200, with at most 16384 cells.
+
+The standard terrain sampling interval is 200 cm (257×257 for a default cell).
+Larger intervals must divide the cell size; adjacent explicit grids use the same
+interval. PNG samples are unsigned, big-endian 16-bit grayscale. `offset_cm` is
+within ±1000000 and `step_cm` is 1..100; decode is exact integer
+`offset_cm + sample * step_cm`, with no normalization or inferred vertical datum.
+Neighbors may use different offsets/steps if every restored shared-edge sample
+matches. Missing grids represent `terrain_base_cm` and must match explicit
+neighbors. Compare the complete padding edges even outside partial map bounds.
+Generation clips full-grid triangles; it does not rescale a partial grid.
+`source_accuracy_cm` remains optional descriptive source uncertainty, independent
+of both horizontal sampling and vertical quantization. It is not an accuracy
+guarantee. Changing it alone changes v1 world content identity, not geometry.
+
+Surface queries interpolate the absolute rational height and truncate once toward
+zero to integer cm. Quantizing a delta relative to one triangle vertex is invalid:
+it previously gave neighboring triangles different 1 cm answers on the same edge.
+This query correction leaves v1 package bytes and generated-v6 triangles/hashes
+unchanged: recipe-v1 vegetation keeps its frozen anchor-relative quantization in
+the explicit internal `recipe_v1_spawn` strategy. The corrected public query
+applies to every queried surface. Native consumers must use matching
+MapKit source/release pins; no saved source, archive geometry or recipe is migrated.
+
 ## Resource limits and errors
 
 Current tooling profile: package <=512 MiB, expanded entries including manifest <=1 GiB, each file

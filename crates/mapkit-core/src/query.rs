@@ -18,28 +18,13 @@ impl MapDocument {
     /// The cap applies to the union, before either result vector is allocated.
     pub fn query_cells(&self, query: &Bounds, max_cells: usize) -> Result<QueryCells> {
         let size = i64::from(self.cell_size_cm);
-        if !(200..=102_400).contains(&size)
-            || size % 200 != 0
-            || (0..2).any(|a| {
-                self.bounds.min[a].unsigned_abs() > 10_000_000
-                    || self.bounds.max[a].unsigned_abs() > 10_000_000
-                    || self.bounds.min[a] >= self.bounds.max[a]
-            })
-        {
-            return Err(error("E_DOCUMENT", "invalid query topology"));
-        }
+        let dimensions = self.cell_dimensions()?;
         if (0..2).any(|a| {
             query.min[a].unsigned_abs() > 1_000_000_000
                 || query.max[a].unsigned_abs() > 1_000_000_000
                 || query.min[a] > query.max[a]
         }) {
             return Err(error("E_QUERY", "invalid query bounds"));
-        }
-        let dimensions = std::array::from_fn::<_, 2, _>(|a| {
-            (self.bounds.max[a] - self.bounds.min[a] + size - 1) / size
-        });
-        if dimensions[0] * dimensions[1] > 16_384 {
-            return Err(error("E_LIMIT", "too many map cells"));
         }
         if !(1..=16_384).contains(&max_cells) {
             return Err(error("E_BUDGET", "invalid query cell allowance"));

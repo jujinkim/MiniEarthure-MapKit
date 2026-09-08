@@ -10,6 +10,7 @@ import tempfile
 from check_input_defense import asset_package
 import struct
 import zlib
+from spatial_terrain_probe import make_fixture as make_terrain_fixture, PROBE as TERRAIN_PROBE
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = '''extends SceneTree
@@ -209,6 +210,7 @@ func run() -> void:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--godot', required=True)
+    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain'], action='append', help='Run only selected behavioral probes; default runs all')
     args = parser.parse_args()
     library = {'win32': 'mapkit_godot.dll', 'darwin': 'libmapkit_godot.dylib'}.get(sys.platform, 'libmapkit_godot.so')
     built_library = ROOT / 'target/debug' / library
@@ -224,6 +226,8 @@ def main():
         (project / 'project.godot').write_text('config_version=5\n[application]\nconfig/name="MapKit Nested Probe"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
         (project / 'probe.gd').write_text(PROBE)
         (project / 'renderer_probe.gd').write_text(RENDER_PROBE)
+        (project / 'terrain_probe.gd').write_text(TERRAIN_PROBE)
+        make_terrain_fixture(project)
         for name in ('chunk_renderer.gd', 'chunk_data.gd'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
@@ -238,8 +242,13 @@ def main():
         (project / 'invalid-document.json').write_text(json.dumps(invalid))
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'invalid-metadata.memap'), str(project / 'invalid-document.json')], check=True, timeout=30)
         subprocess.run([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], check=True, timeout=60)
-        subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://renderer_probe.gd'], check=True, timeout=30)
-        subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://probe.gd'], check=True, timeout=30)
+        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd'}
+        fixture_bytes = (project / 'fixture.memap').read_bytes()
+        for probe in args.probe or scripts:
+            # Binding deliberately corrupts its source to prove snapshot ownership.
+            # Each process gets a fresh fixture even when probes run out of order.
+            (project / 'fixture.memap').write_bytes(fixture_bytes)
+            subprocess.run([args.godot, '--headless', '--path', str(project), '--script', 'res://' + scripts[probe]], check=True, timeout=30)
 
 
 if __name__ == '__main__':
