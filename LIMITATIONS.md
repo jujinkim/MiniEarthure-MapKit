@@ -17,10 +17,15 @@ This repository is a working development foundation, not a completed game cutove
   specified in `spec/FORMAT.md`. Scoped native Mac collision tests are not full
   target-platform driving acceptance. Arbitrary intersecting structures still
   require author-supplied clearance; no implicit crossing connection is generated.
-- Generator work remaining: sidewalks, full-footprint vegetation clearance and
-  solid building volume semantics (K06), user assets/rendering (K07) and native
+- K06 recipe-3 building materials/flat and rectangular gable roofs, exact solid
+  parts, full-canopy placement clearance, deterministic spacing, manual/repeated
+  builtin fences/lights and theme/override/access-aware sidewalks are implemented.
+  Recipes 1/2 remain frozen. See `spec/FORMAT.md` for explicit supported authoring
+  limits; arbitrary roofs, curved fence panels and inferred entrances are not
+  supported. Scoped Mac native checks do not establish real-driving acceptance.
+- Generator work remaining: user assets/rendering (K07) and native
   cross-platform/reference-map acceptance (K08/P). Recipe-2 road scratch has an
-  explicit consumer reservation, but complete S04 allocator/RSS/GPU accounting
+  explicit consumer reservation, as do recipe-3 workspace and convex parts, but complete S04 allocator/RSS/GPU accounting
   remains separate.
 - K03 validates ZIP envelopes/descriptors/ZIP64 and complete PNG/WebP pixels,
   GLB framing/references/accessor bytes/indices/static node graphs/materials and

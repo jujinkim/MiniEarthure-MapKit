@@ -24,7 +24,7 @@ fn surface_count(c: &GeneratedChunk, p: Point, height: i64) -> usize {
             if !t.spawnable {
                 return false;
             }
-            let one = GeneratedChunk {
+            let one = GeneratedChunk { building_prisms: vec![],
                 format_version: 6,
                 cell: c.cell,
                 triangles: vec![(*t).clone()],

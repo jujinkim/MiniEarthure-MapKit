@@ -2,13 +2,13 @@ use super::*;
 use crate::occupancy::Occupancy;
 
 pub(super) struct Builder {
-    chunk: GeneratedChunk,
-    bounds: Bounds,
+    pub(super) chunk: GeneratedChunk,
+    pub(super) bounds: Bounds,
     max: usize,
     occupancy: Option<Occupancy>,
 }
 impl Builder {
-    fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()> {
+    pub(super) fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()> {
         if let Some(occupancy) = &mut self.occupancy {
             occupancy.push(id, shape, &self.bounds)?;
         }
@@ -95,7 +95,7 @@ impl Builder {
         self.triangle([v[0], v[1], v[2]], surface, id, spawnable)?;
         self.triangle([v[0], v[2], v[3]], surface, id, spawnable)
     }
-    fn box_shape(&mut self, center: Vertex, size: [u32; 3], id: &str) -> Result<()> {
+    pub(super) fn box_shape(&mut self, center: Vertex, size: [u32; 3], id: &str) -> Result<()> {
         let min = [
             center[0] - size[0] as i64 / 2,
             center[1] - size[1] as i64 / 2,
@@ -130,7 +130,7 @@ impl Builder {
         Ok(())
     }
 }
-fn polygon_triangles(poly: &[Point]) -> Result<Vec<[usize; 3]>> {
+pub(super) fn polygon_triangles(poly: &[Point]) -> Result<Vec<[usize; 3]>> {
     let area: i128 = (0..poly.len())
         .map(|i| {
             poly[i][0] as i128 * poly[(i + 1) % poly.len()][1] as i128
@@ -171,7 +171,7 @@ fn polygon_triangles(poly: &[Point]) -> Result<Vec<[usize; 3]>> {
     out.push([ring[0], ring[1], ring[2]]);
     Ok(out)
 }
-fn road_contains(p: Point, r: &Road, extra: i64) -> bool {
+pub(super) fn road_contains(p: Point, r: &Road, extra: i64) -> bool {
     r.points.windows(2).enumerate().any(|(i, s)| {
         let a = [s[0][0], s[0][2]];
         let b = [s[1][0], s[1][2]];
@@ -216,13 +216,14 @@ fn generate_internal(
     let bounds = d.cell_bounds(input.cell)?;
     let mut b = Builder {
         chunk: GeneratedChunk {
+            building_prisms: vec![],
             format_version: GENERATED_VERSION,
             cell: input.cell,
             triangles: vec![],
             objects: vec![],
         },
         bounds: bounds.clone(),
-        max: if d.recipe_version == 2 {
+        max: if d.recipe_version >= 2 {
             estimate_generation(d, input.cell, input.max_triangles)?.triangles as usize
         } else { input.max_triangles.min(2_000_000) },
         occupancy,
@@ -252,7 +253,7 @@ fn generate_internal(
             .heightgrid
             .map_or(d.terrain_base_cm, |g| g.heights_cm[y * side + x])
     };
-    if d.recipe_version == 2 {
+    if d.recipe_version >= 2 {
         crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
     } else {
     for y in 0..side - 1 {
@@ -305,6 +306,10 @@ fn generate_internal(
         }
     }
     } // Frozen recipe-v1 terrain/road strategy.
+    if d.recipe_version == 3 {
+        crate::placement::generate(d, input.cell, &mut b)?;
+        return Ok(GeneratedOccupancy { chunk: b.chunk, solids: b.occupancy.map_or_else(Vec::new, |v| v.solids) });
+    }
     for building in &d.buildings {
         let top = building.base_cm + building.height_cm as i64;
         for t in polygon_triangles(&building.footprint)? {

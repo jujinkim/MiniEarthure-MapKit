@@ -12,6 +12,7 @@ pub fn archive_limit(cost: &GenerationCost) -> u64 {
     let id = cost.max_object_id_bytes.max(128);
     (HEADER as u64).saturating_add(cost.triangles.saturating_mul(78 + id))
         .saturating_add(cost.objects.saturating_mul(33 + 2 * id))
+        .saturating_add(if cost.building_prisms > 0 { 4 + cost.building_prisms.saturating_mul(92 + 3 * id) } else { 0 })
 }
 fn invalid() -> Error { error("E_ARCHIVE", "invalid, incompatible or damaged generated-cell archive") }
 fn string(out: &mut Vec<u8>, value: &str) {
@@ -20,11 +21,12 @@ fn string(out: &mut Vec<u8>, value: &str) {
 }
 pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Result<Vec<u8>> {
     let size = HEADER + chunk.triangles.iter().map(|t| 78 + t.object_id.len()).sum::<usize>()
-        + chunk.objects.iter().map(|o| 33 + o.id.len() + o.asset_id.len()).sum::<usize>();
+        + chunk.objects.iter().map(|o| 33 + o.id.len() + o.asset_id.len()).sum::<usize>()
+        + if chunk.building_prisms.is_empty() { 0 } else { 4 + chunk.building_prisms.iter().map(|p|92+p.object_id.len()+p.material.len()+p.usage.len()).sum::<usize>() };
     if size as u64 > max_bytes { return Err(error("E_BUDGET", "cell archive exceeds byte allowance")); }
     if key.len() != 64 || chunk.format_version != GENERATED_VERSION { return Err(invalid()); }
     let mut out = Vec::with_capacity(size);
-    out.extend_from_slice(MAGIC);
+    out.extend_from_slice(if chunk.building_prisms.is_empty() {MAGIC} else {b"MKCELL02"});
     out.extend_from_slice(key.as_bytes());
     out.extend_from_slice(chunk.hash()?.as_bytes());
     out.extend_from_slice(&chunk.format_version.to_le_bytes());
@@ -42,6 +44,13 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
         string(&mut out, &o.id); string(&mut out, &o.asset_id);
         for v in o.position { out.extend_from_slice(&v.to_le_bytes()); }
         out.push(o.quarter_turns);
+    }
+    if !chunk.building_prisms.is_empty() {
+        out.extend_from_slice(&(chunk.building_prisms.len() as u32).to_le_bytes());
+        for p in &chunk.building_prisms {
+            string(&mut out,&p.object_id);string(&mut out,&p.material);string(&mut out,&p.usage);
+            for v in p.footprint.iter().flatten().copied().chain([p.bottom_cm]).chain(p.top_cm) {out.extend_from_slice(&v.to_le_bytes());}
+        }
     }
     Ok(out)
 }
@@ -70,7 +79,8 @@ impl<'a> Reader<'a> {
 pub fn decode_archive(bytes: &[u8], key: &str, cell: Cell, cost: &GenerationCost) -> Result<GeneratedChunk> {
     if bytes.len() < HEADER || bytes.len() as u64 > archive_limit(cost) { return Err(invalid()); }
     let mut r = Reader { bytes, offset: 0 };
-    if r.take(8)? != MAGIC || r.take(64)? != key.as_bytes() { return Err(invalid()); }
+    let magic=r.take(8)?;
+    if (magic!=MAGIC && magic!=b"MKCELL02") || r.take(64)? != key.as_bytes() { return Err(invalid()); }
     let hash = r.take(64)?;
     if r.u32()? != GENERATED_VERSION || r.u32()? as i32 != cell.x || r.u32()? as i32 != cell.y { return Err(invalid()); }
     let triangles = r.u32()? as usize;
@@ -79,7 +89,7 @@ pub fn decode_archive(bytes: &[u8], key: &str, cell: Cell, cost: &GenerationCost
     // before allocating. A tiny corrupt file cannot request a huge vector.
     if triangles as u64 > cost.triangles || objects as u64 > cost.objects
         || triangles as u64 * 79 + objects as u64 * 35 > (bytes.len() - HEADER) as u64 { return Err(invalid()); }
-    let mut chunk = GeneratedChunk { format_version: GENERATED_VERSION, cell,
+    let mut chunk = GeneratedChunk { building_prisms: vec![], format_version: GENERATED_VERSION, cell,
         triangles: Vec::with_capacity(triangles), objects: Vec::with_capacity(objects) };
     let id_limit = cost.max_object_id_bytes.max(128);
     for _ in 0..triangles {
@@ -96,6 +106,19 @@ pub fn decode_archive(bytes: &[u8], key: &str, cell: Cell, cost: &GenerationCost
         if quarter_turns > 3 { return Err(invalid()); }
         chunk.objects.push(GeneratedObject { id, asset_id, position, quarter_turns });
     }
+    if magic==b"MKCELL02" {
+        let count=r.u32()? as usize;
+        if count==0 || count as u64>cost.building_prisms || count>(bytes.len()-r.offset)/95 {return Err(invalid());}
+        chunk.building_prisms.reserve(count);
+        for _ in 0..count {
+            let object_id=r.string(id_limit)?;let material=r.string(16)?;let usage=r.string(16)?;
+            let mut values=[0;10];
+            for v in &mut values {*v=i64::from_le_bytes(r.take(8)?.try_into().unwrap());}
+            let p=BuildingPrism {object_id,material,usage,footprint:[[values[0],values[1]],[values[2],values[3]],[values[4],values[5]]],
+                bottom_cm:values[6],top_cm:[values[7],values[8],values[9]]};
+            if !p.valid() {return Err(invalid());}chunk.building_prisms.push(p);
+        }
+    }
     if r.offset != bytes.len() || chunk.hash()?.as_bytes() != hash { return Err(invalid()); }
     Ok(chunk)
 }
@@ -105,10 +128,10 @@ mod tests {
     use super::*;
     #[test]
     fn archive_roundtrip_corruption_and_allocation_limits() {
-        let chunk = GeneratedChunk { format_version: GENERATED_VERSION, cell: Cell { x: -2, y: 3 },
+        let chunk = GeneratedChunk { building_prisms: vec![], format_version: GENERATED_VERSION, cell: Cell { x: -2, y: 3 },
             triangles: vec![Triangle { vertices: [[-1, 0, 0], [1, 0, 0], [0, 1, 1]], surface: Surface::Gravel, object_id: "도로".into(), spawnable: true }],
             objects: vec![GeneratedObject { id: "tree".into(), asset_id: "builtin.tree".into(), position: [1, 2, 3], quarter_turns: 3 }] };
-        let cost = GenerationCost { triangles: 1, generation_scratch_bytes: 0, objects: 1, occupied_solids: 0, height_samples: 0, max_object_id_bytes: 128 };
+        let cost = GenerationCost { triangles: 1, generation_scratch_bytes: 0, objects: 1, occupied_solids: 0, building_prisms: 0, height_samples: 0, max_object_id_bytes: 128 };
         let key = archive_key(&"a".repeat(64), chunk.cell);
         let bytes = encode_archive(&chunk, &key, archive_limit(&cost)).unwrap();
         assert_eq!(decode_archive(&bytes, &key, chunk.cell, &cost).unwrap(), chunk);

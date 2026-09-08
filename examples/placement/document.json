@@ -1,0 +1,321 @@
+{
+  "map_id": "synthetic-buildings-placement",
+  "revision": 1,
+  "bounds": {
+    "min": [
+      0,
+      0
+    ],
+    "max": [
+      25600,
+      25600
+    ]
+  },
+  "cell_size_cm": 12800,
+  "seed": 42,
+  "recipe_version": 3,
+  "theme": "urban",
+  "terrain_base_cm": 0,
+  "heightmaps": [],
+  "nodes": [
+    {
+      "id": "west",
+      "position": [
+        500,
+        0,
+        6000
+      ],
+      "level": 0
+    },
+    {
+      "id": "east",
+      "position": [
+        25000,
+        0,
+        6000
+      ],
+      "level": 0
+    }
+  ],
+  "roads": [
+    {
+      "id": "street",
+      "from": "west",
+      "to": "east",
+      "points": [
+        [
+          500,
+          0,
+          6000
+        ],
+        [
+          25000,
+          0,
+          6000
+        ]
+      ],
+      "widths_cm": [
+        600
+      ],
+      "surfaces": [
+        "asphalt"
+      ],
+      "kind": "ground",
+      "clearance_cm": null,
+      "sidewalk_cm": null
+    }
+  ],
+  "buildings": [
+    {
+      "id": "concave",
+      "footprint": [
+        [
+          2000,
+          1500
+        ],
+        [
+          6000,
+          1500
+        ],
+        [
+          6000,
+          2800
+        ],
+        [
+          3400,
+          2800
+        ],
+        [
+          3400,
+          4500
+        ],
+        [
+          2000,
+          4500
+        ]
+      ],
+      "material": "brick",
+      "roof": "flat",
+      "usage": "residential",
+      "height_cm": 1000,
+      "base_cm": -100
+    },
+    {
+      "id": "gable",
+      "footprint": [
+        [
+          12000,
+          9000
+        ],
+        [
+          13800,
+          9000
+        ],
+        [
+          13800,
+          11000
+        ],
+        [
+          12000,
+          11000
+        ]
+      ],
+      "material": "wood",
+      "roof": "gable",
+      "usage": "public",
+      "height_cm": 1000,
+      "base_cm": -100
+    },
+    {
+      "id": "shop",
+      "footprint": [
+        [
+          3000,
+          7100
+        ],
+        [
+          6000,
+          7100
+        ],
+        [
+          6000,
+          9000
+        ],
+        [
+          3000,
+          9000
+        ]
+      ],
+      "material": "concrete",
+      "roof": "flat",
+      "usage": "commercial",
+      "height_cm": 1000,
+      "base_cm": -100,
+      "entrances": [
+        [
+          [
+            3600,
+            6300
+          ],
+          [
+            4400,
+            6300
+          ],
+          [
+            4400,
+            7300
+          ],
+          [
+            3600,
+            7300
+          ]
+        ]
+      ]
+    }
+  ],
+  "zones": [
+    {
+      "id": "orchard",
+      "kind": "orchard",
+      "polygon": [
+        [
+          1000,
+          16000
+        ],
+        [
+          10000,
+          16000
+        ],
+        [
+          10000,
+          25000
+        ],
+        [
+          1000,
+          25000
+        ]
+      ],
+      "spacing_cm": 1000,
+      "density_per_mille": 1000,
+      "exclusions": [
+        [
+          [
+            5000,
+            18000
+          ],
+          [
+            6500,
+            18000
+          ],
+          [
+            6500,
+            21000
+          ],
+          [
+            5000,
+            21000
+          ]
+        ]
+      ]
+    },
+    {
+      "id": "forest",
+      "kind": "forest",
+      "polygon": [
+        [
+          14000,
+          16000
+        ],
+        [
+          25000,
+          16000
+        ],
+        [
+          25000,
+          25000
+        ],
+        [
+          14000,
+          25000
+        ]
+      ],
+      "spacing_cm": 900,
+      "density_per_mille": 800,
+      "exclusions": []
+    }
+  ],
+  "assets": [],
+  "placements": [
+    {
+      "id": "manual-tree",
+      "asset_id": "builtin:tree",
+      "position": [
+        20000,
+        0,
+        12000
+      ],
+      "quarter_turns": 0
+    },
+    {
+      "id": "manual-fence",
+      "asset_id": "builtin:fence",
+      "position": [
+        22000,
+        0,
+        12000
+      ],
+      "quarter_turns": 1
+    }
+  ],
+  "attributions": [
+    {
+      "source": "Synthetic fixture",
+      "license": "MIT",
+      "notice": "No external map or asset data"
+    }
+  ],
+  "provenance": {
+    "tool_id": "third-party-example",
+    "version": "1",
+    "build_id": "example",
+    "fingerprint": "untrusted-and-accepted",
+    "first_created": "2026-09-07T00:00:00Z",
+    "last_edited": "2026-09-07T00:00:00Z"
+  },
+  "repetitions": [
+    {
+      "id": "fence-line",
+      "asset_id": "builtin:fence",
+      "points": [
+        [
+          2000,
+          0,
+          14000
+        ],
+        [
+          11000,
+          0,
+          14000
+        ]
+      ],
+      "spacing_cm": 200
+    },
+    {
+      "id": "lights",
+      "asset_id": "builtin:streetlight",
+      "points": [
+        [
+          1000,
+          0,
+          6900
+        ],
+        [
+          24000,
+          0,
+          6900
+        ]
+      ],
+      "spacing_cm": 2400
+    }
+  ]
+}

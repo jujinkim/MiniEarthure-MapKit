@@ -13,6 +13,7 @@ fn input(d: &MapDocument, cell: Cell) -> GenerationInput<'_> {
 }
 fn contains(solid: &OccupiedSolid, p: Vertex) -> bool {
     match &solid.shape {
+        SolidShape::SlopedPrism { .. } => panic!("legacy fixture"),
         SolidShape::Box { min, max } => (0..3).all(|a| min[a] <= p[a] && p[a] <= max[a]),
         SolidShape::TriangularPrism {
             footprint,

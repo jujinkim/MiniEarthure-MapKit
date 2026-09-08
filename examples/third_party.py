@@ -21,6 +21,13 @@ def produce(output, document_path=None):
     document = json.loads(source.read_text(encoding='utf-8'))
     for field in ('nodes', 'roads', 'buildings', 'zones', 'assets', 'placements'):
         document[field].sort(key=lambda obj: obj['id'])
+    if document.get('repetitions'):
+        document['repetitions'].sort(key=lambda obj: obj['id'])
+    else:
+        document.pop('repetitions', None)
+    for building in document['buildings']:
+        if not building.get('entrances'):
+            building.pop('entrances', None)
     document['heightmaps'].sort(key=lambda h: (h['cell']['x'], h['cell']['y']))
     document['attributions'].sort(key=lambda a: (a['source'], a['license'], a['notice']))
     # Omitted optional fields have the same canonical typed form as explicit null.

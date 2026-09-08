@@ -1,6 +1,6 @@
 use mapkit_core::{Cell, GeneratedChunk, SpawnRequest, Surface, Triangle};
 fn chunk() -> GeneratedChunk {
-    GeneratedChunk { format_version: 6, cell: Cell { x: 0, y: 0 }, objects: vec![], triangles: vec![
+    GeneratedChunk { building_prisms: vec![], format_version: 6, cell: Cell { x: 0, y: 0 }, objects: vec![], triangles: vec![
         Triangle { vertices: [[0,0,0],[1000,0,0],[0,0,1000]], surface: Surface::Asphalt, object_id: "ground".into(), spawnable: true },
         Triangle { vertices: [[0,700,0],[1000,1200,0],[0,700,1000]], surface: Surface::Concrete, object_id: "bridge".into(), spawnable: true },
         Triangle { vertices: [[0,2000,0],[1000,2000,0],[0,2000,1000]], surface: Surface::Concrete, object_id: "roof".into(), spawnable: false },

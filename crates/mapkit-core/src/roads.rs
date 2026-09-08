@@ -96,7 +96,7 @@ fn tick(work: &mut usize, n: usize) -> Result<()> {
     }
 }
 // Both halves share the exact same intersection, independent of traversal.
-fn split(poly: &[Vertex], plane: impl Fn(Vertex) -> i128) -> (Poly, Poly) {
+pub(crate) fn split(poly: &[Vertex], plane: impl Fn(Vertex) -> i128) -> (Poly, Poly) {
     let mut inside = vec![];
     let mut outside = vec![];
     for i in 0..poly.len() {
@@ -168,7 +168,7 @@ fn floor_plane(v: &[Vertex; 3], p: Vertex) -> i128 {
         + orient(v[0], v[1], p) * v[2][1] as i128;
     (p[1] as i128 * area - value) * area.signum()
 }
-fn on_plane(v: &[Vertex; 3], p: Vertex) -> Vertex {
+pub(crate) fn on_plane(v: &[Vertex; 3], p: Vertex) -> Vertex {
     let area = orient(v[0], v[1], v[2]);
     let height = (orient(v[1], v[2], p) * v[0][1] as i128
         + orient(v[2], v[0], p) * v[1][1] as i128

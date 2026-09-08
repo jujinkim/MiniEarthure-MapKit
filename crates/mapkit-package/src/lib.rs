@@ -39,7 +39,7 @@ pub struct PackageManifest {
     pub format: String,
     #[schemars(range(min = 1, max = 1))]
     pub format_version: u32,
-    #[schemars(range(min = 1, max = 2))]
+    #[schemars(range(min = 1, max = 3))]
     pub recipe_version: u32,
     #[schemars(range(min = 6, max = 6))]
     pub generated_version: u32,
@@ -51,7 +51,7 @@ pub struct PackageManifest {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(regex(pattern = "^default$"))]
+    #[schemars(regex(pattern = "^(default|urban|rural)$"))]
     pub theme: String,
     #[schemars(regex(pattern = r"^document\.json$"))]
     pub document: String,

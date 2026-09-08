@@ -15,6 +15,11 @@ pub enum SolidShape {
         bottom_cm: i64,
         top_cm: i64,
     },
+    SlopedPrism {
+        footprint: [Point; 3],
+        bottom_cm: i64,
+        top_cm: [i64; 3],
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +49,7 @@ impl Occupancy {
     pub fn push(&mut self, id: &str, shape: SolidShape, cell: &Bounds) -> Result<()> {
         let (min, max) = match &shape {
             SolidShape::Box { min, max } => ([min[0], min[2]], [max[0], max[2]]),
-            SolidShape::TriangularPrism { footprint, .. } => (
+            SolidShape::TriangularPrism { footprint, .. } | SolidShape::SlopedPrism { footprint, .. } => (
                 std::array::from_fn(|axis| footprint.iter().map(|p| p[axis]).min().unwrap()),
                 std::array::from_fn(|axis| footprint.iter().map(|p| p[axis]).max().unwrap()),
             ),

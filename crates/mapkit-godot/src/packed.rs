@@ -13,6 +13,10 @@ pub struct MapKitPackedGeometry {
     indices: PackedInt32Array,
     spawnable: PackedByteArray,
     ids: PackedStringArray,
+    prism_vertices: PackedInt64Array,
+    prism_indices: PackedInt32Array,
+    materials: PackedStringArray,
+    usages: PackedStringArray,
 }
 #[godot_api]
 impl MapKitPackedGeometry {
@@ -24,6 +28,10 @@ impl MapKitPackedGeometry {
             "object_indices" => &self.indices,
             "spawnable" => &self.spawnable,
             "object_ids" => &self.ids,
+            "building_prism_vertices_cm" => &self.prism_vertices,
+            "building_prism_object_indices" => &self.prism_indices,
+            "building_materials" => &self.materials,
+            "building_usages" => &self.usages,
         }
     }
 }
@@ -69,6 +77,15 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
             "quarter_turns" => object.quarter_turns as i64,
         });
     }
+    let mut prism_vertices=Vec::with_capacity(chunk.building_prisms.len()*18);
+    let mut prism_indices=Vec::with_capacity(chunk.building_prisms.len());
+    let mut materials=vec![GString::new();ids.len()];
+    let mut usages=materials.clone();
+    for prism in &chunk.building_prisms {
+        let id=*index.get(prism.object_id.as_str()).ok_or_else(||mapkit_core::error("E_GEOMETRY","building prism has no faces"))?;
+        prism_vertices.extend(prism.vertices().iter().flatten().copied());prism_indices.push(id);
+        materials[id as usize]=prism.material.as_str().into();usages[id as usize]=prism.usage.as_str().into();
+    }
     let geometry = Gd::from_init_fn(|base| MapKitPackedGeometry {
         base,
         vertices: PackedInt64Array::from(vertices.as_slice()),
@@ -76,6 +93,10 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         indices: PackedInt32Array::from(object_indices.as_slice()),
         spawnable: PackedByteArray::from(spawnable.as_slice()),
         ids,
+        prism_vertices: PackedInt64Array::from(prism_vertices.as_slice()),
+        prism_indices: PackedInt32Array::from(prism_indices.as_slice()),
+        materials: PackedStringArray::from(materials.as_slice()),
+        usages: PackedStringArray::from(usages.as_slice()),
     });
     let data = vdict! {
         "packed_version" => 1i64,

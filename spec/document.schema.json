@@ -78,8 +78,14 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 2.0,
+      "maximum": 3.0,
       "minimum": 1.0
+    },
+    "repetitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Repetition"
+      }
     },
     "revision": {
       "type": "integer",
@@ -104,7 +110,7 @@
     },
     "theme": {
       "type": "string",
-      "pattern": "^default$"
+      "pattern": "^(default|urban|rural)$"
     },
     "zones": {
       "type": "array",
@@ -210,6 +216,22 @@
         "base_cm": {
           "type": "integer",
           "format": "int64"
+        },
+        "entrances": {
+          "description": "Author-declared access corridors, excluded from automatic placement/sidewalks.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
         },
         "footprint": {
           "type": "array",
@@ -402,6 +424,42 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Repetition": {
+      "type": "object",
+      "required": [
+        "asset_id",
+        "id",
+        "points",
+        "spacing_cm"
+      ],
+      "properties": {
+        "asset_id": {
+          "description": "builtin:fence or builtin:streetlight. Authored heights are absolute.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "spacing_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         }
       },
       "additionalProperties": false

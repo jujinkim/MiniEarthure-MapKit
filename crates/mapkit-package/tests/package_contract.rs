@@ -415,7 +415,22 @@ fn recipes_are_explicit_preserved_and_manifest_bound() {
     rejected(&bad,"E_MANIFEST");
     let bad=rewrite(&bytes,|entries| {
         let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
-        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=3.into();*b=canonical(&m).unwrap();
+        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=4.into();*b=canonical(&m).unwrap();
     });
     rejected(&bad,"E_VERSION");
+}
+
+#[test]
+fn recipe_three_roundtrips_extensions_and_solid_content() {
+    let d:MapDocument=serde_json::from_str(include_str!("../../../examples/placement/document.json")).unwrap();
+    let bytes=package(d);let p=read_bytes(&bytes).unwrap();
+    assert_eq!(p.manifest.recipe_version,3);
+    assert_eq!(bytes,pack_bytes(p.document.clone(),p.files.clone()).unwrap());
+    assert!(!p.document.repetitions.is_empty());
+    let generated=p.generate(Cell{x:0,y:0},500_000).unwrap();
+    assert!(!generated.building_prisms.is_empty());
+    let mut changed=p.document.clone();changed.provenance.tool_id="another-tool".into();
+    let other=read_bytes(&package(changed)).unwrap();
+    assert_eq!(p.inspection.world_content_hash,other.inspection.world_content_hash);
+    assert_eq!(generated.hash().unwrap(),other.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap());
 }

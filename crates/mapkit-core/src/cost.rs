@@ -11,6 +11,7 @@ pub struct GenerationCost {
     pub objects: u64,
     /// Upper bound for optional occupied-volume records, independent of face clipping.
     pub occupied_solids: u64,
+    pub building_prisms: u64,
     pub height_samples: u64,
     pub max_object_id_bytes: u64,
 }
@@ -53,9 +54,11 @@ pub fn estimate_generation(
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
         triangles: 0,
-        generation_scratch_bytes: if d.recipe_version == 2 && !d.roads.is_empty() { crate::roads::SCRATCH_BYTES } else { 0 },
+        generation_scratch_bytes: (if d.recipe_version >= 2 && !d.roads.is_empty() { crate::roads::SCRATCH_BYTES } else { 0 })
+            + if d.recipe_version == 3 { crate::placement::SCRATCH_BYTES } else { 0 },
         objects: 0,
         occupied_solids: 0,
+        building_prisms: 0,
         height_samples: if descriptor.is_some() { side * side } else { 0 },
         max_object_id_bytes: 7,
     };
@@ -92,6 +95,14 @@ pub fn estimate_generation(
                         - local.min[axis].max(area.min[axis])).max(0) / spacing + 2) as u64;
                     let touched = span(0).saturating_mul(span(1));
                     add(touched.saturating_mul(128).saturating_add(256), r.id.len());
+                    if d.recipe_version == 3 {
+                        let width = crate::placement::sidewalk_width(d,r) as i64;
+                        if width > 0 {
+                            let local_span = ((local.max[0].min(area.max[0])-local.min[0].max(area.min[0])).max(0)
+                                + (local.max[1].min(area.max[1])-local.min[1].max(area.min[1])).max(0))/200+4;
+                            add(local_span as u64 * 96 * (width/spacing+2) as u64, r.id.len()+9);
+                        }
+                    }
                 }
             }
         }
@@ -99,6 +110,14 @@ pub fn estimate_generation(
     for building in &d.buildings {
         let shape = bounds(building.footprint.iter().copied(), 0);
         let n = building.footprint.len() as u64;
+        if d.recipe_version == 3 {
+            let parts = if building.roof == "gable" { 4 } else { n-2 };
+            let clipped = parts * clip_factor(&shape,&area);
+            cost.building_prisms = cost.building_prisms.saturating_add(clipped);
+            if clipped > 0 {cost.occupied_solids = cost.occupied_solids.saturating_add(parts);}
+            add(clipped*8,building.id.len());
+            continue;
+        }
         if clip_factor(&shape, &area) != 0 {
             cost.occupied_solids = cost.occupied_solids.saturating_add(n - 2);
         }
@@ -135,13 +154,18 @@ pub fn estimate_generation(
         cost.occupied_solids = cost.occupied_solids.saturating_add(candidates);
         add(candidates.saturating_mul(12 * 5), zone.id.len() + 42);
     }
-    for placement in &d.placements {
-        let asset = d
+    let repeated = if d.recipe_version == 3 { crate::placement::repeated(d)? } else { vec![] };
+    if d.recipe_version == 3 {
+        cost.generation_scratch_bytes=cost.generation_scratch_bytes.saturating_add((d.placements.len()+repeated.len()) as u64*512);
+    }
+    for placement in d.placements.iter().chain(&repeated) {
+        let builtin = if d.recipe_version == 3 { crate::placement::builtin(&placement.asset_id) } else { None };
+        let collision = builtin.as_ref().unwrap_or_else(|| &d
             .assets
             .iter()
             .find(|a| a.id == placement.asset_id)
-            .unwrap();
-        for proxy in &asset.collision {
+            .unwrap().collision);
+        for proxy in collision {
             let mut center = proxy.center;
             let mut size = proxy.size_cm;
             for _ in 0..placement.quarter_turns {
@@ -169,7 +193,7 @@ pub fn estimate_generation(
             cost.objects = cost.objects.saturating_add(1);
         }
     }
-    for placement in &d.placements {
+    for placement in d.placements.iter().chain(&repeated) {
         cost.max_object_id_bytes = cost
             .max_object_id_bytes
             .max(placement.id.len() as u64)

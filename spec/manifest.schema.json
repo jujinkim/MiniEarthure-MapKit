@@ -81,7 +81,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 2.0,
+      "maximum": 3.0,
       "minimum": 1.0
     },
     "revision": {
@@ -97,7 +97,7 @@
     },
     "theme": {
       "type": "string",
-      "pattern": "^default$"
+      "pattern": "^(default|urban|rural)$"
     },
     "world_content_hash": {
       "type": "string",

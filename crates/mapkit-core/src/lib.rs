@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 2;
+pub const RECIPE_VERSION: u32 = 3;
 pub const GENERATED_VERSION: u32 = 6;
 pub const WORLD_SCALE: f64 = 0.125;
 pub const DEFAULT_CELL_CM: i64 = 51_200;
@@ -129,6 +129,9 @@ pub struct Building {
     pub usage: String,
     pub material: String,
     pub roof: String,
+    /// Author-declared access corridors, excluded from automatic placement/sidewalks.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entrances: Vec<Vec<Point>>,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -180,6 +183,15 @@ pub struct Placement {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct Repetition {
+    pub id: String,
+    /// builtin:fence or builtin:streetlight. Authored heights are absolute.
+    pub asset_id: String,
+    pub points: Vec<Vertex>,
+    pub spacing_cm: u32,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct MapDocument {
     #[schemars(length(min = 1, max = 128))]
     pub map_id: String,
@@ -189,9 +201,9 @@ pub struct MapDocument {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(range(min = 1, max = 2))]
+    #[schemars(range(min = 1, max = 3))]
     pub recipe_version: u32,
-    #[schemars(regex(pattern = "^default$"))]
+    #[schemars(regex(pattern = "^(default|urban|rural)$"))]
     pub theme: String,
     pub terrain_base_cm: i64,
     pub heightmaps: Vec<Heightmap>,
@@ -201,6 +213,8 @@ pub struct MapDocument {
     pub zones: Vec<Zone>,
     pub assets: Vec<Asset>,
     pub placements: Vec<Placement>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub repetitions: Vec<Repetition>,
     pub attributions: Vec<Attribution>,
     pub provenance: Provenance,
 }
@@ -316,6 +330,7 @@ impl MapDocument {
         self.zones.sort_by(|a, b| a.id.cmp(&b.id));
         self.assets.sort_by(|a, b| a.id.cmp(&b.id));
         self.placements.sort_by(|a, b| a.id.cmp(&b.id));
+        self.repetitions.sort_by(|a, b| a.id.cmp(&b.id));
         self.heightmaps.sort_by_key(|h| h.cell);
         self.attributions.sort_by(|a, b| {
             (&a.source, &a.license, &a.notice).cmp(&(&b.source, &b.license, &b.notice))
@@ -325,6 +340,9 @@ impl MapDocument {
         let fail = |m: &str| Err(error("E_GEOMETRY", m));
         if !(1..=RECIPE_VERSION).contains(&self.recipe_version) {
             return Err(error("E_VERSION", "unsupported recipe"));
+        }
+        if self.recipe_version < 3 && (!self.repetitions.is_empty() || self.buildings.iter().any(|b| !b.entrances.is_empty())) {
+            return Err(error("E_VERSION", "placement extensions require explicit recipe 3"));
         }
         self.provenance.validate()?;
         for (index, attribution) in self.attributions.iter().enumerate() {
@@ -336,7 +354,8 @@ impl MapDocument {
                 "seed exceeds exact public JSON integer profile",
             ));
         }
-        if self.map_id.is_empty() || self.map_id.len() > 128 || self.theme != "default" {
+        if self.map_id.is_empty() || self.map_id.len() > 128
+            || !(self.theme == "default" || self.recipe_version == 3 && matches!(self.theme.as_str(), "urban" | "rural")) {
             return Err(error("E_DOCUMENT", "map ID or unsupported theme"));
         }
         if !(200..=102_400).contains(&self.cell_size_cm) || !self.cell_size_cm.is_multiple_of(200) {
@@ -356,7 +375,7 @@ impl MapDocument {
             + self.buildings.len()
             + self.zones.len()
             + self.assets.len()
-            + self.placements.len();
+            + self.placements.len() + self.repetitions.len();
         if count > 200_000 {
             return Err(error("E_LIMIT", "too many objects"));
         }
@@ -370,7 +389,9 @@ impl MapDocument {
                 .zones
                 .iter()
                 .map(|z| z.polygon.len() + z.exclusions.iter().map(Vec::len).sum::<usize>())
-                .sum::<usize>();
+                .sum::<usize>()
+            + self.repetitions.iter().map(|r| r.points.len()).sum::<usize>()
+            + self.buildings.iter().flat_map(|b| &b.entrances).map(Vec::len).sum::<usize>();
         if vertices > 1_000_000 {
             return Err(error("E_LIMIT", "too many input vertices"));
         }
@@ -384,6 +405,7 @@ impl MapDocument {
             .chain(self.zones.iter().map(|x| &x.id))
             .chain(self.assets.iter().map(|x| &x.id))
             .chain(self.placements.iter().map(|x| &x.id))
+            .chain(self.repetitions.iter().map(|x| &x.id))
         {
             if id.is_empty() || id.len() > 128 || !ids.insert(id) {
                 return Err(error("E_ID", "invalid or duplicate object ID"));
@@ -443,7 +465,7 @@ impl MapDocument {
                 return fail("tunnel/underpass requires clearance");
             }
         }
-        if self.recipe_version == 2 {
+        if self.recipe_version >= 2 {
             roads::validate_graph(self)?;
         }
         for b in &self.buildings {
@@ -497,7 +519,7 @@ impl MapDocument {
             }
         }
         for p in &self.placements {
-            if !assets.contains(&p.asset_id)
+            if !(assets.contains(&p.asset_id) || self.recipe_version == 3 && placement::builtin(&p.asset_id).is_some())
                 || p.quarter_turns > 3
                 || !self.bounds.contains([p.position[0], p.position[2]])
                 || p.position[1].unsigned_abs() > 1_000_000
@@ -505,6 +527,7 @@ impl MapDocument {
                 return fail("invalid placement");
             }
         }
+        placement::validate(self)?;
         Ok(())
     }
 }
@@ -557,6 +580,9 @@ pub struct GeneratedObject {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct GeneratedChunk {
+    /// Recipe-3 convex building parts. Empty is omitted to preserve v1/v2 bytes.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub building_prisms: Vec<BuildingPrism>,
     pub format_version: u32,
     pub cell: Cell,
     pub triangles: Vec<Triangle>,
@@ -567,7 +593,16 @@ impl GeneratedChunk {
         // Canonical top-level keys in lexical order; buffer only one object/triangle.
         // This is byte-identical to canonical(self), without a whole serde Value tree.
         let mut hash = Sha256::new();
-        hash.update(b"{\"cell\":");
+        hash.update(b"{");
+        if !self.building_prisms.is_empty() {
+            hash.update(b"\"building_prisms\":[");
+            for (i, prism) in self.building_prisms.iter().enumerate() {
+                if i > 0 { hash.update(b","); }
+                hash.update(canonical(prism)?);
+            }
+            hash.update(b"],");
+        }
+        hash.update(b"\"cell\":");
         hash.update(canonical(&self.cell)?);
         hash.update(b",\"format_version\":");
         hash.update(canonical(&self.format_version)?);
@@ -660,3 +695,5 @@ mod archive;
 pub use archive::{archive_key, archive_limit, decode_archive, encode_archive};
 
 mod roads;
+mod placement;
+pub use placement::BuildingPrism;

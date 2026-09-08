@@ -11,6 +11,7 @@ pub struct MapKitPackedOccupancy {
     values: PackedInt64Array,
     indices: PackedInt32Array,
     ids: PackedStringArray,
+    slope_tops: PackedInt64Array,
 }
 #[godot_api]
 impl MapKitPackedOccupancy {
@@ -22,6 +23,7 @@ impl MapKitPackedOccupancy {
             "shape_values_cm" => &self.values,
             "object_indices" => &self.indices,
             "object_ids" => &self.ids,
+            "slope_tops_cm" => &self.slope_tops,
         }
     }
 }
@@ -30,6 +32,7 @@ pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionar
     super::packed::respond(result.and_then(|result| {
         let mut kinds = Vec::with_capacity(result.solids.len());
         let mut values = Vec::with_capacity(result.solids.len() * 8);
+        let mut slope_tops=vec![];
         let mut indices = Vec::with_capacity(result.solids.len());
         let mut ids = PackedStringArray::new();
         let mut index = BTreeMap::<&str, i32>::new();
@@ -56,6 +59,11 @@ pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionar
                     values.extend(footprint.iter().flatten().copied());
                     values.extend_from_slice(&[*bottom_cm, *top_cm]);
                 }
+                SolidShape::SlopedPrism {footprint,bottom_cm,top_cm} => {
+                    kinds.push(2);values.extend(footprint.iter().flatten().copied());
+                    values.extend_from_slice(&[*bottom_cm,slope_tops.len() as i64]);
+                    slope_tops.extend_from_slice(top_cm);
+                }
             }
         }
         let occupancy = Gd::from_init_fn(|base| MapKitPackedOccupancy {
@@ -64,6 +72,7 @@ pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionar
             values: PackedInt64Array::from(values.as_slice()),
             indices: PackedInt32Array::from(indices.as_slice()),
             ids,
+            slope_tops: PackedInt64Array::from(slope_tops.as_slice()),
         });
         // Solid arrays and normal triangle packing coexist at peak; callers must
         // reserve both representations before invoking this generation method.

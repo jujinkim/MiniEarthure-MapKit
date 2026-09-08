@@ -25,11 +25,11 @@ static func advance(job: Dictionary) -> bool:
 	var chunk: Dictionary = job.chunk
 	var offset := int(job.triangle)
 	if offset < DATA.count(chunk):
-		var key := DATA.surface(chunk, offset)
+		var key := DATA.material_key(chunk, offset)
 		var surface := SurfaceTool.new()
 		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 		var end := mini(offset + TRIANGLES_PER_BATCH, DATA.count(chunk))
-		while offset < end and DATA.surface(chunk, offset) == key:
+		while offset < end and DATA.material_key(chunk, offset) == key:
 			for index in [0, 2, 1]:
 				var point := DATA.scene_vertex(chunk, offset, index)
 				surface.set_uv(Vector2(point.x, point.z))
@@ -40,7 +40,7 @@ static func advance(job: Dictionary) -> bool:
 		mesh.mesh = surface.commit()
 		if not job.materials.has(key):
 			var material := StandardMaterial3D.new()
-			material.albedo_color = COLORS.get(key, Color.GRAY)
+			material.albedo_color = material_color(key)
 			material.roughness = 0.9
 			material.cull_mode = BaseMaterial3D.CULL_DISABLED
 			job.materials[key] = material
@@ -69,6 +69,14 @@ static func advance(job: Dictionary) -> bool:
 		job.chunk = {}
 		job.materials = {}
 	return job.done
+
+static func material_color(key: String) -> Color:
+	if not key.contains(":"):
+		return COLORS.get(key, Color.GRAY)
+	var fields := key.split(":")
+	var base: Color = {"brick": Color("b46c50"), "wood": Color("997347"), "concrete": Color("b7b8b0")}.get(fields[0], Color.GRAY)
+	var tint: Color = {"residential": Color("f4dfc3"), "commercial": Color("c6dfec"), "industrial": Color("bbbec6"), "public": Color("eee3b2")}.get(fields[1], Color.WHITE)
+	return base.lerp(tint, 0.2)
 
 static func cancel(job: Dictionary) -> void:
 	job.cancelled = true
