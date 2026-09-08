@@ -172,7 +172,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--godot', required=True)
     args = parser.parse_args()
-    library = 'mapkit_godot.dll' if sys.platform == 'win32' else 'libmapkit_godot.so'
+    library = {'win32': 'mapkit_godot.dll', 'darwin': 'libmapkit_godot.dylib'}.get(sys.platform, 'libmapkit_godot.so')
     built_library = ROOT / 'target/debug' / library
     if not built_library.exists():
         raise SystemExit('Build mapkit-godot for this native platform before the probe.')

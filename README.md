@@ -23,7 +23,7 @@ document, then pack the directory to another destination. `examples/minimal` is
 an original synthetic fixture from an unknown third-party producer, including
 crossing ground/bridge surfaces and an orchard. No external data or game assets.
 
-Godot 4.7.1 integration: mount this repository at `addons/mapkit` or a nested addon path, build
+Godot 4.7.2 integration: mount this repository at `addons/mapkit` or a nested addon path, build
 `cargo build --locked -p mapkit-godot`, then import the consuming Godot project.
 Native Windows uses its own Rust build; Android requires the Android Rust target
 and toolchain. Host code must not load `godot/chunk_renderer.gd`.
@@ -147,3 +147,8 @@ coexist during conversion.
 
 Cell assembly, memory planning, solid intersection and admission remain application
 responsibilities. Generation has no engine, filesystem, clock or network dependency.
+
+Apple Silicon macOS development uses native `libmapkit_godot.dylib` builds.
+The standalone/nested binding and renderer probe supports this platform:
+`python3.12 scripts/verify_godot_layout.py --godot /absolute/Godot`.
+Godot 4.7.2 source checks do not establish signed application distribution.
