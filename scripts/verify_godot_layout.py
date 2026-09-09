@@ -12,6 +12,7 @@ import struct
 import zlib
 from road_probe import PROBE as ROAD_PROBE
 from asset_probe import PROBE as ASSET_PROBE
+from determinism_probe import PROBE as DETERMINISM_PROBE
 from placement_probe import PROBE as PLACEMENT_PROBE
 from spatial_terrain_probe import make_fixture as make_terrain_fixture, PROBE as TERRAIN_PROBE
 
@@ -222,7 +223,7 @@ def run_engine(command, timeout):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--godot', required=True)
-    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads', 'placement', 'assets'], action='append', help='Run only selected behavioral probes; default runs all')
+    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads', 'placement', 'assets', 'determinism'], action='append', help='Run only selected behavioral probes; default runs all')
     args = parser.parse_args()
     library = {'win32': 'mapkit_godot.dll', 'darwin': 'libmapkit_godot.dylib'}.get(sys.platform, 'libmapkit_godot.so')
     built_library = ROOT / 'target/debug' / library
@@ -242,6 +243,8 @@ def main():
         (project / 'road_probe.gd').write_text(ROAD_PROBE)
         (project / 'placement_probe.gd').write_text(PLACEMENT_PROBE)
         (project / 'asset_probe.gd').write_text(ASSET_PROBE)
+        (project / 'determinism_probe.gd').write_text(DETERMINISM_PROBE)
+        shutil.copyfile(ROOT / 'spec/determinism-vectors.json', project / 'determinism-vectors.json')
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'assets.memap'), str(ROOT / 'examples/assets/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'placement.memap'), str(ROOT / 'examples/placement/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'roads.memap'), str(ROOT / 'examples/roads/document.json')], check=True, timeout=30)
@@ -260,7 +263,7 @@ def main():
         (project / 'invalid-document.json').write_text(json.dumps(invalid))
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'invalid-metadata.memap'), str(project / 'invalid-document.json')], check=True, timeout=30)
         run_engine([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], timeout=60)
-        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd', 'placement': 'placement_probe.gd', 'assets': 'asset_probe.gd'}
+        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd', 'placement': 'placement_probe.gd', 'assets': 'asset_probe.gd', 'determinism': 'determinism_probe.gd'}
         fixture_bytes = (project / 'fixture.memap').read_bytes()
         for probe in args.probe or scripts:
             # Binding deliberately corrupts its source to prove snapshot ownership.

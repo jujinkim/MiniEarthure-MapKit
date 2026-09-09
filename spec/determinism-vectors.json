@@ -1,0 +1,2580 @@
+{
+  "fixtures": [
+    {
+      "cells": [
+        {
+          "archive_bytes": 1651,
+          "archive_sha256": "53c532aa159de5e878c4daa40712d73fea902cbd9fe4696217164aa4e65c2fe3",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "54fe6505da6a3b04fa52dc6208b6466e696a5592a6799192319ad4f0c9ad3e63",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "d553505f6d921dc84a277d39fce51f44f25b92dbbace995b1e2babbb1627fa55",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                0,
+                0,
+                0
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 17,
+          "triangles_sha256": "af1dcef990a18dddce38acdcf0dd7c6856b99943e41cc5efda109a0e66a50390"
+        },
+        {
+          "archive_bytes": 504,
+          "archive_sha256": "a3835cdc7e81f086fe84cf28cca46fe3f80ba7c57550b01c0894be6c6f2063e6",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "b13b2388204c60d28aa363ad46bd9c8421ca78b447f9ed2e6a8bb81ed67a1fef",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                51200,
+                0,
+                0
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 4,
+          "triangles_sha256": "a6f2b489de4ca4497b7c49eba766c3e76de98e4d23fd5ec049705f3f02e82fa9"
+        },
+        {
+          "archive_bytes": 593,
+          "archive_sha256": "c1e6d37bf8b6d6cc0eca961c79d27c028edadd2d523b5bfad00dc011bacf94f0",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "1be71bb6c9b47341b45d75c0acea64409c7f1f59f22b82981581a7948ab29921",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                0,
+                0,
+                51200
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 5,
+          "triangles_sha256": "afb64ae8d0bc99f71130dc6818e79166f01337a20589f7f8a254d89bfd12ae16"
+        },
+        {
+          "archive_bytes": 142622,
+          "archive_sha256": "52a4aff881fc3c183f5329a7c75fcac20456c290f2840222dd2658b0baf78be8",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "5c52dc22b4ca058f8885529069ae804b2cba355b27ed6dd1b99ba1d65080d508",
+          "objects": 121,
+          "objects_sha256": "47a2a553449f9c179db4d6c2b76a8396a846c92e2dd09b517a772b5c8292c29e",
+          "occupancy_sha256": "85b16a30fcd8b2774977b84bcb99ad79ef9c3ec101845ac3b21935bab7118456",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                51200,
+                0,
+                51200
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 1454,
+          "triangles_sha256": "14976aaf49436d333d91c0dcd886865223d6a36c0c734a29ff783070a9bef62b"
+        }
+      ],
+      "input_sha256": "6def01fe25d3995b7c5cdc519b4a0368b2d5c8e99efc654fc063efe06acfe09a",
+      "name": "recipe1"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 18197,
+          "archive_sha256": "faf4754cea3e226ae6e2797e800c70a1a0c2c8b6e72bf8ac46a90d50bbfb33db",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "eefe2579e0abe0fdd06d9a60ebc978b8e60a1e452571d76e724e179c5e12dcfd",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                2833
+              ],
+              "surface_id": "branch"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                1000
+              ],
+              "surface_id": "branch"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                4500,
+                0,
+                1299
+              ],
+              "surface_id": "ground-west"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                600
+              ],
+              "surface_id": "ground-west"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                3000
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                4429,
+                0,
+                1500
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                4498,
+                0,
+                699
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                4581,
+                0,
+                683
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 210,
+          "triangles_sha256": "d2211e93fe2eae39eb3f2427e905c839105648022afe132bfe84dfdbf736cc6d"
+        },
+        {
+          "archive_bytes": 15169,
+          "archive_sha256": "cd9c125cb6df645f0a6c671aee27e2b70eb4a67c650074744d2f21d7f765f6f7",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "d8b822ba456f023d5a9c8832891daea1e874b3971491e879c9723d4a71c31dd9",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                10000,
+                0,
+                500
+              ],
+              "surface_id": "ground-east"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                10000,
+                0,
+                4000
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                10000,
+                0,
+                1500
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                7200,
+                0,
+                1500
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5200,
+                0,
+                2700
+              ],
+              "surface_id": "branch"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                9400,
+                0,
+                4400
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                8000,
+                0,
+                3000
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                7200,
+                0,
+                3200
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 175,
+          "triangles_sha256": "a42d9e9f446a9a3a06f93cc82d3e1d7913fffd7d79a999a1fbf2a8ea1e9c4cb6"
+        },
+        {
+          "archive_bytes": 22175,
+          "archive_sha256": "4a228f58d4b5047cd95840a4138a5b9a9025f0f5cbd4850b9f41a7a11ffdf07e",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "eda132aa94dbf6048aff50c2176ffce0a5c25010e7783af87150b4a7a162a885",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                9000
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                3099,
+                0,
+                7099
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                3250,
+                0,
+                5750
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                7700
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                1300,
+                0,
+                6200
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                700,
+                0,
+                5300
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                0,
+                0,
+                9166
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                2200,
+                0,
+                7200
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 259,
+          "triangles_sha256": "a75daa67fe23bf46b25050a5fcae5c047bf73d1b965f748c58cd5bc56fe40442"
+        },
+        {
+          "archive_bytes": 21920,
+          "archive_sha256": "7829fd39b3c7f1a3f2623de1cde5f124f6120ae45d838a4f2fb232ab96467aab",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "22e6157900f29df5c0944957aaa31ab7f22699ee33b03c17408f5daa2c8b41b6",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                10000,
+                0,
+                9000
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                8700,
+                0,
+                7700
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                9749,
+                0,
+                7249
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                8700,
+                0,
+                7494
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                7200,
+                0,
+                7100
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                8700,
+                0,
+                5300
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                9500,
+                0,
+                10000
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5250,
+                0,
+                10000
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 256,
+          "triangles_sha256": "bc522d8bcc0fd356f1755f1a5a1583ac49d509e195ea81f4cc381dd71573fe6b"
+        }
+      ],
+      "input_sha256": "5c172a22dfddb0db200169b2609d726b3462e93e0a3b3f4b63fb81ea93a8ad7d",
+      "name": "recipe2"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 147520,
+          "archive_sha256": "06e4a247595af0a095422938c7541d44e1c755f23013d80b92eec53d9508375c",
+          "asset_convexes": 0,
+          "building_prisms": 9,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "d9367a69be9dd953cf78e511fdba94180c9d217170778648cc7e6074237f41e2",
+          "objects": 5,
+          "objects_sha256": "d73f2523acc0814cc3f65e06ac2fc6dbd1d9bc2bc3968dff85352b3bec9aed29",
+          "occupancy_sha256": "87eebc335c15e780963e0cc0af47556b72a7632330dc33043091db21faaa1892",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                12800,
+                0,
+                5700
+              ],
+              "surface_id": "street"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                500,
+                0,
+                6299
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                1700,
+                12,
+                6308
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                2300,
+                12,
+                6307
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                3100,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                3700,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                4900,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5450,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            }
+          ],
+          "triangles": 1579,
+          "triangles_sha256": "cc37686f6fde7c74b7c3e39e464c854bc363a2abc42cb0c921588b6bdd903ff4"
+        },
+        {
+          "archive_bytes": 132840,
+          "archive_sha256": "2cbf5d6fb24e86b400494d44e82fb529d8c1c1b0b93650175a876d6273dc9c38",
+          "asset_convexes": 0,
+          "building_prisms": 5,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "4068cb3742bde723406848a9ba06945be49953a97164d47e97c601b479c0a644",
+          "objects": 7,
+          "objects_sha256": "c11662b7f9a6695e7896b40a7c185c3abd76c235b02073a9bb4aa4968a7282b4",
+          "occupancy_sha256": "0caa394d271a06b7906b79fea4e3873fcf87c9766d545c75044a314c713fe39a",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                24987,
+                0,
+                5700
+              ],
+              "surface_id": "street"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                19100,
+                0,
+                6300
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                13300,
+                12,
+                6301
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                14500,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                15300,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                15900,
+                12,
+                6301
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                16700,
+                12,
+                6301
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                17900,
+                12,
+                5450
+              ],
+              "surface_id": "street:sidewalk"
+            }
+          ],
+          "triangles": 1423,
+          "triangles_sha256": "fa19fdc12cbe24410e7d713a343259f25f7ae9c78bddd70496d962771ea7dd64"
+        },
+        {
+          "archive_bytes": 119758,
+          "archive_sha256": "b840dfa70166ffab06d4456aa65d50b0c8ff25a1265ade25719c89839ea4c860",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "300e70eb1a8b5aa19ce410dd4d767c8536cec6a11197048348e1b3db32705257",
+          "objects": 101,
+          "objects_sha256": "367c587f92e968fb7748727f67957e62b86b7eca20a91bf7ed3bdab9ff07cf79",
+          "occupancy_sha256": "566f9cdf244c9c2c66e9d14d7c168e64877c6aa20b5e184c09ed8c1216b191f1",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                0,
+                0,
+                12800
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 1214,
+          "triangles_sha256": "0217de0061e6ec00e90a283028df8d7874515ed71d8cee7935bb588e46d4160b"
+        },
+        {
+          "archive_bytes": 45806,
+          "archive_sha256": "3f8a5757527b5a8743ffeaae4ef539aa804fab48425eebd38bf6adddd3128fa2",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "bda05c76ef7f67972a7907f36c562f8bebc9b4e0333ae524c88c395e6503bf55",
+          "objects": 40,
+          "objects_sha256": "a71322b3031bf31d48ad0cf5f58faddc587de4d4083ea5c14f53d62887640c47",
+          "occupancy_sha256": "dd06a0700e11770bb6b0259b1779b3b03ba80715abf4901d8eae0c6671dc2837",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                12800,
+                0,
+                12800
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 482,
+          "triangles_sha256": "a859d8b7dc97c4ce47c2e160bd0b46605290b0422b9ab973ebe3cfd45a87c10e"
+        }
+      ],
+      "input_sha256": "84128be643dc87e7692922b8f0bf6552ea900cfef306fe1785e9e977f7f50057",
+      "name": "recipe3"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 6836,
+          "archive_sha256": "63e2fb11d84cc19fa7bdb5030a607e0a0ef073f4a2b89cb3da7026342361a0b6",
+          "asset_convexes": 2,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "5f02814bb0a1b8ac6354ae635a1052f45c63e7eb39259e285421250f6cdb12d5",
+          "objects": 6,
+          "objects_sha256": "8281320f11ad7c0420975153868e213c5518910159ec2d7ea42194f2acd3f5e0",
+          "occupancy_sha256": "31d64be0fc4d74fe0cdbff97c33606a68dc4a2992c9189580f01525523378b93",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                0,
+                0,
+                0
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 73,
+          "triangles_sha256": "3a95abed34ffdb27e132ecd5a1ba1bd160fb7e80b350c8b84071be7d2414a7ce"
+        },
+        {
+          "archive_bytes": 716,
+          "archive_sha256": "34c0c7bb592cb68b703e9ebc1dd34af088b8d54a189fa247facaf474bbf9b2dd",
+          "asset_convexes": 1,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "f8c96813419314eca4f5b4891dd2911767308ad3d9bc5518765436ae30013fb4",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "dd510b34668fa2663aa4e0fea1ff478d6e9c68ae7e5c19f3de300044ad0ffe6a",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                12800,
+                0,
+                0
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 5,
+          "triangles_sha256": "0f91a3ef7902d56677e0489444686b57a947484b9593fa1350b62fb90d205bf9"
+        },
+        {
+          "archive_bytes": 326,
+          "archive_sha256": "5a55c4be29c577ccd5128c1d7e3dcfbf39120e79579315a4d64bbbf4b5649140",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "5b0f082e2a49ba42de83fff787d6a14270d1dc80080233861ac5446de9ff875c",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                0,
+                0,
+                12800
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 2,
+          "triangles_sha256": "4b4325c8b11d1c82c9632b354f1062e64870bc0e005f882f9a754a9b0289558a"
+        },
+        {
+          "archive_bytes": 326,
+          "archive_sha256": "6b7ceea544ea196b1b9789be0cca1b8c7692db7bca0fe5c78c7a9f47b754dc7b",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "b047afc25b801b554ec55f1f707a60e7774a36871f00a414e22180dd3986dcd0",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                12800,
+                0,
+                12800
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 2,
+          "triangles_sha256": "61280d266ce3895c567e8631e0048ba884a76497849b89a0b518c9a8530a006a"
+        }
+      ],
+      "input_sha256": "18770ff8bf8fe090bef413488d2d7dff5503c158cf136e61b9295c95f36a9ff8",
+      "name": "recipe4"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 149202,
+          "archive_sha256": "b526e220b42417dbb9c6a1bdb82ce2af8e0b03780e2a1145e8386d0a0985456c",
+          "asset_convexes": 0,
+          "building_prisms": 9,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "6a60754d8d787c049638dd88b1acab21c12aaeb1b7ac3352d5593c26bf0e16c4",
+          "objects": 5,
+          "objects_sha256": "c12c5d8c1d3e721e85ed0e9fe4e7a3ad9c4991f492301dbbab36ee9f07c31e6f",
+          "occupancy_sha256": "5505df02ed52cccbd713619515b5e84bf6d143d43d3f769e06c71fe57921709c",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -4337,
+                0,
+                -7319
+              ],
+              "surface_id": "street"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -17137,
+                0,
+                -6719
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15237,
+                12,
+                -6709
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -14837,
+                12,
+                -6710
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -14237,
+                12,
+                -6711
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -13437,
+                12,
+                -7569
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -12437,
+                12,
+                -6715
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -11687,
+                12,
+                -7569
+              ],
+              "surface_id": "street:sidewalk"
+            }
+          ],
+          "triangles": 1597,
+          "triangles_sha256": "8194af32845bac1ced6876e3887b5b302b2838ff3aa814aca9d1ac16c99de8b5"
+        },
+        {
+          "archive_bytes": 132476,
+          "archive_sha256": "999860e9de0cd8894605a6dfa3e8961fac7168d9f6e647d570e36b3343d00036",
+          "asset_convexes": 0,
+          "building_prisms": 5,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "684b9223040710358f4d3b3e453921dc8b88405c52f1afea364b163d8aab4acd",
+          "objects": 7,
+          "objects_sha256": "965c6091b6c82d273a533c62f7913667de2082919259d337ad5d5f82cc26a701",
+          "occupancy_sha256": "4326efa9e722343b958ef930334e103ad960a3bbd28e63ab98a852754c57b8f8",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                7891,
+                0,
+                -7319
+              ],
+              "surface_id": "street"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -4337,
+                0,
+                -13019
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -3437,
+                12,
+                -7569
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2637,
+                12,
+                -7569
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2037,
+                12,
+                -6718
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -1237,
+                12,
+                -6718
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -37,
+                12,
+                -7569
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                763,
+                12,
+                -7569
+              ],
+              "surface_id": "street:sidewalk"
+            }
+          ],
+          "triangles": 1419,
+          "triangles_sha256": "73b5e482c099574a9bcf871afb513f40f57645cd42171d248044b432a5e34fb9"
+        },
+        {
+          "archive_bytes": 120486,
+          "archive_sha256": "49f9c59ccdb1c6b4f43b96ae58aa055b6f0db52b67c90ede093ffc3eb819085d",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "13871bd3f63887ef6c4ca0bf6ef972280897eec0c8cfc65fdd6cb72fcd10f1bb",
+          "objects": 101,
+          "objects_sha256": "4f1984a6930697cc472d8ba0eb50d537e06d2ea31c8e92711a826fe3c3f0c5e7",
+          "occupancy_sha256": "68554fd07e477c70dcf90c3b57fdc19ee3352845553ff76a72c729e66e3bf6e7",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -17137,
+                0,
+                -219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 1214,
+          "triangles_sha256": "11a88008094767587a1d6ed201523a5779daadf56176ddd6c2132f6c19d1bfb2"
+        },
+        {
+          "archive_bytes": 49626,
+          "archive_sha256": "53f82204f038cb53feb4d70744a1aa8f79101884a63d05bc683fc2b745e4e4f3",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "1bd5fac6549f0352518b87649483e71a9f52eeb48f74c60727001e3b75729152",
+          "objects": 44,
+          "objects_sha256": "9ed120ee63de4b3356483173067091d0e6e82b78c36c823ad50ac90203477da3",
+          "occupancy_sha256": "de6b516bea7b0ec6a70c61e12b930b252a5685d89a744705254fbdb2dbb000f9",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -4337,
+                0,
+                -219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 530,
+          "triangles_sha256": "b3ce2206bdf02c10d9ce8fec4fc12b1e7455a7fde65fac65b872947c50633355"
+        }
+      ],
+      "input_sha256": "b1d757f54812a5035c5b44b0a6262ec200cd671ee200c0fe9b216518beadb7b5",
+      "name": "signed-placement"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 2876,
+          "archive_sha256": "78667fa08e1a9f7d6e83279ba3ecf8671c99ef6934692bccafd0c3c8256c451c",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "17a511366a378c6ab0c22af3c49642a5a0e9e78cabf01dad1faf3a38118ee2fd",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -1000,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -976,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 32,
+          "triangles_sha256": "1bc70945fd61dd2df2a494638afae2b6114d41f7b91f621c1412fbfbed73a08f"
+        },
+        {
+          "archive_bytes": 2536,
+          "archive_sha256": "448d1c69cc6b8822381023b341c07b69e9fc92723d06c7ccc9e43a9a049dbc0c",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "a576bae1451ccb75b4597d367a103b8e152477d84f9b571a36be6eb95ba3eb8b",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -976,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                163,
+                -946,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 28,
+          "triangles_sha256": "44b6d2605e2c8d2b3a894c82f7a43f96c11f77458d64c0d10bcea645b2acb812"
+        },
+        {
+          "archive_bytes": 1856,
+          "archive_sha256": "9452aa7132931d80706f838c12d1747752d0919e1e1a95cb3a9f5437ad5db644",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "bcf92f41f5c9eb129dde05e5c5a265262c77f7a05a70d48ed18be84f1db3442d",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -952,
+                -51
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -237,
+                -922,
+                149
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 20,
+          "triangles_sha256": "95a8da2352af67bd9c6b06bcd36bc6026b2dd9c47d3708bd031f36bc5dd7cae8"
+        },
+        {
+          "archive_bytes": 1516,
+          "archive_sha256": "d54038f061551bc2b9d494ff7f516622134f9b5229cdab7280722a29e0187c30",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "9de6777478fb427a88888a2a6bb354f5f406b3b41b167db5e12fcf9bb30bfec0",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -928,
+                -51
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 16,
+          "triangles_sha256": "02a9f05bd4828456a44fa91280bb8792fd51bdce481faac919bc93f2a5e07080"
+        }
+      ],
+      "input_sha256": "2867c44592a6dc66818172d1e26506c66cfde044b2d6aeedc64f9c7305134f02",
+      "name": "signed-terrain-v1"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 2876,
+          "archive_sha256": "d37ddab36e0b36abd6cb0958146b9412324af5ea823d1070961cac9b7cb33461",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "17a511366a378c6ab0c22af3c49642a5a0e9e78cabf01dad1faf3a38118ee2fd",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -1000,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -976,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 32,
+          "triangles_sha256": "1bc70945fd61dd2df2a494638afae2b6114d41f7b91f621c1412fbfbed73a08f"
+        },
+        {
+          "archive_bytes": 2536,
+          "archive_sha256": "f9470bf37bae9780596b5809b24afc47a661397ecc74ee5186b5342455fcd2a7",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "a576bae1451ccb75b4597d367a103b8e152477d84f9b571a36be6eb95ba3eb8b",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -976,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                163,
+                -946,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 28,
+          "triangles_sha256": "44b6d2605e2c8d2b3a894c82f7a43f96c11f77458d64c0d10bcea645b2acb812"
+        },
+        {
+          "archive_bytes": 1856,
+          "archive_sha256": "e3cecb90b19924e0d333ce74eaec226a825fdc4af4dd68c7c737c1f8ddd1408f",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "bcf92f41f5c9eb129dde05e5c5a265262c77f7a05a70d48ed18be84f1db3442d",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -952,
+                -51
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -237,
+                -922,
+                149
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 20,
+          "triangles_sha256": "95a8da2352af67bd9c6b06bcd36bc6026b2dd9c47d3708bd031f36bc5dd7cae8"
+        },
+        {
+          "archive_bytes": 1516,
+          "archive_sha256": "61e2746b6ed34a992ddd5111ab5c5469c531429abcfe3bb42b59272d0cbc7944",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "9de6777478fb427a88888a2a6bb354f5f406b3b41b167db5e12fcf9bb30bfec0",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -928,
+                -51
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 16,
+          "triangles_sha256": "02a9f05bd4828456a44fa91280bb8792fd51bdce481faac919bc93f2a5e07080"
+        }
+      ],
+      "input_sha256": "2702def612d27e7972a5e466bc0f1b57c335eb02e1489fdb148b68c7bfb5cca7",
+      "name": "signed-terrain-v2"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 2876,
+          "archive_sha256": "67ddc897b758b7084e6e3d48d382fd8417a5a642b011db189fbb9122d17a5c77",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "17a511366a378c6ab0c22af3c49642a5a0e9e78cabf01dad1faf3a38118ee2fd",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -1000,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -976,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 32,
+          "triangles_sha256": "1bc70945fd61dd2df2a494638afae2b6114d41f7b91f621c1412fbfbed73a08f"
+        },
+        {
+          "archive_bytes": 2536,
+          "archive_sha256": "f1541dc70bf1124e1c54be1cdd01907f6279ab8daffab04f9aa15c2b8872e31d",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "a576bae1451ccb75b4597d367a103b8e152477d84f9b571a36be6eb95ba3eb8b",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -976,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                163,
+                -946,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 28,
+          "triangles_sha256": "44b6d2605e2c8d2b3a894c82f7a43f96c11f77458d64c0d10bcea645b2acb812"
+        },
+        {
+          "archive_bytes": 1856,
+          "archive_sha256": "c4038088003bc342ffa11780af0b9711d5a2887ba189ba608890ff3b6248b433",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "bcf92f41f5c9eb129dde05e5c5a265262c77f7a05a70d48ed18be84f1db3442d",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -952,
+                -51
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -237,
+                -922,
+                149
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 20,
+          "triangles_sha256": "95a8da2352af67bd9c6b06bcd36bc6026b2dd9c47d3708bd031f36bc5dd7cae8"
+        },
+        {
+          "archive_bytes": 1516,
+          "archive_sha256": "d5d68034a3627b11bd004ca60ae2c50a8c32c6d161e8c506f22cef66257fcac5",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "9de6777478fb427a88888a2a6bb354f5f406b3b41b167db5e12fcf9bb30bfec0",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -928,
+                -51
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 16,
+          "triangles_sha256": "02a9f05bd4828456a44fa91280bb8792fd51bdce481faac919bc93f2a5e07080"
+        }
+      ],
+      "input_sha256": "8e411b6a112dabb3464c501986538f5c363ecc28cc988fc5bdcd927771b38b57",
+      "name": "signed-terrain-v3"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 2876,
+          "archive_sha256": "b53502c72c91b78405e874c0beebda7cee6a30db835d59b3ae7b9a5e4e8cac7f",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "17a511366a378c6ab0c22af3c49642a5a0e9e78cabf01dad1faf3a38118ee2fd",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -1000,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -976,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 32,
+          "triangles_sha256": "1bc70945fd61dd2df2a494638afae2b6114d41f7b91f621c1412fbfbed73a08f"
+        },
+        {
+          "archive_bytes": 2536,
+          "archive_sha256": "0449a92eba7862c9b3f98b50d012730f0d43cf899e5992fbf8f17f0b2d532180",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "a576bae1451ccb75b4597d367a103b8e152477d84f9b571a36be6eb95ba3eb8b",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -976,
+                -851
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                163,
+                -946,
+                -451
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 28,
+          "triangles_sha256": "44b6d2605e2c8d2b3a894c82f7a43f96c11f77458d64c0d10bcea645b2acb812"
+        },
+        {
+          "archive_bytes": 1856,
+          "archive_sha256": "e2953006d932dcb713c94f97c6efe050bdbaf1f14979d4fa4a7742acdeb630f8",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "bcf92f41f5c9eb129dde05e5c5a265262c77f7a05a70d48ed18be84f1db3442d",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -837,
+                -952,
+                -51
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -237,
+                -922,
+                149
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 20,
+          "triangles_sha256": "95a8da2352af67bd9c6b06bcd36bc6026b2dd9c47d3708bd031f36bc5dd7cae8"
+        },
+        {
+          "archive_bytes": 1516,
+          "archive_sha256": "937142193703b12a3fc34d3ba8fae419dbcbaa5440365786babdee53810272e8",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "9de6777478fb427a88888a2a6bb354f5f406b3b41b167db5e12fcf9bb30bfec0",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                -29933,
+                997758,
+                -59865
+              ],
+              "position_cm": [
+                -37,
+                -928,
+                -51
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 16,
+          "triangles_sha256": "02a9f05bd4828456a44fa91280bb8792fd51bdce481faac919bc93f2a5e07080"
+        }
+      ],
+      "input_sha256": "4685fb49c49a7b0649ff80190c4b97cc7340eb9b3a53e8112766dc1e08e25274",
+      "name": "signed-terrain-v4"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "30917ce5c73a0e448f638578177fa0f8dea3c8be062838c8a2a0a20f297e484a",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "504c4ee61fba4c30b97103ea35b8d2dfe7e06893986571db9e097afdd7b34d2f",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "1e8437a4e820868d025212df6c99bbb72cf1cc170acc2c850028a1b67d2bc950"
+        },
+        {
+          "archive_bytes": 581,
+          "archive_sha256": "fae4528157761f9b40a5d5c4054397b9f8f90163a9edc867bcee2fab964e27c0",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "9750e915889af5ef6884a749321ec87194d06b3300f7263e960cabaca6a5c892",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 5,
+          "triangles_sha256": "b0b33c16f26b2adaf28a3c41a087ee0a890ea995e76d937938c8eaadba6319bf"
+        },
+        {
+          "archive_bytes": 411,
+          "archive_sha256": "7034a7565e5165f564ef77153b313708e5a55e11fc9b8ec8504d72df12fcbde8",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "4dcfe0bd563054eb623d8057ad6010785a05136e288c29ddddc3f67a2d948173",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 3,
+          "triangles_sha256": "bdd7de26302c59c5473b28b799e6ba822ee218bdfd9569751b32f0b24ca9ac46"
+        },
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "6c63ee86344d9d3e9c5ff5265806d889828f68b1872cb68cdc54f511233dbb0b",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "20615afee24c5b28cd63d9fe73131d8de4305981f93da5380e35b96f196f3969",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "7e8331ca93bd886a485878b4bb1a4128ff4c7624f5893e6d1dda7f327d83b101"
+        }
+      ],
+      "input_sha256": "270e4690bd687b9b49622d0eaa2759c13311aa6dcf899d929df1c2abf9aad44c",
+      "name": "oblique-bridge-v1"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "df89a841c39fafc241ff15f9f0257b84bd537b09df88db058f09185e86f761d3",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "504c4ee61fba4c30b97103ea35b8d2dfe7e06893986571db9e097afdd7b34d2f",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "1e8437a4e820868d025212df6c99bbb72cf1cc170acc2c850028a1b67d2bc950"
+        },
+        {
+          "archive_bytes": 581,
+          "archive_sha256": "6b8e7414020d50e81c55ff89d49cae0dd52f9b6d6e40a2ba4d7c73959435bb1c",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "9750e915889af5ef6884a749321ec87194d06b3300f7263e960cabaca6a5c892",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 5,
+          "triangles_sha256": "b0b33c16f26b2adaf28a3c41a087ee0a890ea995e76d937938c8eaadba6319bf"
+        },
+        {
+          "archive_bytes": 411,
+          "archive_sha256": "232114c7e0c9dd57870ca333b7c4762df7858ed375b33e535a9604d7f33e0e6e",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "4dcfe0bd563054eb623d8057ad6010785a05136e288c29ddddc3f67a2d948173",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 3,
+          "triangles_sha256": "bdd7de26302c59c5473b28b799e6ba822ee218bdfd9569751b32f0b24ca9ac46"
+        },
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "5d2fb721039ee89afe581cfc9a5c8a3c0314dbda7ca8634b62b4eb209afe0bb0",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "20615afee24c5b28cd63d9fe73131d8de4305981f93da5380e35b96f196f3969",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "7e8331ca93bd886a485878b4bb1a4128ff4c7624f5893e6d1dda7f327d83b101"
+        }
+      ],
+      "input_sha256": "7afbb5f5bd4d2bf0bd2b470d3e79c6b51bd9c161b8645b98d1c63f3b1be9650d",
+      "name": "oblique-bridge-v2"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "1a082aba122cf2e10c3c5b326c1de03cf1dd986af59274a5889ab03e1edcb8a6",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "504c4ee61fba4c30b97103ea35b8d2dfe7e06893986571db9e097afdd7b34d2f",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "1e8437a4e820868d025212df6c99bbb72cf1cc170acc2c850028a1b67d2bc950"
+        },
+        {
+          "archive_bytes": 581,
+          "archive_sha256": "379304159b33b291a0269273775f49ae6b0f64c6c2859345e0e901d353ccdc2a",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "9750e915889af5ef6884a749321ec87194d06b3300f7263e960cabaca6a5c892",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 5,
+          "triangles_sha256": "b0b33c16f26b2adaf28a3c41a087ee0a890ea995e76d937938c8eaadba6319bf"
+        },
+        {
+          "archive_bytes": 411,
+          "archive_sha256": "9a59fe21d09423bdd3f323acb0d76236ae5b4139eff0dfc46e5bd1799102bd72",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "4dcfe0bd563054eb623d8057ad6010785a05136e288c29ddddc3f67a2d948173",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 3,
+          "triangles_sha256": "bdd7de26302c59c5473b28b799e6ba822ee218bdfd9569751b32f0b24ca9ac46"
+        },
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "edee94be07c7df660455be56ea3a77fa5ad72f6bcfc9b39997b98959a5340166",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "20615afee24c5b28cd63d9fe73131d8de4305981f93da5380e35b96f196f3969",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "7e8331ca93bd886a485878b4bb1a4128ff4c7624f5893e6d1dda7f327d83b101"
+        }
+      ],
+      "input_sha256": "a028b486adaeca275b59c198d0e24b2839ed4756e3270b135a78deb87d782dfb",
+      "name": "oblique-bridge-v3"
+    },
+    {
+      "cells": [
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "836f7e0d2a5aef313ca0b0ae1fdfe956bc139306966160782dc32d7b949e53d8",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 0
+          },
+          "generated_sha256": "504c4ee61fba4c30b97103ea35b8d2dfe7e06893986571db9e097afdd7b34d2f",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "1e8437a4e820868d025212df6c99bbb72cf1cc170acc2c850028a1b67d2bc950"
+        },
+        {
+          "archive_bytes": 581,
+          "archive_sha256": "1a606ccabab0a4b05eca8591a1e20eabcd4cc2b87ffecf689617b793ac1299dd",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 0
+          },
+          "generated_sha256": "9750e915889af5ef6884a749321ec87194d06b3300f7263e960cabaca6a5c892",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -14019
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 5,
+          "triangles_sha256": "b0b33c16f26b2adaf28a3c41a087ee0a890ea995e76d937938c8eaadba6319bf"
+        },
+        {
+          "archive_bytes": 411,
+          "archive_sha256": "2ada1ca6273b2880d722c10248246b92dfda93bd1f418dc9375748ddcd9fc583",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 0,
+            "y": 1
+          },
+          "generated_sha256": "4dcfe0bd563054eb623d8057ad6010785a05136e288c29ddddc3f67a2d948173",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -15037,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 3,
+          "triangles_sha256": "bdd7de26302c59c5473b28b799e6ba822ee218bdfd9569751b32f0b24ca9ac46"
+        },
+        {
+          "archive_bytes": 666,
+          "archive_sha256": "e0108bc7fb060791ef134662aabdfa7168dd976f875f6622a462bc352e74a5fc",
+          "asset_convexes": 0,
+          "building_prisms": 0,
+          "cell": {
+            "x": 1,
+            "y": 1
+          },
+          "generated_sha256": "20615afee24c5b28cd63d9fe73131d8de4305981f93da5380e35b96f196f3969",
+          "objects": 0,
+          "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "surface_probes": [
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -2237,
+                0,
+                -1219
+              ],
+              "surface_id": "terrain"
+            }
+          ],
+          "triangles": 6,
+          "triangles_sha256": "7e8331ca93bd886a485878b4bb1a4128ff4c7624f5893e6d1dda7f327d83b101"
+        }
+      ],
+      "input_sha256": "210ba2499082375d0d3a5e59b903bb186a9f9a45955ee2e8200da24e999d69fa",
+      "name": "oblique-bridge-v4"
+    }
+  ],
+  "generated_version": 6,
+  "vector_version": 1
+}

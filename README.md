@@ -220,3 +220,9 @@ Presentation is opt-in after generation or cache restore; Host can keep CPU-only
 output. Reserve estimates before requesting display bytes. The renderer returns an
 error instead of readiness on an unsupported backend result. See
 [asset provenance](examples/assets/README.md) and [limits](LIMITATIONS.md).
+
+The [K08 determinism audit](spec/DETERMINISM.md) supplies frozen 13-fixture/52-cell
+geometry, occupancy, query and cache vectors, order/seed/boundary regressions and
+native packed/display isolation probes. `python3 scripts/check_determinism.py`
+compares fresh processes to the committed vectors; `--release` checks optimized
+output. Supported native OS/device parity remains a separate acceptance gate.

@@ -74,6 +74,20 @@ func run() -> void:
     for model: MeshInstance3D in meshes(job.root):
         if model.material_override != null and model.material_override.albedo_texture != null: images += 1
     check(images >= 2, "standalone image proxy and model override")
+    # K08: supported engine quality knobs belong to presentation only. No
+    # quality setting is passed to generation, archive identity or collisions.
+    var quality_meshes := meshes(job.root)
+    var before_quality: Dictionary = packed.data.chunk.geometry.view()
+    for low: bool in [true,false]:
+        for model: MeshInstance3D in quality_meshes:
+            model.lod_bias = 0.25 if low else 4.0
+            model.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if low else GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+            if model.material_override is BaseMaterial3D:
+                model.material_override.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST if low else BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+        check(packed.data.chunk.geometry.view() == before_quality, "LOD/shadow/texture filtering preserve exact physical arrays")
+        var quality_generated: Dictionary = bridge.generate_chunk_packed(0,0)
+        check(quality_generated.ok and quality_generated.data.generated_sha256 == original, "quality toggles preserve generation hash")
+        check(meshes(job.root).size() == quality_meshes.size() and anchors.size() == 2, "quality does not remove models or duplicate anchors")
     # Both cells retain full convex collision at the seam. Empty sloping AABB corner stays empty.
     for x in 2:
         var c: Dictionary = DATA.view(bridge.generate_chunk_packed(x,0).data.chunk)
