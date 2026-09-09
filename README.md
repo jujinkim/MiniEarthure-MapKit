@@ -226,3 +226,9 @@ geometry, occupancy, query and cache vectors, order/seed/boundary regressions an
 native packed/display isolation probes. `python3 scripts/check_determinism.py`
 compares fresh processes to the committed vectors; `--release` checks optimized
 output. Supported native OS/device parity remains a separate acceptance gate.
+
+
+Recipe 5 supports bounded flat-roof building courtyards with exact shared
+roof/solid/query geometry. See [the contract](spec/FORMAT.md#recipe-5-building-courtyards)
+and the synthetic [example](examples/courtyard/document.json). Opt in explicitly;
+existing recipes and package bytes remain supported.

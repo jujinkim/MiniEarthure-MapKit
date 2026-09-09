@@ -1,0 +1,106 @@
+{
+  "map_id": "synthetic-courtyard",
+  "revision": 1,
+  "bounds": {
+    "min": [
+      0,
+      0
+    ],
+    "max": [
+      25600,
+      25600
+    ]
+  },
+  "cell_size_cm": 12800,
+  "seed": 42,
+  "recipe_version": 5,
+  "theme": "default",
+  "terrain_base_cm": 0,
+  "heightmaps": [],
+  "nodes": [],
+  "roads": [],
+  "buildings": [
+    {
+      "id": "courtyard",
+      "footprint": [
+        [
+          2000,
+          2000
+        ],
+        [
+          23000,
+          2000
+        ],
+        [
+          23000,
+          23000
+        ],
+        [
+          2000,
+          23000
+        ]
+      ],
+      "holes": [
+        [
+          [
+            8000,
+            8000
+          ],
+          [
+            18000,
+            8000
+          ],
+          [
+            18000,
+            18000
+          ],
+          [
+            8000,
+            18000
+          ]
+        ],
+        [
+          [
+            4000,
+            4000
+          ],
+          [
+            6000,
+            4000
+          ],
+          [
+            6000,
+            6000
+          ],
+          [
+            4000,
+            6000
+          ]
+        ]
+      ],
+      "base_cm": 0,
+      "height_cm": 1200,
+      "usage": "public",
+      "material": "brick",
+      "roof": "flat"
+    }
+  ],
+  "zones": [],
+  "assets": [],
+  "placements": [],
+  "attributions": [
+    {
+      "source": "Synthetic fixture",
+      "license": "MIT",
+      "notice": "No external map or asset data"
+    }
+  ],
+  "provenance": {
+    "tool_id": "third-party-example",
+    "version": "1",
+    "build_id": "example",
+    "fingerprint": "untrusted-and-accepted",
+    "first_created": "2026-09-07T00:00:00Z",
+    "last_edited": "2026-09-07T00:00:00Z"
+  }
+}

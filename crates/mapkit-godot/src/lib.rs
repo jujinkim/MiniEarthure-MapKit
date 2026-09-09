@@ -328,7 +328,7 @@ impl MapKitBridge {
             let sample = p.generate(cell, 500_000)?.surface_probe(&SpawnRequest { position_cm: point, surface_id: surface.to_string() })?;
             let is_road = p.document.roads.iter().any(|r| r.id == sample.surface_id);
             let blocked_by_building = p.document.buildings.iter().any(|b|
-                mapkit_core::point_in_polygon(point, &b.footprint) && sample.position_cm[1] >= b.base_cm
+                b.contains(point) && sample.position_cm[1] >= b.base_cm
                 && sample.position_cm[1] <= b.base_cm + b.height_cm as i64);
             Ok(serde_json::json!({"position_cm":sample.position_cm,"normal_q":sample.normal_q,
                 "surface_id":sample.surface_id,"is_road":is_road,"blocked_by_building":blocked_by_building}))

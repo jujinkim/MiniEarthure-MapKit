@@ -58,3 +58,10 @@ job/frame scheduling and display-error rejection. Engine GLB import is one
 non-preemptible operation; complete asset/driver memory accounting, native
 Windows/Linux/Android render parity, exported products and reference-map frame/RSS
 acceptance remain unverified. Mac synthetic evidence cannot close those gates.
+
+
+I02 courtyard extension: recipe 5 accepts at most 16 disjoint interior rings and
+512 total vertices with a flat roof. No touching/nested holes, inferred entrances,
+general intersecting shells, curved/sloped courtyard roofs or structural OSM
+normalization. Bounded integer triangulation fails closed on budget exhaustion;
+full native platform and representative-map acceptance remain pending.

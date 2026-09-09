@@ -11,6 +11,8 @@ pub struct OverviewRoad<'a> {
 pub struct OverviewBuilding<'a> {
     pub id: &'a str,
     pub footprint: &'a [Point],
+    #[serde(skip_serializing_if = "<[Vec<Point>]>::is_empty")]
+    pub holes: &'a [Vec<Point>],
 }
 #[derive(Debug, Serialize)]
 pub struct OverviewSource<'a> {
@@ -60,9 +62,9 @@ impl MapOverview<'_> {
             points_2d: self
                 .buildings
                 .iter()
-                .map(|b| b.footprint.len() as u64)
+                .map(|b| (b.footprint.len() + b.holes.iter().map(Vec::len).sum::<usize>()) as u64)
                 .sum(),
-            records: (self.roads.len() + self.buildings.len() + self.attributions.len()) as u64,
+            records: (self.roads.len() + self.buildings.len() + self.attributions.len() + self.buildings.iter().map(|b| b.holes.len()).sum::<usize>()) as u64,
             text_bytes: self.map_id.len() as u64
                 + self.roads.iter().map(|r| r.id.len() as u64).sum::<u64>()
                 + self
@@ -102,6 +104,7 @@ pub fn overview(d: &MapDocument) -> Result<MapOverview<'_>> {
         .map(|b| OverviewBuilding {
             id: &b.id,
             footprint: &b.footprint,
+            holes: &b.holes,
         })
         .collect();
     let mut attributions: Vec<_> = d

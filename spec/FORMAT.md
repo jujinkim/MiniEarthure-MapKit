@@ -64,7 +64,7 @@ full grid dimensions and generation clips to map bounds.
 
 ### Recipe 2 roads and structures (K05)
 
-Readers support recipes 1, 2 and 3; the current recipe constant is 3. Export writes
+Readers support recipes 1 through 5; the current recipe constant is 5. Export writes
 **the document's recipe**, and the manifest must agree (`E_MANIFEST`). An unknown
 recipe fails `E_VERSION`. Existing recipe-1 source, package bytes, generation-v6
 bytes and disposable archive keys are preserved. No file is migrated on read or
@@ -527,7 +527,7 @@ acceptance.
 
 `MapOverview` is an optional derived read API, not a package entry or editable
 source. Fields are `version`, `map_id`, `bounds`, `roads` (`id`, `kind`, `points`),
-`buildings` (`id`, `footprint`), `attributions` (`source`, `license`) and
+`buildings` (`id`, `footprint`, optional `holes`), `attributions` (`source`, `license`) and
 `has_custom_assets`. Coordinates retain the document's integer-centimetre axes.
 The original package remains authoritative for provenance, complete attribution
 notices, asset descriptors and all generation data. Overview output cannot be used
@@ -679,3 +679,47 @@ The standalone `examples/assets` project and `--probe assets` exercise materials
 PNG/WebP, actual transforms/solid interiors/seams, mutation isolation and cleanup.
 Editor gestures, full LOD controls and native OS/performance acceptance remain
 separate from this supported static rendering contract.
+
+
+## Recipe 5: building courtyards
+
+Explicit recipe 5 adds optional `Building.holes: [ring, ...]` (default empty,
+omitted when empty). Each record still represents one building with one outer
+`footprint`, material, use, absolute base and height. Holes are open through the
+whole solid, floor and flat roof; inner boundaries are solid walls. Boundaries
+belong to the building for point/clearance queries. No roof or building surface
+is spawnable. Ground and separately authored surfaces remain usable in the void.
+
+The bounded profile accepts simple concave outers/holes, up to 16 strictly
+interior, pairwise disjoint holes and 512 vertices total per courtyard building.
+Touching/crossing rings, nested holes, invalid bounds and non-flat roofs reject.
+Independent island buildings inside a hole are separate source objects, retaining
+their own identity. Existing conservative XY road/building height-clearance rules
+remain; an entire road corridor, manual proxy or vegetation footprint may occupy
+a courtyard only when it clears its walls. Source access-corridor exclusions still
+apply. General intersecting building shells and structural vertical semantics are
+not inferred.
+
+Triangulation uses i128 integer predicates, canonical winding/start/hole order,
+visible original-vertex bridges selected by squared length and lexicographic tie
+break, and ear clipping with a positive exact area check. Redundant collinear
+vertices are removed only on the new hole-bearing path. No floating point,
+new vertex rounding, geometry repair or per-building decomposition is introduced.
+A shared 4,000,000-step document courtyard validation budget rejects excessive
+work; generation uses the same bounded algorithm. Existing 16 MiB placement
+scratch covers bounded ring/triangle vectors. Output estimates include inner
+vertices and bridge pairs (`n + 2h - 2` maximum triangles before cell clipping).
+
+Existing v6 triangular prisms, occupied sidecars, packed views, archive bytes and
+shared renderer represent the material between outer and inner rings. Inner walls
+are prism faces, matching physics. Cell clipping follows the existing integer
+clip contract. Overview v1 adds omitted-when-empty `holes`, counts their points
+and ring records in allocation estimates, and consumers must draw inner outlines.
+
+Readers reject nonempty holes under recipes 1–4 with `E_VERSION`; older readers
+reject recipe 5. `.memap` remains version 1 and generated/archive layouts remain
+v6. Empty holes serialize identically to existing documents; recipes 1–4 retain
+frozen generation vectors. World content identity includes authored holes and
+recipe; old packages/files are never silently rewritten or upgraded. The public
+synthetic `examples/courtyard` and core `courtyard`/package contract tests cover
+this extension. Native OS parity and representative performance remain separate.

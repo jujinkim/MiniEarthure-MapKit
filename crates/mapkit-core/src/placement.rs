@@ -1,6 +1,6 @@
 //! Explicit recipe-3 buildings and placement. All decisions use source identity,
 //! bounded integer geometry and portable math, never a loaded-neighbour cache.
-use crate::generation::{polygon_triangles, Builder};
+use crate::generation::Builder;
 use crate::*;
 
 pub const SCRATCH_BYTES: u64 = 16 * 1024 * 1024;
@@ -87,6 +87,20 @@ fn polygons_overlap(a: &[Point], b: &[Point], work: &mut usize) -> Result<bool> 
         || (0..a.len()).any(|i| {
             (0..b.len()).any(|j| intersects(a[i], a[(i + 1) % a.len()], b[j], b[(j + 1) % b.len()]))
         }))
+}
+fn building_overlap(poly: &[Point], b: &Building, work: &mut usize) -> Result<bool> {
+    if !polygons_overlap(poly, &b.footprint, work)? { return Ok(false); }
+    for hole in &b.holes {
+        if inside(poly, hole, work)? {
+            let mut touching = false;
+            tick(work, poly.len() * hole.len())?;
+            for i in 0..poly.len() { for j in 0..hole.len() {
+                touching |= intersects(poly[i], poly[(i+1)%poly.len()], hole[j], hole[(j+1)%hole.len()]);
+            }}
+            if !touching { return Ok(false); }
+        }
+    }
+    Ok(true)
 }
 fn inside(poly: &[Point], boundary: &[Point], work: &mut usize) -> Result<bool> {
     tick(work, poly.len() * boundary.len())?;
@@ -235,7 +249,7 @@ fn source_clear(
         return Ok(false);
     }
     for b in &d.buildings {
-        if polygons_overlap(poly, &b.footprint, work)? {
+        if building_overlap(poly, b, work)? {
             return Ok(false);
         }
         for entrance in &b.entrances {
@@ -392,7 +406,8 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         for other in &d.buildings[..i] {
             if b.base_cm < other.base_cm + other.height_cm as i64 + roof_rise(other)
                 && other.base_cm < b.base_cm + b.height_cm as i64 + roof_rise(b)
-                && polygons_overlap(&b.footprint, &other.footprint, &mut work)?
+                && building_overlap(&b.footprint, other, &mut work)?
+                && building_overlap(&other.footprint, b, &mut work)?
             {
                 return Err(error(
                     "E_GEOMETRY",
@@ -402,7 +417,14 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         }
         for road in &d.roads {
             // Conservative horizontal clearance is deliberate for authored buildings.
-            if road_overlap(&b.footprint, road, 0, &mut work)? {
+            let overlaps = if b.holes.is_empty() { road_overlap(&b.footprint, road, 0, &mut work)? } else {
+                let mut hit = false;
+                for triangle in crate::courtyard::triangulate(b, &mut work)? {
+                    if road_overlap(&triangle, road, 0, &mut work)? { hit = true; break; }
+                }
+                hit
+            };
+            if overlaps {
                 return Err(error(
                     "E_GEOMETRY",
                     "building footprint intersects a road corridor",
@@ -451,9 +473,9 @@ fn roof_rise(b: &Building) -> i64 {
 fn roof_triangles(b: &Building) -> Result<Vec<[Vertex; 3]>> {
     let top = b.base_cm + i64::from(b.height_cm);
     if b.roof == "flat" {
-        return Ok(polygon_triangles(&b.footprint)?
+        return Ok(crate::courtyard::triangulate(b, &mut 0)?
             .into_iter()
-            .map(|t| t.map(|i| [b.footprint[i][0], top, b.footprint[i][1]]))
+            .map(|t| t.map(|p| [p[0], top, p[1]]))
             .collect());
     }
     let area = aabb(&b.footprint);
@@ -617,7 +639,7 @@ fn sidewalks(d: &MapDocument, b: &mut Builder, work: &mut usize) -> Result<()> {
                         loop {
                             let mut touches = false;
                             for building in &d.buildings {
-                                if polygons_overlap(&poly, &building.footprint, work)? { touches = true; break; }
+                                if building_overlap(&poly, building, work)? { touches = true; break; }
                             }
                             if !touches || fitted <= 50 { break; }
                             fitted = (fitted - 25).max(50);
@@ -627,7 +649,7 @@ fn sidewalks(d: &MapDocument, b: &mut Builder, work: &mut usize) -> Result<()> {
                     }
                     let mut blocked = false;
                     for building in &d.buildings {
-                        if polygons_overlap(&poly, &building.footprint, work)? {
+                        if building_overlap(&poly, building, work)? {
                             blocked = true;
                             break;
                         }

@@ -415,7 +415,7 @@ fn recipes_are_explicit_preserved_and_manifest_bound() {
     rejected(&bad,"E_MANIFEST");
     let bad=rewrite(&bytes,|entries| {
         let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
-        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=5.into();*b=canonical(&m).unwrap();
+        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=(mapkit_core::RECIPE_VERSION+1).into();*b=canonical(&m).unwrap();
     });
     rejected(&bad,"E_VERSION");
 }
@@ -433,4 +433,16 @@ fn recipe_three_roundtrips_extensions_and_solid_content() {
     let other=read_bytes(&package(changed)).unwrap();
     assert_eq!(p.inspection.world_content_hash,other.inspection.world_content_hash);
     assert_eq!(generated.hash().unwrap(),other.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap());
+}
+
+#[test]
+fn recipe_five_courtyard_roundtrip_preserves_holes_and_content_identity() {
+    let d: MapDocument=serde_json::from_str(include_str!("../../../examples/courtyard/document.json")).unwrap();
+    let bytes=package(d.clone());let p=read_bytes(&bytes).unwrap();
+    assert_eq!(p.document.buildings[0].holes,d.buildings[0].holes);
+    assert_eq!(p.manifest.recipe_version,5);
+    assert_eq!(bytes,pack_bytes(p.document.clone(),p.files.clone()).unwrap());
+    let mut filled=d.clone();filled.buildings[0].holes.clear();let solid=read_bytes(&package(filled)).unwrap();
+    assert_ne!(p.inspection.world_content_hash,solid.inspection.world_content_hash);
+    assert_ne!(p.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap(),solid.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap());
 }

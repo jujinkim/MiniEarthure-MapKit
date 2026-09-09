@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 4;
+pub const RECIPE_VERSION: u32 = 5;
 pub const GENERATED_VERSION: u32 = 6;
 pub const WORLD_SCALE: f64 = 0.125;
 pub const DEFAULT_CELL_CM: i64 = 51_200;
@@ -126,6 +126,9 @@ pub struct Road {
 pub struct Building {
     pub id: String,
     pub footprint: Vec<Point>,
+    /// Strictly interior, disjoint open courtyards; explicit recipe 5, flat roof.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<Point>>,
     pub base_cm: i64,
     pub height_cm: u32,
     pub usage: String,
@@ -338,6 +341,8 @@ fn polygon_valid(poly: &[Point], bounds: &Bounds) -> bool {
     }
     area != 0
 }
+mod courtyard;
+
 impl MapDocument {
     pub fn normalize(&mut self) {
         self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
@@ -359,6 +364,9 @@ impl MapDocument {
         }
         if self.recipe_version < 3 && (!self.repetitions.is_empty() || self.buildings.iter().any(|b| !b.entrances.is_empty())) {
             return Err(error("E_VERSION", "placement extensions require explicit recipe 3"));
+        }
+        if self.recipe_version < 5 && self.buildings.iter().any(|b| !b.holes.is_empty()) {
+            return Err(error("E_VERSION", "building courtyards require explicit recipe 5"));
         }
         self.provenance.validate()?;
         for (index, attribution) in self.attributions.iter().enumerate() {
@@ -399,7 +407,7 @@ impl MapDocument {
             + self
                 .buildings
                 .iter()
-                .map(|b| b.footprint.len())
+                .map(|b| b.footprint.len() + b.holes.iter().map(Vec::len).sum::<usize>())
                 .sum::<usize>()
             + self
                 .zones
@@ -484,7 +492,9 @@ impl MapDocument {
         if self.recipe_version >= 2 {
             roads::validate_graph(self)?;
         }
+        let mut courtyard_work = 0;
         for b in &self.buildings {
+            courtyard::validate(b, &self.bounds, &mut courtyard_work)?;
             if !polygon_valid(&b.footprint, &self.bounds)
                 || b.height_cm == 0
                 || b.height_cm > 100_000

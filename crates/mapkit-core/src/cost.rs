@@ -111,7 +111,7 @@ pub fn estimate_generation(
     }
     for building in &d.buildings {
         let shape = bounds(building.footprint.iter().copied(), 0);
-        let n = building.footprint.len() as u64;
+        let n = (building.footprint.len() + building.holes.iter().map(Vec::len).sum::<usize>() + 2 * building.holes.len()) as u64;
         if d.recipe_version >= 3 {
             let parts = if building.roof == "gable" { 4 } else { n-2 };
             let clipped = parts * clip_factor(&shape,&area);

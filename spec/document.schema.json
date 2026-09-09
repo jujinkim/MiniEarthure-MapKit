@@ -307,6 +307,22 @@
           "format": "uint32",
           "minimum": 0.0
         },
+        "holes": {
+          "description": "Strictly interior, disjoint open courtyards; explicit recipe 5, flat roof.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        },
         "id": {
           "type": "string"
         },
