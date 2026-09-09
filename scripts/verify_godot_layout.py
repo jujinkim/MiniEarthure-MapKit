@@ -249,7 +249,7 @@ def main():
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'placement.memap'), str(ROOT / 'examples/placement/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'roads.memap'), str(ROOT / 'examples/roads/document.json')], check=True, timeout=30)
         make_terrain_fixture(project)
-        for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd'):
+        for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd', 'render_memory.gd'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
         inconsistent = bytearray((project / 'fixture.memap').read_bytes())

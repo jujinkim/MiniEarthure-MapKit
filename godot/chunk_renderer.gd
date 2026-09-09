@@ -4,16 +4,30 @@ const ASSETS := preload("./asset_library.gd")
 const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
-const TRIANGLES_PER_BATCH := 512
+const PLAN := preload("./render_memory.gd")
+const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 
 static func scene_position(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.00125
 
-static func begin(chunk: Dictionary, parent: Node3D) -> Dictionary:
+## The caller owns admission policy. A lease implements track(Object) and seal().
+## No game dependency: small standalone editor previews may omit admission.
+
+static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callable(), planned_bytes: int = 0) -> Dictionary:
+	var view := DATA.view(chunk)
+	var lease: RefCounted
+	if reserve.is_valid():
+		var bytes := planned_bytes
+		if bytes > 0 and bytes <= 64 * 1024 * 1024 * 1024: lease = reserve.call(bytes)
+		if lease == null:
+			return {"root": null, "chunk": {}, "done": true, "cancelled": true,
+				"materials": {}, "asset_materials": {}, "templates": {}, "lease": null,
+				"error": {"code": "E_MEMORY_BUDGET", "message": "Display allocation exceeds memory allowance"}}
 	var root := Node3D.new()
+	if lease != null: lease.track(root)
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	return {"root": root, "chunk": DATA.view(chunk), "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}}
+	return {"root": root, "chunk": view, "lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled:
@@ -62,6 +76,7 @@ static func advance(job: Dictionary) -> bool:
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
+		track_resources(job, mesh)
 		job.root.add_child(mesh)
 		job.triangle = offset
 	elif int(job.object) < chunk.objects.size():
@@ -76,6 +91,7 @@ static func advance(job: Dictionary) -> bool:
 				if not job.templates.has(id):
 					var template := ASSETS.template(id, sources, job.asset_materials)
 					if template == null: return fail(job, "E_RENDER_ASSET", "Validated GLB could not be displayed")
+					track_resources(job, template)
 					job.templates[id] = template
 				var instance: Node3D = job.templates[id].duplicate(0)
 				var anchor := Node3D.new()
@@ -100,6 +116,7 @@ static func advance(job: Dictionary) -> bool:
 			var leaf := StandardMaterial3D.new()
 			leaf.albedo_color = Color("486447")
 			canopy.material_override = leaf
+			track_resources(job, canopy)
 			job.root.add_child(canopy)
 	else:
 		job.done = true
@@ -107,11 +124,28 @@ static func advance(job: Dictionary) -> bool:
 	return job.done
 
 static func display_material_key(chunk: Dictionary, triangle: int) -> String:
-	var presentation: Dictionary = chunk.get("presentation", {})
-	var id := str(presentation.get("proxy_materials", {}).get(DATA.object_id(chunk, triangle), ""))
-	if not id.is_empty():
-		return "asset:" + id if presentation.get("assets", {}).has(id) else id
-	return DATA.material_key(chunk, triangle)
+	return PLAN.material_key(chunk, triangle)
+
+## Weak references extend the charge when a trusted consumer retains a mesh,
+## material or texture after its scene node is destroyed. Templates share these
+## resources with duplicate(0) instances; no global renderer cache owns them.
+static func track_resources(job: Dictionary, node: Node) -> void:
+	if job.get("lease") == null: return
+	if node is MeshInstance3D:
+		job.lease.track(node.mesh)
+		track_material(job, node.material_override)
+		for i in node.mesh.get_surface_count():
+			track_material(job, node.mesh.surface_get_material(i))
+			track_material(job, node.get_surface_override_material(i))
+	for child: Node in node.get_children(): track_resources(job, child)
+
+static func track_material(job: Dictionary, material: Material) -> void:
+	if material == null: return
+	job.lease.track(material)
+	if material is BaseMaterial3D:
+		for slot in BaseMaterial3D.TEXTURE_MAX:
+			var texture: Texture2D = material.get_texture(slot)
+			if texture != null: job.lease.track(texture)
 
 static func dispose(job: Dictionary) -> void:
 	for template: Node in job.templates.values():
@@ -120,6 +154,9 @@ static func dispose(job: Dictionary) -> void:
 	job.asset_materials = {}
 	job.materials = {}
 	job.chunk = {}
+	if job.get("lease") != null:
+		job.lease.seal()
+		job.lease = null
 
 static func fail(job: Dictionary, code: String, message: String) -> bool:
 	job.error = {"code": code, "message": message}
