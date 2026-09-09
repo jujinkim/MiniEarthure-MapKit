@@ -662,6 +662,22 @@ impl GeneratedChunk {
         hash.update(b"]}");
         Ok(format!("{:x}", hash.finalize()))
     }
+    /// Bounded selection only: no map/recipe/hash change. Scan borrowed triangles,
+    /// retain only intersecting identities, and reject the entire result on overflow.
+    pub fn spawn_options(&self, point: Point) -> Result<Vec<SurfaceOption>> {
+        let mut found = std::collections::BTreeMap::new();
+        for triangle in &self.triangles {
+            if !triangle.spawnable || found.contains_key(triangle.object_id.as_str()) { continue; }
+            let Some(position_cm) = triangle_position(triangle, point, true) else { continue; };
+            if found.len() == MAX_SURFACE_OPTIONS || triangle.object_id.len() > MAX_SURFACE_ID_BYTES {
+                return Err(error("E_SURFACE_LIMIT", "Too many surfaces or oversized surface identity; choose another location"));
+            }
+            found.insert(triangle.object_id.as_str(), position_cm);
+        }
+        Ok(found.into_iter().map(|(id, position_cm)| SurfaceOption {
+            surface_id: id.to_owned(), position_cm,
+        }).collect())
+    }
     pub fn spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
         self.surface_triangle(request, true).map(|(_, position)| position)
     }
@@ -686,30 +702,39 @@ impl GeneratedChunk {
             if !t.spawnable || t.object_id != request.surface_id {
                 continue;
             }
-            let [a, b, c] = t.vertices;
-            let flat = |v: Vertex| [v[0], v[2]];
-            let area = cross(flat(a), flat(b), flat(c));
-            if area == 0 || !point_in_polygon(request.position_cm, &[flat(a), flat(b), flat(c)]) {
-                continue;
+            if let Some(position) = triangle_position(t, request.position_cm, absolute_height) {
+                return Ok((t, position));
             }
-            let wb = cross(flat(a), request.position_cm, flat(c));
-            let wc = cross(flat(a), flat(b), request.position_cm);
-            // Quantize the absolute rational height once, toward zero. Rounding
-            // a delta from a triangle-specific origin gave opposite sides of a
-            // shared edge different centimetres (also for cyclic vertex order).
-            let delta = wb * (b[1] - a[1]) as i128 + wc * (c[1] - a[1]) as i128;
-            let h = if absolute_height {
-                ((a[1] as i128 * area + delta) / area) as i64
-            } else {
-                a[1] + (delta / area) as i64
-            };
-            return Ok((t, [request.position_cm[0], h, request.position_cm[1]]));
         }
         Err(error(
             "E_SPAWN",
             "requested surface not drivable at this position",
         ))
     }
+}
+/// Selection admission profile; independent of generation limits and world hashes.
+pub const MAX_SURFACE_OPTIONS: usize = 64;
+pub const MAX_SURFACE_ID_BYTES: usize = 256;
+/// 64 records, <=256 UTF-8 bytes/ID, JSON escaping <=6x and 128 bytes numeric/
+/// envelope overhead per record: <128 KiB JSON. 16x text/decode allowance plus
+/// 4096 bytes/record and 64 KiB fixed workspace fit in 2 MiB.
+pub const SURFACE_OPTIONS_BYTES: usize = 2 * 1024 * 1024;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SurfaceOption { pub surface_id: String, pub position_cm: Vertex }
+
+fn triangle_position(t: &Triangle, point: Point, absolute_height: bool) -> Option<Vertex> {
+    let [a, b, c] = t.vertices;
+    let flat = |v: Vertex| [v[0], v[2]];
+    let area = cross(flat(a), flat(b), flat(c));
+    if area == 0 || !point_in_polygon(point, &[flat(a), flat(b), flat(c)]) { return None; }
+    let wb = cross(flat(a), point, flat(c));
+    let wc = cross(flat(a), flat(b), point);
+    let delta = wb * (b[1] - a[1]) as i128 + wc * (c[1] - a[1]) as i128;
+    // Public queries quantize absolute height toward zero once. Recipe-v1
+    // vegetation retains its frozen delta rounding and generated hash.
+    let h = if absolute_height { ((a[1] as i128 * area + delta) / area) as i64 }
+        else { a[1] + (delta / area) as i64 };
+    Some([point[0], h, point[1]])
 }
 #[derive(Debug, Clone)]
 pub struct HeightGrid {

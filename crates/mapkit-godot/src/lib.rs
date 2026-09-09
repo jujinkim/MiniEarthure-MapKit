@@ -292,15 +292,21 @@ impl MapKitBridge {
                 }),
         )
     }
+    /// Reserve before native generation; retain output allowance through decode/use.
+    #[func]
+    fn surface_options_limits(&self) -> GString {
+        response(Ok(serde_json::json!({
+            "max_candidates": mapkit_core::MAX_SURFACE_OPTIONS,
+            "max_id_bytes": mapkit_core::MAX_SURFACE_ID_BYTES,
+            "reserved_bytes": mapkit_core::SURFACE_OPTIONS_BYTES,
+        })))
+    }
     #[func]
     fn spawn_options(&self, x_cm: i64, y_cm: i64) -> GString {
         response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first")).and_then(|p| {
             let cell = p.document.cell_at([x_cm, y_cm]).ok_or_else(|| mapkit_core::error("E_SPAWN", "outside map"))?;
             let chunk = p.generate(cell, 500_000)?;
-            let ids: std::collections::BTreeSet<_> = chunk.triangles.iter().filter(|t| t.spawnable).map(|t| t.object_id.clone()).collect();
-            let options: Vec<_> = ids.into_iter().filter_map(|id| {
-                chunk.spawn(&SpawnRequest { position_cm: [x_cm, y_cm], surface_id: id.clone() }).ok().map(|position| serde_json::json!({"surface_id": id, "position_cm": position}))
-            }).collect();
+            let options = chunk.spawn_options([x_cm, y_cm])?;
             Ok(serde_json::json!({"surfaces": options}))
         }))
     }

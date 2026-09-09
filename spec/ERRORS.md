@@ -28,6 +28,7 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 | `E_CELL` | Requested cell or point is outside the available map. |
 | `E_QUERY` | Invalid bounded spatial query. |
 | `E_ARCHIVE` | Disposable generated-cell archive identity, encoding or digest invalid; regenerate from source. |
+| `E_SURFACE_LIMIT` | Selection exceeds 64 intersecting surfaces or 256 UTF-8 bytes per intersecting identity; the entire selection is refused before output serialization. Choose another position. Package geometry remains valid. |
 | `E_SPAWN` | No valid requested spawn surface or invalid spawn input. |
 | `E_RELEASE` | Exact release identity mismatch. |
 | `E_IO` | Filesystem failure, including an existing output destination; preserve source and select a new output. |
