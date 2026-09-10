@@ -269,3 +269,8 @@ Consumer execution/physics identities must change when adopting the new scene un
 hashes. `cargo run -p mapkit-cli --example loading_benchmark -- FILE.memap` measures
 representative cells of the public driving-school fixture. Neither is a mobile
 rendering benchmark; applications must measure collision and presentation readiness.
+
+Repeated GLB instances in a cell share imported meshes, materials and textures.
+Display planning charges those shared resources once per asset and reserves scene
+nodes for each instance. The renderer keeps its cell-owned resource lease until
+all retained resources retire; this does not set a whole-process memory limit.

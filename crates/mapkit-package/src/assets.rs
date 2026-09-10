@@ -578,6 +578,18 @@ mod tests {
 }
 
 /// Conservative display planning for already validated bytes. No image/GPU load.
+pub(super) fn instance_cost(path: &str, bytes: &[u8]) -> u64 {
+    if !path.ends_with(".glb") { return 0; }
+    let n = le(bytes, 12).unwrap() as usize;
+    let doc: gltf::json::Root = serde_json::from_slice(&bytes[20..20+n]).unwrap();
+    let doc = gltf::Document::from_json(doc).unwrap();
+    // duplicate(0) shares mesh/material/texture resources with the cell template.
+    // Reserve copied scene nodes plus possible per-primitive importer nodes.
+    65536 + (doc.nodes().len() as u64
+        + doc.meshes().map(|m| m.primitives().len() as u64).sum::<u64>()) * 8192
+}
+
+/// Importer, source copies, shared meshes/materials/textures and template nodes.
 pub(super) fn presentation_cost(path: &str, bytes: &[u8]) -> u64 {
     let image = |data: &[u8]| -> u64 {
         if data.starts_with(b"\x89PNG") {u64::from(u32::from_be_bytes(data[16..20].try_into().unwrap()))*u64::from(u32::from_be_bytes(data[20..24].try_into().unwrap()))*24}

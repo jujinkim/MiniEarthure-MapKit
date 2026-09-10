@@ -2,12 +2,13 @@
 use godot::prelude::*;
 use mapkit_core::{Cell, Result};
 use mapkit_package::Package;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub fn cost(p: &Package, cell: Cell) -> u64 {
-    // Per-instance allowance deliberately includes both importer scratch and retained
-    // templates/copies. Driver/RSS calibration remains the caller's responsibility.
-    p.document
+    // The common renderer imports each asset once per cell; duplicate(0) shares
+    // resources. Count importer/shared data once and scene nodes per instance.
+    let mut instances = BTreeMap::<&str, u64>::new();
+    for asset in p.document
         .placements
         .iter()
         .filter(|v| {
@@ -42,8 +43,13 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
                 })
         })
         .filter_map(|v| p.document.assets.iter().find(|a| a.id == v.asset_id))
-        .map(|a| asset_cost(p, a))
-        .sum()
+    {
+        *instances.entry(&asset.id).or_default() += 1;
+    }
+    instances.into_iter().map(|(id, count)| {
+        let asset = p.document.assets.iter().find(|a| a.id == id).unwrap();
+        asset_cost(p, asset) + p.asset_instance_cost(id).unwrap() * count
+    }).sum()
 }
 fn asset_cost(p: &Package, a: &mapkit_core::Asset) -> u64 {
     let own = p.asset_presentation_cost(&a.id).unwrap();

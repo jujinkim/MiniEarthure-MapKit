@@ -560,6 +560,10 @@ The response includes `generated_counts` (`triangles`, `objects`,
 including restored archives. A consumer may retire unused generation allowances
 after worker join, while retaining conservative per-element memory costs. These
 counts are local adapter metadata, never peer-provided admission authority.
+`presentation_bytes` covers one import/template per used asset in a cell and
+per-instance scene nodes. The common renderer's `duplicate(0)` instances share
+mesh/material/texture resources. Consumers making independent resource copies
+must reserve those copies separately; cell leases retain shared resources.
 
 ## Optional native occupied-volume view v1
 

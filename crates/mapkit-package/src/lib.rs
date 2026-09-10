@@ -580,6 +580,13 @@ impl Package {
         Ok(assets::presentation_cost(&a.path, &self.files[&a.path]))
     }
 
+    /// Scene-node allowance when instances share the cell's imported resources.
+    pub fn asset_instance_cost(&self, id: &str) -> Result<u64> {
+        let a = self.document.assets.iter().find(|a| a.id == id)
+            .ok_or_else(|| error("E_REFERENCE", "unknown asset"))?;
+        Ok(assets::instance_cost(&a.path, &self.files[&a.path]))
+    }
+
     fn generation_heightgrid(&self, cell: Cell) -> Result<Option<HeightGrid>> {
         self.document
             .heightmaps

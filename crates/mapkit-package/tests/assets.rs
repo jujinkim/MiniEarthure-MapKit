@@ -11,6 +11,10 @@ fn independent_assets_roundtrip_materials_costs_and_exact_cached_geometry() {
     assert!(package.asset_presentation_cost("tetra").unwrap() > 65536);
     assert!(package.asset_presentation_cost("checker").unwrap() > 65536);
     assert!(package.asset_presentation_cost("missing").is_err());
+    assert_eq!(package.asset_instance_cost("checker").unwrap(), 0);
+    assert!(package.asset_instance_cost("tetra").unwrap() >= 65536 + 2 * 8192);
+    assert!(package.asset_instance_cost("tetra").unwrap() < package.asset_presentation_cost("tetra").unwrap());
+    assert!(package.asset_instance_cost("missing").is_err());
     let chunk = package.generate(Cell { x: 0, y: 0 }, 500_000).unwrap();
     let cost = estimate_generation(&package.document, chunk.cell, 500_000).unwrap();
     let key = archive_key(&package.inspection.world_content_hash, chunk.cell);
