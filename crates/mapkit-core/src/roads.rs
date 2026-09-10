@@ -30,6 +30,17 @@ struct Arm<'a> {
     other: Vertex,
 }
 type Key = (bool, String, usize);
+/// A junction mouth moves at most half the widest road along its arm, then
+/// half a width sideways. Two rounded coordinates add at most two centimetres.
+pub(crate) fn influence_margin(d: &MapDocument) -> i64 {
+    d.roads
+        .iter()
+        .flat_map(|r| &r.widths_cm)
+        .copied()
+        .max()
+        .unwrap_or(0) as i64
+        + 2
+}
 fn key(r: &Road, i: usize) -> Key {
     if i == 0 {
         (false, r.from.clone(), 0)
@@ -204,9 +215,10 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
     // Include complete endpoint junctions when a corridor touches this cell.
     let mut relevant = BTreeSet::new();
     let mut local_segments = 0;
+    let margin = influence_margin(d);
     for r in &d.roads {
         for (i, s) in r.points.windows(2).enumerate() {
-            if hit(s, bounds, 10_000) {
+            if hit(s, bounds, margin) {
                 local_segments += 1;
                 if local_segments > MAX_LOCAL_PATCHES / 8 {
                     return Err(error("E_BUDGET", "recipe 2 local segment limit"));
@@ -284,7 +296,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
                     {
                         return Err(error(
                             "E_GEOMETRY",
-                            "overlapping structural junction mouths; author separated approaches",
+                            format!("overlapping structural junction mouths at {} segment {}; author separated approaches", arm.road.id, arm.segment),
                         ));
                     }
                 }
@@ -329,7 +341,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
     }
     for r in &d.roads {
         for (i, s) in r.points.windows(2).enumerate() {
-            if !hit(s, bounds, 10_000) {
+            if !hit(s, bounds, margin) {
                 continue;
             }
             let a = mouths[&(r.id.as_str(), i, 0)];

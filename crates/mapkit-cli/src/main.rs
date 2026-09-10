@@ -3,13 +3,22 @@ use mapkit_package::*;
 use std::path::Path;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let help="usage: mapkit inspect|validate PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json";
+    let help="usage: mapkit inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json";
     let arg = |i: usize| {
         args.get(i)
             .map(String::as_str)
             .ok_or_else(|| error("E_USAGE", help))
     };
     match arg(0)? {
+        "validate-cells" if args.len() == 2 => {
+            let p = read(Path::new(arg(1)?))?;
+            let mut hashes = std::collections::BTreeMap::new();
+            for cell in p.document.cells() {
+                let chunk = p.generate(cell, 500_000)?;
+                hashes.insert(format!("{}/{}", cell.x, cell.y), chunk.hash()?);
+            }
+            println!("{}", serde_json::to_string(&hashes).unwrap());
+        }
         "inspect" | "validate" if args.len() == 2 => {
             let p = read(Path::new(arg(1)?))?;
             let mut output =

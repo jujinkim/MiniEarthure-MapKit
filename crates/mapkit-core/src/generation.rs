@@ -91,16 +91,34 @@ impl Builder {
         }
         Ok(())
     }
-    pub(super) fn quad(&mut self, v: [Vertex; 4], surface: Surface, id: &str, spawnable: bool) -> Result<()> {
+    pub(super) fn quad(
+        &mut self,
+        v: [Vertex; 4],
+        surface: Surface,
+        id: &str,
+        spawnable: bool,
+    ) -> Result<()> {
         self.triangle([v[0], v[1], v[2]], surface, id, spawnable)?;
         self.triangle([v[0], v[2], v[3]], surface, id, spawnable)
     }
     pub(super) fn convex_shape(&mut self, shape: CollisionConvex, id: &str) -> Result<()> {
-        let area=shape.bounds();
-        if (0..2).any(|a| area.max[a]<self.bounds.min[a] || area.min[a]>self.bounds.max[a]) {return Ok(());}
+        let area = shape.bounds();
+        if (0..2).any(|a| area.max[a] < self.bounds.min[a] || area.min[a] > self.bounds.max[a]) {
+            return Ok(());
+        }
         self.solid(id, SolidShape::Convex(shape.clone()))?;
-        for face in &shape.faces {self.triangle(face.map(|i|shape.vertices[i as usize]),Surface::Concrete,id,false)?;}
-        self.chunk.asset_convexes.push(GeneratedConvex {object_id:id.into(),shape});
+        for face in &shape.faces {
+            self.triangle(
+                face.map(|i| shape.vertices[i as usize]),
+                Surface::Concrete,
+                id,
+                false,
+            )?;
+        }
+        self.chunk.asset_convexes.push(GeneratedConvex {
+            object_id: id.into(),
+            shape,
+        });
         Ok(())
     }
     pub(super) fn box_shape(&mut self, center: Vertex, size: [u32; 3], id: &str) -> Result<()> {
@@ -210,7 +228,13 @@ pub fn generate_with_occupancy(
     if max_solids > MAX_OCCUPIED_SOLIDS {
         return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
     }
-    generate_internal(input, Some(Occupancy { solids: Vec::new(), max: max_solids }))
+    generate_internal(
+        input,
+        Some(Occupancy {
+            solids: Vec::new(),
+            max: max_solids,
+        }),
+    )
 }
 
 fn generate_internal(
@@ -220,10 +244,42 @@ fn generate_internal(
     let mut document = input.document.clone();
     document.normalize();
     document.validate()?;
-    let d = &document;
+    let cost = crate::cost::estimate_validated(&document, input.cell, input.max_triangles)?;
+    generate_validated(
+        GenerationInput {
+            document: &document,
+            ..input
+        },
+        occupancy,
+        &cost,
+    )
+}
+
+pub(crate) fn generate_prepared(
+    input: GenerationInput<'_>,
+    solids: Option<usize>,
+    cost: &GenerationCost,
+) -> Result<GeneratedOccupancy> {
+    generate_validated(
+        input,
+        solids.map(|max| Occupancy {
+            solids: Vec::new(),
+            max,
+        }),
+        cost,
+    )
+}
+
+fn generate_validated(
+    input: GenerationInput<'_>,
+    occupancy: Option<Occupancy>,
+    cost: &GenerationCost,
+) -> Result<GeneratedOccupancy> {
+    let d = input.document;
     let bounds = d.cell_bounds(input.cell)?;
     let mut b = Builder {
-        chunk: GeneratedChunk { asset_convexes: vec![],
+        chunk: GeneratedChunk {
+            asset_convexes: vec![],
             building_prisms: vec![],
             format_version: GENERATED_VERSION,
             cell: input.cell,
@@ -232,8 +288,10 @@ fn generate_internal(
         },
         bounds: bounds.clone(),
         max: if d.recipe_version >= 2 {
-            estimate_generation(d, input.cell, input.max_triangles)?.triangles as usize
-        } else { input.max_triangles.min(2_000_000) },
+            cost.triangles as usize
+        } else {
+            input.max_triangles.min(2_000_000)
+        },
         occupancy,
     };
     let descriptor = d.heightmaps.iter().find(|h| h.cell == input.cell);
@@ -264,69 +322,75 @@ fn generate_internal(
     if d.recipe_version >= 2 {
         crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
     } else {
-    for y in 0..side - 1 {
-        for x in 0..side - 1 {
-            let px = bounds.min[0] + x as i64 * spacing;
-            let py = bounds.min[1] + y as i64 * spacing;
-            b.quad(
-                [
-                    [px, height(x, y), py],
-                    [px + spacing, height(x + 1, y), py],
-                    [px + spacing, height(x + 1, y + 1), py + spacing],
-                    [px, height(x, y + 1), py + spacing],
-                ],
-                Surface::Grass,
-                "terrain",
-                true,
-            )?;
+        for y in 0..side - 1 {
+            for x in 0..side - 1 {
+                let px = bounds.min[0] + x as i64 * spacing;
+                let py = bounds.min[1] + y as i64 * spacing;
+                b.quad(
+                    [
+                        [px, height(x, y), py],
+                        [px + spacing, height(x + 1, y), py],
+                        [px + spacing, height(x + 1, y + 1), py + spacing],
+                        [px, height(x, y + 1), py + spacing],
+                    ],
+                    Surface::Grass,
+                    "terrain",
+                    true,
+                )?;
+            }
         }
-    }
-    for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
-            let dx = (s[1][0] - s[0][0]) as f64;
-            let dy = (s[1][2] - s[0][2]) as f64;
-            let len = libm::sqrt(dx * dx + dy * dy);
-            let half = r.widths_cm[i] as f64 / 2.0;
-            let nx = libm::round(-dy / len * half) as i64;
-            let ny = libm::round(dx / len * half) as i64;
-            let v = [
-                [s[0][0] + nx, s[0][1], s[0][2] + ny],
-                [s[1][0] + nx, s[1][1], s[1][2] + ny],
-                [s[1][0] - nx, s[1][1], s[1][2] - ny],
-                [s[0][0] - nx, s[0][1], s[0][2] - ny],
-            ];
-            b.quad(v, r.surfaces[i], &r.id, true)?;
-            if matches!(r.kind, RoadKind::Tunnel | RoadKind::Underpass) {
-                let h = r.clearance_cm.unwrap() as i64;
-                let top = v.map(|p| [p[0], p[1] + h, p[2]]);
-                for (a, c) in [(0, 1), (2, 3)] {
-                    b.quad(
-                        [v[a], v[c], top[c], top[a]],
-                        Surface::Concrete,
-                        &r.id,
-                        false,
-                    )?;
-                }
-                if r.kind == RoadKind::Tunnel {
-                    b.quad(top, Surface::Concrete, &r.id, false)?;
+        for r in &d.roads {
+            for (i, s) in r.points.windows(2).enumerate() {
+                let dx = (s[1][0] - s[0][0]) as f64;
+                let dy = (s[1][2] - s[0][2]) as f64;
+                let len = libm::sqrt(dx * dx + dy * dy);
+                let half = r.widths_cm[i] as f64 / 2.0;
+                let nx = libm::round(-dy / len * half) as i64;
+                let ny = libm::round(dx / len * half) as i64;
+                let v = [
+                    [s[0][0] + nx, s[0][1], s[0][2] + ny],
+                    [s[1][0] + nx, s[1][1], s[1][2] + ny],
+                    [s[1][0] - nx, s[1][1], s[1][2] - ny],
+                    [s[0][0] - nx, s[0][1], s[0][2] - ny],
+                ];
+                b.quad(v, r.surfaces[i], &r.id, true)?;
+                if matches!(r.kind, RoadKind::Tunnel | RoadKind::Underpass) {
+                    let h = r.clearance_cm.unwrap() as i64;
+                    let top = v.map(|p| [p[0], p[1] + h, p[2]]);
+                    for (a, c) in [(0, 1), (2, 3)] {
+                        b.quad(
+                            [v[a], v[c], top[c], top[a]],
+                            Surface::Concrete,
+                            &r.id,
+                            false,
+                        )?;
+                    }
+                    if r.kind == RoadKind::Tunnel {
+                        b.quad(top, Surface::Concrete, &r.id, false)?;
+                    }
                 }
             }
         }
-    }
     } // Frozen recipe-v1 terrain/road strategy.
     if d.recipe_version >= 3 {
         crate::placement::generate(d, input.cell, &mut b)?;
-        return Ok(GeneratedOccupancy { chunk: b.chunk, solids: b.occupancy.map_or_else(Vec::new, |v| v.solids) });
+        return Ok(GeneratedOccupancy {
+            chunk: b.chunk,
+            solids: b.occupancy.map_or_else(Vec::new, |v| v.solids),
+        });
     }
     for building in &d.buildings {
         let top = building.base_cm + building.height_cm as i64;
         for t in polygon_triangles(&building.footprint)? {
             if b.occupancy.is_some() {
-                b.solid(&building.id, SolidShape::TriangularPrism {
-                    footprint: t.map(|i| building.footprint[i]),
-                    bottom_cm: building.base_cm,
-                    top_cm: top,
-                })?;
+                b.solid(
+                    &building.id,
+                    SolidShape::TriangularPrism {
+                        footprint: t.map(|i| building.footprint[i]),
+                        bottom_cm: building.base_cm,
+                        top_cm: top,
+                    },
+                )?;
             }
             b.triangle(
                 t.map(|i| [building.footprint[i][0], top, building.footprint[i][1]]),
@@ -403,11 +467,17 @@ fn generate_internal(
                     b.chunk.recipe_v1_spawn(&request)?
                 } else {
                     // A cut is empty space, never an invented tree support.
-                    let Ok(position) = b.chunk.spawn(&request) else { continue; };
+                    let Ok(position) = b.chunk.spawn(&request) else {
+                        continue;
+                    };
                     position
                 };
                 b.box_shape(
-                    [position[0], position[1] + i64::from(crate::query::TREE_PROXY_SIZE_CM[1] / 2), position[2]],
+                    [
+                        position[0],
+                        position[1] + i64::from(crate::query::TREE_PROXY_SIZE_CM[1] / 2),
+                        position[2],
+                    ],
                     crate::query::TREE_PROXY_SIZE_CM,
                     &id,
                 )?;

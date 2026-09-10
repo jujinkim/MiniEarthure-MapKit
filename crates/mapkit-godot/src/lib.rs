@@ -1,6 +1,6 @@
+mod occupied;
 mod packed;
 mod presentation;
-mod occupied;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
 use mapkit_package::{pack_bytes, read, read_bytes, read_project, write_new, Package};
@@ -74,16 +74,27 @@ impl MapKitBridge {
     }
     /// Caller-supplied validation allowance, checked before payload inflation.
     #[func]
-    fn open_package_bytes_budgeted(&mut self, bytes: PackedByteArray, memory_limit: i64) -> GString {
+    fn open_package_bytes_budgeted(
+        &mut self,
+        bytes: PackedByteArray,
+        memory_limit: i64,
+    ) -> GString {
         self.package = None;
         if memory_limit <= 0 {
-            return response(Err(mapkit_core::error("E_MEMORY_BUDGET", "positive memory allowance required")));
+            return response(Err(mapkit_core::error(
+                "E_MEMORY_BUDGET",
+                "positive memory allowance required",
+            )));
         }
-        response(mapkit_package::read_bytes_with_budget(bytes.as_slice(), memory_limit as u64).map(|p| {
-            let info = serde_json::to_value(&p.inspection).unwrap();
-            self.package = Some(p);
-            info
-        }))
+        response(
+            mapkit_package::read_bytes_with_budget(bytes.as_slice(), memory_limit as u64).map(
+                |p| {
+                    let info = serde_json::to_value(&p.inspection).unwrap();
+                    self.package = Some(p);
+                    info
+                },
+            ),
+        )
     }
     /// The caller owns transfer/cache/session snapshot policy. MapKit only validates bytes.
     #[func]
@@ -112,6 +123,7 @@ impl MapKitBridge {
                         "bounds": p.document.bounds, "cell_bounds": p.document.cell_bounds(cell)?,
                         "cell_size_cm": p.document.cell_size_cm,
                         "world_scale": mapkit_core::WORLD_SCALE,
+                        "scene_units_version": mapkit_core::SCENE_UNITS_VERSION,
                         "package_format_version": mapkit_core::PACKAGE_VERSION,
                         "recipe_version": p.document.recipe_version,
                         "generated_format_version": mapkit_core::GENERATED_VERSION,
@@ -135,16 +147,23 @@ impl MapKitBridge {
     }
     #[func]
     fn overview_cost(&self) -> GString {
-        response(self.package.as_ref()
-            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|p| mapkit_core::overview(&p.document)?.cost())
-            .map(|cost| serde_json::json!(cost)))
+        response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| mapkit_core::overview(&p.document)?.cost())
+                .map(|cost| serde_json::json!(cost)),
+        )
     }
     #[func]
     fn overview_json(&self, max_json_bytes: i64) -> GString {
-        let result = self.package.as_ref()
+        let result = self
+            .package
+            .as_ref()
             .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|p| mapkit_core::overview(&p.document)?.to_json(max_json_bytes.max(0) as u64));
+            .and_then(|p| {
+                mapkit_core::overview(&p.document)?.to_json(max_json_bytes.max(0) as u64)
+            });
         match result {
             Ok(body) => GString::from(format!("{{\"ok\":true,\"data\":{body}}}").as_str()),
             Err(error) => response(Err(error)),
@@ -162,85 +181,141 @@ impl MapKitBridge {
     #[func]
     fn estimate_chunk(&self, x: i32, y: i32) -> GString {
         response(
-            self.package.as_ref()
+            self.package
+                .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
                 .and_then(|p| {
-                    let cell=Cell{x,y};
-                    let mut cost=serde_json::json!(mapkit_core::estimate_generation(&p.document,cell,500_000)?);
-                    cost["presentation_bytes"]=serde_json::json!(presentation::cost(p,cell));Ok(cost)
-                })
+                    let cell = Cell { x, y };
+                    let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
+                    cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell));
+                    Ok(cost)
+                }),
         )
     }
     /// Bounded broad-phase plan; callers estimate and reserve each required cell.
     #[func]
-    fn query_cells(&self, min_x: i64, min_y: i64, max_x: i64, max_y: i64, max_cells: i64) -> GString {
-        response(self.package.as_ref()
-            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|p| {
-                if !(1..=16_384).contains(&max_cells) {
-                    return Err(mapkit_core::error("E_BUDGET", "invalid query cell allowance"));
-                }
-                p.document.query_cells(&mapkit_core::Bounds {
-                    min: [min_x, min_y], max: [max_x, max_y],
-                }, max_cells as usize)
-            }).map(|plan| serde_json::json!(plan)))
+    fn query_cells(
+        &self,
+        min_x: i64,
+        min_y: i64,
+        max_x: i64,
+        max_y: i64,
+        max_cells: i64,
+    ) -> GString {
+        response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| {
+                    if !(1..=16_384).contains(&max_cells) {
+                        return Err(mapkit_core::error(
+                            "E_BUDGET",
+                            "invalid query cell allowance",
+                        ));
+                    }
+                    p.document.query_cells(
+                        &mapkit_core::Bounds {
+                            min: [min_x, min_y],
+                            max: [max_x, max_y],
+                        },
+                        max_cells as usize,
+                    )
+                })
+                .map(|plan| serde_json::json!(plan)),
+        )
     }
     /// Exact integer centimetres and indexed triangle metadata; no JSON geometry copy.
     #[func]
     fn generate_chunk_packed(&self, x: i32, y: i32) -> VarDictionary {
-        packed::response(self.package.as_ref()
-            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|p| p.generate(Cell { x, y }, 500_000)))
+        packed::response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| p.generate(Cell { x, y }, 500_000)),
+        )
     }
     /// Opt-in presentation bytes for a prepared/restored chunk. Caller reserves estimate first.
     #[func]
     fn with_presentation(&self, data: VarDictionary) -> VarDictionary {
-        packed::respond(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
-            .and_then(|p|presentation::decorate(p,data)))
+        packed::respond(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| presentation::decorate(p, data)),
+        )
     }
     /// Archive identity and pre-allocation size bound; storage/leases belong to callers.
     #[func]
     fn chunk_archive_info(&self, x: i32, y: i32) -> GString {
         response((|| {
-            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let p = self
+                .package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
             let cell = Cell { x, y };
-            let cost = mapkit_core::estimate_generation(&p.document, cell, 500_000)?;
-            Ok(serde_json::json!({"key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
-                "max_bytes": mapkit_core::archive_limit(&cost)}))
+            let cost = p.document.estimate(cell, 500_000)?;
+            Ok(
+                serde_json::json!({"key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
+                "max_bytes": mapkit_core::archive_limit(&cost)}),
+            )
         })())
     }
     #[func]
     fn generate_chunk_archived(&self, x: i32, y: i32, max_bytes: i64) -> VarDictionary {
         packed::respond((|| {
-            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let p = self
+                .package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
             let cell = Cell { x, y };
             let chunk = p.generate(cell, 500_000)?;
-            let archive = mapkit_core::encode_archive(&chunk,
-                &mapkit_core::archive_key(&p.inspection.world_content_hash, cell), max_bytes.max(0) as u64).ok();
+            let archive = mapkit_core::encode_archive(
+                &chunk,
+                &mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
+                max_bytes.max(0) as u64,
+            )
+            .ok();
             let mut data = packed::pack(chunk)?;
-            if let Some(bytes) = archive { data.set("archive", &PackedByteArray::from(bytes.as_slice())); }
+            if let Some(bytes) = archive {
+                data.set("archive", &PackedByteArray::from(bytes.as_slice()));
+            }
             Ok(data)
         })())
     }
     #[func]
     fn restore_chunk_archive(&self, x: i32, y: i32, bytes: PackedByteArray) -> VarDictionary {
         packed::response((|| {
-            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let p = self
+                .package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
             let cell = Cell { x, y };
-            let cost = mapkit_core::estimate_generation(&p.document, cell, 500_000)?;
-            mapkit_core::decode_archive(bytes.as_slice(),
-                &mapkit_core::archive_key(&p.inspection.world_content_hash, cell), cell, &cost)
+            let cost = p.document.estimate(cell, 500_000)?;
+            mapkit_core::decode_archive(
+                bytes.as_slice(),
+                &mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
+                cell,
+                &cost,
+            )
         })())
     }
     #[func]
     fn generate_chunk_occupied_packed(&self, x: i32, y: i32, max_solids: i64) -> VarDictionary {
-        occupied::response(if !(0..=mapkit_core::MAX_OCCUPIED_SOLIDS as i64).contains(&max_solids) {
-            Err(mapkit_core::error("E_BUDGET", "invalid occupied solid allowance"))
-        } else {
-            self.package.as_ref()
-                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-                .and_then(|p| p.generate_with_occupancy(Cell { x, y }, 500_000, max_solids as usize))
-        })
+        occupied::response(
+            if !(0..=mapkit_core::MAX_OCCUPIED_SOLIDS as i64).contains(&max_solids) {
+                Err(mapkit_core::error(
+                    "E_BUDGET",
+                    "invalid occupied solid allowance",
+                ))
+            } else {
+                self.package
+                    .as_ref()
+                    .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                    .and_then(|p| {
+                        p.generate_with_occupancy(Cell { x, y }, 500_000, max_solids as usize)
+                    })
+            },
+        )
     }
     #[func]
     fn generate_chunk(&self, x: i32, y: i32) -> GString {
@@ -256,12 +331,26 @@ impl MapKitBridge {
         )
     }
     #[func]
-    fn preview_document_packed(&self, document:GString,x:i32,y:i32)->VarDictionary {
+    fn preview_document_packed(&self, document: GString, x: i32, y: i32) -> VarDictionary {
         packed::respond((|| {
-            let d=engine_document(&document.to_string())?;
-            if !d.assets.is_empty() || !d.heightmaps.is_empty(){return Err(mapkit_core::error("E_STATE","assets/heightmaps require saved project preview"));}
-            let c=mapkit_core::generate(GenerationInput{document:&d,cell:Cell{x,y},heightgrid:None,max_triangles:500_000})?;
-            presentation::decorate_document(&d,&std::collections::BTreeMap::new(),packed::pack(c)?)
+            let d = engine_document(&document.to_string())?;
+            if !d.assets.is_empty() || !d.heightmaps.is_empty() {
+                return Err(mapkit_core::error(
+                    "E_STATE",
+                    "assets/heightmaps require saved project preview",
+                ));
+            }
+            let c = mapkit_core::generate(GenerationInput {
+                document: &d,
+                cell: Cell { x, y },
+                heightgrid: None,
+                max_triangles: 500_000,
+            })?;
+            presentation::decorate_document(
+                &d,
+                &std::collections::BTreeMap::new(),
+                packed::pack(c)?,
+            )
         })())
     }
     #[func]
@@ -303,12 +392,20 @@ impl MapKitBridge {
     }
     #[func]
     fn spawn_options(&self, x_cm: i64, y_cm: i64) -> GString {
-        response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first")).and_then(|p| {
-            let cell = p.document.cell_at([x_cm, y_cm]).ok_or_else(|| mapkit_core::error("E_SPAWN", "outside map"))?;
-            let chunk = p.generate(cell, 500_000)?;
-            let options = chunk.spawn_options([x_cm, y_cm])?;
-            Ok(serde_json::json!({"surfaces": options}))
-        }))
+        response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| {
+                    let cell = p
+                        .document
+                        .cell_at([x_cm, y_cm])
+                        .ok_or_else(|| mapkit_core::error("E_SPAWN", "outside map"))?;
+                    let chunk = p.generate(cell, 500_000)?;
+                    let options = chunk.spawn_options([x_cm, y_cm])?;
+                    Ok(serde_json::json!({"surfaces": options}))
+                }),
+        )
     }
     #[func]
     fn spawn(&self, x_cm: i64, y_cm: i64, surface: GString) -> GString {
@@ -321,9 +418,19 @@ impl MapKitBridge {
     /// Exact local bounds without serializing the full editing document.
     #[func]
     fn map_bounds(&self) -> PackedInt64Array {
-        self.package.as_ref().map(|p| PackedInt64Array::from(&[
-            p.document.bounds.min[0], p.document.bounds.min[1],
-            p.document.bounds.max[0], p.document.bounds.max[1]][..])).unwrap_or_default()
+        self.package
+            .as_ref()
+            .map(|p| {
+                PackedInt64Array::from(
+                    &[
+                        p.document.bounds.min[0],
+                        p.document.bounds.min[1],
+                        p.document.bounds.max[0],
+                        p.document.bounds.max[1],
+                    ][..],
+                )
+            })
+            .unwrap_or_default()
     }
     /// Caller must reserve generation cost and invoke on its bounded worker.
     #[func]

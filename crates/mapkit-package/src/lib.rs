@@ -77,7 +77,7 @@ pub struct Inspection {
 }
 pub struct Package {
     pub manifest: PackageManifest,
-    pub document: MapDocument,
+    pub document: PreparedMap,
     pub files: BTreeMap<String, Vec<u8>>,
     pub inspection: Inspection,
 }
@@ -347,7 +347,11 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
     validate_heightmaps(&d, &files)?;
     Ok((d, files))
 }
-pub fn pack_bytes(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> Result<Vec<u8>> {
+pub fn pack_bytes(
+    document: impl Into<MapDocument>,
+    mut files: BTreeMap<String, Vec<u8>>,
+) -> Result<Vec<u8>> {
+    let mut d = document.into();
     d.normalize();
     d.validate()?;
     files.insert("document.json".into(), canonical(&d)?);
@@ -501,7 +505,9 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
             .get("document.json")
             .ok_or_else(|| error("E_REFERENCE", "missing document"))?,
     )?;
-    document.validate()?;
+    // Keep original ordering for manifest equality while preparing the immutable
+    // generation source once. The temporary typed clone fits the read allowance.
+    let prepared = PreparedMap::new(document.clone())?;
     let mut records = BTreeSet::new();
     for f in &manifest.files {
         if !records.insert(f.path.clone()) {
@@ -557,7 +563,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     };
     Ok(Package {
         manifest,
-        document,
+        document: prepared,
         files,
         inspection,
     })
@@ -565,8 +571,13 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
 impl Package {
     /// Display estimate for an asset in this already validated immutable snapshot.
     pub fn asset_presentation_cost(&self, id: &str) -> Result<u64> {
-        let a=self.document.assets.iter().find(|a|a.id==id).ok_or_else(||error("E_REFERENCE","unknown asset"))?;
-        Ok(assets::presentation_cost(&a.path,&self.files[&a.path]))
+        let a = self
+            .document
+            .assets
+            .iter()
+            .find(|a| a.id == id)
+            .ok_or_else(|| error("E_REFERENCE", "unknown asset"))?;
+        Ok(assets::presentation_cost(&a.path, &self.files[&a.path]))
     }
 
     fn generation_heightgrid(&self, cell: Cell) -> Result<Option<HeightGrid>> {
@@ -579,12 +590,7 @@ impl Package {
     }
     pub fn generate(&self, cell: Cell, max_triangles: usize) -> Result<GeneratedChunk> {
         let grid = self.generation_heightgrid(cell)?;
-        generate(GenerationInput {
-            document: &self.document,
-            cell,
-            heightgrid: grid.as_ref(),
-            max_triangles,
-        })
+        self.document.generate(cell, grid.as_ref(), max_triangles)
     }
     /// Uses the identical package terrain decoder and generator as ordinary chunks.
     pub fn generate_with_occupancy(
@@ -597,15 +603,8 @@ impl Package {
             return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
         }
         let grid = self.generation_heightgrid(cell)?;
-        mapkit_core::generate_with_occupancy(
-            GenerationInput {
-                document: &self.document,
-                cell,
-                heightgrid: grid.as_ref(),
-                max_triangles,
-            },
-            max_solids,
-        )
+        self.document
+            .generate_with_occupancy(cell, grid.as_ref(), max_triangles, Some(max_solids))
     }
 }
 

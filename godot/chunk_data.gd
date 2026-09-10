@@ -71,7 +71,7 @@ static func prism_points(chunk: Dictionary, index: int, scale: float) -> PackedV
 	return result
 
 
-static func scene_vertex(chunk: Dictionary, triangle: int, vertex: int, scale: float = 0.125) -> Vector3:
+static func scene_vertex(chunk: Dictionary, triangle: int, vertex: int, scale: float = 1.0) -> Vector3:
 	if chunk.has("packed_version"):
 		var values: PackedInt64Array = chunk.vertices_cm
 		var offset := triangle * 9 + vertex * 3

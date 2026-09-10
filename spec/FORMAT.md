@@ -45,7 +45,10 @@ terrain, triangle surface IDs, spawn eligibility and object placements.
 ## Spatial model
 
 Local UI x/y metres normalize to integer centimetres. Vertex order is
-`[x_cm,height_cm,y_cm]`; Godot vector is `(x,height,-y)*0.00125` (1:8 scale).
+`[x_cm,height_cm,y_cm]`; Godot vector is `(x,height,-y)*0.01` (actual metres).
+Scene-units contract 2 replaces the former global 1:8 display scale. OSM scale,
+when desired, is applied once by the importer; custom documents are never rescaled.
+Generated format 6 retains integer centimetres and unchanged archive bytes.
 Map bounds are inclusive for point validation, with maximum-edge points owned
 by the last cell. Cells start at bounds.min and use nonnegative x/y indices,
 default 51200 cm. A 3x3 start window contains only existing cells.
@@ -198,7 +201,7 @@ priority. Fence panels may share edges but never positive-area interiors. Curves
 mitred corner panels and arbitrary orientation are outside this declared profile.
 
 Vegetation uses a global signed lattice, SHA-256 rule `vegetation-v3`, density
-0..1000, spacing 200..100000 cm, orchard zero jitter and forest ±spacing/3 jitter.
+0..1000, spacing 25..100000 cm, orchard zero jitter and forest ±spacing/3 jitter.
 The full 400×400 cm canopy envelope (including the 40 cm trunk) must lie inside its
 zone/map and clear exclusions, all building footprints/access corridors, manual
 and accepted repeated props, roads plus 100 cm and their planned sidewalk width.
@@ -548,6 +551,15 @@ between collision and presentation. `godot/chunk_data.gd` obtains and reads view
 the common renderer also accepts the existing JSON form for editor callers.
 This view is an engine adapter, not a new package or generated hash contract.
 Generated hashing streams canonical members without retaining a whole JSON tree.
+The native owner also prepares `scene_vertices`, `scene_normals`, `ground_uv` and
+`wall_uv` arrays in scene-units contract 2. Consumers can submit contiguous mesh
+batches without converting every triangle on the main thread. These arrays use
+copy-on-write wrappers; the integer geometry remains the source of hashes.
+The response includes `generated_counts` (`triangles`, `objects`,
+`building_prisms`, `asset_convexes`) measured from the immutable local chunk,
+including restored archives. A consumer may retire unused generation allowances
+after worker join, while retaining conservative per-element memory costs. These
+counts are local adapter metadata, never peer-provided admission authority.
 
 ## Optional native occupied-volume view v1
 
@@ -652,7 +664,7 @@ package; no path/URL or shader is evaluated. GLB uses its embedded static glTF
 materials unless this override is present. PNG/WebP placements texture their
 explicit proxy faces (dominant-plane scene-metre UVs; vertical faces include height). GLB coordinates use metres,
 right-handed x-right/y-up/z-back, corresponding to `(map_x,height,-map_y)/100`.
-The common renderer applies placement quarter turns and the shared 0.125 scale.
+The common renderer applies placement quarter turns in actual metres (scale 1.0).
 Builtin tree canopy/trunk, fence panel and streetlight post/head use original
 procedural shapes and fixed shared material colors.
 

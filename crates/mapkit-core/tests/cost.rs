@@ -2,6 +2,39 @@ use mapkit_core::*;
 fn document() -> MapDocument {
     serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap()
 }
+#[test]
+fn prepared_source_is_immutable_and_preserves_generation_and_budget_results() {
+    let mut source = document();
+    let prepared = PreparedMap::new(source.clone()).unwrap();
+    for cell in source.cells() {
+        let expected = generate(GenerationInput {
+            document: &source,
+            cell,
+            heightgrid: None,
+            max_triangles: 500_000,
+        })
+        .unwrap();
+        assert_eq!(prepared.generate(cell, None, 500_000).unwrap(), expected);
+        assert_eq!(
+            prepared.estimate(cell, 500_000).unwrap(),
+            estimate_generation(&source, cell, 500_000).unwrap()
+        );
+        assert_eq!(prepared.estimate(cell, 1).unwrap().triangles, 1);
+        assert_eq!(
+            prepared
+                .generate_with_occupancy(cell, None, 500_000, Some(MAX_OCCUPIED_SOLIDS))
+                .unwrap()
+                .chunk,
+            expected
+        );
+    }
+    source.roads[0].widths_cm.clear();
+    assert!(PreparedMap::new(source).is_err());
+    assert!(prepared
+        .generate(Cell { x: 0, y: 0 }, None, 500_000)
+        .is_ok());
+    assert!(prepared.estimate(Cell { x: -1, y: 0 }, 500_000).is_err());
+}
 fn assert_bound(d: &MapDocument, cell: Cell, grid: Option<&HeightGrid>) {
     let cost = estimate_generation(d, cell, 500_000).unwrap();
     let chunk = generate(GenerationInput {
@@ -11,11 +44,24 @@ fn assert_bound(d: &MapDocument, cell: Cell, grid: Option<&HeightGrid>) {
         max_triangles: 500_000,
     })
     .unwrap();
-    let occupied = generate_with_occupancy(GenerationInput {
-        document: d, cell, heightgrid: grid, max_triangles: 500_000,
-    }, MAX_OCCUPIED_SOLIDS).unwrap();
-    assert!(occupied.solids.len() as u64 <= cost.occupied_solids, "{cell:?}");
-    assert!(occupied.solids.iter().all(|s| s.object_id.len() as u64 <= cost.max_object_id_bytes));
+    let occupied = generate_with_occupancy(
+        GenerationInput {
+            document: d,
+            cell,
+            heightgrid: grid,
+            max_triangles: 500_000,
+        },
+        MAX_OCCUPIED_SOLIDS,
+    )
+    .unwrap();
+    assert!(
+        occupied.solids.len() as u64 <= cost.occupied_solids,
+        "{cell:?}"
+    );
+    assert!(occupied
+        .solids
+        .iter()
+        .all(|s| s.object_id.len() as u64 <= cost.max_object_id_bytes));
     assert_eq!(chunk, occupied.chunk);
     assert!(chunk.triangles.len() as u64 <= cost.triangles, "{cell:?}");
     assert!(chunk.objects.len() as u64 <= cost.objects, "{cell:?}");
@@ -96,7 +142,9 @@ fn rotated_proxies_concave_buildings_and_negative_origin_are_bounded() {
         [13000, 15000],
         [12000, 15000],
     ];
-    d.assets.push(Asset { convex_collision: vec![], material: None,
+    d.assets.push(Asset {
+        convex_collision: vec![],
+        material: None,
         id: "asset".into(),
         path: "asset.glb".into(),
         attribution: Attribution {

@@ -10,7 +10,8 @@ mod metadata;
 pub const PACKAGE_VERSION: u32 = 1;
 pub const RECIPE_VERSION: u32 = 5;
 pub const GENERATED_VERSION: u32 = 6;
-pub const WORLD_SCALE: f64 = 0.125;
+pub const SCENE_UNITS_VERSION: u32 = 2;
+pub const WORLD_SCALE: f64 = 1.0;
 pub const DEFAULT_CELL_CM: i64 = 51_200;
 pub type Point = [i64; 2];
 pub type Vertex = [i64; 3]; // x, height, local y, centimetres
@@ -362,11 +363,20 @@ impl MapDocument {
         if !(1..=RECIPE_VERSION).contains(&self.recipe_version) {
             return Err(error("E_VERSION", "unsupported recipe"));
         }
-        if self.recipe_version < 3 && (!self.repetitions.is_empty() || self.buildings.iter().any(|b| !b.entrances.is_empty())) {
-            return Err(error("E_VERSION", "placement extensions require explicit recipe 3"));
+        if self.recipe_version < 3
+            && (!self.repetitions.is_empty()
+                || self.buildings.iter().any(|b| !b.entrances.is_empty()))
+        {
+            return Err(error(
+                "E_VERSION",
+                "placement extensions require explicit recipe 3",
+            ));
         }
         if self.recipe_version < 5 && self.buildings.iter().any(|b| !b.holes.is_empty()) {
-            return Err(error("E_VERSION", "building courtyards require explicit recipe 5"));
+            return Err(error(
+                "E_VERSION",
+                "building courtyards require explicit recipe 5",
+            ));
         }
         self.provenance.validate()?;
         for (index, attribution) in self.attributions.iter().enumerate() {
@@ -378,8 +388,11 @@ impl MapDocument {
                 "seed exceeds exact public JSON integer profile",
             ));
         }
-        if self.map_id.is_empty() || self.map_id.len() > 128
-            || !(self.theme == "default" || self.recipe_version >= 3 && matches!(self.theme.as_str(), "urban" | "rural")) {
+        if self.map_id.is_empty()
+            || self.map_id.len() > 128
+            || !(self.theme == "default"
+                || self.recipe_version >= 3 && matches!(self.theme.as_str(), "urban" | "rural"))
+        {
             return Err(error("E_DOCUMENT", "map ID or unsupported theme"));
         }
         if !(200..=102_400).contains(&self.cell_size_cm) || !self.cell_size_cm.is_multiple_of(200) {
@@ -399,7 +412,8 @@ impl MapDocument {
             + self.buildings.len()
             + self.zones.len()
             + self.assets.len()
-            + self.placements.len() + self.repetitions.len();
+            + self.placements.len()
+            + self.repetitions.len();
         if count > 200_000 {
             return Err(error("E_LIMIT", "too many objects"));
         }
@@ -414,8 +428,17 @@ impl MapDocument {
                 .iter()
                 .map(|z| z.polygon.len() + z.exclusions.iter().map(Vec::len).sum::<usize>())
                 .sum::<usize>()
-            + self.repetitions.iter().map(|r| r.points.len()).sum::<usize>()
-            + self.buildings.iter().flat_map(|b| &b.entrances).map(Vec::len).sum::<usize>();
+            + self
+                .repetitions
+                .iter()
+                .map(|r| r.points.len())
+                .sum::<usize>()
+            + self
+                .buildings
+                .iter()
+                .flat_map(|b| &b.entrances)
+                .map(Vec::len)
+                .sum::<usize>();
         if vertices > 1_000_000 {
             return Err(error("E_LIMIT", "too many input vertices"));
         }
@@ -439,14 +462,23 @@ impl MapDocument {
         // aliases before generation; never repair IDs or depend on cell order.
         let zone_ids: BTreeSet<_> = self.zones.iter().map(|z| z.id.as_str()).collect();
         for id in &ids {
-            let generated = id.rsplit_once(':').and_then(|(prefix, y)| {
-                let (zone, x) = prefix.rsplit_once(':')?;
-                let canonical_index = |value: &str| value.parse::<i64>()
-                    .is_ok_and(|index| index.to_string() == value);
-                Some(zone_ids.contains(zone) && canonical_index(x) && canonical_index(y))
-            }).unwrap_or(false);
+            let generated = id
+                .rsplit_once(':')
+                .and_then(|(prefix, y)| {
+                    let (zone, x) = prefix.rsplit_once(':')?;
+                    let canonical_index = |value: &str| {
+                        value
+                            .parse::<i64>()
+                            .is_ok_and(|index| index.to_string() == value)
+                    };
+                    Some(zone_ids.contains(zone) && canonical_index(x) && canonical_index(y))
+                })
+                .unwrap_or(false);
             if id.as_str() == "terrain" || generated {
-                return Err(error("E_ID", "object ID aliases a generated terrain or vegetation identity"));
+                return Err(error(
+                    "E_ID",
+                    "object ID aliases a generated terrain or vegetation identity",
+                ));
             }
         }
         let nodes: BTreeMap<_, _> = self.nodes.iter().map(|n| (&n.id, n)).collect();
@@ -484,7 +516,7 @@ impl MapDocument {
                 return fail("road endpoints must match explicit graph nodes");
             }
             if matches!(r.kind, RoadKind::Tunnel | RoadKind::Underpass)
-                && !r.clearance_cm.is_some_and(|v| (200..=5000).contains(&v))
+                && !r.clearance_cm.is_some_and(|v| (20..=5000).contains(&v))
             {
                 return fail("tunnel/underpass requires clearance");
             }
@@ -506,7 +538,7 @@ impl MapDocument {
         for z in &self.zones {
             if !polygon_valid(&z.polygon, &self.bounds)
                 || z.exclusions.iter().any(|p| !polygon_valid(p, &self.bounds))
-                || z.spacing_cm < 200
+                || z.spacing_cm < 25
                 || z.density_per_mille > 1000
             {
                 return fail("invalid zone");
@@ -528,17 +560,34 @@ impl MapDocument {
             }
         }
         let assets: BTreeSet<_> = self.assets.iter().map(|a| &a.id).collect();
-        if self.recipe_version < 4 && self.assets.iter().any(|a| !a.convex_collision.is_empty() || a.material.is_some()) {
-            return Err(error("E_VERSION", "asset extensions require explicit recipe 4"));
+        if self.recipe_version < 4
+            && self
+                .assets
+                .iter()
+                .any(|a| !a.convex_collision.is_empty() || a.material.is_some())
+        {
+            return Err(error(
+                "E_VERSION",
+                "asset extensions require explicit recipe 4",
+            ));
         }
         for a in &self.assets {
             a.attribution
                 .validate(&format!("asset {} attribution", a.id))?;
             if a.id.starts_with("builtin:") && self.recipe_version >= 4
-                || a.convex_collision.len() > 32 || self.recipe_version >= 4 && a.collision.len() > 1024
+                || a.convex_collision.len() > 32
+                || self.recipe_version >= 4 && a.collision.len() > 1024
                 || a.convex_collision.iter().any(|c| !c.valid(100_000))
-                || a.material.as_ref().is_some_and(|m|m.metallic_per_mille>1000 || m.roughness_per_mille>1000
-                    || m.albedo_texture.as_ref().is_some_and(|id| !self.assets.iter().any(|a| &a.id==id && (a.path.ends_with(".png") || a.path.ends_with(".webp")))))
+                || a.material.as_ref().is_some_and(|m| {
+                    m.metallic_per_mille > 1000
+                        || m.roughness_per_mille > 1000
+                        || m.albedo_texture.as_ref().is_some_and(|id| {
+                            !self.assets.iter().any(|a| {
+                                &a.id == id
+                                    && (a.path.ends_with(".png") || a.path.ends_with(".webp"))
+                            })
+                        })
+                })
                 || !safe_path(&a.path)
                 || ![".glb", ".png", ".webp"]
                     .iter()
@@ -553,7 +602,8 @@ impl MapDocument {
             }
         }
         for p in &self.placements {
-            if !(assets.contains(&p.asset_id) || self.recipe_version >= 3 && placement::builtin(&p.asset_id).is_some())
+            if !(assets.contains(&p.asset_id)
+                || self.recipe_version >= 3 && placement::builtin(&p.asset_id).is_some())
                 || p.quarter_turns > 3
                 || !self.bounds.contains([p.position[0], p.position[2]])
                 || p.position[1].unsigned_abs() > 1_000_000
@@ -632,15 +682,20 @@ impl GeneratedChunk {
         hash.update(b"{");
         if !self.asset_convexes.is_empty() {
             hash.update(b"\"asset_convexes\":[");
-            for (i,convex) in self.asset_convexes.iter().enumerate() {
-                if i>0 {hash.update(b",");}hash.update(canonical(convex)?);
+            for (i, convex) in self.asset_convexes.iter().enumerate() {
+                if i > 0 {
+                    hash.update(b",");
+                }
+                hash.update(canonical(convex)?);
             }
             hash.update(b"],");
         }
         if !self.building_prisms.is_empty() {
             hash.update(b"\"building_prisms\":[");
             for (i, prism) in self.building_prisms.iter().enumerate() {
-                if i > 0 { hash.update(b","); }
+                if i > 0 {
+                    hash.update(b",");
+                }
                 hash.update(canonical(prism)?);
             }
             hash.update(b"],");
@@ -651,12 +706,16 @@ impl GeneratedChunk {
         hash.update(canonical(&self.format_version)?);
         hash.update(b",\"objects\":[");
         for (index, object) in self.objects.iter().enumerate() {
-            if index > 0 { hash.update(b","); }
+            if index > 0 {
+                hash.update(b",");
+            }
             hash.update(canonical(object)?);
         }
         hash.update(b"],\"triangles\":[");
         for (index, triangle) in self.triangles.iter().enumerate() {
-            if index > 0 { hash.update(b","); }
+            if index > 0 {
+                hash.update(b",");
+            }
             hash.update(canonical(triangle)?);
         }
         hash.update(b"]}");
@@ -667,37 +726,63 @@ impl GeneratedChunk {
     pub fn spawn_options(&self, point: Point) -> Result<Vec<SurfaceOption>> {
         let mut found = std::collections::BTreeMap::new();
         for triangle in &self.triangles {
-            if !triangle.spawnable || found.contains_key(triangle.object_id.as_str()) { continue; }
-            let Some(position_cm) = triangle_position(triangle, point, true) else { continue; };
-            if found.len() == MAX_SURFACE_OPTIONS || triangle.object_id.len() > MAX_SURFACE_ID_BYTES {
-                return Err(error("E_SURFACE_LIMIT", "Too many surfaces or oversized surface identity; choose another location"));
+            if !triangle.spawnable || found.contains_key(triangle.object_id.as_str()) {
+                continue;
+            }
+            let Some(position_cm) = triangle_position(triangle, point, true) else {
+                continue;
+            };
+            if found.len() == MAX_SURFACE_OPTIONS || triangle.object_id.len() > MAX_SURFACE_ID_BYTES
+            {
+                return Err(error(
+                    "E_SURFACE_LIMIT",
+                    "Too many surfaces or oversized surface identity; choose another location",
+                ));
             }
             found.insert(triangle.object_id.as_str(), position_cm);
         }
-        Ok(found.into_iter().map(|(id, position_cm)| SurfaceOption {
-            surface_id: id.to_owned(), position_cm,
-        }).collect())
+        Ok(found
+            .into_iter()
+            .map(|(id, position_cm)| SurfaceOption {
+                surface_id: id.to_owned(),
+                position_cm,
+            })
+            .collect())
     }
     pub fn spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
-        self.surface_triangle(request, true).map(|(_, position)| position)
+        self.surface_triangle(request, true)
+            .map(|(_, position)| position)
     }
     /// Frozen recipe-v1 vegetation anchor rounding. Public queries must not
     /// silently migrate existing generated-v6 objects, collision or hashes.
     pub(crate) fn recipe_v1_spawn(&self, request: &SpawnRequest) -> Result<Vertex> {
-        self.surface_triangle(request, false).map(|(_, position)| position)
+        self.surface_triangle(request, false)
+            .map(|(_, position)| position)
     }
     pub fn surface_probe(&self, request: &SpawnRequest) -> Result<SurfaceProbe> {
         let (triangle, position_cm) = self.surface_triangle(request, true)?;
         let [a, b, c] = triangle.vertices;
         let u = std::array::from_fn::<_, 3, _>(|i| b[i] as i128 - a[i] as i128);
         let v = std::array::from_fn::<_, 3, _>(|i| c[i] as i128 - a[i] as i128);
-        let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]].map(|v| v as f64);
-        let length = libm::sqrt(n.iter().map(|v| v*v).sum());
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+        .map(|v| v as f64);
+        let length = libm::sqrt(n.iter().map(|v| v * v).sum());
         let sign = if n[1] < 0.0 { -1.0 } else { 1.0 };
-        Ok(SurfaceProbe { position_cm, surface_id: request.surface_id.clone(),
-            normal_q: n.map(|v| libm::round(v / length * sign * 1_000_000.0) as i32) })
+        Ok(SurfaceProbe {
+            position_cm,
+            surface_id: request.surface_id.clone(),
+            normal_q: n.map(|v| libm::round(v / length * sign * 1_000_000.0) as i32),
+        })
     }
-    fn surface_triangle(&self, request: &SpawnRequest, absolute_height: bool) -> Result<(&Triangle, Vertex)> {
+    fn surface_triangle(
+        &self,
+        request: &SpawnRequest,
+        absolute_height: bool,
+    ) -> Result<(&Triangle, Vertex)> {
         for t in &self.triangles {
             if !t.spawnable || t.object_id != request.surface_id {
                 continue;
@@ -720,20 +805,28 @@ pub const MAX_SURFACE_ID_BYTES: usize = 256;
 /// 4096 bytes/record and 64 KiB fixed workspace fit in 2 MiB.
 pub const SURFACE_OPTIONS_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SurfaceOption { pub surface_id: String, pub position_cm: Vertex }
+pub struct SurfaceOption {
+    pub surface_id: String,
+    pub position_cm: Vertex,
+}
 
 fn triangle_position(t: &Triangle, point: Point, absolute_height: bool) -> Option<Vertex> {
     let [a, b, c] = t.vertices;
     let flat = |v: Vertex| [v[0], v[2]];
     let area = cross(flat(a), flat(b), flat(c));
-    if area == 0 || !point_in_polygon(point, &[flat(a), flat(b), flat(c)]) { return None; }
+    if area == 0 || !point_in_polygon(point, &[flat(a), flat(b), flat(c)]) {
+        return None;
+    }
     let wb = cross(flat(a), point, flat(c));
     let wc = cross(flat(a), flat(b), point);
     let delta = wb * (b[1] - a[1]) as i128 + wc * (c[1] - a[1]) as i128;
     // Public queries quantize absolute height toward zero once. Recipe-v1
     // vegetation retains its frozen delta rounding and generated hash.
-    let h = if absolute_height { ((a[1] as i128 * area + delta) / area) as i64 }
-        else { a[1] + (delta / area) as i64 };
+    let h = if absolute_height {
+        ((a[1] as i128 * area + delta) / area) as i64
+    } else {
+        a[1] + (delta / area) as i64
+    };
     Some([point[0], h, point[1]])
 }
 #[derive(Debug, Clone)]
@@ -747,21 +840,25 @@ pub struct GenerationInput<'a> {
     pub heightgrid: Option<&'a HeightGrid>,
     pub max_triangles: usize,
 }
+mod prepared;
 mod spatial;
+pub use prepared::PreparedMap;
 mod cost;
 mod generation;
 mod occupancy;
 mod query;
-pub use query::QueryCells;
 pub use occupancy::{GeneratedOccupancy, OccupiedSolid, SolidShape, MAX_OCCUPIED_SOLIDS};
+pub use query::QueryCells;
 mod overview;
-pub use overview::{overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource};
 pub use cost::{estimate_generation, GenerationCost};
 pub use generation::{generate, generate_with_occupancy};
+pub use overview::{
+    overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource,
+};
 
 mod archive;
 pub use archive::{archive_key, archive_limit, decode_archive, encode_archive};
 
-mod roads;
 mod placement;
+mod roads;
 pub use placement::BuildingPrism;

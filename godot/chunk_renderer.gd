@@ -8,7 +8,7 @@ const PLAN := preload("./render_memory.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 
 static func scene_position(value: Array) -> Vector3:
-	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.00125
+	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.01
 
 ## The caller owns admission policy. A lease implements track(Object) and seal().
 ## No game dependency: small standalone editor previews may omit admission.
@@ -49,22 +49,34 @@ static func advance(job: Dictionary) -> bool:
 			job.triangle = offset
 			return false
 		var key := display_material_key(chunk, offset)
-		var surface := SurfaceTool.new()
-		surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 		var end := mini(offset + TRIANGLES_PER_BATCH, DATA.count(chunk))
+		var first := offset
 		while offset < end and display_material_key(chunk, offset) == key and not DATA.object_id(chunk, offset) in presentation.get("hidden_proxies", PackedStringArray()):
-			var normal := (DATA.scene_vertex(chunk, offset, 1) - DATA.scene_vertex(chunk, offset, 0)).cross(DATA.scene_vertex(chunk, offset, 2) - DATA.scene_vertex(chunk, offset, 0)).abs()
-			for index in [0, 2, 1]:
-				var point := DATA.scene_vertex(chunk, offset, index)
-				var uv := Vector2(point.x, point.z)
-				if key.begins_with("asset:") and normal.y < maxf(normal.x, normal.z):
-					uv = Vector2(point.z, point.y) if normal.x > normal.z else Vector2(point.x, point.y)
-				surface.set_uv(uv)
-				surface.add_vertex(point)
 			offset += 1
-		surface.generate_normals()
 		var mesh := MeshInstance3D.new()
-		mesh.mesh = surface.commit()
+		if chunk.has("scene_vertices"):
+			var arrays := []
+			arrays.resize(Mesh.ARRAY_MAX)
+			arrays[Mesh.ARRAY_VERTEX] = chunk.scene_vertices.slice(first * 3, offset * 3)
+			arrays[Mesh.ARRAY_NORMAL] = chunk.scene_normals.slice(first * 3, offset * 3)
+			arrays[Mesh.ARRAY_TEX_UV] = (chunk.wall_uv if key.begins_with("asset:") else chunk.ground_uv).slice(first * 3, offset * 3)
+			var prepared := ArrayMesh.new()
+			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			mesh.mesh = prepared
+		else:
+			var surface := SurfaceTool.new()
+			surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for triangle in range(first, offset):
+				var normal := (DATA.scene_vertex(chunk, triangle, 1) - DATA.scene_vertex(chunk, triangle, 0)).cross(DATA.scene_vertex(chunk, triangle, 2) - DATA.scene_vertex(chunk, triangle, 0)).abs()
+				for index in [0, 2, 1]:
+					var point := DATA.scene_vertex(chunk, triangle, index)
+					var uv := Vector2(point.x, point.z)
+					if key.begins_with("asset:") and normal.y < maxf(normal.x, normal.z):
+						uv = Vector2(point.z, point.y) if normal.x > normal.z else Vector2(point.x, point.y)
+					surface.set_uv(uv)
+					surface.add_vertex(point)
+			surface.generate_normals()
+			mesh.mesh = surface.commit()
 		if not job.materials.has(key):
 			var material := ASSETS.material(key.substr(6), sources, job.asset_materials) if key.begins_with("asset:") else StandardMaterial3D.new()
 			if material == null:
@@ -100,7 +112,7 @@ static func advance(job: Dictionary) -> bool:
 				anchor.position = scene_position(object.position)
 				# glTF metres: x-right, y-up, z-back; local map y points forward.
 				anchor.rotation.y = float(object.quarter_turns) * PI / 2.0
-				anchor.scale = Vector3.ONE * 0.125
+				anchor.scale = Vector3.ONE
 				anchor.add_child(instance)
 				job.root.add_child(anchor)
 				continue
@@ -109,10 +121,10 @@ static func advance(job: Dictionary) -> bool:
 			if id != "builtin:tree": continue
 			var canopy := MeshInstance3D.new()
 			var shape := SphereMesh.new()
-			shape.radius = 0.23
-			shape.height = 0.5
+			shape.radius = 1.84
+			shape.height = 4.0
 			canopy.mesh = shape
-			canopy.position = scene_position(object.position) + Vector3.UP * 0.6
+			canopy.position = scene_position(object.position) + Vector3.UP * 4.8
 			var leaf := StandardMaterial3D.new()
 			leaf.albedo_color = Color("486447")
 			canopy.material_override = leaf

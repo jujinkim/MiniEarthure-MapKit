@@ -89,15 +89,26 @@ fn polygons_overlap(a: &[Point], b: &[Point], work: &mut usize) -> Result<bool> 
         }))
 }
 fn building_overlap(poly: &[Point], b: &Building, work: &mut usize) -> Result<bool> {
-    if !polygons_overlap(poly, &b.footprint, work)? { return Ok(false); }
+    if !polygons_overlap(poly, &b.footprint, work)? {
+        return Ok(false);
+    }
     for hole in &b.holes {
         if inside(poly, hole, work)? {
             let mut touching = false;
             tick(work, poly.len() * hole.len())?;
-            for i in 0..poly.len() { for j in 0..hole.len() {
-                touching |= intersects(poly[i], poly[(i+1)%poly.len()], hole[j], hole[(j+1)%hole.len()]);
-            }}
-            if !touching { return Ok(false); }
+            for i in 0..poly.len() {
+                for j in 0..hole.len() {
+                    touching |= intersects(
+                        poly[i],
+                        poly[(i + 1) % poly.len()],
+                        hole[j],
+                        hole[(j + 1) % hole.len()],
+                    );
+                }
+            }
+            if !touching {
+                return Ok(false);
+            }
         }
     }
     Ok(true)
@@ -149,10 +160,20 @@ fn near_segment(p: Point, a: Point, b: Point, radius: i64) -> bool {
     }
 }
 fn road_overlap(poly: &[Point], r: &Road, extra: i64, work: &mut usize) -> Result<bool> {
+    let bounds = aabb(poly);
     for (i, s) in r.points.windows(2).enumerate() {
-        tick(work, poly.len())?;
+        tick(work, 1)?;
         let (a, b) = (xy(s[0]), xy(s[1]));
         let radius = (r.widths_cm[i] as i64 + 1) / 2 + extra;
+        // Charge the broad phase separately; only intersecting bounds require
+        // the per-vertex polygon predicates. The work ceiling is unchanged.
+        if (0..2).any(|axis| {
+            a[axis].max(b[axis]) + radius < bounds.min[axis]
+                || a[axis].min(b[axis]) - radius > bounds.max[axis]
+        }) {
+            continue;
+        }
+        tick(work, poly.len())?;
         if point_in_polygon(a, poly) || point_in_polygon(b, poly) {
             return Ok(true);
         }
@@ -213,12 +234,17 @@ fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
         .to_vec();
     }
     let mut boxes = proxies(d, p);
-    if let Some(asset)=d.assets.iter().find(|a|a.id==p.asset_id) {
+    if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
         for c in &asset.convex_collision {
-            let c=c.placed(p);
-            let min: Vertex=std::array::from_fn(|a|c.vertices.iter().map(|v|v[a]).min().unwrap());
-            let max: Vertex=std::array::from_fn(|a|c.vertices.iter().map(|v|v[a]).max().unwrap());
-            boxes.push(CollisionBox {center:std::array::from_fn(|a|min[a]+(max[a]-min[a])/2),size_cm:std::array::from_fn(|a|(max[a]-min[a]) as u32)});
+            let c = c.placed(p);
+            let min: Vertex =
+                std::array::from_fn(|a| c.vertices.iter().map(|v| v[a]).min().unwrap());
+            let max: Vertex =
+                std::array::from_fn(|a| c.vertices.iter().map(|v| v[a]).max().unwrap());
+            boxes.push(CollisionBox {
+                center: std::array::from_fn(|a| min[a] + (max[a] - min[a]) / 2),
+                size_cm: std::array::from_fn(|a| (max[a] - min[a]) as u32),
+            });
         }
     }
     let min = std::array::from_fn(|a| {
@@ -245,6 +271,15 @@ fn source_clear(
     road_margin: i64,
     work: &mut usize,
 ) -> Result<bool> {
+    source_clear_indexed(d, poly, road_margin, work, None)
+}
+fn source_clear_indexed(
+    d: &MapDocument,
+    poly: &[Point],
+    road_margin: i64,
+    work: &mut usize,
+    road_bounds: Option<&[Bounds]>,
+) -> Result<bool> {
     if !poly.iter().all(|p| d.bounds.contains(*p)) {
         return Ok(false);
     }
@@ -258,7 +293,14 @@ fn source_clear(
             }
         }
     }
-    for r in &d.roads {
+    let area = aabb(poly);
+    for (index, r) in d.roads.iter().enumerate() {
+        if let Some(bounds) = road_bounds {
+            tick(work, 1)?;
+            if !overlaps(&area, &bounds[index]) {
+                continue;
+            }
+        }
         if road_overlap(poly, r, road_margin, work)? {
             return Ok(false);
         }
@@ -402,6 +444,19 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         }
     }
     let mut work = 0;
+    // Validate authored objects against coarse road bounds once, then inspect
+    // segments only for nearby roads. Exact predicates and the work cap remain.
+    let mut road_bounds = Vec::with_capacity(d.roads.len());
+    for road in &d.roads {
+        tick(&mut work, road.points.len())?;
+        let mut area = aabb(&road.points.iter().copied().map(xy).collect::<Vec<_>>());
+        let radius = i64::from(road.widths_cm.iter().copied().max().unwrap().div_ceil(2));
+        for axis in 0..2 {
+            area.min[axis] -= radius;
+            area.max[axis] += radius;
+        }
+        road_bounds.push(area);
+    }
     for (i, b) in d.buildings.iter().enumerate() {
         for other in &d.buildings[..i] {
             if b.base_cm < other.base_cm + other.height_cm as i64 + roof_rise(other)
@@ -415,19 +470,32 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
                 ));
             }
         }
-        for road in &d.roads {
+        let area = aabb(&b.footprint);
+        for (index, road) in d.roads.iter().enumerate() {
+            tick(&mut work, 1)?;
+            if !overlaps(&area, &road_bounds[index]) {
+                continue;
+            }
             // Conservative horizontal clearance is deliberate for authored buildings.
-            let overlaps = if b.holes.is_empty() { road_overlap(&b.footprint, road, 0, &mut work)? } else {
+            let overlaps = if b.holes.is_empty() {
+                road_overlap(&b.footprint, road, 0, &mut work)?
+            } else {
                 let mut hit = false;
                 for triangle in crate::courtyard::triangulate(b, &mut work)? {
-                    if road_overlap(&triangle, road, 0, &mut work)? { hit = true; break; }
+                    if road_overlap(&triangle, road, 0, &mut work)? {
+                        hit = true;
+                        break;
+                    }
                 }
                 hit
             };
             if overlaps {
                 return Err(error(
                     "E_GEOMETRY",
-                    "building footprint intersects a road corridor",
+                    format!(
+                        "building {} footprint intersects road {} corridor",
+                        b.id, road.id
+                    ),
                 ));
             }
         }
@@ -440,7 +508,12 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
                 .unwrap()
                 .collision
                 .is_empty()
-            && d.assets.iter().find(|a|a.id==p.asset_id).unwrap().convex_collision.is_empty()
+            && d.assets
+                .iter()
+                .find(|a| a.id == p.asset_id)
+                .unwrap()
+                .convex_collision
+                .is_empty()
         {
             return Err(error(
                 "E_GEOMETRY",
@@ -448,7 +521,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
             ));
         }
         let poly = footprint(d, p);
-        if !source_clear(d, &poly, 0, &mut work)? {
+        if !source_clear_indexed(d, &poly, 0, &mut work, Some(&road_bounds))? {
             return Err(error(
                 "E_GEOMETRY",
                 "manual placement footprint intersects bounds/building/access/road",
@@ -503,6 +576,9 @@ fn roof_triangles(b: &Building) -> Result<Vec<[Vertex; 3]>> {
 }
 fn buildings(d: &MapDocument, b: &mut Builder) -> Result<()> {
     for building in &d.buildings {
+        if !overlaps(&aabb(&building.footprint), &b.bounds) {
+            continue;
+        }
         for roof in roof_triangles(building)? {
             let original = BuildingPrism {
                 object_id: building.id.clone(),
@@ -639,9 +715,14 @@ fn sidewalks(d: &MapDocument, b: &mut Builder, work: &mut usize) -> Result<()> {
                         loop {
                             let mut touches = false;
                             for building in &d.buildings {
-                                if building_overlap(&poly, building, work)? { touches = true; break; }
+                                if building_overlap(&poly, building, work)? {
+                                    touches = true;
+                                    break;
+                                }
                             }
-                            if !touches || fitted <= 50 { break; }
+                            if !touches || fitted <= 50 {
+                                break;
+                            }
                             fitted = (fitted - 25).max(50);
                             poly[2] = point(end, half + fitted);
                             poly[3] = point(start, half + fitted);
@@ -733,8 +814,10 @@ fn emit_placement(
     for proxy in proxies(d, p) {
         b.box_shape(proxy.center, proxy.size_cm, &p.id)?;
     }
-    if let Some(asset)=d.assets.iter().find(|a|a.id==p.asset_id) {
-        for shape in &asset.convex_collision {b.convex_shape(shape.placed(p), &p.id)?;}
+    if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
+        for shape in &asset.convex_collision {
+            b.convex_shape(shape.placed(p), &p.id)?;
+        }
     }
     b.bounds = saved;
     if d.cell_at(xy(p.position)) == Some(cell) {
