@@ -528,3 +528,43 @@ fn authoring_roundtrip_preserves_every_payload_and_refuses_existing_destination(
     );
     std::fs::remove_dir_all(directory).unwrap(); // exclusively created by this test
 }
+
+#[test]
+fn audit_summary_binds_transport_source_and_bounded_world_overview() {
+    let mut d = empty();
+    d.bounds.min = [0, 0];
+    d.bounds.max = [1_000_000, 1_000_000];
+    d.cell_size_cm = 1600;
+    let bytes = pack_source(d, BTreeMap::new(), 128).unwrap();
+    let mut reader = IndexedReader::open(Cursor::new(bytes.clone()), BUDGET, None).unwrap();
+    assert_eq!(
+        reader.audit_summary(1, &ticket()).unwrap_err().code,
+        "E_MEMORY_BUDGET"
+    );
+    let epoch = ReadEpoch::default();
+    let stale = epoch.begin();
+    epoch.cancel();
+    assert_eq!(
+        reader.audit_summary(BUDGET, &stale).unwrap_err().code,
+        "E_CANCELLED"
+    );
+    let summary = reader.audit_summary(BUDGET, &ticket()).unwrap();
+    assert_eq!(summary["package_sha256"], sha256(&bytes));
+    assert_eq!(summary["index_sha256"], reader.identity());
+    assert_eq!(summary["verification"], "complete-audit");
+    assert_eq!(summary["cell_count"], 390625);
+    let overview: serde_json::Value =
+        serde_json::from_str(summary["overview_json"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        overview["bounds"]["max"],
+        serde_json::json!([1_000_000, 1_000_000])
+    );
+    // Whole audit still rejects a individually valid but wrongly derived region.
+    let id = reader.index().regions[0].source;
+    let snapshot = reader.load_region(0, BUDGET, &ticket()).unwrap();
+    let mut changed = (*snapshot.package.document).clone();
+    changed.terrain_base_cm += 100;
+    let bad_bytes = replace_record(&bytes, id, &canonical(&changed).unwrap(), false);
+    let mut bad = IndexedReader::open(Cursor::new(bad_bytes), BUDGET, None).unwrap();
+    assert!(bad.audit_summary(BUDGET, &ticket()).is_err());
+}

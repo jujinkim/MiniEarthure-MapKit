@@ -166,10 +166,40 @@ allowances are 15,561,226–43,850,274B / 40,632,656–58,422,412B, versus the o
 versus the old 332,374,070B. This is a functional storage comparison, not gameplay
 or density/performance acceptance. Neither grouping becomes a universal default.
 
-The MapKit storage/CLI/native unit is implemented. Application adoption still
-needs complete-audit acquisition, source leases and generation admission,
-cancel/join/late-result ownership, safe current/candidate collision handoff,
-overview/selection, actual Host/Client sessions and Editor export/reopen. ENet
-region requests are not implemented; retaining whole-file transport is the first
-consumer candidate, subject to explicit identity/admission decisions. This is
-remaining L01 implementation, not completed integration or merely deferred tests.
+The L01-A storage/CLI/native evidence above describes the earlier standalone
+unit. L01-B adds `audit_summary` and native complete-audit admission, immutable
+world queries outside the reader I/O lock, source-topology overview, and explicit
+project export/recovery bindings. Applications own the adoption and its tests.
+
+## L01-B consumer interface — 2026-09-11
+
+`audit_summary` returns the SHA-256 of the complete original open handle, index
+identity, world identity, complete expanded record bytes (including source
+copies), shared user-asset compressed/expanded bytes, a maximum 4MiB overview
+and its allocation cost. The original document/payloads are released at return.
+The summary has an additional 16MiB native allowance. The native reader also
+reserves a second index allowance for immutable query metadata; `cell_window`,
+`query_cells` and `map_bounds` never wait on an active decoder's lock. Native
+`audit` reports both audit peak and the largest region validation bound.
+
+The private Runtime consumer chooses whole-file protocol9 transport with explicit
+`memap`/`mkregions` support negotiation. File/index/world hashes have separate
+roles. A cache installation runs a complete audit and verifies the offered
+identity; region records are verified again on every source read. There is no
+region-request network protocol. Runtime uses one scoped source snapshot at a
+time on its existing serial worker. A source is dropped before reading another
+and on job return; generated/presentation data are independent copies. Runtime
+reserves the conservative largest source validation allowance together with
+generation and existing outputs, keeps live work charged through cancellation
+and join, and binds disk archive namespaces to the regional identity. The
+largest-region allowance is conservative even for lighter regions; safe denial
+is possible where more precise planning could fit. No budget is increased.
+
+Editor selects `.mkregions` explicitly at export, with 1–128 execution cells per
+storage side; its initial UI value of 8 is an editing convenience, not a universal
+performance profile. Reopen restores into a new adjacent `.source` directory and
+uses ordinary dirty-document protection before adopting it. Existing files and
+unused original payloads remain intact. The legacy bounded authoring document
+limit still applies; source-topology overview does not enable unbounded editing.
+Functional consumer evidence and remaining platform/performance gates belong to
+the owning application reports. This interface does not declare final cutover.

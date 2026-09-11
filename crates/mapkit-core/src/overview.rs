@@ -64,7 +64,11 @@ impl MapOverview<'_> {
                 .iter()
                 .map(|b| (b.footprint.len() + b.holes.iter().map(Vec::len).sum::<usize>()) as u64)
                 .sum(),
-            records: (self.roads.len() + self.buildings.len() + self.attributions.len() + self.buildings.iter().map(|b| b.holes.len()).sum::<usize>()) as u64,
+            records: (self.roads.len()
+                + self.buildings.len()
+                + self.attributions.len()
+                + self.buildings.iter().map(|b| b.holes.len()).sum::<usize>())
+                as u64,
             text_bytes: self.map_id.len() as u64
                 + self.roads.iter().map(|r| r.id.len() as u64).sum::<u64>()
                 + self
@@ -89,6 +93,16 @@ impl MapOverview<'_> {
 }
 pub fn overview(d: &MapDocument) -> Result<MapOverview<'_>> {
     d.validate()?;
+    overview_validated(d)
+}
+
+/// Opt-in indexed source topology. Bounded overview output still has its own cap.
+pub fn source_overview(d: &MapDocument) -> Result<MapOverview<'_>> {
+    d.validate_source()?;
+    overview_validated(d)
+}
+
+fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
     let mut roads: Vec<_> = d
         .roads
         .iter()

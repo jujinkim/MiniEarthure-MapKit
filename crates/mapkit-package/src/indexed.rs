@@ -515,6 +515,72 @@ impl<R: Read + Seek> IndexedReader<R> {
     pub fn audit(&mut self, memory_limit: u64, ticket: &ReadTicket) -> Result<()> {
         self.audited_files(memory_limit, ticket).map(|_| ())
     }
+    pub fn audit_peak_bytes(&self) -> u64 {
+        self.cost(self.index.authoring_source, &self.index.payloads)
+            .validation_peak_bytes
+            + self
+                .index
+                .regions
+                .iter()
+                .map(|r| self.index.records[r.source].size)
+                .max()
+                .unwrap_or(0)
+                * 128
+    }
+    /// Whole-file admission with a bounded overview. No authored source survives
+    /// this call. Hash the original handle, never reopen a potentially replaced path.
+    pub fn audit_summary(
+        &mut self,
+        memory_limit: u64,
+        ticket: &ReadTicket,
+    ) -> Result<serde_json::Value> {
+        const SUMMARY_BYTES: u64 = 16 * 1024 * 1024;
+        let files = self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket)?;
+        let document: MapDocument =
+            json::<MapDocument>(&files["document.json"])?.into_indexed_source()?;
+        let overview = mapkit_core::source_overview(&document)?;
+        let overview_cost = overview.cost()?;
+        let overview_json = overview.to_json(4 * 1024 * 1024)?;
+        let assets: BTreeSet<_> = document.assets.iter().map(|a| a.path.as_str()).collect();
+        let user_asset_bytes: u64 = files
+            .iter()
+            .filter(|(path, _)| assets.contains(path.as_str()))
+            .map(|(_, b)| b.len() as u64)
+            .sum();
+        let expanded_bytes: u64 = self.index.records.iter().map(|r| r.size).sum();
+        let mut digest = Sha256::new();
+        self.reader.seek(SeekFrom::Start(0)).map_err(io)?;
+        let mut buffer = [0u8; 65536];
+        let mut total = 0u64;
+        loop {
+            ticket.check()?;
+            let count = self.reader.read(&mut buffer).map_err(io)?;
+            if count == 0 {
+                break;
+            }
+            total += count as u64;
+            if total > self.artifact_length {
+                return Err(bad("artifact changed during audit"));
+            }
+            digest.update(&buffer[..count]);
+        }
+        if total != self.artifact_length {
+            return Err(bad("artifact changed during audit"));
+        }
+        ticket.check()?;
+        Ok(serde_json::json!({
+            "format": "mkregions", "format_version": 1, "verification": "complete-audit",
+            "index_sha256": self.identity, "package_sha256": format!("{:x}", digest.finalize()),
+            "world_content_hash": self.index.world_content_hash, "package_bytes": total,
+            "expanded_bytes": expanded_bytes, "user_asset_bytes": user_asset_bytes,
+            "base_data_bytes": expanded_bytes - user_asset_bytes,
+            "user_asset_compressed_bytes": assets.iter().filter_map(|path| self.index.payloads.get(*path)).map(|id| self.index.records[*id].compressed_bytes).sum::<u64>(),
+            "validation_peak_bytes": self.audit_peak_bytes() + SUMMARY_BYTES,
+            "cell_count": self.index.world.cell_count()?,
+            "retained_memory_bytes": self.index_retained + SUMMARY_BYTES,
+            "overview_json": overview_json, "overview_cost": overview_cost
+        }))
+    }
     /// Recover the canonical authored source and all original payloads, including
     /// unused declared assets. Destination must not already exist.
     pub fn unpack_source(

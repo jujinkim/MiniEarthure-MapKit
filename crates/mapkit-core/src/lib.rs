@@ -907,7 +907,7 @@ mod overview;
 pub use cost::{estimate_generation, GenerationCost};
 pub use generation::{generate, generate_with_occupancy};
 pub use overview::{
-    overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource,
+    source_overview,     overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad, OverviewSource,
 };
 
 mod archive;
