@@ -233,6 +233,10 @@ roof/solid/query geometry. See [the contract](spec/FORMAT.md#recipe-5-building-c
 and the synthetic [example](examples/courtyard/document.json). Opt in explicitly;
 existing recipes and package bytes remain supported.
 
+Recipe 6 adds ground surface polygons, connected sidewalks and optional road markings.
+Exactly coincident structural-road terrain is removed; intentional burial is preserved.
+See [urban generation and presentation](spec/FORMAT.md#recipe-6-urban-ground-and-road-presentation).
+
 ### Bounded surface selection
 
 `MapKitBridge.surface_options_limits()` declares 64 selectable surfaces, 256 UTF-8

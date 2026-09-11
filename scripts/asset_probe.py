@@ -60,7 +60,7 @@ func run() -> void:
     for node: Node in job.root.get_children():
         if node.has_meta("mapkit_object_id"): anchors[node.get_meta("mapkit_object_id")] = node
     check(anchors.size() == 2, "one owner instance per model")
-    var points := DATA.prism_points(independent,0,0.125)
+    var points := DATA.prism_points(independent,0,1.0)
     var model_points := PackedVector3Array()
     for model: MeshInstance3D in meshes(anchors["tetra-a"]):
         for v: Vector3 in model.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
@@ -96,7 +96,7 @@ func run() -> void:
             var body := StaticBody3D.new()
             var collider := CollisionShape3D.new()
             var shape := ConvexPolygonShape3D.new()
-            shape.points = DATA.prism_points(c,i,0.125)
+            shape.points = DATA.prism_points(c,i,1.0)
             collider.shape = shape
             body.add_child(collider)
             world.add_child(body)

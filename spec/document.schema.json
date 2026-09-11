@@ -78,7 +78,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 4.0,
+      "maximum": 6.0,
       "minimum": 1.0
     },
     "repetitions": {
@@ -103,6 +103,12 @@
       "format": "uint64",
       "maximum": 9007199254740991.0,
       "minimum": 0.0
+    },
+    "surface_areas": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/SurfaceArea"
+      }
     },
     "terrain_base_cm": {
       "type": "integer",
@@ -603,6 +609,16 @@
         "kind": {
           "$ref": "#/definitions/RoadKind"
         },
+        "markings": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RoadMarkings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "points": {
           "type": "array",
           "items": {
@@ -654,6 +670,36 @@
         "tunnel"
       ]
     },
+    "RoadMarkings": {
+      "type": "object",
+      "required": [
+        "center_line",
+        "crosswalk_end",
+        "crosswalk_start",
+        "edge_lines",
+        "lanes"
+      ],
+      "properties": {
+        "center_line": {
+          "type": "boolean"
+        },
+        "crosswalk_end": {
+          "type": "boolean"
+        },
+        "crosswalk_start": {
+          "type": "boolean"
+        },
+        "edge_lines": {
+          "type": "boolean"
+        },
+        "lanes": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "RoadNode": {
       "type": "object",
       "required": [
@@ -690,6 +736,35 @@
         "gravel",
         "grass"
       ]
+    },
+    "SurfaceArea": {
+      "type": "object",
+      "required": [
+        "id",
+        "polygon",
+        "surface"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "polygon": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "surface": {
+          "$ref": "#/definitions/Surface"
+        }
+      },
+      "additionalProperties": false
     },
     "Zone": {
       "type": "object",

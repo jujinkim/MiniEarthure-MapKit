@@ -53,7 +53,7 @@ impl BuildingPrism {
             && self.object_id.len() <= 128
     }
 }
-fn tick(work: &mut usize, amount: usize) -> Result<()> {
+pub(crate) fn tick(work: &mut usize, amount: usize) -> Result<()> {
     *work = work.saturating_add(amount);
     if *work > MAX_WORK {
         Err(error("E_BUDGET", "recipe-3 placement work limit"))
@@ -456,6 +456,9 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
             area.max[axis] += radius;
         }
         road_bounds.push(area);
+    }
+    if d.recipe_version >= 6 {
+        return validate_indexed(d, &road_bounds, &mut work);
     }
     for (i, b) in d.buildings.iter().enumerate() {
         for other in &d.buildings[..i] {
@@ -991,7 +994,11 @@ fn vegetation(
 }
 pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder) -> Result<()> {
     let mut work = 0;
-    sidewalks(d, b, &mut work)?;
+    if d.recipe_version >= 6 {
+        crate::roads::sidewalks(d, b)?;
+    } else {
+        sidewalks(d, b, &mut work)?;
+    }
     buildings(d, b)?;
     let mut occupied: Vec<_> = d.placements.iter().map(|p| footprint(d, p)).collect();
     for p in &d.placements {
@@ -1021,4 +1028,127 @@ pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder) -> Result<(
         occupied.push(poly);
     }
     vegetation(d, cell, b, &occupied, &mut work)
+}
+
+fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -> Result<()> {
+    use crate::bounds_index::BoundsIndex;
+    let building_bounds: Vec<_> = d
+        .buildings
+        .iter()
+        .map(|b| {
+            let mut area = aabb(&b.footprint);
+            for ring in &b.entrances {
+                let other = aabb(ring);
+                for a in 0..2 {
+                    area.min[a] = area.min[a].min(other.min[a]);
+                    area.max[a] = area.max[a].max(other.max[a]);
+                }
+            }
+            area
+        })
+        .collect();
+    let buildings = BoundsIndex::new(&building_bounds);
+    let roads = BoundsIndex::new(road_bounds);
+    for (i, b) in d.buildings.iter().enumerate() {
+        let area = aabb(&b.footprint);
+        for index in buildings.query(&area, work)?.into_iter().filter(|&j| j < i) {
+            let other = &d.buildings[index];
+            if b.base_cm < other.base_cm + other.height_cm as i64 + roof_rise(other)
+                && other.base_cm < b.base_cm + b.height_cm as i64 + roof_rise(b)
+                && building_overlap(&b.footprint, other, work)?
+                && building_overlap(&other.footprint, b, work)?
+            {
+                return Err(error(
+                    "E_GEOMETRY",
+                    "overlapping building footprints/height ranges",
+                ));
+            }
+        }
+        for index in roads.query(&area, work)? {
+            let road = &d.roads[index];
+            let hit = if b.holes.is_empty() {
+                road_overlap(&b.footprint, road, 0, work)?
+            } else {
+                let mut hit = false;
+                for triangle in crate::courtyard::triangulate(b, work)? {
+                    hit |= road_overlap(&triangle, road, 0, work)?;
+                }
+                hit
+            };
+            if hit {
+                return Err(error(
+                    "E_GEOMETRY",
+                    format!(
+                        "building {} footprint intersects road {} corridor",
+                        b.id, road.id
+                    ),
+                ));
+            }
+        }
+    }
+    let mut footprints = vec![];
+    for p in &d.placements {
+        if builtin(&p.asset_id).is_none()
+            && d.assets
+                .iter()
+                .find(|a| a.id == p.asset_id)
+                .is_some_and(|a| a.collision.is_empty() && a.convex_collision.is_empty())
+        {
+            return Err(error(
+                "E_GEOMETRY",
+                "manual assets require a declared footprint proxy",
+            ));
+        }
+        footprints.push(footprint(d, p));
+    }
+    let placement_bounds: Vec<_> = footprints.iter().map(|p| aabb(p)).collect();
+    let placements = BoundsIndex::new(&placement_bounds);
+    for (i, p) in d.placements.iter().enumerate() {
+        let poly = &footprints[i];
+        let area = &placement_bounds[i];
+        if !poly.iter().all(|p| d.bounds.contains(*p)) {
+            return Err(error(
+                "E_GEOMETRY",
+                format!("placement {} outside bounds", p.id),
+            ));
+        }
+        for j in buildings.query(area, work)? {
+            let b = &d.buildings[j];
+            if building_overlap(poly, b, work)? {
+                return Err(error(
+                    "E_GEOMETRY",
+                    format!("placement {} intersects building {}", p.id, b.id),
+                ));
+            }
+            for entrance in &b.entrances {
+                if polygons_overlap(poly, entrance, work)? {
+                    return Err(error(
+                        "E_GEOMETRY",
+                        format!("placement {} intersects entrance {}", p.id, b.id),
+                    ));
+                }
+            }
+        }
+        for j in roads.query(area, work)? {
+            if road_overlap(poly, &d.roads[j], 0, work)? {
+                return Err(error(
+                    "E_GEOMETRY",
+                    format!("placement {} intersects road {}", p.id, d.roads[j].id),
+                ));
+            }
+        }
+        for j in placements.query(area, work)?.into_iter().filter(|&j| j < i) {
+            if polygons_overlap(poly, &footprints[j], work)? {
+                return Err(error(
+                    "E_GEOMETRY",
+                    format!(
+                        "placement {} intersects placement {}",
+                        p.id, d.placements[j].id
+                    ),
+                ));
+            }
+        }
+    }
+    repeated(d)?;
+    Ok(())
 }

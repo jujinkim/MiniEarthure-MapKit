@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 5;
+pub const RECIPE_VERSION: u32 = 6;
 pub const GENERATED_VERSION: u32 = 6;
 pub const SCENE_UNITS_VERSION: u32 = 2;
 pub const WORLD_SCALE: f64 = 1.0;
@@ -121,6 +121,24 @@ pub struct Road {
     /// Required for tunnel/underpass; portals connect only explicit graph nodes.
     pub clearance_cm: Option<u32>,
     pub sidewalk_cm: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markings: Option<RoadMarkings>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoadMarkings {
+    pub lanes: u8,
+    pub center_line: bool,
+    pub edge_lines: bool,
+    pub crosswalk_start: bool,
+    pub crosswalk_end: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SurfaceArea {
+    pub id: String,
+    pub polygon: Vec<Point>,
+    pub surface: Surface,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -221,7 +239,7 @@ pub struct MapDocument {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(range(min = 1, max = 4))]
+    #[schemars(range(min = 1, max = 6))]
     pub recipe_version: u32,
     #[schemars(regex(pattern = "^(default|urban|rural)$"))]
     pub theme: String,
@@ -229,6 +247,8 @@ pub struct MapDocument {
     pub heightmaps: Vec<Heightmap>,
     pub nodes: Vec<RoadNode>,
     pub roads: Vec<Road>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surface_areas: Vec<SurfaceArea>,
     pub buildings: Vec<Building>,
     pub zones: Vec<Zone>,
     pub assets: Vec<Asset>,
@@ -348,6 +368,7 @@ impl MapDocument {
     pub fn normalize(&mut self) {
         self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
         self.roads.sort_by(|a, b| a.id.cmp(&b.id));
+        self.surface_areas.sort_by(|a, b| a.id.cmp(&b.id));
         self.buildings.sort_by(|a, b| a.id.cmp(&b.id));
         self.zones.sort_by(|a, b| a.id.cmp(&b.id));
         self.assets.sort_by(|a, b| a.id.cmp(&b.id));
@@ -379,6 +400,7 @@ impl MapDocument {
             ));
         }
         self.provenance.validate()?;
+        urban::validate(self)?;
         for (index, attribution) in self.attributions.iter().enumerate() {
             attribution.validate(&format!("attributions[{index}]"))?;
         }
@@ -407,7 +429,8 @@ impl MapDocument {
             return fail("bounds or height out of range");
         }
         self.cell_dimensions()?;
-        let count = self.nodes.len()
+        let count = self.surface_areas.len()
+            + self.nodes.len()
             + self.roads.len()
             + self.buildings.len()
             + self.zones.len()
@@ -417,7 +440,12 @@ impl MapDocument {
         if count > 200_000 {
             return Err(error("E_LIMIT", "too many objects"));
         }
-        let vertices = self.roads.iter().map(|r| r.points.len()).sum::<usize>()
+        let vertices = self
+            .surface_areas
+            .iter()
+            .map(|a| a.polygon.len())
+            .sum::<usize>()
+            + self.roads.iter().map(|r| r.points.len()).sum::<usize>()
             + self
                 .buildings
                 .iter()
@@ -448,6 +476,7 @@ impl MapDocument {
             .iter()
             .map(|x| &x.id)
             .chain(self.roads.iter().map(|x| &x.id))
+            .chain(self.surface_areas.iter().map(|x| &x.id))
             .chain(self.buildings.iter().map(|x| &x.id))
             .chain(self.zones.iter().map(|x| &x.id))
             .chain(self.assets.iter().map(|x| &x.id))
@@ -859,6 +888,8 @@ pub use overview::{
 mod archive;
 pub use archive::{archive_key, archive_limit, decode_archive, encode_archive};
 
+mod bounds_index;
 mod placement;
 mod roads;
+mod urban;
 pub use placement::BuildingPrism;

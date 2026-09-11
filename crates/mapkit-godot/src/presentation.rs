@@ -8,7 +8,8 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
     // The common renderer imports each asset once per cell; duplicate(0) shares
     // resources. Count importer/shared data once and scene nodes per instance.
     let mut instances = BTreeMap::<&str, u64>::new();
-    for asset in p.document
+    for asset in p
+        .document
         .placements
         .iter()
         .filter(|v| {
@@ -46,10 +47,27 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
     {
         *instances.entry(&asset.id).or_default() += 1;
     }
-    instances.into_iter().map(|(id, count)| {
-        let asset = p.document.assets.iter().find(|a| a.id == id).unwrap();
-        asset_cost(p, asset) + p.asset_instance_cost(id).unwrap() * count
-    }).sum()
+    let styles = if p.document.recipe_version >= 6 {
+        p.document
+            .estimate(cell, 500_000)
+            .map_or(0, |c| c.triangles * 256)
+            + p.document
+                .roads
+                .iter()
+                .filter(|r| r.markings.is_some())
+                .map(|r| (r.points.len() - 1) as u64 * 4096)
+                .sum::<u64>()
+    } else {
+        0
+    };
+    styles
+        + instances
+            .into_iter()
+            .map(|(id, count)| {
+                let asset = p.document.assets.iter().find(|a| a.id == id).unwrap();
+                asset_cost(p, asset) + p.asset_instance_cost(id).unwrap() * count
+            })
+            .sum::<u64>()
 }
 fn asset_cost(p: &Package, a: &mapkit_core::Asset) -> u64 {
     let own = p.asset_presentation_cost(&a.id).unwrap();
@@ -61,7 +79,42 @@ fn asset_cost(p: &Package, a: &mapkit_core::Asset) -> u64 {
         .map_or(0, |texture| p.asset_presentation_cost(&texture.id).unwrap())
 }
 pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
-    decorate_document(&p.document, &p.files, data)
+    let mut data = decorate_document(&p.document, &p.files, data)?;
+    if p.document.recipe_version >= 6 {
+        let chunk = data.get("chunk").unwrap().to::<VarDictionary>();
+        let presentation = chunk.get("presentation").unwrap().to::<VarDictionary>();
+        let assets = presentation.get("assets").unwrap().to::<VarDictionary>();
+        let objects = chunk.get("objects").unwrap().to::<Array<VarDictionary>>();
+        let mut bytes = presentation
+            .get("road_materials")
+            .unwrap()
+            .to::<PackedStringArray>()
+            .len() as u64
+            * 256
+            + presentation
+                .get("road_styles")
+                .unwrap()
+                .to::<VarDictionary>()
+                .len() as u64
+                * 4096;
+        for asset in &p.document.assets {
+            if !assets.contains_key(asset.id.as_str()) {
+                continue;
+            }
+            bytes += asset_cost(p, asset);
+            bytes += objects
+                .iter_shared()
+                .filter(|o| o.get("asset_id").unwrap().to::<GString>().to_string() == asset.id)
+                .count() as u64
+                * p.asset_instance_cost(&asset.id).unwrap();
+        }
+        if let Some(value) = data.get("generated_counts") {
+            let mut counts = value.to::<VarDictionary>();
+            counts.set("presentation_bytes", bytes as i64);
+            data.set("generated_counts", &counts);
+        }
+    }
+    Ok(data)
 }
 pub fn decorate_document(
     document: &mapkit_core::MapDocument,
@@ -74,8 +127,19 @@ pub fn decorate_document(
         .ok_or_else(|| mapkit_core::error("E_STATE", "generated chunk required"))?;
     let objects: Array<VarDictionary> = chunk
         .get("objects")
-        .and_then(|v| v.try_to().ok())
+        .and_then(|v| {
+            if let Ok(typed) = v.try_to::<Array<VarDictionary>>() {
+                return Some(typed);
+            }
+            let array = v.try_to::<Array<Variant>>().ok()?;
+            let mut typed = Array::<VarDictionary>::new();
+            for item in array.iter_shared() {
+                typed.push(&item.try_to::<VarDictionary>().ok()?);
+            }
+            Some(typed)
+        })
         .ok_or_else(|| mapkit_core::error("E_STATE", "generated objects required"))?;
+    chunk.set("objects", &objects); // Normalize JSON arrays for the typed packed/display adapter.
     let mut required = BTreeSet::new();
     for o in objects.iter_shared() {
         let id = o.get("asset_id").unwrap().to::<GString>().to_string();
@@ -97,7 +161,8 @@ pub fn decorate_document(
             ids.insert(id.to_string());
         }
     } else if let Some(value) = chunk.get("triangles") {
-        for t in value.to::<Array<VarDictionary>>().iter_shared() {
+        for value in value.to::<Array<Variant>>().iter_shared() {
+            let t = value.to::<VarDictionary>();
             ids.insert(t.get("object_id").unwrap().to::<GString>().to_string());
         }
     }
@@ -161,10 +226,10 @@ pub fn decorate_document(
         assets.set(id.as_str(),&vdict!{"path"=>a.path.as_str(),"bytes"=>&PackedByteArray::from(files[&a.path].as_slice()),
             "material_json"=>serde_json::to_string(&a.material).unwrap().as_str()});
     }
-    chunk.set(
-        "presentation",
-        &vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials},
-    );
+    let mut presentation =
+        vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};
+    crate::road_style::decorate(document, &chunk, &mut presentation);
+    chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);
     Ok(data)
 }

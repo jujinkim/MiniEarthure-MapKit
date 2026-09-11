@@ -173,6 +173,7 @@ pub fn fixtures() -> Vec<Fixture> {
             kind: RoadKind::Bridge,
             clearance_cm: None,
             sidewalk_cm: None,
+            markings: None,
         }];
         out.push(Fixture {
             name: format!("oblique-bridge-v{recipe}"),

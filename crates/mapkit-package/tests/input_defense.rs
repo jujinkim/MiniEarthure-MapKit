@@ -11,7 +11,9 @@ fn document() -> MapDocument {
 }
 fn asset_doc(path: &str) -> MapDocument {
     let mut d = document();
-    d.assets.push(Asset { convex_collision: vec![], material: None,
+    d.assets.push(Asset {
+        convex_collision: vec![],
+        material: None,
         id: "custom".into(),
         path: path.into(),
         attribution: Attribution {
@@ -424,4 +426,52 @@ fn heightmap_decode_checks_parameters_and_complete_image() {
         decode_heightmap(&h, 200, &image).unwrap_err().code,
         "E_HEIGHTMAP"
     );
+}
+
+#[test]
+fn bounded_asset_prefix_planning_retains_decode_and_malformed_input_gates() {
+    for (path, data, ceiling) in [
+        ("assets/a.glb", glb(glb_json(), bin()), 32 * 1024 * 1024),
+        ("assets/a.png", png(), 96 * 1024 * 1024),
+    ] {
+        let package = pack_bytes(
+            asset_doc(path),
+            BTreeMap::from([(path.into(), data.clone())]),
+        )
+        .unwrap();
+        let cost = inspect_read_cost(&package).unwrap();
+        assert!(cost.validation_peak_bytes < ceiling);
+        assert!(read_bytes_with_budget(&package, cost.validation_peak_bytes).is_ok());
+        assert_eq!(
+            read_bytes_with_budget(&package, cost.validation_peak_bytes - 1)
+                .err()
+                .unwrap()
+                .code,
+            "E_MEMORY_BUDGET"
+        );
+        let mut rows = entries(&package);
+        rows.iter_mut().find(|(p, _)| p == path).unwrap().1[0] ^= 1;
+        let malformed = zip_entries(rows);
+        assert!(inspect_read_cost(&malformed).unwrap().validation_peak_bytes >= 256 * 1024 * 1024);
+    }
+    let path = "assets/a.glb";
+    let package = pack_bytes(
+        asset_doc(path),
+        BTreeMap::from([(path.into(), glb(glb_json(), bin()))]),
+    )
+    .unwrap();
+    for json in [
+        b"{\"images\":[],\"images\":[{}]}".to_vec(),
+        vec![b' '; 16 * 1024 + 4],
+        b"{\"images\":null}".to_vec(),
+    ] {
+        let mut rows = entries(&package);
+        rows.iter_mut().find(|(p, _)| p == path).unwrap().1 = glb_raw(json, bin());
+        assert!(
+            inspect_read_cost(&zip_entries(rows))
+                .unwrap()
+                .validation_peak_bytes
+                >= 256 * 1024 * 1024
+        );
+    }
 }

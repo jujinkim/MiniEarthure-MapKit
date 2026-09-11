@@ -24,7 +24,9 @@ fn surface_count(c: &GeneratedChunk, p: Point, height: i64) -> usize {
             if !t.spawnable {
                 return false;
             }
-            let one = GeneratedChunk { asset_convexes: vec![], building_prisms: vec![],
+            let one = GeneratedChunk {
+                asset_convexes: vec![],
+                building_prisms: vec![],
                 format_version: 6,
                 cell: c.cell,
                 triangles: vec![(*t).clone()],
@@ -202,6 +204,7 @@ fn explicit_ground_portal_connects_and_rejects_an_incompatible_apron() {
         kind: RoadKind::Ground,
         clearance_cm: None,
         sidewalk_cm: None,
+        markings: None,
     });
     assert_eq!(
         d.connected_roads("underpass-from").unwrap(),

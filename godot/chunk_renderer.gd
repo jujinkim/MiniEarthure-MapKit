@@ -4,6 +4,7 @@ const ASSETS := preload("./asset_library.gd")
 const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
+const URBAN_SURFACE := preload("./urban_surface.gdshader")
 const PLAN := preload("./render_memory.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 
@@ -78,11 +79,13 @@ static func advance(job: Dictionary) -> bool:
 			surface.generate_normals()
 			mesh.mesh = surface.commit()
 		if not job.materials.has(key):
-			var material := ASSETS.material(key.substr(6), sources, job.asset_materials) if key.begins_with("asset:") else StandardMaterial3D.new()
+			if presentation.get("urban_surfaces", false) and not job.has("urban_shader"):
+				job.urban_shader = URBAN_SURFACE.duplicate()
+			var material: Material = ASSETS.material(key.substr(6), sources, job.asset_materials) if key.begins_with("asset:") else surface_material(key, presentation, job.get("urban_shader"))
 			if material == null:
 				mesh.free()
 				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
-			if not key.begins_with("asset:"):
+			if material is StandardMaterial3D and not key.begins_with("asset:"):
 				material.albedo_color = material_color(key)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -154,6 +157,7 @@ static func track_resources(job: Dictionary, node: Node) -> void:
 static func track_material(job: Dictionary, material: Material) -> void:
 	if material == null: return
 	job.lease.track(material)
+	if material is ShaderMaterial: job.lease.track(material.shader)
 	if material is BaseMaterial3D:
 		for slot in BaseMaterial3D.TEXTURE_MAX:
 			var texture: Texture2D = material.get_texture(slot)
@@ -166,6 +170,7 @@ static func dispose(job: Dictionary) -> void:
 	job.asset_materials = {}
 	job.materials = {}
 	job.chunk = {}
+	job.erase("urban_shader")
 	if job.get("lease") != null:
 		job.lease.seal()
 		job.lease = null
@@ -200,3 +205,16 @@ static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 	while not advance(job):
 		pass
 	return job.root
+
+static func surface_material(key: String, presentation: Dictionary, shader: Shader) -> Material:
+	if not presentation.get("urban_surfaces", false) or not (key.begins_with("road:") or key in ["asphalt", "concrete"]): return StandardMaterial3D.new()
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	var style: Dictionary = presentation.get("road_styles", {}).get(key, {})
+	var concrete := key == "concrete" or int(style.get("surface", 0)) == 1
+	material.set_shader_parameter("base_color", COLORS["concrete" if concrete else "asphalt"])
+	material.set_shader_parameter("paving", concrete)
+	material.set_shader_parameter("marked", not style.is_empty())
+	for name: String in style:
+		if name != "surface": material.set_shader_parameter(name, style[name])
+	return material

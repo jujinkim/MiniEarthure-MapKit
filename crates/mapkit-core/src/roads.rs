@@ -98,7 +98,7 @@ pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
     }
     Ok(())
 }
-fn tick(work: &mut usize, n: usize) -> Result<()> {
+pub(crate) fn tick(work: &mut usize, n: usize) -> Result<()> {
     *work = work.saturating_add(n);
     if *work > MAX_WORK {
         Err(error("E_BUDGET", "recipe 2 subdivision work exceeded"))
@@ -142,10 +142,14 @@ pub(crate) fn split(poly: &[Vertex], plane: impl Fn(Vertex) -> i128) -> (Poly, P
     }
     (inside, outside)
 }
-fn valid(poly: &[Vertex]) -> bool {
+pub(crate) fn valid(poly: &[Vertex]) -> bool {
     poly.len() >= 3 && (1..poly.len() - 1).any(|i| orient(poly[0], poly[i], poly[i + 1]) != 0)
 }
-fn partition(poly: &[Vertex], clip: &[Vertex; 3], work: &mut usize) -> Result<(Poly, Vec<Poly>)> {
+pub(crate) fn partition(
+    poly: &[Vertex],
+    clip: &[Vertex; 3],
+    work: &mut usize,
+) -> Result<(Poly, Vec<Poly>)> {
     tick(work, poly.len() * 3)?;
     let sign = orient(clip[0], clip[1], clip[2]).signum();
     if sign == 0 {
@@ -166,7 +170,13 @@ fn partition(poly: &[Vertex], clip: &[Vertex; 3], work: &mut usize) -> Result<(P
     }
     Ok((remaining, outside))
 }
-fn emit(b: &mut Builder, poly: &[Vertex], surface: Surface, id: &str, spawn: bool) -> Result<()> {
+pub(crate) fn emit(
+    b: &mut Builder,
+    poly: &[Vertex],
+    surface: Surface,
+    id: &str,
+    spawn: bool,
+) -> Result<()> {
     for i in 1..poly.len().saturating_sub(1) {
         b.triangle([poly[0], poly[i], poly[i + 1]], surface, id, spawn)?;
     }
@@ -216,6 +226,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
     let mut relevant = BTreeSet::new();
     let mut local_segments = 0;
     let margin = influence_margin(d);
+    let width = |r: &Road, i: usize| r.widths_cm[i] as f64;
     for r in &d.roads {
         for (i, s) in r.points.windows(2).enumerate() {
             if hit(s, bounds, margin) {
@@ -255,7 +266,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
     for arms in groups.values() {
         let radius = arms
             .iter()
-            .map(|a| a.road.widths_cm[a.segment] as f64 / 2.0)
+            .map(|a| width(a.road, a.segment) / 2.0)
             .fold(0.0, f64::max);
         let mut ring = vec![];
         for arm in arms {
@@ -270,7 +281,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
             let center: Vertex = std::array::from_fn(|i| {
                 arm.point[i] + libm::round((arm.other[i] - arm.point[i]) as f64 * t) as i64
             });
-            let half = arm.road.widths_cm[arm.segment] as f64 / 2.0;
+            let half = width(arm.road, arm.segment) / 2.0;
             let offset = [
                 libm::round(-dy / len * half) as i64,
                 libm::round(dx / len * half) as i64,
@@ -386,6 +397,7 @@ pub(crate) fn generate(
     b: &mut Builder,
 ) -> Result<()> {
     let (patches, walls) = plan(d, bounds)?;
+    let paving = crate::urban::areas(d, bounds)?;
     let height =
         |x: usize, y: usize| grid.map_or(d.terrain_base_cm, |g| g.heights_cm[y * side + x]);
     let mut work = 0;
@@ -419,10 +431,15 @@ pub(crate) fn generate(
                 let mut remaining = vec![terrain.to_vec()];
                 for patch in &patches {
                     tick(&mut work, 1)?;
-                    if !matches!(
+                    let coincident = d.recipe_version >= 6
+                        && matches!(patch.road.kind, RoadKind::Elevated | RoadKind::Bridge)
+                        && orient(patch.v[0], patch.v[1], patch.v[2]) != 0
+                        && patch.v.iter().all(|p| floor_plane(&terrain, *p) == 0);
+                    if (!matches!(
                         patch.road.kind,
                         RoadKind::Ground | RoadKind::Underpass | RoadKind::Tunnel
-                    ) || !hit(&patch.v, &tb, 0)
+                    ) && !coincident)
+                        || !hit(&patch.v, &tb, 0)
                     {
                         continue;
                     }
@@ -456,7 +473,7 @@ pub(crate) fn generate(
                                         next.push(above);
                                     }
                                 }
-                                _ => unreachable!(),
+                                RoadKind::Elevated | RoadKind::Bridge => {} // exact coincident terrain only
                             }
                         }
                         if next.len() > MAX_FRAGMENTS || vertices > MAX_VERTICES {
@@ -466,7 +483,7 @@ pub(crate) fn generate(
                     remaining = next;
                 }
                 for poly in remaining {
-                    emit(b, &poly, Surface::Grass, "terrain", true)?;
+                    crate::urban::paint(b, &poly, &paving, &terrain, &mut work)?;
                 }
             }
         }
@@ -562,6 +579,111 @@ pub(crate) fn generate(
                         }
                     }
                 }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Recipe 6 widened graph aprons cover corners; only restored ground receives
+/// sidewalk tops. Road carriageways, independent decks and portals are untouched.
+pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
+    let expanded = Bounds {
+        min: b.bounds.min.map(|v| v - 1000),
+        max: b.bounds.max.map(|v| v + 1000),
+    };
+    let (original, _) = plan(d, &expanded)?;
+    let mut patches = vec![];
+    for patch in original {
+        let width = crate::placement::sidewalk_width(d, patch.road) as i64;
+        if width == 0 {
+            continue;
+        }
+        let diagonal = libm::round(width as f64 / libm::sqrt(2.0)) as i64;
+        let offsets = [
+            [width, 0],
+            [diagonal, diagonal],
+            [0, width],
+            [-diagonal, diagonal],
+            [-width, 0],
+            [-diagonal, -diagonal],
+            [0, -width],
+            [diagonal, -diagonal],
+        ];
+        let ring = hull(
+            patch
+                .v
+                .iter()
+                .flat_map(|p| offsets.map(|o| [p[0] + o[0], p[1], p[2] + o[1]]))
+                .collect(),
+        );
+        for i in 1..ring.len().saturating_sub(1) {
+            patches.push(Patch {
+                v: [ring[0], ring[i], ring[i + 1]],
+                ..patch.clone()
+            });
+        }
+    }
+    if patches.is_empty() {
+        return Ok(());
+    }
+    let exclusions: Vec<_> = d
+        .buildings
+        .iter()
+        .flat_map(|b| std::iter::once(&b.footprint).chain(&b.entrances))
+        .collect();
+    let exclusion_index = crate::bounds_index::BoundsIndex::new(
+        &exclusions
+            .iter()
+            .map(|p| crate::bounds_index::bounds(p))
+            .collect::<Vec<_>>(),
+    );
+    let ground: Vec<_> = b
+        .chunk
+        .triangles
+        .iter()
+        .filter(|t| t.object_id == "terrain" || d.surface_areas.iter().any(|a| a.id == t.object_id))
+        .cloned()
+        .collect();
+    let mut work = 0;
+    for t in ground {
+        let area = crate::bounds_index::bounds(&t.vertices.map(xy));
+        let nearby = exclusion_index.query(&area, &mut work)?;
+        let mut remaining = vec![t.vertices.to_vec()];
+        for patch in &patches {
+            tick(&mut work, 1)?;
+            if !hit(&patch.v, &area, 0) {
+                continue;
+            }
+            let mut next = vec![];
+            for poly in remaining {
+                let (inside, outside) = partition(&poly, &patch.v, &mut work)?;
+                next.extend(outside);
+                if valid(&inside) {
+                    let mut fitted = vec![inside];
+                    for &i in &nearby {
+                        fitted = crate::urban::subtract(fitted, exclusions[i], &mut work)?;
+                    }
+                    let id = format!("{}:sidewalk", patch.road.id);
+                    for p in fitted {
+                        let bottom: Vec<_> = p.iter().map(|p| on_plane(&t.vertices, *p)).collect();
+                        let top: Vec<_> = bottom.iter().map(|p| [p[0], p[1] + 12, p[2]]).collect();
+                        emit(b, &top, Surface::Concrete, &id, true)?;
+                        for i in 0..top.len() {
+                            let j = (i + 1) % top.len();
+                            b.quad(
+                                [bottom[i], bottom[j], top[j], top[i]],
+                                Surface::Concrete,
+                                &id,
+                                false,
+                            )?;
+                        }
+                    }
+                }
+            }
+            remaining = next;
+            if remaining.len() > MAX_FRAGMENTS {
+                return Err(error("E_BUDGET", "sidewalk fragments exceeded"));
             }
         }
     }

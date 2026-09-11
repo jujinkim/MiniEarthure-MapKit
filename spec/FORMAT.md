@@ -739,3 +739,57 @@ frozen generation vectors. World content identity includes authored holes and
 recipe; old packages/files are never silently rewritten or upgraded. The public
 synthetic `examples/courtyard` and core `courtyard`/package contract tests cover
 this extension. Native OS parity and representative performance remain separate.
+
+
+## Recipe 6: urban ground and road presentation
+
+Explicit recipe 6 adds `surface_areas` (default empty, omitted when empty):
+`{id, polygon: [[x_cm,y_cm],...], surface}`. Polygons are simple, inside map bounds,
+with disjoint interiors; touching boundaries are allowed. IDs share the document
+namespace. Clipping uses the same integer terrain subdivisions as roads and keeps
+the sampled terrain height, including sloped and partially clipped cells. Areas
+paint the existing ground; they create no extra floating plane. Ground roads keep
+priority over paint. Explicit structural roads below terrain remain covered.
+
+Roads optionally carry `markings: {lanes, center_line, edge_lines, crosswalk_start,
+crosswalk_end}` with 1–8 lanes and boolean switches. Omission disables markings.
+These fields require recipe 6. The common renderer applies asphalt grain, concrete
+paving seams, lane/edge lines, crosswalks and stop lines to actual road meshes using
+segment coordinates and graph junction clearance. There is no elevated decal or
+physics mesh. Marking edits change source/world identity but not generated collision
+hashes. Recipe 6 keeps package version 1 and generated/archive version 6.
+
+For elevated/bridge road triangles, terrain is removed only where a nonzero-area
+road triangle is exactly coplanar with that terrain triangle. Authored clearance
+or burial of even one centimetre is preserved. A crossing line alone is not an
+area overlap. Ground-road terrain following and tunnel/underpass portal rules
+remain unchanged. Recipe 1–5 retain their generation and serialization behavior.
+
+Recipe-6 sidewalks buffer connected ground-road aprons and follow sampled terrain
+at +12 cm. They fill bends and junction corners, exclude carriageways and building
+footprints/entrances, and remain under street furniture. Dense manual placement
+validation uses a deterministic bounds hierarchy with the original exact clearance
+predicates and unchanged work limit. No collision proxy is discarded for capacity.
+
+Native `with_presentation` supplies per-face `road_materials`, a `road_styles`
+dictionary, and `urban_surfaces`. Source-derived `presentation_bytes` reserves
+construction before work; local `generated_counts.presentation_bytes` can refine
+this bound after successful materialization. It includes actual required model
+imports, owner instances, per-face strings and style records. It must never exceed
+the admitted bound. This optional adapter field is outside package/archive formats.
+The renderer owns one shader instance per cell; retaining a shader extends that
+cell's display lease, while a neighboring cell does not prevent retirement.
+
+Package read planning inspects bounded PNG/GLB prefixes within the existing 8 MiB
+pre-index allowance (at most 16 KiB JSON). Small, fully parsed GLB headers without
+images do not reserve an image decoder. PNG planning retains the existing 64 MiB
+decoder workspace limit plus worst-case RGBA16 output and 8 MiB grid/work allowance.
+Unknown, malformed, large or embedded-image GLB headers and WebP retain the
+256 MiB allowance. Complete decoding, duplicate-key checks, size/work limits,
+CRC/inventory checks and pre-allocation memory rejection are still mandatory.
+These are conservative planning amounts, not RSS or GPU measurements.
+
+Validation: Rust `urban`, bounds-index and input-defense regressions; native
+`verify_godot_layout.py --probe urban --probe assets --probe binding`. The public
+urban probe compares packed/JSON decoration, physics hashes and independent
+shader retirement, including an externally retained shader.

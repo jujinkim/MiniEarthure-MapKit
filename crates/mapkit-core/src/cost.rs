@@ -63,8 +63,10 @@ pub(crate) fn estimate_validated(
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
         triangles: 0,
-        generation_scratch_bytes: (if d.recipe_version >= 2 && !d.roads.is_empty() {
-            crate::roads::SCRATCH_BYTES
+        generation_scratch_bytes: (if d.recipe_version >= 2
+            && (!d.roads.is_empty() || !d.surface_areas.is_empty())
+        {
+            crate::roads::SCRATCH_BYTES * if d.recipe_version >= 6 { 2 } else { 1 }
         } else {
             0
         }) + if d.recipe_version >= 3 {
@@ -90,6 +92,12 @@ pub(crate) fn estimate_validated(
     let partial = (area.max[0] - area.min[0]) < d.cell_size_cm as i64
         || (area.max[1] - area.min[1]) < d.cell_size_cm as i64;
     add(nx * ny * 2 * if partial { 5 } else { 1 }, 7);
+    for paint in &d.surface_areas {
+        let shape = bounds(paint.polygon.iter().copied(), 0);
+        if clip_factor(&shape, &area) != 0 {
+            add(nx * ny * (paint.polygon.len() as u64) * 24, paint.id.len());
+        }
+    }
     let road_margin = crate::roads::influence_margin(d);
     for r in &d.roads {
         for (index, points) in r.points.windows(2).enumerate() {
