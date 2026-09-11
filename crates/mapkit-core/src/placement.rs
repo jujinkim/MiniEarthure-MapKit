@@ -225,7 +225,7 @@ pub(crate) fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
         })
         .collect()
 }
-fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
+pub(crate) fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
     if p.asset_id == "builtin:tree" {
         return rectangle(
             [p.position[0] - TREE_RADIUS, p.position[2] - TREE_RADIUS],

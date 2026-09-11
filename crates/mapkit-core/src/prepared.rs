@@ -8,6 +8,8 @@ pub struct PreparedMap {
     document: MapDocument,
     #[serde(skip)]
     costs: RwLock<BTreeMap<(Cell, usize), GenerationCost>>,
+    #[serde(skip)]
+    region: Option<CellRegion>,
 }
 
 impl PreparedMap {
@@ -17,13 +19,24 @@ impl PreparedMap {
         Ok(Self {
             document,
             costs: RwLock::new(BTreeMap::new()),
+            region: None,
         })
+    }
+    pub fn new_region(mut document: MapDocument, region: CellRegion) -> Result<Self> {
+        document = document.into_indexed_source()?;
+        region.validate(&document)?;
+        document.normalize();
+        document.validate_source()?;
+        Ok(Self { document, costs: RwLock::new(BTreeMap::new()), region: Some(region) })
     }
     /// Editing must create a new validated snapshot; no mutable source alias exists.
     pub fn to_document(&self) -> MapDocument {
         self.document.clone()
     }
     pub fn estimate(&self, cell: Cell, max_triangles: usize) -> Result<GenerationCost> {
+        if self.region.is_some_and(|r| !r.contains(cell)) {
+            return Err(error("E_CELL", "cell outside prepared source region"));
+        }
         self.document.cell_bounds(cell)?;
         let limit = max_triangles.min(2_000_000);
         if let Some(cost) = self.costs.read().unwrap().get(&(cell, limit)) {

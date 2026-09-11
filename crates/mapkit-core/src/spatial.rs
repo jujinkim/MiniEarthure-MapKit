@@ -3,6 +3,13 @@ use super::*;
 
 impl MapDocument {
     pub(crate) fn cell_dimensions(&self) -> Result<[i64; 2]> {
+        let dimensions = self.source_dimensions()?;
+        if !self.indexed_topology && dimensions[0] * dimensions[1] > 16_384 {
+            return Err(error("E_LIMIT", "too many map cells"));
+        }
+        Ok(dimensions)
+    }
+    fn source_dimensions(&self) -> Result<[i64; 2]> {
         let size = i64::from(self.cell_size_cm);
         if !(200..=102_400).contains(&size)
             || size % 200 != 0
@@ -17,15 +24,20 @@ impl MapDocument {
         let dimensions = std::array::from_fn::<_, 2, _>(|a| {
             (self.bounds.max[a] - self.bounds.min[a] + size - 1) / size
         });
-        if dimensions[0] * dimensions[1] > 16_384 {
-            return Err(error("E_LIMIT", "too many map cells"));
-        }
         Ok(dimensions)
+    }
+    /// Constant-space topology query; this never allocates one record per cell.
+    pub fn cell_count(&self) -> Result<u64> {
+        let [x, y] = self.source_dimensions()?;
+        Ok((x * y) as u64)
     }
     pub fn cells(&self) -> Vec<Cell> {
         let Ok([nx, ny]) = self.cell_dimensions() else {
             return vec![];
         };
+        if nx * ny > 16_384 {
+            return vec![];
+        }
         (0..ny as i32)
             .flat_map(|y| (0..nx as i32).map(move |x| Cell { x, y }))
             .collect()

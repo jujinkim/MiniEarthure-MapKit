@@ -85,7 +85,7 @@ func run() -> void:
             else:
                 for index in indices: expanded.append(rendered[index])
             check(expanded == faces, "common renderer mesh exactly matches collision faces")
-    check(DATA.scene_vertex({"triangles": [{"vertices": [[-800, -400, 1600]]}]}, 0, 0) == Vector3(-1, -0.5, -2), "negative x/height and north axis exact scale")
+    check(DATA.scene_vertex({"triangles": [{"vertices": [[-800, -400, 1600]]}]}, 0, 0) == Vector3(-8, -4, -16), "negative x/height and north axis exact metre scale")
     await physics_frame
     await physics_frame
     # Every triangle centroid, including partial boundary fragments, must be

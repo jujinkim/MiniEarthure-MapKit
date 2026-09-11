@@ -39,9 +39,15 @@ This repository is a working development foundation, not a completed game cutove
 - Common Godot renderer uses simple material colors and basic tree canopies;
   streaming attachment budgeting, LOD/material libraries and incremental preview
   invalidation are not complete. No claim of 4 ms attachment is made.
-- Package I/O currently holds complete payloads in memory and validates terrain
-  seams up front. Lazy I/O, structural inspection under 3 s and peak memory
-  accounting need implementation before game admission uses this adapter.
+- `.memap` v1 still reads complete source/payloads and validates seams up front.
+  Opt-in L01 `.mkregions` now provides an index-only open, independently verified
+  bounded region reads, shared on-disk payloads and a native generation bridge.
+  See `spec/REGIONAL_SOURCE.md`: complete dependency audit and application
+  scheduling/admission/region-source leases remain distinct from partial loading.
+  Client/Host/Editor session integration is still implementation work. Distant
+  road/rule dependencies can retain extra source, and conservative decoder
+  reservations can exceed those of the legacy reader; RSS/GPU savings and a
+  structural-inspection latency guarantee are not established.
 - Native Windows/Android hash parity, native Windows exports, representative
   10x10 km mixed-use 50 MB benchmark, and real hardware driving are unverified.
 - Game transport, collision admission, session memory/cache policy and release

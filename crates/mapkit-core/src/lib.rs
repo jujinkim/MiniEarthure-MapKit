@@ -231,6 +231,10 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    /// An explicit in-memory source topology capability, never accepted from JSON.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub(crate) indexed_topology: bool,
     #[schemars(length(min = 1, max = 128))]
     pub map_id: String,
     pub revision: u32,
@@ -380,6 +384,17 @@ impl MapDocument {
         });
     }
     pub fn validate(&self) -> Result<()> {
+        self.validate_inner(false)
+    }
+    /// Indexed authoring source: bounds describe a world, not a resident cell array.
+    /// All original geometry, object, vertex and work limits still apply.
+    pub fn validate_source(&self) -> Result<()> {
+        if !self.indexed_topology {
+            return self.clone().into_indexed_source().map(|_| ());
+        }
+        self.validate_inner(true)
+    }
+    fn validate_inner(&self, source_topology: bool) -> Result<()> {
         let fail = |m: &str| Err(error("E_GEOMETRY", m));
         if !(1..=RECIPE_VERSION).contains(&self.recipe_version) {
             return Err(error("E_VERSION", "unsupported recipe"));
@@ -429,6 +444,9 @@ impl MapDocument {
             return fail("bounds or height out of range");
         }
         self.cell_dimensions()?;
+        if !source_topology && self.cell_count()? > 16_384 {
+            return Err(error("E_LIMIT", "too many map cells"));
+        }
         let count = self.surface_areas.len()
             + self.nodes.len()
             + self.roads.len()
@@ -642,6 +660,11 @@ impl MapDocument {
         }
         placement::validate(self)?;
         Ok(())
+    }
+    pub fn into_indexed_source(mut self) -> Result<Self> {
+        self.indexed_topology = true;
+        self.validate_source()?;
+        Ok(self)
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
@@ -870,6 +893,8 @@ pub struct GenerationInput<'a> {
     pub max_triangles: usize,
 }
 mod prepared;
+mod region;
+pub use region::{region_source, CellRegion};
 mod spatial;
 pub use prepared::PreparedMap;
 mod cost;

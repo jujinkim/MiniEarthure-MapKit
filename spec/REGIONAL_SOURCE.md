@@ -1,0 +1,175 @@
+# L01 regional source storage — decision, 2026-09-11
+
+MapKit owns this opt-in, independently indexed source format. It is a separate
+`.mkregions` artifact, magic `MKREGN01`; it is not a replacement interpretation of
+`.memap` v1. Existing packages, recipes 1–6, generated-v6 bytes, recovery originals
+and ENet contracts remain intact. No format is upgraded on read.
+
+## Decision before implementation
+
+Use a bounded front index and independently compressed, SHA-256-bound records.
+Storage regions group an explicit integer number of execution cells. Eight or
+sixteen 16m cells give the 128m/256m comparison candidates; neither is a mandatory
+world grid or a performance guarantee. Coordinates, cell origin, object IDs and
+procedural seeds remain world-global. The source grid may cover more than 16,384
+cells; a prepared execution region remains bounded. Legacy document validation
+and its 16,384-cell limit are retained. The 32MiB authoring document, 200,000 input
+objects, 512MiB artifact, 1GiB expanded data and execution budgets are not raised.
+
+The first producer converts a bounded authored source into independently
+validated source snapshots. It retains dependencies conservatively; spatial
+partitioning must not cut connected road arms, implicit sidewalk dependencies,
+vegetation competitors, repetitions, collision proxies or terrain edge samples.
+Shared payloads are stored once, with per-region references. The authoring/export
+step may read the whole source. Opening the artifact reads only its index;
+loading one region reads that region's source and referenced payloads. No reader
+implicitly enumerates the world or inflates unrelated regions.
+
+Independent region verification means index/envelope verification followed by
+complete validation of each requested region and its referenced assets. It does
+not mean that unread bytes have been validated. An explicit whole-artifact audit
+is separate. Hashes identify content, not a trusted publisher. A failed,
+cancelled or stale candidate must never replace a caller's live source/collision.
+Readers return immutable, separately owned snapshots and retain no implicit
+region cache. Callers budget all simultaneously held snapshots and worker
+lifetimes; cancellation is checked between bounded I/O/decode operations and
+before returning. A running decoder/generator is joined before its reservation
+can retire. Existing renderer retirement is unchanged.
+
+The index binds topology, region source hashes, exact offsets/lengths, payload
+references and total length. Region/cache identity includes the index digest,
+region coordinate, source digest and generator contract. Overlap, gaps, duplicate
+records, trailing bytes, unknown fields, oversized allocations, decompression
+tails and hash/length mismatches reject. Asset paths remain inert portable names.
+Existing asset and heightmap validators are reused.
+
+## Alternatives and integration boundary
+
+- Increasing cell size conflates storage with physics/render work and can worsen
+  dense-cell cost. Increasing memory/document/cell constants is not selected.
+- One compressed document cannot supply bounded partial reads. An ordinary ZIP
+  central directory alone does not provide spatial source dependencies.
+- Independent bounded records permit seeks and eventual range transport without
+  requiring network requests per region now. Per-region asset duplication is
+  avoided on disk; independently held snapshots still count their own memory.
+- A generated-only cache loses editable source and ties storage to generated
+  versions. Generated archives remain disposable, separately keyed accelerators.
+
+Whole-map transport versus region requests requires consumer implementation and
+measurement. This format does not silently extend the protocol-8 game offer or
+make the existing Client/Host/Editor accept it. L01 delivery must distinguish the
+MapKit source/adapter implementation from consumer adoption; L02 representative
+area/density support and final platform acceptance are not inferred from it.
+
+This decision is authorized by the current L01 implementation request; it is not
+a claim of completed functional cutover.
+
+## Implemented envelope and verification levels
+
+The 48-byte header is eight-byte magic, little-endian u64 index length and 32
+raw SHA-256 bytes of canonical index JSON. The index is at most 4MiB. Record
+offsets are relative to the payload start; each is a complete raw-DEFLATE stream.
+Spans are contiguous and ordered, without gaps, overlap, prefix or tail. Each
+record binds exact compressed and expanded lengths and SHA-256 of expanded bytes.
+The file's captured length is rechecked before each record. Reads use the original
+open handle and independently verify content; a changed path cannot redirect it.
+
+Index fields are defined by `indexed::Index` with unknown fields and duplicate
+JSON keys rejected. `world` is a metadata-only MapDocument, `side_cells` is 1–128,
+`regions` are row-major exact non-overlapping coverage of the global execution
+grid, and each `cells.min/end` is an inclusive/exclusive cell range. There are at
+most 8192 storage regions, 8191 shared payloads and 16384 total records. Sources
+remain at most 32MiB each; other records at most 128MiB. All source duplication is
+included in the existing 1GiB expanded and 512MiB compressed ceilings.
+
+The original canonical authoring document is a separate record. All original
+declared assets/terrain payloads, including unused assets, are stored once and
+preserved by `unpack-regions`; region snapshots reference only their dependencies.
+No generated geometry is bundled. Original world content identity is retained;
+the index digest and region identity distinguish the new storage/source snapshot.
+The embedded regional manifest is labeled `mkregions-source`, never `memap`.
+Its `package_sha256/package_bytes` describe region identity/read bytes, not a ZIP
+transport package. Existing generated archives additionally retain their ordinary
+world/recipe/generated/cell binding; an application's storage cache must bind the
+region/index identity when caching regional source.
+
+1. `open` verifies the index, topology, spans and captured file length only.
+2. `load_region` verifies that source and all referenced payloads, complete source
+   geometry/IDs/rules/assets, and terrain edges touching the execution region.
+   It does not read or certify unrelated source or prove the global dependency
+   derivation. A changed but individually valid regional document may require the
+   complete audit to detect its disagreement with the authored whole.
+3. `audit` reads the bounded original source and all assets, checks world identity
+   and every regional source against `region_source(original, cells)`. **An
+   untrusted artifact needs this complete audit before consumer installation or
+   cross-region game admission.** Persist that result by the index digest and
+   reverify every region record on access; the digest is not publisher identity.
+   `unpack_source` performs this audit and only creates a new destination.
+
+The reader has no implicit cache. Every returned `RegionSnapshot` is independent;
+its prepared generator rejects cells outside `cells`. Metadata-only world queries
+are constant-space. Ordinary deserialization cannot enable source topology: the
+in-memory capability comes from explicit `into_indexed_source`/`new_region`, is
+not serialized, and never bypasses legacy `validate` or `cells` bounds.
+
+## Dependency closure and current limits
+
+Global road records and explicit graph nodes are retained so junction arms and
+width influence remain complete. Zones and repetitions remain global. With
+explicit ground-road sidewalk widths and no repetitions, buildings/entrances
+and manual proxies are spatially culled against the region plus maximum vegetation
+competitor reach, canopy and clearance. All other recipes/cases retain complete
+building/manual context. Surface polygons are filtered by their bounds. Heightmap
+descriptors retain the immediate neighbor ring; validation checks restored shared
+edges that touch the execution region, including implicit-flat neighbors.
+Assets retain material-texture closure; display bytes are validated with existing
+asset rules and are never treated as executable paths.
+
+The first exporter still accepts one bounded authoring document. Sharded authoring
+above 32MiB/200,000 objects and partitioning long global road/rule dependencies
+are **not implemented**. Large area does not imply arbitrary density. These limits
+may cause an explicit budget/format rejection; the writer never drops geometry,
+raises budgets or silently freezes derived sidewalk widths to make a map fit.
+
+`region_cost` includes the live index, source and payload vectors, structured
+parsing, the bounded estimate cache and sequential decoder workspace. It uses a
+conservative 256MiB decoder allowance whenever payloads are present; unlike the
+legacy reader it does not inspect asset prefixes to refine that allowance.
+Consequently a smaller retained source can have a higher validation reservation.
+Independent concurrently held snapshots each require their own reservation.
+Reported bytes are logical planning allowances, not measured RSS or GPU usage.
+Generation/output/physics/presentation reservations are additional.
+
+Cancellation is observed every 64KiB input block, every 8KiB inflate step, between
+validation stages, and before returning. A native asset decoder or geometry
+validator is not preempted mid-call. `ReadEpoch`/`ReadTicket` and the Godot request
+generation reject cancelled and late candidates; applications must check again
+at serialized commit and join before releasing the worker's peak reservation.
+Committed snapshots do not become unusable when another request starts.
+
+## Validation and handoff
+
+Standalone Rust tests include legacy frozen vectors, 10km/16m topology with 6241
+128m storage regions, exact read spans, pre-read budgets, malformed envelopes,
+duplicate JSON, decompression tails, mid-read cancellation, late results,
+heightmap corruption, shared payloads, recovery/no-overwrite, and source/geometry/
+occupied-solid equivalence across public fixtures. The native `regional` probe
+loads on a worker, joins/cancels/retries, verifies packed/cache identity and actual
+bridge collision support while retaining the current collider.
+
+For the unchanged public v6 driving-school package, `regional_compare` checked all
+432 cells and occupied solids for both storage sizes. The original package is
+262,980B; 128m/256m indexed artifacts are 534,527B/370,219B with 10/3 regions.
+All 33 original payload files (1,237,273B expanded) occur once. Source retained
+allowances are 15,561,226–43,850,274B / 40,632,656–58,422,412B, versus the old
+70,943,750B. Highest source validation allowances are 419,920,590B/475,877,998B,
+versus the old 332,374,070B. This is a functional storage comparison, not gameplay
+or density/performance acceptance. Neither grouping becomes a universal default.
+
+The MapKit storage/CLI/native unit is implemented. Application adoption still
+needs complete-audit acquisition, source leases and generation admission,
+cancel/join/late-result ownership, safe current/candidate collision handoff,
+overview/selection, actual Host/Client sessions and Editor export/reopen. ENet
+region requests are not implemented; retaining whole-file transport is the first
+consumer candidate, subject to explicit identity/admission decisions. This is
+remaining L01 implementation, not completed integration or merely deferred tests.

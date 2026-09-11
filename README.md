@@ -109,7 +109,8 @@ JSON/GLB processing, metadata, bounded image decoding and terrain seams. They ar
 conservative policy inputs, not allocator/RSS measurements. Validation retains only
 four edges per decoded heightmap instead of every full grid. Payload reads are capped
 at the declared uncompressed size plus one byte, rejecting mismatches. Full payload
-hash checks still run; lazy file-backed payload access remains future work.
+hash checks still run. The separate opt-in indexed source path below provides
+bounded file-backed region reads; the `.memap` v1 behavior is unchanged.
 
 ## Compact map overview
 
@@ -284,3 +285,29 @@ all retained resources retire; this does not set a whole-process memory limit.
 The [language-neutral world library and static sign surface](spec/WORLD_ASSETS.md)
 provide reproducible MIT source assets and a bounded PNG-to-GLB byte helper.
 They use the existing native package validation and rendering contract.
+
+## Indexed regional source (L01 MapKit implementation)
+
+See [REGIONAL_SOURCE](spec/REGIONAL_SOURCE.md) for the decision, exact profile,
+ownership, partial versus complete validation, costs and integration limits.
+Storage groups execution cells without changing their coordinates or generation.
+Shared payloads are stored once; the original canonical authoring document and
+all original declared payloads can be recovered into a new directory.
+
+```sh
+rtk cargo run --locked -p mapkit-cli -- pack-regions examples/minimal /tmp/example.mkregions 1
+rtk cargo run --locked -p mapkit-cli -- inspect-regions /tmp/example.mkregions 536870912
+rtk cargo run --locked -p mapkit-cli -- audit-regions /tmp/example.mkregions 536870912
+rtk cargo run --locked -p mapkit-cli -- generate-region-chunk /tmp/example.mkregions 0 0 /tmp/region-cell.json 536870912
+rtk cargo run --locked -p mapkit-cli -- unpack-regions /tmp/example.mkregions /tmp/restored-source 536870912
+```
+
+`MapKitRegionReader` exposes `open_index`, `region_for_cell`, `begin_request`,
+`load_region`, `cancel_request` and `request_is_current`. A successful load returns
+an independently owned `MapKitBridge` restricted to that prepared region, usable
+for the existing packed generation, presentation, occupancy and archive methods.
+Native verification: `python3 scripts/verify_godot_layout.py --godot GODOT --probe regional`.
+Applications must reserve source validation and generation separately, join workers,
+reject stale candidates at commit, and keep current collision until replacement
+is admitted. The current game and editor file/session paths do not yet consume
+`.mkregions`; that integration remains implementation work, not a test-only gate.

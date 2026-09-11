@@ -22,6 +22,7 @@ use assets::validate_assets;
 mod read_cost;
 pub use read_cost::{inspect_read_cost, ReadCost};
 mod export_limits;
+pub mod indexed;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -243,6 +244,9 @@ pub fn decode_heightmap(h: &Heightmap, cell_size: u32, bytes: &[u8]) -> Result<H
     })
 }
 fn validate_heightmaps(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
+    validate_heightmaps_region(d, files, None)
+}
+fn validate_heightmaps_region(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>, region: Option<CellRegion>) -> Result<()> {
     // Keep only seams, rather than every decoded map-sized grid at once.
     // Direction order: west, east, south, north (local y grows north).
     let mut grids = BTreeMap::new();
@@ -258,9 +262,14 @@ fn validate_heightmaps(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Re
         ];
         grids.insert(h.cell, (h, edges));
     }
-    for c in d.cells() {
+    // Only a non-flat descriptor or its west/south neighbor can create a seam.
+    // This remains bounded by source descriptors, not world area.
+    let cells: BTreeSet<Cell> = d.heightmaps.iter().flat_map(|h| [h.cell,
+        Cell { x: h.cell.x - 1, y: h.cell.y }, Cell { x: h.cell.x, y: h.cell.y - 1 }])
+        .filter(|c| d.has_cell(*c)).collect();
+    for c in cells {
         for n in [Cell { x: c.x + 1, y: c.y }, Cell { x: c.x, y: c.y + 1 }] {
-            if !d.has_cell(n) {
+            if !d.has_cell(n) || region.is_some_and(|r| !r.contains(c) && !r.contains(n)) {
                 continue;
             }
             let (a, b) = (grids.get(&c), grids.get(&n));
@@ -648,10 +657,13 @@ fn temporary(parent: &Path, kind: &str) -> Result<PathBuf> {
     )))
 }
 pub fn unpack(package: &Package, destination: &Path) -> Result<()> {
+    unpack_files(&package.files, destination)
+}
+fn unpack_files(files: &BTreeMap<String, Vec<u8>>, destination: &Path) -> Result<()> {
     // Reserve destination with create_dir, never walk or overwrite an existing path.
     fs::create_dir(destination).map_err(io)?;
     let result = (|| {
-        for (path, bytes) in &package.files {
+        for (path, bytes) in files {
             let out = destination.join(path);
             if let Some(parent) = out.parent() {
                 fs::create_dir_all(parent).map_err(io)?;

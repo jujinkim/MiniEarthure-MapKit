@@ -16,6 +16,7 @@ from asset_probe import PROBE as ASSET_PROBE
 from determinism_probe import PROBE as DETERMINISM_PROBE
 from placement_probe import PROBE as PLACEMENT_PROBE
 from spatial_terrain_probe import make_fixture as make_terrain_fixture, PROBE as TERRAIN_PROBE
+from regional_probe import PROBE as REGIONAL_PROBE
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBE = '''extends SceneTree
@@ -228,7 +229,7 @@ def run_engine(command, timeout):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--godot', required=True)
-    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads', 'placement', 'assets', 'determinism', 'urban'], action='append', help='Run only selected behavioral probes; default runs all')
+    parser.add_argument('--probe', choices=['renderer', 'binding', 'terrain', 'roads', 'placement', 'assets', 'determinism', 'urban', 'regional'], action='append', help='Run only selected behavioral probes; default runs all')
     args = parser.parse_args()
     library = {'win32': 'mapkit_godot.dll', 'darwin': 'libmapkit_godot.dylib'}.get(sys.platform, 'libmapkit_godot.so')
     built_library = ROOT / 'target/debug' / library
@@ -243,6 +244,7 @@ def main():
         shutil.copyfile(built_library, addon / 'target/debug' / library)
         (project / 'project.godot').write_text('config_version=5\n[application]\nconfig/name="MapKit Nested Probe"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
         (project / 'probe.gd').write_text(PROBE)
+        (project / 'regional_probe.gd').write_text(REGIONAL_PROBE)
         (project / 'renderer_probe.gd').write_text(RENDER_PROBE)
         (project / 'terrain_probe.gd').write_text(TERRAIN_PROBE)
         (project / 'road_probe.gd').write_text(ROAD_PROBE)
@@ -260,6 +262,8 @@ def main():
         for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd', 'render_memory.gd', 'urban_surface.gdshader'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
+        if args.probe is None or 'regional' in args.probe:
+            subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack-regions', str(ROOT / 'examples/minimal'), str(project / 'fixture.mkregions'), '1'], check=True, timeout=60)
         inconsistent = bytearray((project / 'fixture.memap').read_bytes())
         inconsistent[30] ^= 1  # first physical filename; central manifest is unchanged
         (project / 'invalid-container.memap').write_bytes(inconsistent)
@@ -271,7 +275,7 @@ def main():
         (project / 'invalid-document.json').write_text(json.dumps(invalid))
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'invalid-metadata.memap'), str(project / 'invalid-document.json')], check=True, timeout=30)
         run_engine([args.godot, '--headless', '--import', '--frame-delay', '1000', '--path', str(project)], timeout=60)
-        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd', 'placement': 'placement_probe.gd', 'assets': 'asset_probe.gd', 'determinism': 'determinism_probe.gd', 'urban': 'urban_probe.gd'}
+        scripts = {'renderer': 'renderer_probe.gd', 'binding': 'probe.gd', 'terrain': 'terrain_probe.gd', 'roads': 'road_probe.gd', 'placement': 'placement_probe.gd', 'assets': 'asset_probe.gd', 'determinism': 'determinism_probe.gd', 'urban': 'urban_probe.gd', 'regional': 'regional_probe.gd'}
         fixture_bytes = (project / 'fixture.memap').read_bytes()
         for probe in args.probe or scripts:
             # Binding deliberately corrupts its source to prove snapshot ownership.
