@@ -1,0 +1,2467 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "world-polar-cabin",
+      "path": "assets/polar-cabin.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            210,
+            0
+          ],
+          "size_cm": [
+            700,
+            300,
+            600
+          ]
+        },
+        {
+          "center": [
+            -270,
+            30,
+            -230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            -270,
+            30,
+            230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            270,
+            30,
+            -230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            270,
+            30,
+            230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            240,
+            410,
+            150
+          ],
+          "size_cm": [
+            50,
+            110,
+            50
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -375,
+              360,
+              -330
+            ],
+            [
+              375,
+              360,
+              -330
+            ],
+            [
+              0,
+              485,
+              -330
+            ],
+            [
+              -375,
+              360,
+              330
+            ],
+            [
+              375,
+              360,
+              330
+            ],
+            [
+              0,
+              485,
+              330
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-utility-cabin",
+      "path": "assets/utility-cabin.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            210,
+            0
+          ],
+          "size_cm": [
+            700,
+            300,
+            600
+          ]
+        },
+        {
+          "center": [
+            -270,
+            30,
+            -230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            -270,
+            30,
+            230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            270,
+            30,
+            -230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            270,
+            30,
+            230
+          ],
+          "size_cm": [
+            35,
+            60,
+            35
+          ]
+        },
+        {
+          "center": [
+            240,
+            410,
+            150
+          ],
+          "size_cm": [
+            50,
+            110,
+            50
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -375,
+              360,
+              -330
+            ],
+            [
+              375,
+              360,
+              -330
+            ],
+            [
+              0,
+              485,
+              -330
+            ],
+            [
+              -375,
+              360,
+              330
+            ],
+            [
+              375,
+              360,
+              330
+            ],
+            [
+              0,
+              485,
+              330
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-podium-tower",
+      "path": "assets/podium-tower.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            150,
+            0
+          ],
+          "size_cm": [
+            900,
+            300,
+            900
+          ]
+        },
+        {
+          "center": [
+            0,
+            1100,
+            0
+          ],
+          "size_cm": [
+            650,
+            1600,
+            650
+          ]
+        },
+        {
+          "center": [
+            0,
+            1950,
+            0
+          ],
+          "size_cm": [
+            300,
+            100,
+            300
+          ]
+        },
+        {
+          "center": [
+            0,
+            280,
+            -500
+          ],
+          "size_cm": [
+            900,
+            18,
+            100
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-gable-barn",
+      "path": "assets/gable-barn.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            165,
+            0
+          ],
+          "size_cm": [
+            800,
+            330,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -440,
+              330,
+              -430
+            ],
+            [
+              440,
+              330,
+              -430
+            ],
+            [
+              0,
+              580,
+              -430
+            ],
+            [
+              -440,
+              330,
+              430
+            ],
+            [
+              440,
+              330,
+              430
+            ],
+            [
+              0,
+              580,
+              430
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-courtyard-house",
+      "path": "assets/courtyard-house.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            -330,
+            215,
+            0
+          ],
+          "size_cm": [
+            240,
+            430,
+            800
+          ]
+        },
+        {
+          "center": [
+            330,
+            215,
+            0
+          ],
+          "size_cm": [
+            240,
+            430,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            215,
+            300
+          ],
+          "size_cm": [
+            420,
+            430,
+            200
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -250
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -180
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -110
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -40
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-deep-veranda",
+      "path": "assets/deep-veranda.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            280,
+            0
+          ],
+          "size_cm": [
+            700,
+            420,
+            500
+          ]
+        },
+        {
+          "center": [
+            -300,
+            35,
+            -200
+          ],
+          "size_cm": [
+            30,
+            70,
+            30
+          ]
+        },
+        {
+          "center": [
+            -300,
+            35,
+            200
+          ],
+          "size_cm": [
+            30,
+            70,
+            30
+          ]
+        },
+        {
+          "center": [
+            300,
+            35,
+            -200
+          ],
+          "size_cm": [
+            30,
+            70,
+            30
+          ]
+        },
+        {
+          "center": [
+            300,
+            35,
+            200
+          ],
+          "size_cm": [
+            30,
+            70,
+            30
+          ]
+        },
+        {
+          "center": [
+            0,
+            70,
+            -310
+          ],
+          "size_cm": [
+            780,
+            16,
+            140
+          ]
+        },
+        {
+          "center": [
+            -360,
+            240,
+            -350
+          ],
+          "size_cm": [
+            16,
+            340,
+            16
+          ]
+        },
+        {
+          "center": [
+            360,
+            240,
+            -350
+          ],
+          "size_cm": [
+            16,
+            340,
+            16
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -420,
+              490,
+              -400
+            ],
+            [
+              420,
+              490,
+              -400
+            ],
+            [
+              0,
+              650,
+              -400
+            ],
+            [
+              -420,
+              490,
+              400
+            ],
+            [
+              420,
+              490,
+              400
+            ],
+            [
+              0,
+              650,
+              400
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-snow-drift",
+      "path": "assets/snow-drift.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -350,
+              0,
+              -200
+            ],
+            [
+              350,
+              0,
+              -200
+            ],
+            [
+              0,
+              120,
+              -200
+            ],
+            [
+              -350,
+              0,
+              200
+            ],
+            [
+              350,
+              0,
+              200
+            ],
+            [
+              0,
+              120,
+              200
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-ice-ridge",
+      "path": "assets/ice-ridge.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -250,
+              0,
+              -150
+            ],
+            [
+              250,
+              0,
+              -150
+            ],
+            [
+              0,
+              280,
+              -150
+            ],
+            [
+              -250,
+              0,
+              150
+            ],
+            [
+              250,
+              0,
+              150
+            ],
+            [
+              0,
+              280,
+              150
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-sand-dune",
+      "path": "assets/sand-dune.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -550,
+              0,
+              -350
+            ],
+            [
+              550,
+              0,
+              -350
+            ],
+            [
+              0,
+              280,
+              -350
+            ],
+            [
+              -550,
+              0,
+              350
+            ],
+            [
+              550,
+              0,
+              350
+            ],
+            [
+              0,
+              280,
+              350
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-rock-outcrop",
+      "path": "assets/rock-outcrop.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -250,
+              0,
+              -200
+            ],
+            [
+              250,
+              0,
+              -200
+            ],
+            [
+              0,
+              220,
+              -200
+            ],
+            [
+              -250,
+              0,
+              200
+            ],
+            [
+              250,
+              0,
+              200
+            ],
+            [
+              0,
+              220,
+              200
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-canopy-tree",
+      "path": "assets/canopy-tree.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            400,
+            0
+          ],
+          "size_cm": [
+            45,
+            800,
+            45
+          ]
+        },
+        {
+          "center": [
+            -70,
+            15,
+            0
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            70,
+            15,
+            0
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            0,
+            15,
+            70
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-palm",
+      "path": "assets/palm.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            250,
+            0
+          ],
+          "size_cm": [
+            45,
+            500,
+            45
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-ground-snow",
+      "path": "assets/ground-snow.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -2,
+            0
+          ],
+          "size_cm": [
+            1600,
+            5,
+            1600
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-ground-sand",
+      "path": "assets/ground-sand.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -2,
+            0
+          ],
+          "size_cm": [
+            1600,
+            5,
+            1600
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-ground-earth",
+      "path": "assets/ground-earth.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -2,
+            0
+          ],
+          "size_cm": [
+            1600,
+            5,
+            1600
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-ground-field",
+      "path": "assets/ground-field.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -2,
+            0
+          ],
+          "size_cm": [
+            1600,
+            5,
+            1600
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-farm-fence",
+      "path": "assets/farm-fence.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            -180,
+            65,
+            0
+          ],
+          "size_cm": [
+            13,
+            130,
+            13
+          ]
+        },
+        {
+          "center": [
+            0,
+            65,
+            0
+          ],
+          "size_cm": [
+            13,
+            130,
+            13
+          ]
+        },
+        {
+          "center": [
+            180,
+            65,
+            0
+          ],
+          "size_cm": [
+            13,
+            130,
+            13
+          ]
+        },
+        {
+          "center": [
+            0,
+            40,
+            0
+          ],
+          "size_cm": [
+            380,
+            13,
+            13
+          ]
+        },
+        {
+          "center": [
+            0,
+            100,
+            0
+          ],
+          "size_cm": [
+            380,
+            13,
+            13
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-crop-row",
+      "path": "assets/crop-row.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            2,
+            0
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-undergrowth",
+      "path": "assets/undergrowth.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            2,
+            0
+          ],
+          "size_cm": [
+            150,
+            5,
+            150
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-arid-shrub",
+      "path": "assets/arid-shrub.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            80,
+            0
+          ],
+          "size_cm": [
+            60,
+            160,
+            60
+          ]
+        },
+        {
+          "center": [
+            -55,
+            95,
+            0
+          ],
+          "size_cm": [
+            55,
+            25,
+            25
+          ]
+        },
+        {
+          "center": [
+            -55,
+            120,
+            0
+          ],
+          "size_cm": [
+            25,
+            70,
+            25
+          ]
+        },
+        {
+          "center": [
+            55,
+            95,
+            0
+          ],
+          "size_cm": [
+            55,
+            25,
+            25
+          ]
+        },
+        {
+          "center": [
+            55,
+            120,
+            0
+          ],
+          "size_cm": [
+            25,
+            70,
+            25
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-shade-shelter",
+      "path": "assets/shade-shelter.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            -250,
+            160,
+            0
+          ],
+          "size_cm": [
+            16,
+            320,
+            16
+          ]
+        },
+        {
+          "center": [
+            250,
+            160,
+            0
+          ],
+          "size_cm": [
+            16,
+            320,
+            16
+          ]
+        },
+        {
+          "center": [
+            0,
+            315,
+            0
+          ],
+          "size_cm": [
+            540,
+            20,
+            300
+          ]
+        },
+        {
+          "center": [
+            -150,
+            60,
+            0
+          ],
+          "size_cm": [
+            100,
+            12,
+            40
+          ]
+        },
+        {
+          "center": [
+            0,
+            60,
+            0
+          ],
+          "size_cm": [
+            100,
+            12,
+            40
+          ]
+        },
+        {
+          "center": [
+            150,
+            60,
+            0
+          ],
+          "size_cm": [
+            100,
+            12,
+            40
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-drain-channel",
+      "path": "assets/drain-channel.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            7,
+            0
+          ],
+          "size_cm": [
+            55,
+            14,
+            340
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-street-lamp",
+      "path": "assets/street-lamp.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            160,
+            0
+          ],
+          "size_cm": [
+            12,
+            320,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            320,
+            -45
+          ],
+          "size_cm": [
+            18,
+            12,
+            100
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-bench",
+      "path": "assets/bench.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            35,
+            0
+          ],
+          "size_cm": [
+            180,
+            18,
+            50
+          ]
+        },
+        {
+          "center": [
+            -70,
+            15,
+            0
+          ],
+          "size_cm": [
+            10,
+            30,
+            40
+          ]
+        },
+        {
+          "center": [
+            70,
+            15,
+            0
+          ],
+          "size_cm": [
+            10,
+            30,
+            40
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-blank-signboard",
+      "path": "assets/blank-signboard.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            65,
+            0
+          ],
+          "size_cm": [
+            320,
+            130,
+            10
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-plot-polar",
+      "path": "assets/plot-polar.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "size_cm": [
+            1596,
+            4,
+            1396
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -650,
+              0,
+              -200
+            ],
+            [
+              50,
+              0,
+              -200
+            ],
+            [
+              -300,
+              120,
+              -200
+            ],
+            [
+              -650,
+              0,
+              200
+            ],
+            [
+              50,
+              0,
+              200
+            ],
+            [
+              -300,
+              120,
+              200
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              150,
+              0,
+              50
+            ],
+            [
+              650,
+              0,
+              50
+            ],
+            [
+              400,
+              280,
+              50
+            ],
+            [
+              150,
+              0,
+              350
+            ],
+            [
+              650,
+              0,
+              350
+            ],
+            [
+              400,
+              280,
+              350
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-plot-arid",
+      "path": "assets/plot-arid.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "size_cm": [
+            1596,
+            4,
+            1396
+          ]
+        },
+        {
+          "center": [
+            600,
+            80,
+            -400
+          ],
+          "size_cm": [
+            60,
+            160,
+            60
+          ]
+        },
+        {
+          "center": [
+            545,
+            95,
+            -400
+          ],
+          "size_cm": [
+            55,
+            25,
+            25
+          ]
+        },
+        {
+          "center": [
+            545,
+            120,
+            -400
+          ],
+          "size_cm": [
+            25,
+            70,
+            25
+          ]
+        },
+        {
+          "center": [
+            655,
+            95,
+            -400
+          ],
+          "size_cm": [
+            55,
+            25,
+            25
+          ]
+        },
+        {
+          "center": [
+            655,
+            120,
+            -400
+          ],
+          "size_cm": [
+            25,
+            70,
+            25
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -650,
+              0,
+              -250
+            ],
+            [
+              450,
+              0,
+              -250
+            ],
+            [
+              -100,
+              280,
+              -250
+            ],
+            [
+              -650,
+              0,
+              450
+            ],
+            [
+              450,
+              0,
+              450
+            ],
+            [
+              -100,
+              280,
+              450
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world-plot-farm",
+      "path": "assets/plot-farm.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "size_cm": [
+            1596,
+            4,
+            1396
+          ]
+        },
+        {
+          "center": [
+            -500,
+            2,
+            -300
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        },
+        {
+          "center": [
+            -500,
+            2,
+            200
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        },
+        {
+          "center": [
+            0,
+            2,
+            -300
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        },
+        {
+          "center": [
+            0,
+            2,
+            200
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        },
+        {
+          "center": [
+            500,
+            2,
+            -300
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        },
+        {
+          "center": [
+            500,
+            2,
+            200
+          ],
+          "size_cm": [
+            280,
+            5,
+            260
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-plot-garden",
+      "path": "assets/plot-garden.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "size_cm": [
+            1596,
+            4,
+            1396
+          ]
+        },
+        {
+          "center": [
+            0,
+            400,
+            100
+          ],
+          "size_cm": [
+            45,
+            800,
+            45
+          ]
+        },
+        {
+          "center": [
+            -70,
+            15,
+            100
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            70,
+            15,
+            100
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            0,
+            15,
+            170
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-plot-humid",
+      "path": "assets/plot-humid.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "size_cm": [
+            1596,
+            4,
+            1396
+          ]
+        },
+        {
+          "center": [
+            -400,
+            400,
+            -200
+          ],
+          "size_cm": [
+            45,
+            800,
+            45
+          ]
+        },
+        {
+          "center": [
+            -470,
+            15,
+            -200
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            -330,
+            15,
+            -200
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            -400,
+            15,
+            -130
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            400,
+            400,
+            200
+          ],
+          "size_cm": [
+            45,
+            800,
+            45
+          ]
+        },
+        {
+          "center": [
+            330,
+            15,
+            200
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            470,
+            15,
+            200
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            400,
+            15,
+            270
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            0,
+            2,
+            0
+          ],
+          "size_cm": [
+            150,
+            5,
+            150
+          ]
+        },
+        {
+          "center": [
+            500,
+            2,
+            -300
+          ],
+          "size_cm": [
+            150,
+            5,
+            150
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "world-plot-tropical",
+      "path": "assets/plot-tropical.glb",
+      "attribution": {
+        "source": "mapkit-world-library-v1",
+        "license": "MIT",
+        "notice": "Original procedural miniature structures, plants, landforms and blank signboard. No surveyed data, extracted models, letters, font or image dependencies."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            0,
+            0
+          ],
+          "size_cm": [
+            1596,
+            4,
+            1396
+          ]
+        },
+        {
+          "center": [
+            -400,
+            250,
+            100
+          ],
+          "size_cm": [
+            45,
+            500,
+            45
+          ]
+        },
+        {
+          "center": [
+            400,
+            250,
+            -100
+          ],
+          "size_cm": [
+            45,
+            500,
+            45
+          ]
+        },
+        {
+          "center": [
+            0,
+            2,
+            300
+          ],
+          "size_cm": [
+            150,
+            5,
+            150
+          ]
+        }
+      ],
+      "convex_collision": []
+    }
+  ],
+  "sha256": {
+    "assets/polar-cabin.glb": "4b0cad91fc5cbab5f7cee87deed1056a27dba2e0b0ffe93a33e386a9b880ac0e",
+    "assets/utility-cabin.glb": "90c287b0b97f78e6e28e8f6758dd3c59b43e279577fcd2ce12df8bc89e2147f8",
+    "assets/podium-tower.glb": "7d81513c60983882c0b563d6edefc4f4ae2439647bb0bfc80ceaa2c0fea61418",
+    "assets/gable-barn.glb": "89934ff8b6636f5442fb5de025df1c7d3fd6fc11c39ad05de5507e6240f70470",
+    "assets/courtyard-house.glb": "e7472fb69080d9d9e1c7e510686076c177d892fa6343b68dc000e04a23dccdcd",
+    "assets/deep-veranda.glb": "775f154fc213d4091baf4ef7592f1cc926cca9303065935c43f2847f1f3dbd81",
+    "assets/snow-drift.glb": "3ca864f17d6dee0ae0f596b424f382e64ba664bf030957eb07b70c998127351a",
+    "assets/ice-ridge.glb": "e1c8a8a2733bc66107a31b7d3fa38d96e52691595f2dfab59ab582768f132fd0",
+    "assets/sand-dune.glb": "b2a455f58249208b01723da89bd4ece5f5d23ca9a90c583a0097e9cf578b5403",
+    "assets/rock-outcrop.glb": "2496c54f2e62bb2a3542371e0738b04d74ee6046ff497bf623475a4f866edbdf",
+    "assets/canopy-tree.glb": "b8c7004257f6189ee6f46e98b615f212dad72b3d7c86551e346b1bc078cd6fca",
+    "assets/palm.glb": "53812e5386ec862e6abb8d9940b7374e22dcd82befd1de0a3c3c28d17144a12a",
+    "assets/ground-snow.glb": "423caf1dcf7116a9fbeff3a87c84776b5814b3b23c7d034378e694b2aef27b6a",
+    "assets/ground-sand.glb": "40407e1a67a396ebcd5527f0c43bdd21f70f337e4078490c5234527cf067521c",
+    "assets/ground-earth.glb": "17938276ce5925f9a4b7316ee9075b3c3373e7eca42d7237f515ee92eb0135e0",
+    "assets/ground-field.glb": "46616c8d7ad7315c9922a468d60ebfbb221e2effc5ae9f185cd0416fdbada749",
+    "assets/farm-fence.glb": "a295e7cb89786763948a0d482a20251269d95cb008a26e910b7bfce7d0ea7047",
+    "assets/crop-row.glb": "a21742a7706e6c1222d5b069ef1f6e7433b16dd4501e22ce3701bffc1d4256f7",
+    "assets/undergrowth.glb": "56c06bdd881ab7816b1ec88b180af19aad5f30fac5a98f443ffee896fd8f00e6",
+    "assets/arid-shrub.glb": "b8c35c5d4b668836b42a7993954481a6103376f13010c9d463865ba3c13baca2",
+    "assets/shade-shelter.glb": "f3c9e691703002cc6e867ff0b279a42406f78f62ab05cfcc2849b2d52eaa40b9",
+    "assets/drain-channel.glb": "b2cee40ae0b108a0c578abdd89d27e8b7301e765974bd20a19fa98c4fa9fdb2f",
+    "assets/street-lamp.glb": "cf4f531baa4515a5658afa43042464b7423db7415295026f6e121541bd240166",
+    "assets/bench.glb": "d7f7f48c90483800e2fe3624fffd3676916adccb9f6fe09a60d1d3613a1e1d5e",
+    "assets/blank-signboard.glb": "e2d566890226fdb550548a0e86b349f1d28e7cbd93ade6f9b9ec910b7101f0b8",
+    "assets/plot-polar.glb": "2fe0d9d0c9d952057d3b9efc6625b6d4c8f62bfe61670d06c77dd3ff2c152b27",
+    "assets/plot-arid.glb": "334d4d95ec6c9a9504f952cad40654514e76c3edc59ce1eca31efbbca42c05d7",
+    "assets/plot-farm.glb": "2c14cc03a97557420cd860019357feddb3756ae34549e05434c75af6e4173956",
+    "assets/plot-garden.glb": "1fc4910cdaf61db30bf05d4a8a577efbdb194624985c955874323e8ccf1cb9cb",
+    "assets/plot-humid.glb": "39cb4ca85aad3677976b13281386d89e531522ee3591804d50c1e3806b4f86e4",
+    "assets/plot-tropical.glb": "ff1a3d3fd5161ad5aedb92eb9a5ea34f2bb6b13091b2532c526dcc5c81592fe1"
+  },
+  "license": "MIT",
+  "sign_surface": {
+    "width_cm": 300,
+    "height_cm": 110,
+    "center_cm": [
+      0,
+      65,
+      -8
+    ],
+    "normal": [
+      0,
+      0,
+      -1
+    ]
+  }
+}

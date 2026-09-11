@@ -278,3 +278,9 @@ Repeated GLB instances in a cell share imported meshes, materials and textures.
 Display planning charges those shared resources once per asset and reserves scene
 nodes for each instance. The renderer keeps its cell-owned resource lease until
 all retained resources retire; this does not set a whole-process memory limit.
+
+### World asset authoring
+
+The [language-neutral world library and static sign surface](spec/WORLD_ASSETS.md)
+provide reproducible MIT source assets and a bounded PNG-to-GLB byte helper.
+They use the existing native package validation and rendering contract.
