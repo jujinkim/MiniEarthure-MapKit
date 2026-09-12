@@ -49,8 +49,43 @@ impl CellRegion {
 /// their full placement/building context instead of silently changing generation.
 /// This conservative fallback is intentional and is reported in source byte counts.
 pub fn region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument> {
+    derive_source(d, region, false)
+}
+
+/// Version-2 closure. Version-1 derivation remains byte-for-byte reproducible.
+pub fn local_region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument> {
+    derive_source(d, region, true)
+}
+
+/// Clone metadata without allocating a transient copy of world geometry.
+pub fn source_metadata(d: &MapDocument) -> MapDocument {
+    MapDocument {
+        indexed_topology: d.indexed_topology,
+        map_id: d.map_id.clone(),
+        revision: d.revision,
+        bounds: d.bounds.clone(),
+        cell_size_cm: d.cell_size_cm,
+        seed: d.seed,
+        recipe_version: d.recipe_version,
+        theme: d.theme.clone(),
+        terrain_base_cm: d.terrain_base_cm,
+        attributions: d.attributions.clone(),
+        provenance: d.provenance.clone(),
+        heightmaps: vec![],
+        nodes: vec![],
+        roads: vec![],
+        surface_areas: vec![],
+        buildings: vec![],
+        zones: vec![],
+        assets: vec![],
+        placements: vec![],
+        repetitions: vec![],
+    }
+}
+
+fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<MapDocument> {
     region.validate(d)?;
-    let mut out = d.clone();
+    let mut out = source_metadata(d);
     let mut bounds = d.cell_bounds(region.min)?;
     bounds.max = d
         .cell_bounds(Cell {
@@ -78,26 +113,100 @@ pub fn region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument>
                 && points.iter().any(|p| p[a] >= bounds.min[a])
         })
     };
-    if d.recipe_version >= 3
+    let prune = d.recipe_version >= 3
         && d.repetitions.is_empty()
         && d.roads
             .iter()
-            .all(|r| r.kind != RoadKind::Ground || r.sidewalk_cm.is_some())
-    {
-        out.buildings
-            .retain(|b| hit(&b.footprint) || b.entrances.iter().any(|p| hit(p)));
-        out.placements.retain(|p| {
-            hit(&crate::placement::footprint(d, p)) || hit(&[[p.position[0], p.position[2]]])
-        });
+            .all(|r| r.kind != RoadKind::Ground || r.sidewalk_cm.is_some());
+    out.buildings = d
+        .buildings
+        .iter()
+        .filter(|b| !prune || hit(&b.footprint) || b.entrances.iter().any(|p| hit(p)))
+        .cloned()
+        .collect();
+    out.placements = d
+        .placements
+        .iter()
+        .filter(|p| {
+            !prune
+                || hit(&crate::placement::footprint(d, p))
+                || hit(&[[p.position[0], p.position[2]]])
+        })
+        .cloned()
+        .collect();
+    out.surface_areas = d
+        .surface_areas
+        .iter()
+        .filter(|a| hit(&a.polygon))
+        .cloned()
+        .collect();
+    out.heightmaps = d
+        .heightmaps
+        .iter()
+        .filter(|h| {
+            h.cell.x >= region.min.x - 1
+                && h.cell.x <= region.end.x
+                && h.cell.y >= region.min.y - 1
+                && h.cell.y <= region.end.y
+        })
+        .cloned()
+        .collect();
+    out.repetitions = d.repetitions.clone();
+    if local && prune && d.recipe_version == 6 {
+        let road_margin = crate::roads::influence_margin(d) + 1000;
+        let relevant: BTreeSet<_> = d
+            .roads
+            .iter()
+            .filter(|r| {
+                r.points.windows(2).any(|s| {
+                    (0..2).all(|a| {
+                        s.iter().any(|p| p[a * 2] <= bounds.max[a] + road_margin)
+                            && s.iter().any(|p| p[a * 2] >= bounds.min[a] - road_margin)
+                    })
+                })
+            })
+            .map(|r| r.id.as_str())
+            .collect();
+        // Complete authored endpoint stars, not a geometric proximity join.
+        let endpoints: BTreeSet<_> = d
+            .roads
+            .iter()
+            .filter(|r| relevant.contains(r.id.as_str()))
+            .flat_map(|r| [r.from.as_str(), r.to.as_str()])
+            .collect();
+        let widest = d
+            .roads
+            .iter()
+            .max_by_key(|r| r.widths_cm.iter().max().copied().unwrap_or(0));
+        out.roads = d
+            .roads
+            .iter()
+            .filter(|r| {
+                relevant.contains(r.id.as_str())
+                    || endpoints.contains(r.from.as_str())
+                    || endpoints.contains(r.to.as_str())
+                    || widest.is_some_and(|w| w.id == r.id)
+            })
+            .cloned()
+            .collect();
+        let nodes: BTreeSet<_> = out.roads.iter().flat_map(|r| [&r.from, &r.to]).collect();
+        out.nodes = d
+            .nodes
+            .iter()
+            .filter(|n| nodes.contains(&n.id))
+            .cloned()
+            .collect();
+        out.zones = d
+            .zones
+            .iter()
+            .filter(|z| hit(&z.polygon))
+            .cloned()
+            .collect();
+    } else {
+        out.roads = d.roads.clone();
+        out.nodes = d.nodes.clone();
+        out.zones = d.zones.clone();
     }
-    out.surface_areas.retain(|a| hit(&a.polygon));
-    // Keep immediate height neighbors for exact restored edge validation.
-    out.heightmaps.retain(|h| {
-        h.cell.x >= region.min.x - 1
-            && h.cell.x <= region.end.x
-            && h.cell.y >= region.min.y - 1
-            && h.cell.y <= region.end.y
-    });
     let mut needed: BTreeSet<String> = out
         .placements
         .iter()
@@ -117,7 +226,12 @@ pub fn region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument>
             break;
         }
     }
-    out.assets.retain(|a| needed.contains(&a.id));
+    out.assets = d
+        .assets
+        .iter()
+        .filter(|a| needed.contains(&a.id))
+        .cloned()
+        .collect();
     out.normalize();
     Ok(out)
 }

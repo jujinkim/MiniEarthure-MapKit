@@ -309,5 +309,14 @@ for the existing packed generation, presentation, occupancy and archive methods.
 Native verification: `python3 scripts/verify_godot_layout.py --godot GODOT --probe regional`.
 Applications must reserve source validation and generation separately, join workers,
 reject stale candidates at commit, and keep current collision until replacement
-is admitted. The current game and editor file/session paths do not yet consume
-`.mkregions`; that integration remains implementation work, not a test-only gate.
+is admitted. `audit` provides complete file/index/world identity and a bounded
+overview; consumer installation must require this full audit.
+
+New exports use index **v2** with local road/zone dependencies and verified decoder
+planning declarations. Existing index v1 files retain their original derivation
+and remain readable; older readers reject v2. See the L01-C decision and scoped
+evidence in [REGIONAL_SOURCE](spec/REGIONAL_SOURCE.md). The `regional_parity` CLI
+example compares generated geometry and occupied solids between fixed artifacts:
+`rtk cargo run --release -p mapkit-cli --example regional_parity -- OLD NEW '[[0,0],[1,0]]'`.
+Use `all` for all cells of a bounded comparison fixture. The old partial source is
+a migration oracle, never an installation approval or full-artifact audit.

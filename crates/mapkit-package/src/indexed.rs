@@ -40,6 +40,9 @@ pub struct Index {
     pub regions: Vec<RegionRecord>,
     pub records: Vec<Record>,
     pub payload_bytes: u64,
+    /// Untrusted version-2 planning declarations, checked against verified bytes.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub decoder_peaks: BTreeMap<String, u64>,
 }
 
 /// Caller-owned generation. Advancing it invalidates every older ticket, including
@@ -114,17 +117,7 @@ fn hash_valid(s: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 fn metadata(d: &MapDocument) -> MapDocument {
-    let mut m = d.clone();
-    m.nodes.clear();
-    m.roads.clear();
-    m.surface_areas.clear();
-    m.buildings.clear();
-    m.zones.clear();
-    m.placements.clear();
-    m.repetitions.clear();
-    m.assets.clear();
-    m.heightmaps.clear();
-    m
+    source_metadata(d)
 }
 fn regions(d: &MapDocument, side: u32) -> Result<Vec<CellRegion>> {
     if !(1..=128).contains(&side) {
@@ -160,13 +153,23 @@ fn regions(d: &MapDocument, side: u32) -> Result<Vec<CellRegion>> {
 }
 impl Index {
     fn validate(&self, length: u64, payload_start: u64) -> Result<()> {
-        if self.version != 1 {
+        if !matches!(self.version, 1 | 2) {
             return Err(error("E_VERSION", "unsupported indexed source version"));
         }
         if canonical(&metadata(&self.world))? != canonical(&self.world)?
             || !hash_valid(&self.world_content_hash)
         {
             return Err(bad("invalid world metadata"));
+        }
+        if (self.version == 1 && !self.decoder_peaks.is_empty())
+            || (self.version == 2
+                && (self.decoder_peaks.keys().ne(self.payloads.keys())
+                    || self
+                        .decoder_peaks
+                        .values()
+                        .any(|n| !(8 * 1024 * 1024..=256 * 1024 * 1024).contains(n))))
+        {
+            return Err(bad("invalid decoder planning inventory"));
         }
         let expected = regions(&self.world, self.side_cells)?;
         if self.regions.len() != expected.len()
@@ -318,7 +321,15 @@ impl<R: Read + Seek> IndexedReader<R> {
         let mut structured = expanded;
         let mut compressed = self.index.records[source].compressed_bytes;
         let mut pngs = 0;
+        let mut decoder = 8 * 1024 * 1024;
         for (path, id) in payloads {
+            decoder = decoder.max(
+                self.index
+                    .decoder_peaks
+                    .get(path)
+                    .copied()
+                    .unwrap_or(256 * 1024 * 1024),
+            );
             let r = &self.index.records[*id];
             expanded += r.size;
             compressed = compressed.max(r.compressed_bytes);
@@ -334,7 +345,6 @@ impl<R: Read + Seek> IndexedReader<R> {
             + structured * 32
             + (payloads.len() as u64 + 1) * 4096
             + 16_384 * 256;
-        let decoder = if payloads.is_empty() { 8 } else { 256 } * 1024 * 1024;
         ReadCost {
             retained_memory_bytes: retained,
             validation_peak_bytes: retained
@@ -414,7 +424,15 @@ impl<R: Read + Seek> IndexedReader<R> {
             return Err(error("E_REFERENCE", "region inventory/source mismatch"));
         }
         for (path, id) in payloads {
-            files.insert(path.clone(), self.record(*id, ticket)?);
+            let bytes = self.record(*id, ticket)?;
+            if self.index.version == 2
+                && self.index.decoder_peaks[path] != payload_decoder_peak(path, &bytes)
+            {
+                return Err(bad(
+                    "decoder planning declaration differs from verified payload",
+                ));
+            }
+            files.insert(path.clone(), bytes);
         }
         ticket.check()?;
         Ok((document, files))
@@ -516,16 +534,26 @@ impl<R: Read + Seek> IndexedReader<R> {
         self.audited_files(memory_limit, ticket).map(|_| ())
     }
     pub fn audit_peak_bytes(&self) -> u64 {
-        self.cost(self.index.authoring_source, &self.index.payloads)
-            .validation_peak_bytes
-            + self
-                .index
-                .regions
-                .iter()
-                .map(|r| self.index.records[r.source].size)
-                .max()
-                .unwrap_or(0)
-                * 128
+        let cost = self.cost(self.index.authoring_source, &self.index.payloads);
+        let comparison = self
+            .index
+            .regions
+            .iter()
+            .map(|r| {
+                let record = &self.index.records[r.source];
+                record.size * 128 + record.compressed_bytes * 2
+            })
+            .max()
+            .unwrap_or(0);
+        // Validation and derivation are sequential. Keep all original files and
+        // typed source charged while holding one expected source/canonical tree.
+        // The original-clone allowance also covers conservative legacy closures.
+        cost.validation_peak_bytes.max(
+            cost.retained_memory_bytes
+                + self.index.records[self.index.authoring_source].size * 32
+                + comparison
+                + 8 * 1024 * 1024,
+        )
     }
     /// Whole-file admission with a bounded overview. No authored source survives
     /// this call. Hash the original handle, never reopen a potentially replaced path.
@@ -569,7 +597,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         }
         ticket.check()?;
         Ok(serde_json::json!({
-            "format": "mkregions", "format_version": 1, "verification": "complete-audit",
+            "format": "mkregions", "format_version": self.index.version, "verification": "complete-audit",
             "index_sha256": self.identity, "package_sha256": format!("{:x}", digest.finalize()),
             "world_content_hash": self.index.world_content_hash, "package_bytes": total,
             "expanded_bytes": expanded_bytes, "user_asset_bytes": user_asset_bytes,
@@ -600,27 +628,25 @@ impl<R: Read + Seek> IndexedReader<R> {
     ) -> Result<BTreeMap<String, Vec<u8>>> {
         let source = self.index.authoring_source;
         let payloads = self.index.payloads.clone();
-        let cost = self.cost(source, &payloads);
-        let max_source = self
-            .index
-            .regions
-            .iter()
-            .map(|r| self.index.records[r.source].size)
-            .max()
-            .unwrap_or(0);
-        if cost.validation_peak_bytes + max_source * 128 > memory_limit {
+        ticket.check()?;
+        if self.audit_peak_bytes() > memory_limit {
             return Err(error("E_MEMORY_BUDGET", "whole audit exceeds allowance"));
         }
         let (d, files) = self.source_files(source, &payloads, ticket)?;
-        d.validate_source()?;
+        // source_files already validates the complete original document.
         validate_assets(&d, &files)?;
         validate_heightmaps(&d, &files)?;
         if content_hash(&d, &files)? != self.index.world_content_hash {
             return Err(error("E_HASH", "authoring world identity mismatch"));
         }
-        for r in self.index.regions.clone() {
+        for id in 0..self.index.regions.len() {
             ticket.check()?;
-            let expected = region_source(&d, r.cells)?;
+            let r = self.index.regions[id].clone();
+            let expected = if self.index.version == 1 {
+                region_source(&d, r.cells)?
+            } else {
+                local_region_source(&d, r.cells)?
+            };
             if self.record(r.source, ticket)? != canonical(&expected)? {
                 return Err(error(
                     "E_REFERENCE",
@@ -697,7 +723,7 @@ pub fn pack_source(
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     let mut index = Index {
-        version: 1,
+        version: 2,
         world: metadata(&d),
         world_content_hash: content_hash(&d, &files)?,
         side_cells,
@@ -706,6 +732,11 @@ pub fn pack_source(
         regions: vec![],
         records: vec![],
         payload_bytes: 0,
+        decoder_peaks: files
+            .iter()
+            .filter(|(p, _)| p.as_str() != "document.json")
+            .map(|(p, b)| (p.clone(), payload_decoder_peak(p, b)))
+            .collect(),
     };
     let mut payload = Vec::new();
     let mut expanded = 0u64;
@@ -755,7 +786,7 @@ pub fn pack_source(
         index.payloads.insert(path.clone(), id);
     }
     for cells in regions(&index.world, side_cells)? {
-        let source = region_source(&d, cells)?;
+        let source = local_region_source(&d, cells)?;
         // Region validation has all existing geometry/ownership/work limits.
         source.validate_source()?;
         let bytes = canonical(&source)?;
@@ -793,4 +824,12 @@ pub fn pack_source(
     out.extend_from_slice(&bytes);
     out.extend_from_slice(&payload);
     Ok(out)
+}
+
+fn payload_decoder_peak(path: &str, bytes: &[u8]) -> u64 {
+    if path.ends_with(".glb") || path.ends_with(".png") || path.ends_with(".webp") {
+        read_cost::decoder_peak(&mut Cursor::new(bytes), path, bytes.len() as u64)
+    } else {
+        8 * 1024 * 1024
+    }
 }

@@ -443,7 +443,7 @@ fn independent_damage_cancellation_and_late_results_never_mutate_live_snapshot()
 fn malformed_indexes_reject_before_any_payload_read() {
     let bytes = pack_source(empty(), BTreeMap::new(), 2).unwrap();
     let edits: Vec<Box<dyn Fn(&mut serde_json::Value)>> = vec![
-        Box::new(|v| v["version"] = 2.into()),
+        Box::new(|v| v["version"] = 3.into()),
         Box::new(|v| v["records"][0]["offset"] = 1.into()),
         Box::new(|v| v["records"][1]["offset"] = 0.into()),
         Box::new(|v| v["records"][0]["size"] = (MAX_DOCUMENT_BYTES + 1).into()),
@@ -567,4 +567,173 @@ fn audit_summary_binds_transport_source_and_bounded_world_overview() {
     let bad_bytes = replace_record(&bytes, id, &canonical(&changed).unwrap(), false);
     let mut bad = IndexedReader::open(Cursor::new(bad_bytes), BUDGET, None).unwrap();
     assert!(bad.audit_summary(BUDGET, &ticket()).is_err());
+}
+
+#[test]
+fn frozen_version_one_artifact_keeps_its_original_derivation() {
+    let bytes = include_bytes!("fixtures/indexed-v1-roads.mkregions");
+    let mut reader = IndexedReader::open(Cursor::new(bytes), BUDGET, None).unwrap();
+    assert_eq!(reader.index().version, 1);
+    assert_eq!(
+        reader.identity(),
+        "5a1ec8bcfe2e5f82db606ccd3cf4c1753e113dd47f810cb4236fe1efc2ba8f57"
+    );
+    reader.audit(BUDGET, &ticket()).unwrap();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/roads");
+    let (d, f) = read_project(&path).unwrap();
+    let original = read_bytes(&pack_bytes(d, f).unwrap()).unwrap();
+    for c in original.document.cells() {
+        let id = reader.region_for_cell(c).unwrap();
+        let source = reader.load_region(id, BUDGET, &ticket()).unwrap();
+        let a = original
+            .generate_with_occupancy(c, 500_000, MAX_OCCUPIED_SOLIDS)
+            .unwrap();
+        let b = source
+            .package
+            .generate_with_occupancy(c, 500_000, MAX_OCCUPIED_SOLIDS)
+            .unwrap();
+        assert_eq!(a.chunk, b.chunk);
+        assert_eq!(a.solids, b.solids);
+    }
+}
+
+#[test]
+fn decoder_declarations_are_checked_before_decoding_and_never_authorize_partial_audit() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets");
+    let (d, f) = read_project(&path).unwrap();
+    let bytes = pack_source(d, f, 1).unwrap();
+    let mut reader = IndexedReader::open(Cursor::new(bytes.clone()), BUDGET, None).unwrap();
+    assert_eq!(reader.index().version, 2);
+    reader.audit(BUDGET, &ticket()).unwrap();
+    let png = reader
+        .index()
+        .payloads
+        .keys()
+        .find(|p| p.ends_with(".png"))
+        .unwrap()
+        .clone();
+    let forged = mutate_index(&bytes, |v| {
+        v["decoder_peaks"][&png] = (8 * 1024 * 1024).into()
+    });
+    let mut forged = IndexedReader::open(Cursor::new(forged), BUDGET, None).unwrap();
+    assert_eq!(forged.audit(BUDGET, &ticket()).unwrap_err().code, "E_INDEX");
+    for edit in [0, 1, 2] {
+        let bad = mutate_index(&bytes, |v| match edit {
+            0 => {
+                v["decoder_peaks"].as_object_mut().unwrap().remove(&png);
+            }
+            1 => v["decoder_peaks"][&png] = 1.into(),
+            _ => v["version"] = 1.into(),
+        });
+        assert!(IndexedReader::open(Cursor::new(bad), BUDGET, None).is_err());
+    }
+}
+
+#[test]
+fn local_closure_preserves_junction_widths_competitors_and_rejects_rehashed_omissions() {
+    let mut d = empty();
+    d.bounds = Bounds {
+        min: [0, 0],
+        max: [64000, 16000],
+    };
+    d.cell_size_cm = 1600;
+    let template: MapDocument =
+        serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+    for i in 0..12 {
+        let mut r = template.roads[0].clone();
+        r.id = format!("road-{i:02}");
+        r.from = format!("node-{i:02}");
+        r.to = format!("node-{:02}", i + 1);
+        r.points = vec![[i * 5000, 0, 1600], [(i + 1) * 5000, 0, 1600]];
+        r.widths_cm = vec![if i == 11 { 1600 } else { 400 }];
+        r.sidewalk_cm = Some(180);
+        d.roads.push(r);
+    }
+    for i in 0..=12 {
+        let mut n = template.nodes[0].clone();
+        n.id = format!("node-{i:02}");
+        n.position = [i * 5000, 0, 1600];
+        d.nodes.push(n);
+    }
+    for (id, x, spacing) in [
+        ("local", 100, 700),
+        ("competitor", 2500, 1200),
+        ("remote", 52000, 1500),
+    ] {
+        d.zones.push(Zone {
+            id: id.into(),
+            polygon: vec![[x, 3000], [x + 5000, 3000], [x + 5000, 14000], [x, 14000]],
+            kind: ZoneKind::Forest,
+            spacing_cm: spacing,
+            density_per_mille: 1000,
+            exclusions: vec![],
+        });
+    }
+    d.normalize();
+    let original = read_bytes(&pack_bytes(d.clone(), BTreeMap::new()).unwrap()).unwrap();
+    let bytes = pack_source(d.clone(), BTreeMap::new(), 2).unwrap();
+    let mut reader = IndexedReader::open(Cursor::new(bytes.clone()), BUDGET, None).unwrap();
+    reader.audit(BUDGET, &ticket()).unwrap();
+    let first = reader.load_region(0, BUDGET, &ticket()).unwrap();
+    assert!(first.package.document.roads.len() < d.roads.len());
+    assert!(first
+        .package
+        .document
+        .roads
+        .iter()
+        .any(|r| r.id == "road-01")); // endpoint star beyond local road
+    assert!(first
+        .package
+        .document
+        .roads
+        .iter()
+        .any(|r| r.id == "road-11")); // global widest sentinel
+    assert!(!first
+        .package
+        .document
+        .zones
+        .iter()
+        .any(|z| z.id == "remote"));
+    // Every cell on both sides of multiple storage seams, with actual occupied solids.
+    for c in d.cells() {
+        let id = reader.region_for_cell(c).unwrap();
+        let source = reader.load_region(id, BUDGET, &ticket()).unwrap();
+        let a = original
+            .generate_with_occupancy(c, 500_000, MAX_OCCUPIED_SOLIDS)
+            .unwrap();
+        let b = source
+            .package
+            .generate_with_occupancy(c, 500_000, MAX_OCCUPIED_SOLIDS)
+            .unwrap();
+        assert_eq!(a.chunk, b.chunk, "{c:?}");
+        assert_eq!(a.solids, b.solids, "{c:?}");
+    }
+    let mut changed = first.package.document.to_document();
+    changed.roads.retain(|r| r.id != "road-00");
+    let id = reader.index().regions[0].source;
+    let bad = replace_record(&bytes, id, &canonical(&changed).unwrap(), false);
+    let mut bad = IndexedReader::open(Cursor::new(bad), BUDGET, None).unwrap();
+    assert!(bad.load_region(0, BUDGET, &ticket()).is_ok());
+    assert_eq!(
+        bad.audit(BUDGET, &ticket()).unwrap_err().code,
+        "E_REFERENCE"
+    );
+    // Implicit width and repeated eligibility retain their frozen whole context.
+    let region = reader.index().regions[0].cells;
+    d.roads[0].sidewalk_cm = None;
+    assert_eq!(
+        local_region_source(&d, region).unwrap(),
+        region_source(&d, region).unwrap()
+    );
+    d.roads[0].sidewalk_cm = Some(180);
+    d.repetitions.push(Repetition {
+        id: "repeat".into(),
+        asset_id: "builtin:fence".into(),
+        points: vec![[100, 0, 15000], [50000, 0, 15000]],
+        spacing_cm: 500,
+    });
+    assert_eq!(
+        local_region_source(&d, region).unwrap(),
+        region_source(&d, region).unwrap()
+    );
 }

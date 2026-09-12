@@ -27,6 +27,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(zip_error)?;
         let name = entry.name().to_string();
+        let entry_size = entry.size();
         if i == 0 && (name != "manifest.json" || entry.header_start() != 0) {
             return Err(error(
                 "E_MANIFEST",
@@ -68,7 +69,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
             structured += entry.size();
         }
         if name.ends_with(".glb") || name.ends_with(".png") || name.ends_with(".webp") {
-            image_peak = image_peak.max(decoder_peak(&mut entry, &name));
+            image_peak = image_peak.max(decoder_peak(&mut entry, &name, entry_size));
         }
         if name.ends_with(".png") {
             pngs += 1;
@@ -93,7 +94,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
 /// Prefix inspection uses < 16 KiB decompressed input plus bounded JSON scratch,
 /// covered by the 8 MiB pre-index allowance. Never scan BIN or decode pixels here.
 /// Unknown/invalid/larger headers keep the previous 256 MiB image allowance.
-fn decoder_peak(entry: &mut zip::read::ZipFile<'_>, name: &str) -> u64 {
+pub(super) fn decoder_peak(entry: &mut impl Read, name: &str, size: u64) -> u64 {
     const FULL: u64 = 256 * 1024 * 1024;
     if name.ends_with(".png") {
         let mut h = [0u8; 33];
@@ -123,8 +124,8 @@ fn decoder_peak(entry: &mut zip::read::ZipFile<'_>, name: &str) -> u64 {
     if n == 0
         || n > 16 * 1024
         || n % 4 != 0
-        || u32::from_le_bytes(h[8..12].try_into().unwrap()) as u64 != entry.size()
-        || n as u64 + 20 > entry.size()
+        || u32::from_le_bytes(h[8..12].try_into().unwrap()) as u64 != size
+        || n as u64 + 20 > size
     {
         return FULL;
     }
