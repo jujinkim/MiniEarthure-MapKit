@@ -43,7 +43,7 @@ pub struct PackageManifest {
     pub format: String,
     #[schemars(range(min = 1, max = 1))]
     pub format_version: u32,
-    #[schemars(range(min = 1, max = 3))]
+    #[schemars(range(min = 1, max = 7))]
     pub recipe_version: u32,
     #[schemars(range(min = 6, max = 6))]
     pub generated_version: u32,

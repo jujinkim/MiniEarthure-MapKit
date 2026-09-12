@@ -861,10 +861,13 @@ fn candidate(d: &MapDocument, zone: usize, x: i64, y: i64) -> Result<Option<Cand
         zone,
     }))
 }
-fn tree_footprint(p: Point) -> [Point; 4] {
+pub(crate) fn zone_tree_radius(zone: &Zone) -> i64 {
+    zone.tree.as_ref().map_or(TREE_RADIUS, |tree| i64::from(tree.radius_cm))
+}
+fn tree_footprint(p: Point, radius: i64) -> [Point; 4] {
     rectangle(
-        [p[0] - TREE_RADIUS, p[1] - TREE_RADIUS],
-        [p[0] + TREE_RADIUS, p[1] + TREE_RADIUS],
+        [p[0] - radius, p[1] - radius],
+        [p[0] + radius, p[1] + radius],
     )
 }
 fn eligible(
@@ -874,8 +877,9 @@ fn eligible(
     work: &mut usize,
 ) -> Result<bool> {
     let zone = &d.zones[c.zone];
-    let poly = tree_footprint(c.p);
-    if !inside(&poly, &zone.polygon, work)? || !source_clear(d, &poly, 100, work)? {
+    let poly = tree_footprint(c.p, zone_tree_radius(zone));
+    let clearance = zone.tree.as_ref().map_or(100, |tree| i64::from(tree.clearance_cm));
+    if !inside(&poly, &zone.polygon, work)? || !source_clear(d, &poly, clearance, work)? {
         return Ok(false);
     }
     for excluded in &zone.exclusions {
@@ -884,14 +888,15 @@ fn eligible(
         }
     }
     for p in occupied {
-        if polygons_overlap(&poly, p, work)? {
+        let footprint = if zone.tree.is_some() { tree_footprint(c.p, zone_tree_radius(zone) + clearance) } else { poly };
+        if polygons_overlap(&footprint, p, work)? {
             return Ok(false);
         }
     }
     // Reserve the authored/automatic sidewalk width, even when a piece is
     // suppressed. Vegetation must never occupy a future access strip.
     for road in &d.roads {
-        if road_overlap(&poly, road, i64::from(sidewalk_width(d, road)) + 100, work)? {
+        if road_overlap(&poly, road, i64::from(sidewalk_width(d, road)) + clearance, work)? {
             return Ok(false);
         }
     }
@@ -929,8 +934,10 @@ fn vegetation(
                 // competitor wins even outside this cell; generation order and
                 // rejection chains cannot create seam duplicates or overlap.
                 for (other_index, other) in d.zones.iter().enumerate() {
-                    let reach =
-                        i64::from(zone.spacing_cm.max(other.spacing_cm)).max(TREE_RADIUS * 2 + 1);
+                    let radii = zone_tree_radius(zone) + zone_tree_radius(other);
+                    let gap = zone.tree.as_ref().map_or(0, |t| i64::from(t.clearance_cm))
+                        .max(other.tree.as_ref().map_or(0, |t| i64::from(t.clearance_cm)));
+                    let reach = i64::from(zone.spacing_cm.max(other.spacing_cm)).max(radii + gap + 1);
                     let other_s = i64::from(other.spacing_cm);
                     let jitter = if other.kind == ZoneKind::Forest {
                         other_s / 3
@@ -954,8 +961,8 @@ fn vegetation(
                             }
                             let dx = (c.p[0] - other_c.p[0]) as i128;
                             let dy = (c.p[1] - other_c.p[1]) as i128;
-                            let overlap = dx.abs() <= TREE_RADIUS as i128 * 2
-                                && dy.abs() <= TREE_RADIUS as i128 * 2;
+                            let overlap = dx.abs() <= i128::from(radii + gap)
+                                && dy.abs() <= i128::from(radii + gap);
                             if (overlap || dx * dx + dy * dy < (reach as i128) * (reach as i128))
                                 && eligible(d, &other_c, occupied, work)?
                             {
@@ -982,7 +989,7 @@ fn vegetation(
                 };
                 let p = Placement {
                     id: format!("{}:{x}:{y}", zone.id),
-                    asset_id: "builtin:tree".into(),
+                    asset_id: zone.tree.as_ref().map_or_else(|| "builtin:tree".into(), |t| t.asset_id.clone()),
                     position,
                     quarter_turns: (c.rank % 4) as u8,
                 };

@@ -807,6 +807,7 @@ fn local_closure_preserves_junction_widths_competitors_and_rejects_rehashed_omis
         ("remote", 52000, 1500),
     ] {
         d.zones.push(Zone {
+                tree: None,
             id: id.into(),
             polygon: vec![[x, 3000], [x + 5000, 3000], [x + 5000, 14000], [x, 14000]],
             kind: ZoneKind::Forest,

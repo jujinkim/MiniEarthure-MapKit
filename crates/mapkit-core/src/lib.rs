@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 6;
+pub const RECIPE_VERSION: u32 = 7;
 pub const GENERATED_VERSION: u32 = 6;
 pub const SCENE_UNITS_VERSION: u32 = 2;
 pub const WORLD_SCALE: f64 = 1.0;
@@ -172,6 +172,18 @@ pub struct Zone {
     pub spacing_cm: u32,
     pub density_per_mille: u16,
     pub exclusions: Vec<Vec<Point>>,
+    /// Recipe 7: declared visual footprint and shared asset for generated trees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree: Option<ZoneTree>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ZoneTree {
+    pub asset_id: String,
+    #[schemars(range(min = 1, max = 200))]
+    pub radius_cm: u32,
+    #[schemars(range(max = 100000))]
+    pub clearance_cm: u32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -243,7 +255,7 @@ pub struct MapDocument {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(range(min = 1, max = 6))]
+    #[schemars(range(min = 1, max = 7))]
     pub recipe_version: u32,
     #[schemars(regex(pattern = "^(default|urban|rural)$"))]
     pub theme: String,
@@ -583,6 +595,9 @@ impl MapDocument {
             }
         }
         for z in &self.zones {
+            if z.tree.is_some() && self.recipe_version < 7 {
+                return Err(error("E_VERSION", "zone tree assets require explicit recipe 7"));
+            }
             if !polygon_valid(&z.polygon, &self.bounds)
                 || z.exclusions.iter().any(|p| !polygon_valid(p, &self.bounds))
                 || z.spacing_cm < 25
@@ -646,6 +661,31 @@ impl MapDocument {
                 })
             {
                 return Err(error("E_ASSET", "invalid asset or collision proxy"));
+            }
+        }
+        for z in &self.zones {
+            let Some(tree) = &z.tree else { continue };
+            let Some(asset) = self.assets.iter().find(|a| a.id == tree.asset_id) else {
+                return Err(error("E_ASSET", "zone tree references a missing custom asset"));
+            };
+            // Custom vegetation stays within the existing 2 m tree footprint
+            // envelope. Larger static models remain ordinary placements.
+            if !(1..=200).contains(&tree.radius_cm) || tree.clearance_cm > 100_000
+                || !asset.path.ends_with(".glb")
+                || asset.collision.is_empty() && asset.convex_collision.is_empty()
+            {
+                return Err(error("E_ASSET", "invalid zone tree asset or footprint"));
+            }
+            // A square contains every quarter turn. Collision must never extend
+            // beyond the footprint used for exclusions and competing trees.
+            let radius = i64::from(tree.radius_cm);
+            if asset.collision.iter().any(|b| [0,2].into_iter().any(|axis| {
+                let min = b.center[axis] - i64::from(b.size_cm[axis] / 2);
+                min < -radius || min + i64::from(b.size_cm[axis]) > radius
+            })) || asset.convex_collision.iter().any(|c| c.vertices.iter().any(|v|
+                v[0].abs() > radius || v[2].abs() > radius))
+            {
+                return Err(error("E_ASSET", "zone tree footprint does not enclose its collision"));
             }
         }
         for p in &self.placements {

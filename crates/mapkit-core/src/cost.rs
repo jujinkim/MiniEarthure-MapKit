@@ -194,8 +194,20 @@ pub(crate) fn estimate_validated(
         // exceed this even when the domain bounds span many cells.
         candidates = candidates.min(300_000);
         cost.objects = cost.objects.saturating_add(candidates);
-        cost.occupied_solids = cost.occupied_solids.saturating_add(candidates);
-        add(candidates.saturating_mul(12 * 5), zone.id.len() + 42);
+        if let Some(tree) = &zone.tree {
+            let asset = d.assets.iter().find(|a| a.id == tree.asset_id).unwrap();
+            cost.occupied_solids = cost.occupied_solids.saturating_add(
+                candidates.saturating_mul((asset.collision.len() + asset.convex_collision.len()) as u64));
+            cost.asset_convexes = cost.asset_convexes.saturating_add(
+                candidates.saturating_mul(asset.convex_collision.len() as u64));
+            let triangles = asset.collision.len() as u64 * 12
+                + asset.convex_collision.iter().map(|c| c.faces.len() as u64).sum::<u64>();
+            add(candidates.saturating_mul(triangles).saturating_mul(5),
+                (zone.id.len() + 42).max(tree.asset_id.len()));
+        } else {
+            cost.occupied_solids = cost.occupied_solids.saturating_add(candidates);
+            add(candidates.saturating_mul(12 * 5), zone.id.len() + 42);
+        }
     }
     let repeated = if d.recipe_version >= 3 {
         crate::placement::repeated(d)?

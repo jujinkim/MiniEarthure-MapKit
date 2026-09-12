@@ -355,3 +355,5 @@ Read `accepted` and `error_code`: a diagnosed rejection still exits successfully
 It excludes allocator overhead, external malloc, stack and RSS; it never changes
 the production allocator. See [the L01-F decision](spec/REGIONAL_SOURCE.md) for
 staged refusal, whole-source validation and the preserved acceptance limits.
+
+Recipe 7 supports [zone-selected vegetation assets](VEGETATION.md): shared GLBs, declared canopy footprints, and live spacing/density without a fixed tree count.

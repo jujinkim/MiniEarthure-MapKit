@@ -135,7 +135,7 @@ impl<'a> RegionSourcePlan<'a> {
                 )));
             }
         }
-        let use_local = local && prune && document.recipe_version == 6;
+        let use_local = local && prune && document.recipe_version >= 6;
         let mut roads = Vec::with_capacity(if use_local { document.roads.len() } else { 0 });
         if use_local {
             for (i, road) in document.roads.iter().enumerate() {
@@ -195,7 +195,8 @@ fn bounds_hit(candidate: &Bounds, bounds: &Bounds) -> bool {
 fn competition_margin(d: &MapDocument) -> i64 {
     d.zones
         .iter()
-        .map(|z| i64::from(z.spacing_cm))
+        .map(|z| i64::from(z.spacing_cm).max(
+            z.tree.as_ref().map_or(0, |t| i64::from(t.radius_cm) * 2 + i64::from(t.clearance_cm) + 1)))
         .max()
         .unwrap_or(0)
         .max(501)
@@ -311,7 +312,7 @@ fn derive_source(
         .cloned()
         .collect();
     out.repetitions = d.repetitions.clone();
-    if local && prune && d.recipe_version == 6 {
+    if local && prune && d.recipe_version >= 6 {
         let road_margin = plan.map_or_else(
             || crate::roads::influence_margin(d) + 1000,
             |p| p.road_margin,
@@ -379,6 +380,7 @@ fn derive_source(
         .iter()
         .map(|p| p.asset_id.clone())
         .chain(out.repetitions.iter().map(|p| p.asset_id.clone()))
+        .chain(out.zones.iter().filter_map(|z| z.tree.as_ref().map(|t| t.asset_id.clone())))
         .collect();
     loop {
         let before = needed.len();

@@ -301,6 +301,7 @@ fn recipe_v1_tree_anchor_quantization_stays_frozen_while_queries_are_corrected()
         max: [399, 399],
     };
     d.zones.push(Zone {
+                tree: None,
         id: "orchard".into(),
         polygon: vec![[-1, -1], [399, -1], [399, 399], [-1, 399]],
         kind: ZoneKind::Orchard,

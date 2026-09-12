@@ -206,11 +206,13 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         spacing_cm: _,
         density_per_mille: _,
         exclusions,
+        tree,
     } in zones
     {
         retained.string(id)?;
         retained.vector(polygon)?;
         retained.polygons(exclusions)?;
+        if let Some(tree) = tree { retained.string(&tree.asset_id)?; }
     }
     retained.vector(assets)?;
     for Asset {
@@ -369,6 +371,7 @@ mod tests {
         d.zones = vector(
             19,
             Zone {
+                tree: Some(mapkit_core::ZoneTree { asset_id: string(177), radius_cm: 58, clearance_cm: 5 }),
                 id: string(173),
                 polygon: vector(23, [0, 0]),
                 kind: ZoneKind::Forest,
@@ -429,6 +432,7 @@ mod tests {
             &d.buildings[0].material,
             &d.buildings[0].roof,
             &d.zones[0].id,
+            &d.zones[0].tree.as_ref().unwrap().asset_id,
             &d.assets[0].id,
             &d.assets[0].path,
             &d.assets[0].attribution.source,

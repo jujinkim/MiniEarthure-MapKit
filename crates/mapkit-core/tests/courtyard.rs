@@ -216,6 +216,7 @@ fn courtyard_road_and_vegetation_are_allowed_only_with_full_clearance() {
     d.roads.clear();
     d.nodes.clear();
     d.zones.push(Zone {
+                tree: None,
         id: "court-trees".into(),
         polygon: vec![[9000, 9000], [17000, 9000], [17000, 17000], [9000, 17000]],
         kind: ZoneKind::Orchard,

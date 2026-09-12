@@ -78,7 +78,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 6.0,
+      "maximum": 7.0,
       "minimum": 1.0
     },
     "repetitions": {
@@ -819,6 +819,17 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
+        },
+        "tree": {
+          "description": "Recipe 7: declared visual footprint and shared asset for generated trees.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ZoneTree"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -829,6 +840,32 @@
         "forest",
         "orchard"
       ]
+    },
+    "ZoneTree": {
+      "type": "object",
+      "required": [
+        "asset_id",
+        "clearance_cm",
+        "radius_cm"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "clearance_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 100000.0,
+          "minimum": 0.0
+        },
+        "radius_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 200.0,
+          "minimum": 1.0
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
