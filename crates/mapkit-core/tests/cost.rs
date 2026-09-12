@@ -3,6 +3,26 @@ fn document() -> MapDocument {
     serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap()
 }
 #[test]
+fn prepared_region_rechecks_mutated_indexed_source_and_limits_cells() {
+    let mut source = document().into_indexed_source().unwrap();
+    let region = CellRegion { min: Cell { x: 0, y: 0 }, end: Cell { x: 1, y: 1 } };
+    source.roads.reverse();
+    source.nodes.reverse();
+    let prepared = PreparedMap::new_region(source.clone(), region).unwrap();
+    let expected = generate_with_occupancy(GenerationInput {
+        document: &source, cell: region.min, heightgrid: None, max_triangles: 500_000,
+    }, MAX_OCCUPIED_SOLIDS).unwrap();
+    let actual = prepared.generate_with_occupancy(region.min, None, 500_000, Some(MAX_OCCUPIED_SOLIDS)).unwrap();
+    assert_eq!(actual.chunk, expected.chunk);
+    assert_eq!(actual.solids, expected.solids);
+    assert!(prepared.estimate(region.end, 500_000).is_err());
+    source.roads[0].widths_cm.clear();
+    // Indexed topology survives public mutation; it must never skip validation.
+    assert!(PreparedMap::new_region(source, region).is_err());
+    let invalid_region = CellRegion { min: region.min, end: Cell { x: 999, y: 999 } };
+    assert!(PreparedMap::new_region(document(), invalid_region).is_err());
+}
+#[test]
 fn prepared_source_is_immutable_and_preserves_generation_and_budget_results() {
     let mut source = document();
     let prepared = PreparedMap::new(source.clone()).unwrap();

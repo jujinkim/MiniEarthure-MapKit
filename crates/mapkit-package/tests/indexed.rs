@@ -26,6 +26,33 @@ fn ticket() -> ReadTicket {
     ReadEpoch::default().begin()
 }
 const BUDGET: u64 = 4 * 1024 * 1024 * 1024;
+#[test]
+fn optional_profiles_preserve_complete_audit_and_generated_occupancy() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets");
+    let (d, f) = read_project(&path).unwrap();
+    let bytes = pack_source(d, f, 1).unwrap();
+    let mut reader = IndexedReader::open(Cursor::new(bytes), BUDGET, None).unwrap();
+    let expected = reader.audit_summary(BUDGET, &ticket()).unwrap();
+    let mut profile = ReadProfile::enabled();
+    let actual = reader.audit_summary_profiled(BUDGET, &ticket(), &mut profile).unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(profile.stages["audit_region_derivation"].calls as usize, reader.index().regions.len());
+    assert_eq!(profile.stages["source_validation"].calls, 1);
+    let expected = reader.load_region(0, BUDGET, &ticket()).unwrap();
+    let mut profile = ReadProfile::enabled();
+    let actual = reader.load_region_profiled(0, BUDGET, &ticket(), &mut profile).unwrap();
+    assert_eq!(actual.identity, expected.identity);
+    assert_eq!(profile.stages["prepared_source_validation"].calls, 1);
+    for cell in expected.cells.cells().unwrap() {
+        let a = actual.package.generate_with_occupancy(cell, 500_000, MAX_OCCUPIED_SOLIDS).unwrap();
+        let e = expected.package.generate_with_occupancy(cell, 500_000, MAX_OCCUPIED_SOLIDS).unwrap();
+        assert_eq!(a.chunk, e.chunk);
+        assert_eq!(a.solids, e.solids);
+    }
+    let mut disabled = ReadProfile::default();
+    reader.load_region_profiled(0, BUDGET, &ticket(), &mut disabled).unwrap();
+    assert!(disabled.stages.is_empty());
+}
 #[derive(Clone)]
 struct Observed {
     bytes: Cursor<Vec<u8>>,

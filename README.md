@@ -320,3 +320,12 @@ example compares generated geometry and occupied solids between fixed artifacts:
 `rtk cargo run --release -p mapkit-cli --example regional_parity -- OLD NEW '[[0,0],[1,0]]'`.
 Use `all` for all cells of a bounded comparison fixture. The old partial source is
 a migration oracle, never an installation approval or full-artifact audit.
+
+`regional_benchmark` separates complete audit, regional source validation,
+generation estimates, occupied generation and generated hash costs on an existing
+artifact. It keeps one source snapshot at a time and writes JSON lines to stdout:
+`rtk cargo run --locked -p mapkit-cli --example regional_benchmark -- MAP.mkregions '[[3,3],[7,8],[8,8]]'`.
+Use the same debug/release profile and artifact bytes for comparisons. The opt-in
+`ReadProfile` reports accumulated stage microseconds and call counts; normal reader
+calls do not read a clock. Timings do not establish cold storage, RSS/GPU, consumer
+budget admission or gameplay acceptance.

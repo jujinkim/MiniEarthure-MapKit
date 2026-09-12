@@ -25,8 +25,9 @@ impl PreparedMap {
     pub fn new_region(mut document: MapDocument, region: CellRegion) -> Result<Self> {
         document = document.into_indexed_source()?;
         region.validate(&document)?;
+        // Normalization only reorders checked records; it cannot invalidate
+        // geometry or references and must follow untrusted-input work limits.
         document.normalize();
-        document.validate_source()?;
         Ok(Self { document, costs: RwLock::new(BTreeMap::new()), region: Some(region) })
     }
     /// Editing must create a new validated snapshot; no mutable source alias exists.

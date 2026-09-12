@@ -12,6 +12,36 @@ const MAGIC: &[u8; 8] = b"MKREGN01";
 const HEADER: u64 = 48;
 pub const MAX_REGIONS: usize = 8192;
 
+/// Opt-in wall-clock diagnostics. These are observations, never validation
+/// receipts, resource allowances or part of deterministic package identity.
+#[derive(Debug, Default, Serialize)]
+pub struct ReadProfile {
+    #[serde(skip)]
+    enabled: bool,
+    pub stages: BTreeMap<&'static str, ReadStage>,
+}
+#[derive(Debug, Default, Serialize)]
+pub struct ReadStage {
+    pub calls: u64,
+    pub elapsed_us: u64,
+}
+impl ReadProfile {
+    pub fn enabled() -> Self {
+        Self { enabled: true, stages: BTreeMap::new() }
+    }
+    fn start(&self) -> Option<std::time::Instant> {
+        self.enabled.then(std::time::Instant::now)
+    }
+    fn finish(&mut self, name: &'static str, start: Option<std::time::Instant>) {
+        if let Some(start) = start {
+            let elapsed = start.elapsed().as_micros().min(u128::from(u64::MAX)) as u64;
+            let stage = self.stages.entry(name).or_default();
+            stage.calls += 1;
+            stage.elapsed_us = stage.elapsed_us.saturating_add(elapsed);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Record {
@@ -407,9 +437,18 @@ impl<R: Read + Seek> IndexedReader<R> {
         source: usize,
         payloads: &BTreeMap<String, usize>,
         ticket: &ReadTicket,
+        profile: &mut ReadProfile,
     ) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
+        let start = profile.start();
         let bytes = self.record(source, ticket)?;
-        let document: MapDocument = json::<MapDocument>(&bytes)?.into_indexed_source()?;
+        profile.finish("source_record_read_decode_hash", start);
+        let start = profile.start();
+        let document: MapDocument = json(&bytes)?;
+        profile.finish("source_parse", start);
+        let start = profile.start();
+        let document = document.into_indexed_source()?;
+        profile.finish("source_validation", start);
+        let start = profile.start();
         if canonical(&metadata(&document))? != canonical(&self.index.world)? {
             return Err(bad("source disagrees with indexed world"));
         }
@@ -423,6 +462,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         {
             return Err(error("E_REFERENCE", "region inventory/source mismatch"));
         }
+        profile.finish("source_metadata_inventory", start);
+        let start = profile.start();
         for (path, id) in payloads {
             let bytes = self.record(*id, ticket)?;
             if self.index.version == 2
@@ -435,6 +476,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             files.insert(path.clone(), bytes);
         }
         ticket.check()?;
+        profile.finish("payload_read_decode_hash_planning", start);
         Ok((document, files))
     }
     pub fn load_region(
@@ -442,6 +484,15 @@ impl<R: Read + Seek> IndexedReader<R> {
         id: usize,
         memory_limit: u64,
         ticket: &ReadTicket,
+    ) -> Result<RegionSnapshot> {
+        self.load_region_profiled(id, memory_limit, ticket, &mut ReadProfile::default())
+    }
+    pub fn load_region_profiled(
+        &mut self,
+        id: usize,
+        memory_limit: u64,
+        ticket: &ReadTicket,
+        profile: &mut ReadProfile,
     ) -> Result<RegionSnapshot> {
         ticket.check()?;
         let cost = self.region_cost(id)?;
@@ -452,13 +503,20 @@ impl<R: Read + Seek> IndexedReader<R> {
             ));
         }
         let region = self.index.regions[id].clone();
-        let (d, files) = self.source_files(region.source, &region.payloads, ticket)?;
+        let (d, files) = self.source_files(region.source, &region.payloads, ticket, profile)?;
+        let start = profile.start();
         let document = PreparedMap::new_region(d, region.cells)?;
+        profile.finish("prepared_source_validation", start);
         ticket.check()?;
+        let start = profile.start();
         validate_assets(&document, &files)?;
+        profile.finish("assets_validation", start);
         ticket.check()?;
+        let start = profile.start();
         validate_heightmaps_region(&document, &files, Some(region.cells))?;
+        profile.finish("heightmaps_validation", start);
         ticket.check()?;
+        let start = profile.start();
         let identity = sha256(&canonical(&(
             "MKREGN01",
             &self.identity,
@@ -515,6 +573,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             validation_peak_bytes: cost.validation_peak_bytes,
         };
         ticket.check()?;
+        profile.finish("source_manifest_identity", start);
         Ok(RegionSnapshot {
             package: Package {
                 manifest,
@@ -531,7 +590,7 @@ impl<R: Read + Seek> IndexedReader<R> {
     /// Explicit full audit, separate from partial open/load. Reconstruct the
     /// authoring source and prove every regional closure matches the producer rule.
     pub fn audit(&mut self, memory_limit: u64, ticket: &ReadTicket) -> Result<()> {
-        self.audited_files(memory_limit, ticket).map(|_| ())
+        self.audited_files(memory_limit, ticket, &mut ReadProfile::default()).map(|_| ())
     }
     pub fn audit_peak_bytes(&self) -> u64 {
         let cost = self.cost(self.index.authoring_source, &self.index.payloads);
@@ -562,10 +621,20 @@ impl<R: Read + Seek> IndexedReader<R> {
         memory_limit: u64,
         ticket: &ReadTicket,
     ) -> Result<serde_json::Value> {
+        self.audit_summary_profiled(memory_limit, ticket, &mut ReadProfile::default())
+    }
+    pub fn audit_summary_profiled(
+        &mut self,
+        memory_limit: u64,
+        ticket: &ReadTicket,
+        profile: &mut ReadProfile,
+    ) -> Result<serde_json::Value> {
         const SUMMARY_BYTES: u64 = 16 * 1024 * 1024;
-        let files = self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket)?;
-        let document: MapDocument =
-            json::<MapDocument>(&files["document.json"])?.into_indexed_source()?;
+        // Move the already checked original within this one audit lifetime.
+        // Neither its mutable type nor indexed topology is a public validation
+        // receipt; no authored source is retained after the summary returns.
+        let (document, files) = self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket, profile)?;
+        let start = profile.start();
         let overview = mapkit_core::source_overview(&document)?;
         let overview_cost = overview.cost()?;
         let overview_json = overview.to_json(4 * 1024 * 1024)?;
@@ -576,6 +645,8 @@ impl<R: Read + Seek> IndexedReader<R> {
             .map(|(_, b)| b.len() as u64)
             .sum();
         let expanded_bytes: u64 = self.index.records.iter().map(|r| r.size).sum();
+        profile.finish("summary_overview_inventory", start);
+        let start = profile.start();
         let mut digest = Sha256::new();
         self.reader.seek(SeekFrom::Start(0)).map_err(io)?;
         let mut buffer = [0u8; 65536];
@@ -596,6 +667,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             return Err(bad("artifact changed during audit"));
         }
         ticket.check()?;
+        profile.finish("summary_full_file_hash", start);
         Ok(serde_json::json!({
             "format": "mkregions", "format_version": self.index.version, "verification": "complete-audit",
             "index_sha256": self.identity, "package_sha256": format!("{:x}", digest.finalize()),
@@ -617,7 +689,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         memory_limit: u64,
         ticket: &ReadTicket,
     ) -> Result<()> {
-        let files = self.audited_files(memory_limit, ticket)?;
+        let (_, files) = self.audited_files(memory_limit, ticket, &mut ReadProfile::default())?;
         ticket.check()?;
         unpack_files(&files, destination)
     }
@@ -625,34 +697,46 @@ impl<R: Read + Seek> IndexedReader<R> {
         &mut self,
         memory_limit: u64,
         ticket: &ReadTicket,
-    ) -> Result<BTreeMap<String, Vec<u8>>> {
+        profile: &mut ReadProfile,
+    ) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
         let source = self.index.authoring_source;
         let payloads = self.index.payloads.clone();
         ticket.check()?;
         if self.audit_peak_bytes() > memory_limit {
             return Err(error("E_MEMORY_BUDGET", "whole audit exceeds allowance"));
         }
-        let (d, files) = self.source_files(source, &payloads, ticket)?;
+        let (d, files) = self.source_files(source, &payloads, ticket, profile)?;
         // source_files already validates the complete original document.
+        let start = profile.start();
         validate_assets(&d, &files)?;
+        profile.finish("audit_assets_validation", start);
+        let start = profile.start();
         validate_heightmaps(&d, &files)?;
+        profile.finish("audit_heightmaps_validation", start);
+        let start = profile.start();
         if content_hash(&d, &files)? != self.index.world_content_hash {
             return Err(error("E_HASH", "authoring world identity mismatch"));
         }
+        profile.finish("audit_world_content_hash", start);
         for id in 0..self.index.regions.len() {
             ticket.check()?;
             let r = self.index.regions[id].clone();
+            let start = profile.start();
             let expected = if self.index.version == 1 {
                 region_source(&d, r.cells)?
             } else {
                 local_region_source(&d, r.cells)?
             };
+            profile.finish("audit_region_derivation", start);
+            let start = profile.start();
             if self.record(r.source, ticket)? != canonical(&expected)? {
                 return Err(error(
                     "E_REFERENCE",
                     "regional source differs from complete dependency closure",
                 ));
             }
+            profile.finish("audit_region_record_canonical_compare", start);
+            let start = profile.start();
             let expected_paths = references(&expected)?;
             if r.payloads
                 .keys()
@@ -666,9 +750,10 @@ impl<R: Read + Seek> IndexedReader<R> {
                     "regional dependency inventory mismatch",
                 ));
             }
+            profile.finish("audit_region_inventory", start);
         }
         ticket.check()?;
-        Ok(files)
+        Ok((d, files))
     }
 }
 impl IndexedReader<File> {
