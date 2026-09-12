@@ -321,3 +321,70 @@ The final release `regional_parity` example also compared complete generated
 geometry and occupied-solid structures in 20 representative cells across the
 fixed dense/mixed 2km version-1/version-2 pairs at 128m/256m. All match; these
 partial migration comparisons do not replace complete artifact admission.
+
+## L01-E decision before implementation — 2026-09-12
+
+Full audit may build one immutable, document-borrowing `RegionSourcePlan` after
+the original source, all payloads, terrain and world hash have passed validation.
+It caches placement footprint bounds, whole-road bounds and global selection
+constants once. Placement footprint and anchor remain separate predicates;
+road bounds only reject distant candidates before the original segment test.
+Endpoint stars remain one-hop, and the last tied widest road remains selected.
+Version-1 and conservative fallbacks keep their original global context. The
+ordinary uncached producer stays available as the canonical comparison oracle.
+This changes no file/index/world identity, generation rule or protocol.
+
+The two arrays have exactly one 32-byte Bounds per placement/road, at most
+200,000 combined entries under the existing input limit (6,400,000 bytes).
+Reserve `min(original record bytes, 6,400,000) + 256` before reading any payload,
+in addition to the existing closure-phase original/expected/canonical/scratch
+allowances. Before allocation, enforce the actual entry count/byte bound; never
+grow these arrays. The 256 bytes cover vector/plan headers and allocation
+bookkeeping. Only one placement's existing footprint scratch is live during
+construction. The maximum of original validation and this augmented comparison
+phase determines admission; no consumer budget is raised.
+
+Check cancellation before construction, every 64 records and after construction,
+as well as before each regional derivation and record read. Drop the plan on
+success, error or cancellation before audit returns/summary construction; it
+cannot escape its borrowed original, survive on the reader, or become a cache.
+This is a bounded pure selection transform, not a validation receipt or unchecked
+PreparedMap constructor. Its returned ordinary MapDocument still requires the
+existing validation before execution. Full source/payload/inventory and every
+canonical regional comparison remain required before installation.
+
+Validate cached/uncached canonical equality for v1/v2, all fallback modes,
+seams/terrain/assets/convex placement, segment-vs-road bounds, endpoint stars and
+widest ties; preserve generated/occupied parity, pre-read budget refusal and
+cancellation/current-owner protection. Compare the same fixed L02 artifacts and
+consumer initial preparation with separate plan-build/derivation timings.
+
+### Implemented and scoped validation
+
+132 standalone Rust tests pass, including six new plan/budget regressions.
+Canonical source equality covers both closure versions, recipes 1–6, implicit
+width/repetition fallback, reversed source order, offset/rotated odd convex
+footprints with a separate anchor, whole-road AABB false positives, exact halo
+touch, one-hop endpoints and last-tied widest roads. Fallback global scans also
+observe cancellation every 64 records. An audit allowance one byte below its
+reported peak rejects before payload I/O; the exact allowance succeeds.
+Existing full audit, unused payload, frozen v1, corruption, terrain seams,
+generated/occupied-solid and source independence tests remain passing.
+Debug/release workspace native, CLI and examples build; core ownership passes.
+
+On the same fixed synthetic dense 2km debug artifacts, 128m/256m standalone audit
+changed from 14.199s/6.955s to 8.025s/5.399s. Derivation changed from
+8.965s/2.481s to 2.763s/0.928s, plus one plan build of 27.965ms/28.438ms.
+The 22,500 placements and 10,891 roads use 1,068,768 logical plan bytes including
+overhead, within their 5,973,705-byte pre-read reservation. The original validation
+phase still dominates the phase maximum, so these artifacts' audit peaks remain
+unchanged. Mixed 256m audit changed from 2.552s to 2.031s. File/index/world identity,
+source allowances and selected cell results are identical; all four fixed
+mixed/dense 128m/256m artifacts pass complete audit, and 20 selected v1/v2 cells
+match complete generated geometry and occupied solids.
+
+These are single sequential macOS arm64/M1 debug observations, not controlled
+cold-cache, RSS/GPU, consumer-budget or startup-SLA acceptance. Full original
+validation/retention still bounds audit memory. The plan is released before
+summary/return and does not solve sharded authoring, resident source LRU,
+region-request transport or larger-area/platform acceptance.

@@ -33,13 +33,17 @@ type Key = (bool, String, usize);
 /// A junction mouth moves at most half the widest road along its arm, then
 /// half a width sideways. Two rounded coordinates add at most two centimetres.
 pub(crate) fn influence_margin(d: &MapDocument) -> i64 {
-    d.roads
-        .iter()
-        .flat_map(|r| &r.widths_cm)
-        .copied()
-        .max()
-        .unwrap_or(0) as i64
-        + 2
+    width_influence_margin(
+        d.roads
+            .iter()
+            .flat_map(|r| &r.widths_cm)
+            .copied()
+            .max()
+            .unwrap_or(0),
+    )
+}
+pub(crate) fn width_influence_margin(maximum_width: u32) -> i64 {
+    i64::from(maximum_width) + 2
 }
 fn key(r: &Road, i: usize) -> Key {
     if i == 0 {

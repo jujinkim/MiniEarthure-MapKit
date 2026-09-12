@@ -49,12 +49,173 @@ impl CellRegion {
 /// their full placement/building context instead of silently changing generation.
 /// This conservative fallback is intentional and is reported in source byte counts.
 pub fn region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument> {
-    derive_source(d, region, false)
+    derive_source(d, region, false, None)
 }
 
 /// Version-2 closure. Version-1 derivation remains byte-for-byte reproducible.
 pub fn local_region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument> {
-    derive_source(d, region, true)
+    derive_source(d, region, true, None)
+}
+
+/// Bounded, immutable selection scratch for repeated regional derivation.
+/// Like `region_source`, this transforms an already valid document into an
+/// ordinary MapDocument; it is NOT a validation receipt or a PreparedMap.
+/// Callers must validate returned source before execution. No source is cloned
+/// or retained beyond the input borrow, and no caller-supplied bounds are trusted.
+pub struct RegionSourcePlan<'a> {
+    document: &'a MapDocument,
+    local: bool,
+    placements: Vec<Bounds>,
+    roads: Vec<Bounds>,
+    margin: i64,
+    prune: bool,
+    road_margin: i64,
+    widest: Option<usize>,
+}
+
+impl<'a> RegionSourcePlan<'a> {
+    // Shared authored-object limit: these two arrays never exceed its total.
+    const MAX_ENTRIES: usize = 200_000;
+    const OVERHEAD: u64 = 256;
+
+    /// Pre-read reservation. Actual entries are checked against this allowance
+    /// before allocation, so even a forged serialized size cannot undercharge.
+    pub fn allocation_bound(source_bytes: u64) -> u64 {
+        source_bytes.min((Self::MAX_ENTRIES * std::mem::size_of::<Bounds>()) as u64)
+            + Self::OVERHEAD
+    }
+
+    pub fn new(
+        document: &'a MapDocument,
+        local: bool,
+        memory_limit: u64,
+        mut check: impl FnMut() -> Result<()>,
+    ) -> Result<Self> {
+        check()?;
+        let count = document
+            .placements
+            .len()
+            .checked_add(document.roads.len())
+            .filter(|count| *count <= Self::MAX_ENTRIES)
+            .ok_or_else(|| error("E_LIMIT", "regional plan object limit exceeded"))?;
+        let bytes = (count * std::mem::size_of::<Bounds>()) as u64 + Self::OVERHEAD;
+        if bytes > memory_limit {
+            return Err(error("E_MEMORY_BUDGET", "regional plan exceeds allowance"));
+        }
+        let mut prune = document.recipe_version >= 3 && document.repetitions.is_empty();
+        let mut widest = None;
+        let mut maximum_width = 0;
+        for (i, road) in document.roads.iter().enumerate() {
+            if i % 64 == 0 {
+                check()?;
+            }
+            prune &= road.kind != RoadKind::Ground || road.sidewalk_cm.is_some();
+            let width = road.widths_cm.iter().copied().max().unwrap_or(0);
+            // max_by_key keeps the last item on a tie, including zero width.
+            if widest.is_none() || width >= maximum_width {
+                maximum_width = width;
+                widest = Some(i);
+            }
+        }
+        let mut maximum_spacing = 0;
+        for (i, zone) in document.zones.iter().enumerate() {
+            if i % 64 == 0 {
+                check()?;
+            }
+            maximum_spacing = maximum_spacing.max(i64::from(zone.spacing_cm));
+        }
+        let mut placements = Vec::with_capacity(if prune { document.placements.len() } else { 0 });
+        if prune {
+            for (i, placement) in document.placements.iter().enumerate() {
+                if i % 64 == 0 {
+                    check()?;
+                }
+                placements.push(point_bounds(crate::placement::footprint(
+                    document, placement,
+                )));
+            }
+        }
+        let use_local = local && prune && document.recipe_version == 6;
+        let mut roads = Vec::with_capacity(if use_local { document.roads.len() } else { 0 });
+        if use_local {
+            for (i, road) in document.roads.iter().enumerate() {
+                if i % 64 == 0 {
+                    check()?;
+                }
+                roads.push(point_bounds(road.points.iter().map(|p| [p[0], p[2]])));
+            }
+        }
+        let plan = Self {
+            document,
+            local,
+            placements,
+            roads,
+            margin: maximum_spacing.max(501) + 1000,
+            prune,
+            road_margin: if use_local {
+                crate::roads::width_influence_margin(maximum_width) + 1000
+            } else {
+                0
+            },
+            widest: if use_local { widest } else { None },
+        };
+        check()?;
+        Ok(plan)
+    }
+
+    pub fn allocated_bytes(&self) -> u64 {
+        ((self.placements.capacity() + self.roads.capacity()) * std::mem::size_of::<Bounds>())
+            as u64
+            + Self::OVERHEAD
+    }
+
+    pub fn derive(&self, region: CellRegion) -> Result<MapDocument> {
+        derive_source(self.document, region, self.local, Some(self))
+    }
+}
+
+fn point_bounds(points: impl IntoIterator<Item = Point>) -> Bounds {
+    let mut bounds = Bounds {
+        min: [i64::MAX; 2],
+        max: [i64::MIN; 2],
+    };
+    for p in points {
+        for a in 0..2 {
+            bounds.min[a] = bounds.min[a].min(p[a]);
+            bounds.max[a] = bounds.max[a].max(p[a]);
+        }
+    }
+    bounds
+}
+
+fn bounds_hit(candidate: &Bounds, bounds: &Bounds) -> bool {
+    (0..2).all(|a| candidate.min[a] <= bounds.max[a] && candidate.max[a] >= bounds.min[a])
+}
+
+fn competition_margin(d: &MapDocument) -> i64 {
+    d.zones
+        .iter()
+        .map(|z| i64::from(z.spacing_cm))
+        .max()
+        .unwrap_or(0)
+        .max(501)
+        + 1000
+}
+
+fn can_prune(d: &MapDocument) -> bool {
+    d.recipe_version >= 3
+        && d.repetitions.is_empty()
+        && d.roads
+            .iter()
+            .all(|r| r.kind != RoadKind::Ground || r.sidewalk_cm.is_some())
+}
+
+fn widest_road(d: &MapDocument) -> Option<usize> {
+    d.roads
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, r)| r.widths_cm.iter().max().copied().unwrap_or(0))
+        .map(|(i, _)| i)
 }
 
 /// Clone metadata without allocating a transient copy of world geometry.
@@ -83,7 +244,12 @@ pub fn source_metadata(d: &MapDocument) -> MapDocument {
     }
 }
 
-fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<MapDocument> {
+fn derive_source(
+    d: &MapDocument,
+    region: CellRegion,
+    local: bool,
+    plan: Option<&RegionSourcePlan<'_>>,
+) -> Result<MapDocument> {
     region.validate(d)?;
     let mut out = source_metadata(d);
     let mut bounds = d.cell_bounds(region.min)?;
@@ -95,14 +261,7 @@ fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<Map
         .max;
     // A vegetation competitor up to max spacing away can suppress a local tree.
     // Its footprint and clearance need the same source, across storage seams.
-    let margin = d
-        .zones
-        .iter()
-        .map(|z| i64::from(z.spacing_cm))
-        .max()
-        .unwrap_or(0)
-        .max(501)
-        + 1000;
+    let margin = plan.map_or_else(|| competition_margin(d), |p| p.margin);
     for a in 0..2 {
         bounds.min[a] -= margin;
         bounds.max[a] += margin;
@@ -113,11 +272,7 @@ fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<Map
                 && points.iter().any(|p| p[a] >= bounds.min[a])
         })
     };
-    let prune = d.recipe_version >= 3
-        && d.repetitions.is_empty()
-        && d.roads
-            .iter()
-            .all(|r| r.kind != RoadKind::Ground || r.sidewalk_cm.is_some());
+    let prune = plan.map_or_else(|| can_prune(d), |p| p.prune);
     out.buildings = d
         .buildings
         .iter()
@@ -127,12 +282,16 @@ fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<Map
     out.placements = d
         .placements
         .iter()
-        .filter(|p| {
+        .enumerate()
+        .filter(|(i, p)| {
             !prune
-                || hit(&crate::placement::footprint(d, p))
+                || plan.map_or_else(
+                    || hit(&crate::placement::footprint(d, p)),
+                    |plan| bounds_hit(&plan.placements[*i], &bounds),
+                )
                 || hit(&[[p.position[0], p.position[2]]])
         })
-        .cloned()
+        .map(|(_, p)| p.clone())
         .collect();
     out.surface_areas = d
         .surface_areas
@@ -153,19 +312,28 @@ fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<Map
         .collect();
     out.repetitions = d.repetitions.clone();
     if local && prune && d.recipe_version == 6 {
-        let road_margin = crate::roads::influence_margin(d) + 1000;
+        let road_margin = plan.map_or_else(
+            || crate::roads::influence_margin(d) + 1000,
+            |p| p.road_margin,
+        );
+        let road_bounds = Bounds {
+            min: bounds.min.map(|v| v - road_margin),
+            max: bounds.max.map(|v| v + road_margin),
+        };
         let relevant: BTreeSet<_> = d
             .roads
             .iter()
-            .filter(|r| {
-                r.points.windows(2).any(|s| {
-                    (0..2).all(|a| {
-                        s.iter().any(|p| p[a * 2] <= bounds.max[a] + road_margin)
-                            && s.iter().any(|p| p[a * 2] >= bounds.min[a] - road_margin)
+            .enumerate()
+            .filter(|(i, r)| {
+                plan.is_none_or(|p| bounds_hit(&p.roads[*i], &road_bounds))
+                    && r.points.windows(2).any(|s| {
+                        (0..2).all(|a| {
+                            s.iter().any(|p| p[a * 2] <= bounds.max[a] + road_margin)
+                                && s.iter().any(|p| p[a * 2] >= bounds.min[a] - road_margin)
+                        })
                     })
-                })
             })
-            .map(|r| r.id.as_str())
+            .map(|(_, r)| r.id.as_str())
             .collect();
         // Complete authored endpoint stars, not a geometric proximity join.
         let endpoints: BTreeSet<_> = d
@@ -174,10 +342,9 @@ fn derive_source(d: &MapDocument, region: CellRegion, local: bool) -> Result<Map
             .filter(|r| relevant.contains(r.id.as_str()))
             .flat_map(|r| [r.from.as_str(), r.to.as_str()])
             .collect();
-        let widest = d
-            .roads
-            .iter()
-            .max_by_key(|r| r.widths_cm.iter().max().copied().unwrap_or(0));
+        let widest = plan
+            .map_or_else(|| widest_road(d), |p| p.widest)
+            .map(|i| &d.roads[i]);
         out.roads = d
             .roads
             .iter()

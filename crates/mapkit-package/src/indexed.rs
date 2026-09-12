@@ -610,6 +610,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         cost.validation_peak_bytes.max(
             cost.retained_memory_bytes
                 + self.index.records[self.index.authoring_source].size * 32
+                + RegionSourcePlan::allocation_bound(self.index.records[self.index.authoring_source].size)
                 + comparison
                 + 8 * 1024 * 1024,
         )
@@ -718,15 +719,19 @@ impl<R: Read + Seek> IndexedReader<R> {
             return Err(error("E_HASH", "authoring world identity mismatch"));
         }
         profile.finish("audit_world_content_hash", start);
+        let start = profile.start();
+        let plan = RegionSourcePlan::new(
+            &d,
+            self.index.version != 1,
+            RegionSourcePlan::allocation_bound(self.index.records[source].size),
+            || ticket.check(),
+        )?;
+        profile.finish("audit_region_plan_build", start);
         for id in 0..self.index.regions.len() {
             ticket.check()?;
             let r = self.index.regions[id].clone();
             let start = profile.start();
-            let expected = if self.index.version == 1 {
-                region_source(&d, r.cells)?
-            } else {
-                local_region_source(&d, r.cells)?
-            };
+            let expected = plan.derive(r.cells)?;
             profile.finish("audit_region_derivation", start);
             let start = profile.start();
             if self.record(r.source, ticket)? != canonical(&expected)? {
@@ -752,6 +757,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             }
             profile.finish("audit_region_inventory", start);
         }
+        drop(plan);
         ticket.check()?;
         Ok((d, files))
     }

@@ -36,6 +36,7 @@ fn optional_profiles_preserve_complete_audit_and_generated_occupancy() {
     let mut profile = ReadProfile::enabled();
     let actual = reader.audit_summary_profiled(BUDGET, &ticket(), &mut profile).unwrap();
     assert_eq!(actual, expected);
+    assert_eq!(profile.stages["audit_region_plan_build"].calls, 1);
     assert_eq!(profile.stages["audit_region_derivation"].calls as usize, reader.index().regions.len());
     assert_eq!(profile.stages["source_validation"].calls, 1);
     let expected = reader.load_region(0, BUDGET, &ticket()).unwrap();
@@ -344,6 +345,30 @@ fn index_only_open_and_local_reads_have_exact_bounded_spans() {
             .code,
         "E_CELL"
     );
+}
+
+#[test]
+fn whole_audit_plan_peak_rejects_before_payload_reads() {
+    let bytes = pack_source(empty(), BTreeMap::new(), 2).unwrap();
+    let reads = Arc::new(Mutex::new(vec![]));
+    let mut reader = IndexedReader::open(
+        Observed {
+            bytes: Cursor::new(bytes),
+            reads: reads.clone(),
+            cancel: None,
+        },
+        BUDGET,
+        None,
+    ).unwrap();
+    reads.lock().unwrap().clear();
+    let peak = reader.audit_peak_bytes();
+    assert_eq!(
+        reader.audit(peak - 1, &ticket()).unwrap_err().code,
+        "E_MEMORY_BUDGET",
+    );
+    assert!(reads.lock().unwrap().is_empty());
+    reader.audit(peak, &ticket()).unwrap();
+    assert!(!reads.lock().unwrap().is_empty());
 }
 
 #[test]

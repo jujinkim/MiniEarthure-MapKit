@@ -894,7 +894,7 @@ pub struct GenerationInput<'a> {
 }
 mod prepared;
 mod region;
-pub use region::{local_region_source, region_source, source_metadata, CellRegion};
+pub use region::{local_region_source, region_source, source_metadata, CellRegion, RegionSourcePlan};
 mod spatial;
 pub use prepared::PreparedMap;
 mod cost;

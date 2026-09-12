@@ -329,3 +329,12 @@ Use the same debug/release profile and artifact bytes for comparisons. The opt-i
 `ReadProfile` reports accumulated stage microseconds and call counts; normal reader
 calls do not read a clock. Timings do not establish cold storage, RSS/GPU, consumer
 budget admission or gameplay acceptance.
+
+L01-E complete audit reuses one borrow-scoped plan of placement footprint/road
+bounds and global selection constants. It retains exact v1/v2 canonical closure
+checks and releases the plan before returning. The extra bounded plan allowance
+is included in pre-read audit admission; region loads and consumer budgets are
+unchanged. `audit_region_plan_build` and `audit_region_derivation` report its
+separate preparation and reuse costs. See [the design](spec/REGIONAL_SOURCE.md)
+for memory, cancellation and validation boundaries; this is not a resident source
+cache or a partial-audit installation path.
