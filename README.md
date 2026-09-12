@@ -338,3 +338,20 @@ unchanged. `audit_region_plan_build` and `audit_region_derivation` report its
 separate preparation and reuse costs. See [the design](spec/REGIONAL_SOURCE.md)
 for memory, cancellation and validation boundaries; this is not a resident source
 cache or a partial-audit installation path.
+
+L01-F complete audit uses a discarding strict JSON pass, direct typed decoding
+and a borrowed canonical world hash. Before original I/O it reserves the existing
+typed parsing envelope; before validation/payloads it charges every actual owned
+String/Vec capacity plus allocation overhead. Full original, unused payload and
+all regional closure checks remain mandatory. The index-only `audit_peak_bytes`
+is a sufficient conservative bound; a smaller allowance can pass staged admission.
+The summary reports the admitted phase maximum, source ownership and preflight.
+Region loads, formats, limits and worker lifetime rules remain unchanged.
+
+The optional single-threaded `regional_allocations` example reports requested
+Rust heap peak and release points separately from logical reservations:
+`rtk cargo run --locked -p mapkit-cli --example regional_allocations -- MAP.mkregions 536870912`.
+Read `accepted` and `error_code`: a diagnosed rejection still exits successfully.
+It excludes allocator overhead, external malloc, stack and RSS; it never changes
+the production allocator. See [the L01-F decision](spec/REGIONAL_SOURCE.md) for
+staged refusal, whole-source validation and the preserved acceptance limits.

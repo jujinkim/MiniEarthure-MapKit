@@ -27,7 +27,10 @@ pub struct ReadStage {
 }
 impl ReadProfile {
     pub fn enabled() -> Self {
-        Self { enabled: true, stages: BTreeMap::new() }
+        Self {
+            enabled: true,
+            stages: BTreeMap::new(),
+        }
     }
     fn start(&self) -> Option<std::time::Instant> {
         self.enabled.then(std::time::Instant::now)
@@ -448,6 +451,16 @@ impl<R: Read + Seek> IndexedReader<R> {
         let start = profile.start();
         let document = document.into_indexed_source()?;
         profile.finish("source_validation", start);
+        self.finish_source_files(document, bytes, payloads, ticket, profile)
+    }
+    fn finish_source_files(
+        &mut self,
+        document: MapDocument,
+        bytes: Vec<u8>,
+        payloads: &BTreeMap<String, usize>,
+        ticket: &ReadTicket,
+        profile: &mut ReadProfile,
+    ) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
         let start = profile.start();
         if canonical(&metadata(&document))? != canonical(&self.index.world)? {
             return Err(bad("source disagrees with indexed world"));
@@ -590,8 +603,11 @@ impl<R: Read + Seek> IndexedReader<R> {
     /// Explicit full audit, separate from partial open/load. Reconstruct the
     /// authoring source and prove every regional closure matches the producer rule.
     pub fn audit(&mut self, memory_limit: u64, ticket: &ReadTicket) -> Result<()> {
-        self.audited_files(memory_limit, ticket, &mut ReadProfile::default()).map(|_| ())
+        self.audited_files(memory_limit, ticket, &mut ReadProfile::default())
+            .map(|_| ())
     }
+    /// Sufficient index-only bound. Smaller allowances may pass after the
+    /// bounded source preflight establishes its actual owned capacities.
     pub fn audit_peak_bytes(&self) -> u64 {
         let cost = self.cost(self.index.authoring_source, &self.index.payloads);
         let comparison = self
@@ -610,7 +626,41 @@ impl<R: Read + Seek> IndexedReader<R> {
         cost.validation_peak_bytes.max(
             cost.retained_memory_bytes
                 + self.index.records[self.index.authoring_source].size * 32
-                + RegionSourcePlan::allocation_bound(self.index.records[self.index.authoring_source].size)
+                + RegionSourcePlan::allocation_bound(
+                    self.index.records[self.index.authoring_source].size,
+                )
+                + comparison
+                + 8 * 1024 * 1024,
+        )
+    }
+    /// This phase must be reserved before any original record I/O. The strict
+    /// scan and typed decoder are sequential, within the existing 32x envelope.
+    pub fn audit_preflight_bytes(&self) -> u64 {
+        let source = &self.index.records[self.index.authoring_source];
+        self.index_retained + source.size * 34 + source.compressed_bytes * 2 + 8 * 1024 * 1024
+    }
+    fn audit_owned_peak_bytes(&self, owned: u64) -> u64 {
+        let source = &self.index.records[self.index.authoring_source];
+        let cost = self.cost(self.index.authoring_source, &self.index.payloads);
+        let retained = cost.retained_memory_bytes - source.size * 32 + owned;
+        // No whole-source Value tree survives strict parsing or streaming hash.
+        // Keep one full-source scratch allowance for unchanged validators, plus
+        // every existing asset/decoder allowance. This is still conservative.
+        let validation = cost.validation_peak_bytes - source.size * 128 + owned + source.size * 32;
+        let comparison = self
+            .index
+            .regions
+            .iter()
+            .map(|r| {
+                let record = &self.index.records[r.source];
+                record.size * 128 + record.compressed_bytes * 2
+            })
+            .max()
+            .unwrap_or(0);
+        self.audit_preflight_bytes().max(validation).max(
+            retained
+                + source.size * 32
+                + RegionSourcePlan::allocation_bound(source.size)
                 + comparison
                 + 8 * 1024 * 1024,
         )
@@ -634,7 +684,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         // Move the already checked original within this one audit lifetime.
         // Neither its mutable type nor indexed topology is a public validation
         // receipt; no authored source is retained after the summary returns.
-        let (document, files) = self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket, profile)?;
+        let (document, files, peak) =
+            self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket, profile)?;
         let start = profile.start();
         let overview = mapkit_core::source_overview(&document)?;
         let overview_cost = overview.cost()?;
@@ -676,7 +727,10 @@ impl<R: Read + Seek> IndexedReader<R> {
             "expanded_bytes": expanded_bytes, "user_asset_bytes": user_asset_bytes,
             "base_data_bytes": expanded_bytes - user_asset_bytes,
             "user_asset_compressed_bytes": assets.iter().filter_map(|path| self.index.payloads.get(*path)).map(|id| self.index.records[*id].compressed_bytes).sum::<u64>(),
-            "validation_peak_bytes": self.audit_peak_bytes() + SUMMARY_BYTES,
+            "validation_peak_bytes": peak + SUMMARY_BYTES,
+            "audit_preflight_bytes": self.audit_preflight_bytes(),
+            "audit_index_bound_bytes": self.audit_peak_bytes(),
+            "audit_source_owned_bytes": audit_memory::document_retained_bytes(&document)?,
             "cell_count": self.index.world.cell_count()?,
             "retained_memory_bytes": self.index_retained + SUMMARY_BYTES,
             "overview_json": overview_json, "overview_cost": overview_cost
@@ -690,7 +744,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         memory_limit: u64,
         ticket: &ReadTicket,
     ) -> Result<()> {
-        let (_, files) = self.audited_files(memory_limit, ticket, &mut ReadProfile::default())?;
+        let (_, files, _) =
+            self.audited_files(memory_limit, ticket, &mut ReadProfile::default())?;
         ticket.check()?;
         unpack_files(&files, destination)
     }
@@ -699,15 +754,45 @@ impl<R: Read + Seek> IndexedReader<R> {
         memory_limit: u64,
         ticket: &ReadTicket,
         profile: &mut ReadProfile,
-    ) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
+    ) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>, u64)> {
         let source = self.index.authoring_source;
-        let payloads = self.index.payloads.clone();
         ticket.check()?;
-        if self.audit_peak_bytes() > memory_limit {
-            return Err(error("E_MEMORY_BUDGET", "whole audit exceeds allowance"));
+        if self.audit_preflight_bytes() > memory_limit {
+            return Err(error(
+                "E_MEMORY_BUDGET",
+                "audit source preflight exceeds allowance",
+            ));
         }
-        let (d, files) = self.source_files(source, &payloads, ticket, profile)?;
-        // source_files already validates the complete original document.
+        let start = profile.start();
+        let bytes = self.record(source, ticket)?;
+        profile.finish("source_record_read_decode_hash", start);
+        let start = profile.start();
+        let d = audit_json::document(&bytes, || ticket.check())?;
+        profile.finish("source_parse", start);
+        let start = profile.start();
+        let owned = audit_memory::document_retained_bytes(&d)?;
+        let envelope = self.index.records[source].size * 32;
+        if owned > envelope || audit_hash::scratch_bound(&d) > envelope + 8 * 1024 * 1024 {
+            return Err(error(
+                "E_MEMORY_BUDGET",
+                "audit source ownership exceeds typed envelope",
+            ));
+        }
+        let peak = self.audit_owned_peak_bytes(owned);
+        if peak > memory_limit {
+            return Err(error(
+                "E_MEMORY_BUDGET",
+                "audit validated source phases exceed allowance",
+            ));
+        }
+        profile.finish("audit_source_ownership_admission", start);
+        ticket.check()?;
+        let start = profile.start();
+        let d = d.into_indexed_source()?;
+        profile.finish("source_validation", start);
+        ticket.check()?;
+        let payloads = self.index.payloads.clone();
+        let (d, files) = self.finish_source_files(d, bytes, &payloads, ticket, profile)?;
         let start = profile.start();
         validate_assets(&d, &files)?;
         profile.finish("audit_assets_validation", start);
@@ -715,7 +800,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         validate_heightmaps(&d, &files)?;
         profile.finish("audit_heightmaps_validation", start);
         let start = profile.start();
-        if content_hash(&d, &files)? != self.index.world_content_hash {
+        if audit_hash::content_hash(&d, &files, || ticket.check())? != self.index.world_content_hash
+        {
             return Err(error("E_HASH", "authoring world identity mismatch"));
         }
         profile.finish("audit_world_content_hash", start);
@@ -734,6 +820,11 @@ impl<R: Read + Seek> IndexedReader<R> {
             let expected = plan.derive(r.cells)?;
             profile.finish("audit_region_derivation", start);
             let start = profile.start();
+            // A forged tiny region must not induce a full-world canonical tree
+            // charged only to that tiny record. Derivation's clone is covered
+            // by the original-source scratch; count without a tree or buffer
+            // before entering the record-sized canonical comparison workspace.
+            check_canonical_size(&expected, self.index.records[r.source].size, ticket)?;
             if self.record(r.source, ticket)? != canonical(&expected)? {
                 return Err(error(
                     "E_REFERENCE",
@@ -759,8 +850,57 @@ impl<R: Read + Seek> IndexedReader<R> {
         }
         drop(plan);
         ticket.check()?;
-        Ok((d, files))
+        Ok((d, files, peak))
     }
+}
+
+fn check_canonical_size(value: &impl Serialize, expected: u64, ticket: &ReadTicket) -> Result<()> {
+    struct Counter<'a> {
+        bytes: u64,
+        limit: u64,
+        writes: u64,
+        ticket: &'a ReadTicket,
+        failure: Option<Error>,
+    }
+    impl Write for Counter<'_> {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if self.writes.is_multiple_of(64) {
+                if let Err(error) = self.ticket.check() {
+                    self.failure = Some(error);
+                    return Err(std::io::Error::other("source size check cancelled"));
+                }
+            }
+            self.writes += 1;
+            self.bytes = self.bytes.saturating_add(bytes.len() as u64);
+            if self.bytes > self.limit {
+                return Err(std::io::Error::other(
+                    "canonical source exceeds declared record",
+                ));
+            }
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut count = Counter {
+        bytes: 0,
+        limit: expected,
+        writes: 0,
+        ticket,
+        failure: None,
+    };
+    // Object key ordering affects bytes, not encoded length. The same schema
+    // and skip rules feed canonical(), whose full Value allocation follows.
+    if serde_json::to_writer(&mut count, value).is_err() || count.bytes != expected {
+        return Err(count.failure.unwrap_or_else(|| {
+            error(
+                "E_REFERENCE",
+                "regional source size differs from complete dependency closure",
+            )
+        }));
+    }
+    ticket.check()
 }
 impl IndexedReader<File> {
     pub fn open_path(path: &Path, memory_limit: u64, expected_index: Option<&str>) -> Result<Self> {

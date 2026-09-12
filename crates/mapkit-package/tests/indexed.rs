@@ -34,24 +34,39 @@ fn optional_profiles_preserve_complete_audit_and_generated_occupancy() {
     let mut reader = IndexedReader::open(Cursor::new(bytes), BUDGET, None).unwrap();
     let expected = reader.audit_summary(BUDGET, &ticket()).unwrap();
     let mut profile = ReadProfile::enabled();
-    let actual = reader.audit_summary_profiled(BUDGET, &ticket(), &mut profile).unwrap();
+    let actual = reader
+        .audit_summary_profiled(BUDGET, &ticket(), &mut profile)
+        .unwrap();
     assert_eq!(actual, expected);
     assert_eq!(profile.stages["audit_region_plan_build"].calls, 1);
-    assert_eq!(profile.stages["audit_region_derivation"].calls as usize, reader.index().regions.len());
+    assert_eq!(
+        profile.stages["audit_region_derivation"].calls as usize,
+        reader.index().regions.len()
+    );
     assert_eq!(profile.stages["source_validation"].calls, 1);
     let expected = reader.load_region(0, BUDGET, &ticket()).unwrap();
     let mut profile = ReadProfile::enabled();
-    let actual = reader.load_region_profiled(0, BUDGET, &ticket(), &mut profile).unwrap();
+    let actual = reader
+        .load_region_profiled(0, BUDGET, &ticket(), &mut profile)
+        .unwrap();
     assert_eq!(actual.identity, expected.identity);
     assert_eq!(profile.stages["prepared_source_validation"].calls, 1);
     for cell in expected.cells.cells().unwrap() {
-        let a = actual.package.generate_with_occupancy(cell, 500_000, MAX_OCCUPIED_SOLIDS).unwrap();
-        let e = expected.package.generate_with_occupancy(cell, 500_000, MAX_OCCUPIED_SOLIDS).unwrap();
+        let a = actual
+            .package
+            .generate_with_occupancy(cell, 500_000, MAX_OCCUPIED_SOLIDS)
+            .unwrap();
+        let e = expected
+            .package
+            .generate_with_occupancy(cell, 500_000, MAX_OCCUPIED_SOLIDS)
+            .unwrap();
         assert_eq!(a.chunk, e.chunk);
         assert_eq!(a.solids, e.solids);
     }
     let mut disabled = ReadProfile::default();
-    reader.load_region_profiled(0, BUDGET, &ticket(), &mut disabled).unwrap();
+    reader
+        .load_region_profiled(0, BUDGET, &ticket(), &mut disabled)
+        .unwrap();
     assert!(disabled.stages.is_empty());
 }
 #[derive(Clone)]
@@ -348,8 +363,10 @@ fn index_only_open_and_local_reads_have_exact_bounded_spans() {
 }
 
 #[test]
-fn whole_audit_plan_peak_rejects_before_payload_reads() {
-    let bytes = pack_source(empty(), BTreeMap::new(), 2).unwrap();
+fn staged_audit_reserves_before_source_io_and_before_validating_owned_source() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets");
+    let (d, files) = read_project(&path).unwrap();
+    let bytes = pack_source(d, files, 2).unwrap();
     let reads = Arc::new(Mutex::new(vec![]));
     let mut reader = IndexedReader::open(
         Observed {
@@ -359,16 +376,93 @@ fn whole_audit_plan_peak_rejects_before_payload_reads() {
         },
         BUDGET,
         None,
-    ).unwrap();
+    )
+    .unwrap();
     reads.lock().unwrap().clear();
-    let peak = reader.audit_peak_bytes();
+    let preflight = reader.audit_preflight_bytes();
     assert_eq!(
-        reader.audit(peak - 1, &ticket()).unwrap_err().code,
+        reader.audit(preflight - 1, &ticket()).unwrap_err().code,
         "E_MEMORY_BUDGET",
     );
     assert!(reads.lock().unwrap().is_empty());
+    let summary = reader.audit_summary(BUDGET, &ticket()).unwrap();
+    let peak = summary["validation_peak_bytes"].as_u64().unwrap() - 16 * 1024 * 1024;
+    assert!(peak > preflight);
+    assert!(peak < reader.audit_peak_bytes());
+    assert!(
+        summary["audit_source_owned_bytes"].as_u64().unwrap()
+            < reader.index().records[reader.index().authoring_source].size * 32
+    );
+    reads.lock().unwrap().clear();
+    let mut profile = ReadProfile::enabled();
+    assert_eq!(
+        reader
+            .audit_summary_profiled(peak + 16 * 1024 * 1024 - 1, &ticket(), &mut profile)
+            .unwrap_err()
+            .code,
+        "E_MEMORY_BUDGET"
+    );
+    assert!(profile.stages.contains_key("source_parse"));
+    assert!(!profile.stages.contains_key("source_validation"));
+    assert!(!profile
+        .stages
+        .contains_key("payload_read_decode_hash_planning"));
+    assert!(!profile.stages.contains_key("audit_region_derivation"));
+    let source = &reader.index().records[reader.index().authoring_source];
+    assert_eq!(
+        reads
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, size)| *size as u64)
+            .sum::<u64>(),
+        source.compressed_bytes
+    );
     reader.audit(peak, &ticket()).unwrap();
-    assert!(!reads.lock().unwrap().is_empty());
+    assert_eq!(
+        reader
+            .audit_summary(peak + 16 * 1024 * 1024, &ticket())
+            .unwrap(),
+        summary
+    );
+    // The index-only sufficient upper bound remains accepted and unchanged.
+    reader.audit(reader.audit_peak_bytes(), &ticket()).unwrap();
+}
+
+#[test]
+fn forged_tiny_closure_rejects_before_region_io_and_canonical_allocation() {
+    let bytes = pack_source(empty(), BTreeMap::new(), 2).unwrap();
+    let reader = IndexedReader::open(Cursor::new(bytes.clone()), BUDGET, None).unwrap();
+    let region_id = reader.index().regions[0].source;
+    let bytes = replace_record(&bytes, region_id, b"{}", false);
+    let reads = Arc::new(Mutex::new(vec![]));
+    let mut reader = IndexedReader::open(
+        Observed {
+            bytes: Cursor::new(bytes),
+            reads: reads.clone(),
+            cancel: None,
+        },
+        BUDGET,
+        None,
+    )
+    .unwrap();
+    reads.lock().unwrap().clear();
+    let error = reader
+        .audit(reader.audit_peak_bytes(), &ticket())
+        .unwrap_err();
+    assert_eq!(error.code, "E_REFERENCE");
+    assert!(error.message.contains("source size differs"));
+    let original = &reader.index().records[reader.index().authoring_source];
+    assert_eq!(
+        reads
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(_, size)| *size as u64)
+            .sum::<u64>(),
+        original.compressed_bytes,
+        "only the original source was read"
+    );
 }
 
 #[test]

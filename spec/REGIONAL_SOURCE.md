@@ -388,3 +388,86 @@ cold-cache, RSS/GPU, consumer-budget or startup-SLA acceptance. Full original
 validation/retention still bounds audit memory. The plan is released before
 summary/return and does not solve sharded authoring, resident source LRU,
 region-request transport or larger-area/platform acceptance.
+
+## L01-F decision before implementation — 2026-09-12
+
+Replace the complete audit's whole-source JSON trees with a strict, discarding
+JSON pass followed by direct typed decoding, and a borrowed streaming world hash.
+The strict pass still rejects duplicate keys (including escaped aliases and
+nested metadata), noninteger numbers, invalid/trailing JSON and excessive depth.
+It retains only the keys of currently open objects; arrays retain no elements.
+The typed decoder runs after that scratch is gone. Regional reads and the legacy
+package reader keep their existing implementation and reservations.
+
+Admission becomes staged inside the caller's already reserved worker allowance.
+Before any original record I/O reserve index + twice original expanded bytes +
+the existing 32-times-source typed/parse allowance + twice compressed bytes +
+8MiB scratch. Check cancellation during strict traversal and before typed decode.
+After decoding, walk every owned String/Vec capacity, inline structure and nested
+allocation without allocating. Include 64 bytes per allocation and checked
+arithmetic; reject if this ownership exceeds the pre-reserved typed envelope.
+This ownership calculation is a planning charge, not RSS or allocator telemetry.
+
+Before semantic validation or reading any payload, replace only the original
+typed 32-times-source resident allowance with that checked owned capacity. Keep
+all original files, payload/GLB allowances, decoder declarations and verification,
+the existing 32-times-source clone/scratch allowance, per-region 128-times-source
+canonical/expected workspace, plan bytes, index/query/summary and fixed scratch.
+The original-validation phase needs one source scratch allowance after removing
+whole-source parse/canonical trees; it does not overlap a typed decoder with the
+strict pass. Full original validation, all unused payloads, terrain, world identity
+and every v1/v2 canonical closure/inventory comparison remain mandatory.
+
+The reported audit peak is the maximum of preflight and the checked later phases.
+`audit_peak_bytes` remains an index-only conservative sufficient bound; its
+minus-one value no longer means guaranteed refusal. A separate preflight bound
+rejects before source I/O. A later budget refusal may have read/parsed the source
+but must precede semantic/payload/closure allocations. No receipt is stored on the
+reader and no source survives audit. Errors, cancellation and success drop all
+local ownership, and consumer reservations remain held until worker join.
+
+Before creating each expected regional canonical tree, count its serialized
+length without allocating and require equality with the indexed record size.
+Check cancellation every 64 serializer writes. A forged tiny regional record
+therefore rejects while still in the original-source clone allowance, before
+record I/O or record-sized canonical workspace. Length equality never replaces
+the subsequent full record length/hash and canonical byte comparison.
+
+Hashing sorts borrowed record indices one collection at a time, with the original
+index as the tie breaker to preserve stable normalization. Canonical serializers
+preserve the existing field ordering, omissions, integers and nested-array order;
+provenance/attributions remain excluded only from world identity. Hash equality
+against the unchanged legacy oracle and exact-capacity, staged-denial, duplicate,
+corruption/cancellation and fixed-artifact admission regressions are required.
+No index/protocol/recipe/generated format, limit, map quality, transport, renderer
+reservation or source-cache policy changes. The same fixed 2km and small Client
+controls decide the supported admission results; larger areas and final platform,
+cold/50MB, human/internet and installation acceptance remain separate.
+
+### Implemented and scoped validation
+
+145 Rust tests are covered by the passing 144-test suite followed by the final
+16 indexed regressions after adding the forged-size guard. Twelve new unit tests
+cover strict/cancelled parsing, all owned capacities and schema fields, exact
+legacy canonical hash parity for recipes 1–6/options/order and hash cancellation.
+The staged-boundary regression refuses before source I/O or before semantic/
+payload work, accepts the exact reported peak and preserves the index upper bound.
+The additional forged tiny closure refuses before region I/O/canonical allocation.
+Debug/release workspace native, CLI and examples build; core purity passes.
+
+All four fixed mixed/dense 2km 128/256m artifacts audit within the Client worker's
+383,254,528-byte allowance after subtracting its additional index query metadata.
+Core audit summaries (including 16MiB summary but excluding that extra native
+metadata) require mixed 272,991,727/270,747,343B and dense
+323,057,523/318,900,883B. Dense source owned capacity is 16,481,529B, versus its
+unchanged 191,150,368B pre-parse typed envelope. Mixed ownership is 6,617,271B.
+The dense256 exact summary peak succeeds; one byte less refuses after preflight,
+and preflight+summary minus one refuses before original I/O. Frozen v1 still audits.
+Twenty selected v1/v2 cells match complete generated geometry and occupied solids.
+
+The standalone diagnostic observes 11,315,093–26,233,434 requested Rust heap bytes
+at audit peak across these four cases. Every success/refusal returns exactly to
+the pre-audit live allocation baseline after the result is dropped; dropping the
+reader releases its index. These observations exclude allocator overhead, external
+allocations, stack and RSS and do not replace the conservative logical bounds.
+Consumer safety/initial admission and platform evidence remain application-owned.
