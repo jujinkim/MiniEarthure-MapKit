@@ -1,6 +1,7 @@
 mod occupied;
 mod packed;
 mod presentation;
+mod distant;
 mod road_style;
 mod regional;
 use godot::prelude::*;
@@ -193,6 +194,22 @@ impl MapKitBridge {
                     Ok(cost)
                 }),
         )
+    }
+    /// Display-only product; callers reserve source, generation and display first.
+    #[func]
+    fn estimate_far_chunk(&self, x: i32, y: i32) -> GString {
+        response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first")).and_then(|p| {
+            let cell = mapkit_core::Cell { x, y };
+            let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
+            cost["distant_triangles"] = serde_json::json!(p.distant_triangle_bound(cell)?);
+            cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell));
+            Ok(cost)
+        }))
+    }
+    #[func]
+    fn generate_far_chunk(&self, x: i32, y: i32) -> VarDictionary {
+        packed::respond(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .and_then(|p| p.generate_distant(mapkit_core::Cell { x, y })).map(distant::pack))
     }
     /// Bounded broad-phase plan; callers estimate and reserve each required cell.
     #[func]

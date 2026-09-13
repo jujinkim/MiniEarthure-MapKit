@@ -17,6 +17,7 @@ pub const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILES: usize = 8192;
 mod assets;
+pub mod distant;
 mod audit_hash;
 mod container;
 use assets::validate_assets;

@@ -28,7 +28,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 	if lease != null: lease.track(root)
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	return {"root": root, "chunk": view, "lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}}
+	return {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled:
