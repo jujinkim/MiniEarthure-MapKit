@@ -73,8 +73,10 @@ scale/contracts without requiring the application to copy generator constants.
 `MapKitBridge.spawn_options(x_cm, y_cm)` returns only valid spawnable surfaces at
 the chosen point, including separate bridge/ground heights and excluding roofs.
 The shared renderer supports `begin(chunk, parent)`, `advance(job)` and `cancel(job)`.
-One advance attaches at most 512 triangles or eight tree canopies; callers own
-scheduling/time budgets. `attach` remains a synchronous convenience using the same
+One advance prepares/imports one resource, attaches at most512 surface triangles,
+or places one model; callers own scheduling/time budgets. The optional session
+resource context shares original meshes/materials across cells and batches repeated
+opaque models. See [resource ownership and planning](RENDER_MEMORY.md). `attach` remains a synchronous convenience using the same
 renderer. The native-layout probe also tests renderer batching/cancellation in a
 separate renderer process, without any private game dependency.
 

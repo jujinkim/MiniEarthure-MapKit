@@ -209,6 +209,53 @@ func run() -> void:
     assert(material_ref.get_ref() == null)
     parent.queue_free()
     await process_frame
+    # Worker grouping preserves every visible vertex/normal/UV and material.
+    var source := {"cell": {"x": 0, "y": 0}, "objects": [], "triangles": [], "scene_vertices": PackedVector3Array(), "scene_normals": PackedVector3Array(), "wall_uv": PackedVector2Array(), "ground_uv": PackedVector2Array(), "presentation": {"hidden_proxies": ["hidden"]}}
+    for i in 9:
+        source.triangles.append({"object_id": "hidden" if i == 4 else "ground", "surface": "grass" if i % 2 == 0 else "asphalt"})
+        for v in 3:
+            source.scene_vertices.append(Vector3(i, v, -i))
+            source.scene_normals.append(Vector3.UP)
+            source.ground_uv.append(Vector2(i, v))
+            source.wall_uv.append(Vector2(-i, v))
+    var batches: Array = RENDERER.PLAN.prepare_batches(source)
+    assert(batches.size() == 2)
+    var seen := {}
+    for batch: Dictionary in batches:
+        for v in batch.vertices.size():
+            var point: Vector3 = batch.vertices[v]
+            assert(int(point.x) != 4 and not seen.has(point))
+            seen[point] = true
+            assert(batch.normals[v] == Vector3.UP and batch.uv[v] == Vector2(point.x, point.y))
+            assert(batch.key == ("grass" if int(point.x) % 2 == 0 else "asphalt"))
+    assert(seen.size() == 24)
+    var template := Node3D.new()
+    template.position = Vector3(1, 2, 3)
+    var model := MeshInstance3D.new()
+    model.mesh = BoxMesh.new()
+    model.mesh.material = StandardMaterial3D.new()
+    model.position = Vector3(2, 0, 0)
+    template.add_child(model)
+    var group_parent := Node3D.new()
+    root.add_child(group_parent)
+    var grouped: Dictionary = RENDERER.INSTANCES.begin(template, 2, group_parent, null)
+    var placement := Transform3D(Basis(Vector3.UP, PI / 2), Vector3(10, 0, 20))
+    RENDERER.INSTANCES.append(grouped, placement, "a")
+    RENDERER.INSTANCES.append(grouped, Transform3D.IDENTITY, "b")
+    assert(grouped.groups[0].transform.is_equal_approx(template.transform * model.transform))
+    if DisplayServer.get_name() != "headless":
+        assert(grouped.groups[0].multi.get_instance_transform(0).is_equal_approx(placement * template.transform * model.transform))
+    assert(grouped.groups[0].multi.mesh == model.mesh and grouped.groups[0].multi.visible_instance_count == 2)
+    model.material_override = StandardMaterial3D.new()
+    model.material_override.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    assert(RENDERER.INSTANCES.parts(template).is_empty())
+    model.material_override.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+    if DisplayServer.get_name() != "headless":
+        model.set_surface_override_material(0, StandardMaterial3D.new())
+        assert(RENDERER.INSTANCES.parts(template).is_empty())
+    template.free()
+    group_parent.queue_free()
+    await process_frame
     print("mapkit_incremental_renderer: PASS")
     quit(0)
 '''
@@ -259,7 +306,7 @@ def main():
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'placement.memap'), str(ROOT / 'examples/placement/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'roads.memap'), str(ROOT / 'examples/roads/document.json')], check=True, timeout=30)
         make_terrain_fixture(project)
-        for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd', 'render_memory.gd', 'urban_surface.gdshader'):
+        for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd', 'render_memory.gd', 'render_instances.gd', 'urban_surface.gdshader'):
             shutil.copyfile(ROOT / 'godot' / name, addon / name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
         if args.probe is None or 'regional' in args.probe:

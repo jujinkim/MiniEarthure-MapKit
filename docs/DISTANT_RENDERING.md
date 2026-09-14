@@ -32,3 +32,11 @@ No public package format or generated-data identity changes are required.
 Validation: `cargo test -p mapkit-package distant` covers synthetic packages,
 deterministic output, conservative bounds, preserved ground and unchanged ordinary
 generated hashes. The existing asset tests cover supported archive inputs.
+
+The bridge also reports `visual_margin_cm` from validated transformed model bounds
+in `cell_window` and cost metadata. Consumers can choose full detail using the
+nearest visual extent instead of the cell centre. Full-detail caching and worker
+batch planning are documented in [RENDER_MEMORY.md](../RENDER_MEMORY.md). No
+specific distance, physics interest, admission cap or gameplay ACK is imposed by
+MapKit. Renderer roots carry diagnostic `mapkit_render_root` metadata so a caller
+can count cell resources independently of scene-generated node names.

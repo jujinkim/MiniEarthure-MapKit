@@ -16,6 +16,7 @@ unsafe impl ExtensionLibrary for MapKitExtension {}
 struct MapKitBridge {
     base: Base<RefCounted>,
     package: Option<Package>,
+    visual_margin_cm: i64,
 }
 #[godot_api]
 impl IRefCounted for MapKitBridge {
@@ -23,6 +24,7 @@ impl IRefCounted for MapKitBridge {
         Self {
             base,
             package: None,
+            visual_margin_cm: 0,
         }
     }
 }
@@ -71,6 +73,7 @@ impl MapKitBridge {
         self.package = None;
         response(read(Path::new(&path.to_string())).map(|p| {
             let info = serde_json::to_value(&p.inspection).unwrap();
+            self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
             self.package = Some(p);
             info
         }))
@@ -93,6 +96,7 @@ impl MapKitBridge {
             mapkit_package::read_bytes_with_budget(bytes.as_slice(), memory_limit as u64).map(
                 |p| {
                     let info = serde_json::to_value(&p.inspection).unwrap();
+                    self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
                     self.package = Some(p);
                     info
                 },
@@ -105,6 +109,7 @@ impl MapKitBridge {
         self.package = None;
         response(read_bytes(bytes.as_slice()).map(|p| {
             let info = serde_json::to_value(&p.inspection).unwrap();
+            self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
             self.package = Some(p);
             info
         }))
@@ -125,6 +130,7 @@ impl MapKitBridge {
                         "cell": cell, "cells": p.document.window([x_cm, y_cm]),
                         "bounds": p.document.bounds, "cell_bounds": p.document.cell_bounds(cell)?,
                         "cell_size_cm": p.document.cell_size_cm,
+                        "visual_margin_cm": self.visual_margin_cm,
                         "world_scale": mapkit_core::WORLD_SCALE,
                         "scene_units_version": mapkit_core::SCENE_UNITS_VERSION,
                         "package_format_version": mapkit_core::PACKAGE_VERSION,
@@ -143,6 +149,7 @@ impl MapKitBridge {
                 .and_then(|b| read_bytes(&b))
                 .map(|p| {
                     let info = serde_json::to_value(&p.inspection).unwrap();
+                    self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
                     self.package = Some(p);
                     info
                 }),
@@ -191,6 +198,7 @@ impl MapKitBridge {
                     let cell = Cell { x, y };
                     let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
                     cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell));
+                    cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
                     Ok(cost)
                 }),
         )
@@ -203,6 +211,7 @@ impl MapKitBridge {
             let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
             cost["distant_triangles"] = serde_json::json!(p.distant_triangle_bound(cell)?);
             cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell));
+            cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
             Ok(cost)
         }))
     }

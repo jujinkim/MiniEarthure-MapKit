@@ -4,6 +4,8 @@ const BATCH_VERTICES := 1536
 
 static func begin(data: Dictionary, parent: Node3D, lease: RefCounted) -> Dictionary:
 	var root := Node3D.new()
+	root.set_meta("mapkit_render_root", true)
+	root.name = "MapKitDistant"
 	root.visible = false
 	parent.add_child(root)
 	lease.track(root)

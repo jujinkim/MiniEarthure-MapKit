@@ -1,36 +1,65 @@
-# Incremental renderer memory ownership
+# Incremental renderer resource ownership
 
-`render_memory.gd` is pure worker-side planning over a validated chunk view.
-It shares the renderer material grouping and 512-triangle batch limit. The caller
-supplies native `estimate_chunk.presentation_bytes`, including decoded pixels,
-importer scratch and custom instances. Compressed byte length is not a substitute.
-No GPU resources are made by planning.
+The optional fifth argument to `chunk_renderer.begin(chunk, parent, reserve,
+planned_bytes, resources)` is a session `render_resource_cache.gd` context. Existing
+four/two-argument calls and synchronous `attach` remain supported for standalone
+previews. MapKit contains no game admission, physics or network policy.
 
-`chunk_renderer.begin(chunk, parent, reserve, planned_bytes)` optionally asks the
-caller for a lease before creating the root, meshes or decoding assets. A denied
-or missing positive bound returns a terminal `E_MEMORY_BUDGET` job. A lease has
-`track(Object)` and `seal()` methods. Admission, process caps and retirement policy
-belong to the caller; MapKit has no private game dependency. Existing two-argument
-`begin` and `attach` remain compatible for standalone previews and do not claim a
-process memory budget.
+## Planning and shared resources
 
-The plan includes 64 KiB per job, 512 bytes per triangle, 8 KiB per mesh batch,
-64 KiB per object and the native custom-asset peak. These conservative logical
-allowances are not measured allocator/GPU bounds. Templates/material caches share
-resources within one job; separate cells/candidates own separate leases. There is
-no global renderer asset cache. The full peak stays charged through resource
-lifetime rather than speculatively crediting importer scratch.
+`render_memory.gd` plans validated output without allocating GPU resources.
+`supports_batches` excludes image proxies whose alpha/order needs the legacy path.
+`prepare_batches` groups opaque triangle surfaces by material into at most512
+triangles, preserving coordinates, normals, UVs, winding and hidden-proxy exclusion.
+Its packed buffers cost96 bytes per visible triangle plus bounded grouping metadata.
+The caller must account for source and preparation buffers before worker execution.
+An empty batch list must not replace an unsupported source; use `supports_batches`.
 
-The renderer tracks roots, meshes, surface/override materials and texture slots.
-GLB templates are tracked before duplication. Completion destroys templates,
-clears source/material caches and seals the lease. Cancellation also removes and
-queues the root for destruction; it is idempotent. The lease owner must count until
-tracked resources are gone, including references held by another trusted consumer.
-Callers must cancel jobs on shutdown and must not mutate validated chunks or make
-unaccounted copies. A closed job may retain an invalid root handle for diagnostics.
+`estimate` includes64KiB per job (another64KiB for urban surfaces),512 bytes per
+visible triangle,8KiB per batch,64KiB per object and the validated native asset
+allowance. Hidden collision proxies do not allocate visible mesh batches. These are
+conservative logical allowances, not allocator measurements. `upper_bound` is a
+pre-generation safety bound; the exact plan can be admitted after worker completion
+and before renderer allocation. Compressed file length is never a RAM estimate.
 
-Standalone checks: `scripts/verify_godot_layout.py --godot <Godot> --probe renderer
---probe assets` covers relocation, actual GLB/images and incremental cancellation.
-The pure planning script is included in the independent project. Rust, package
-format, generated hashes and native ABI are unchanged. Game integration also tests
-budget denial/retry, reference lifetime and delayed retirement as caller policy.
+Recipe6+ native presentation records add `content_hash` and `memory_bytes` from the
+validated package. They are excluded from package serialization/generated hashes.
+The cache key includes content, declarative material settings and referenced image
+content. Older views without these records retain independent per-job ownership.
+The cache claims resources before import and holds at most256 entries/64MiB by
+default, including its urban shader. The caller supplies independent admission.
+Each model imports once while cached; materials, mesh surfaces and decoded images
+are shared. Import, MultiMesh setup, individual placement and mesh upload are
+separate `advance` steps. Timings expose cumulative import/attachment/release costs
+and peak single-step/import durations; synchronous engine import cannot be preempted.
+
+Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
+transforms, mesh surfaces, material overrides, original colours and shadow mode
+survive. Transparent models, overlays and per-surface overrides use ordinary
+instances. No model reduction or automatic mesh LOD is introduced.
+
+## Lifetimes
+
+The cell lease subtracts only the separately admitted shared asset allowance.
+Shared resources have their own lease. Instance nodes/MultiMeshes and private
+surface meshes/materials belong to the cell. Worker/native source owners remain
+independent. The cache conservatively retains the import peak until actual resource
+retirement; it does not claim allocator savings by reducing a multiplier.
+
+Claims pin templates during attachment. Completion/cancel releases pins exactly
+once and clears source records. Unpinned templates may be evicted; their meshes,
+materials/textures remain charged while scene instances or external consumers
+borrow them. Cache shutdown seals these leases, including the shared shader.
+The lease provider must retain charges through its last-borrower/retirement rules.
+Completed/failed jobs may retain an invalid root handle for diagnostics.
+
+`MapKitBridge.cell_window` and estimates provide a conservative horizontal visual
+anchor margin, including transformed GLB bounds independently of collision proxies.
+It is presentation metadata, not a new package, generated or transport version.
+
+Validation: `scripts/verify_godot_layout.py --godot <Godot> --probe renderer --probe
+assets --probe binding` checks relocatable standalone use, unchanged generated
+hashes, GLB/images, opaque grouping, cancellation and transforms. Actual GPU
+MultiMesh transform queries require a rendered engine; the dummy headless server
+cannot supply them. Caller integration tests cover admission, shared last borrowers,
+failed replacement, worker cancellation and delayed retirement.

@@ -77,6 +77,19 @@ fn proxies(bytes: &[u8], tint: Option<[u8; 4]>) -> Result<Vec<Proxy>> {
 }
 
 impl Package {
+    /// Conservative anchor-to-visual horizontal extent, independent of collision proxies.
+    pub fn visual_margin_cm(&self) -> Result<i64> {
+        let mut radius = 1.84_f32;
+        for asset in &self.document.assets {
+            if !asset.path.ends_with(".glb") { continue; }
+            for proxy in proxies(&self.files[&asset.path], None)? {
+                let x = proxy.min[0].abs().max(proxy.max[0].abs());
+                let z = proxy.min[2].abs().max(proxy.max[2].abs());
+                radius = radius.max(x.hypot(z));
+            }
+        }
+        Ok((radius * 100.0).ceil() as i64)
+    }
     /// Conservative upper bound before generation; parsing/import workspace is
     /// charged separately through the existing validated asset allowances.
     pub fn distant_triangle_bound(&self, cell: Cell) -> Result<u64> {

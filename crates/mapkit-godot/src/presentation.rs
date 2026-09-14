@@ -101,6 +101,11 @@ pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
             if !assets.contains_key(asset.id.as_str()) {
                 continue;
             }
+            // Additive presentation metadata, excluded from generated serialization/hash.
+            // The consumer can reserve one immutable resource across multiple cells.
+            let mut view = assets.get(asset.id.as_str()).unwrap().to::<VarDictionary>();
+            view.set("content_hash", mapkit_core::sha256(&p.files[&asset.path]).as_str());
+            view.set("memory_bytes", asset_cost(p, asset) as i64);
             bytes += asset_cost(p, asset);
             bytes += objects
                 .iter_shared()

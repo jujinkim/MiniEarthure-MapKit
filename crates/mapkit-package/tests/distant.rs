@@ -9,6 +9,11 @@ fn distant_display_is_bounded_deterministic_and_preserves_generation() {
             .join(name);
         let (document, files) = read_project(&path).unwrap();
         let package = read_bytes(&pack_bytes(document, files).unwrap()).unwrap();
+        let margin = package.visual_margin_cm().unwrap();
+        assert!(margin >= 184);
+        if name == "assets" {
+            assert_eq!(margin, 641, "5 m by 4 m horizontal GLB bounds include every quarter turn");
+        }
         for cell in package.document.cells() {
             let original = package.generate(cell, 500_000).unwrap();
             let hash = original.hash().unwrap();

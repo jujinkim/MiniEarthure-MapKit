@@ -6,7 +6,11 @@ const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
 const URBAN_SURFACE := preload("./urban_surface.gdshader")
 const PLAN := preload("./render_memory.gd")
+const INSTANCES := preload("./render_instances.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
+static var _advance_usec := 0
+static var _release_usec := 0
+static var _steps := 0
 
 static func scene_position(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.01
@@ -14,23 +18,47 @@ static func scene_position(value: Array) -> Vector3:
 ## The caller owns admission policy. A lease implements track(Object) and seal().
 ## No game dependency: small standalone editor previews may omit admission.
 
-static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callable(), planned_bytes: int = 0) -> Dictionary:
+static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callable(), planned_bytes: int = 0, resources: RefCounted = null) -> Dictionary:
 	var view := DATA.view(chunk)
+	var shared := PLAN.shared_bytes(view) if resources != null else 0
+	if shared <= 0: resources = null
 	var lease: RefCounted
 	if reserve.is_valid():
-		var bytes := planned_bytes
+		var bytes := planned_bytes - shared
 		if bytes > 0 and bytes <= 64 * 1024 * 1024 * 1024: lease = reserve.call(bytes)
 		if lease == null:
 			return {"root": null, "chunk": {}, "done": true, "cancelled": true,
 				"materials": {}, "asset_materials": {}, "templates": {}, "lease": null,
 				"error": {"code": "E_MEMORY_BUDGET", "message": "Display allocation exceeds memory allowance"}}
 	var root := Node3D.new()
+	root.set_meta("mapkit_render_root", true)
 	if lease != null: lease.track(root)
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	return {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}}
+	var job := {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
+	if resources != null:
+		var sources: Dictionary = view.get("presentation", {}).get("assets", {})
+		for id: String in sources:
+			var key: String = resources.claim(id, sources)
+			if key.is_empty():
+				fail(job, "E_MEMORY_BUDGET", "Shared display resources exceed memory allowance")
+				return job
+			job.claims[id] = key
+		for object: Dictionary in view.objects:
+			var id := str(object.asset_id)
+			job.counts[id] = int(job.counts.get(id, 0)) + 1
+	return job
 
 static func advance(job: Dictionary) -> bool:
+	var started := Time.get_ticks_usec()
+	var done := _advance(job)
+	_advance_usec += Time.get_ticks_usec() - started
+	_steps += 1
+	job.steps = int(job.get("steps", 0)) + 1
+	job.peak_step_usec = maxi(int(job.get("peak_step_usec", 0)), Time.get_ticks_usec() - started)
+	return done
+
+static func _advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled:
 		return true
 	if not is_instance_valid(job.root) or job.root.is_queued_for_deletion():
@@ -41,6 +69,9 @@ static func advance(job: Dictionary) -> bool:
 	var presentation: Dictionary = chunk.get("presentation", {})
 	var sources: Dictionary = presentation.get("assets", {})
 	var offset := int(job.triangle)
+	if chunk.has("render_batches"):
+		if offset < chunk.render_batches.size(): return _prepared_batch(job, chunk.render_batches[offset])
+		offset = DATA.count(chunk)
 	if offset < DATA.count(chunk):
 		var skipped := 0
 		while offset < DATA.count(chunk) and DATA.object_id(chunk, offset) in presentation.get("hidden_proxies", PackedStringArray()) and skipped < TRIANGLES_PER_BATCH:
@@ -80,8 +111,16 @@ static func advance(job: Dictionary) -> bool:
 			mesh.mesh = surface.commit()
 		if not job.materials.has(key):
 			if presentation.get("urban_surfaces", false) and not job.has("urban_shader"):
-				job.urban_shader = URBAN_SURFACE.duplicate()
-			var material: Material = ASSETS.material(key.substr(6), sources, job.asset_materials) if key.begins_with("asset:") else surface_material(key, presentation, job.get("urban_shader"))
+				job.urban_shader = job.resources.urban_shader() if job.get("resources") != null else URBAN_SURFACE.duplicate()
+				if job.urban_shader == null:
+					mesh.free()
+					return fail(job, "E_MEMORY_BUDGET", "Shared surface shader exceeds memory allowance")
+			var material: Material
+			if key.begins_with("asset:"):
+				var id := key.substr(6)
+				material = job.resources.material(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.material(id, sources, job.asset_materials)
+				if material != null and job.get("resources") != null: job.borrowed_materials[material.get_instance_id()] = true
+			else: material = surface_material(key, presentation, job.get("urban_shader"))
 			if material == null:
 				mesh.free()
 				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
@@ -104,10 +143,22 @@ static func advance(job: Dictionary) -> bool:
 				if not sources.has(id): return fail(job, "E_RENDER_ASSET", "Presentation bytes are missing")
 				if not str(sources[id].path).ends_with(".glb"): continue # textured proxy faces
 				if not job.templates.has(id):
-					var template := ASSETS.template(id, sources, job.asset_materials)
+					var template: Node3D = job.resources.template(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.template(id, sources, job.asset_materials)
 					if template == null: return fail(job, "E_RENDER_ASSET", "Validated GLB could not be displayed")
-					track_resources(job, template)
+					if job.get("resources") == null: track_resources(job, template)
 					job.templates[id] = template
+					# Import and scene attachment are different budgeted steps.
+					job.object -= 1
+					return false
+				if job.get("resources") != null:
+					if not job.instances.has(id):
+						job.instances[id] = INSTANCES.begin(job.templates[id], int(job.counts.get(id, 0)), job.root, job.lease)
+						job.object -= 1
+						return false
+					if not job.instances[id].is_empty():
+						var transform := Transform3D(Basis(Vector3.UP, float(object.quarter_turns) * PI / 2.0), scene_position(object.position))
+						INSTANCES.append(job.instances[id], transform, str(object.id))
+						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
 				var anchor := Node3D.new()
 				anchor.set_meta("mapkit_asset_id", id)
@@ -118,6 +169,7 @@ static func advance(job: Dictionary) -> bool:
 				anchor.scale = Vector3.ONE
 				anchor.add_child(instance)
 				job.root.add_child(anchor)
+				track_instance_nodes(job.lease, anchor)
 				continue
 			if id not in ["builtin:tree", "builtin:fence", "builtin:streetlight"]:
 				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
@@ -138,12 +190,57 @@ static func advance(job: Dictionary) -> bool:
 		dispose(job)
 	return job.done
 
+static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = batch.vertices
+	arrays[Mesh.ARRAY_NORMAL] = batch.normals
+	arrays[Mesh.ARRAY_TEX_UV] = batch.uv
+	var mesh := MeshInstance3D.new()
+	var resource := ArrayMesh.new()
+	resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.mesh = resource
+	var key: String = batch.key
+	if not job.materials.has(key):
+		var presentation: Dictionary = job.chunk.get("presentation", {})
+		var sources: Dictionary = presentation.get("assets", {})
+		if presentation.get("urban_surfaces", false) and not job.has("urban_shader"):
+			job.urban_shader = job.resources.urban_shader() if job.get("resources") != null else URBAN_SURFACE.duplicate()
+			if job.urban_shader == null:
+				mesh.free()
+				return fail(job, "E_MEMORY_BUDGET", "Shared surface shader exceeds memory allowance")
+		var material: Material
+		if key.begins_with("asset:"):
+			var id := key.substr(6)
+			material = job.resources.material(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.material(id, sources, job.asset_materials)
+			if material != null and job.get("resources") != null: job.borrowed_materials[material.get_instance_id()] = true
+		else:
+			material = surface_material(key, presentation, job.get("urban_shader"))
+			if material is StandardMaterial3D:
+				material.albedo_color = material_color(key)
+				material.roughness = 0.9
+				material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if material == null:
+			mesh.free()
+			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
+		job.materials[key] = material
+	mesh.material_override = job.materials[key]
+	track_resources(job, mesh)
+	job.root.add_child(mesh)
+	job.triangle += 1
+	return false
+
 static func display_material_key(chunk: Dictionary, triangle: int) -> String:
 	return PLAN.material_key(chunk, triangle)
 
 ## Weak references extend the charge when a trusted consumer retains a mesh,
 ## material or texture after its scene node is destroyed. Templates share these
-## resources with duplicate(0) instances; no global renderer cache owns them.
+## resources with duplicate(0) instances; the optional session cache owns shared leases.
+static func track_instance_nodes(lease: RefCounted, node: Node) -> void:
+	if lease == null: return
+	lease.track(node)
+	for child: Node in node.get_children(): track_instance_nodes(lease, child)
+
 static func track_resources(job: Dictionary, node: Node) -> void:
 	if job.get("lease") == null: return
 	if node is MeshInstance3D:
@@ -156,16 +253,25 @@ static func track_resources(job: Dictionary, node: Node) -> void:
 
 static func track_material(job: Dictionary, material: Material) -> void:
 	if material == null: return
+	if job.get("borrowed_materials", {}).has(material.get_instance_id()): return
 	job.lease.track(material)
-	if material is ShaderMaterial: job.lease.track(material.shader)
+	if material is ShaderMaterial and job.get("resources") == null: job.lease.track(material.shader)
 	if material is BaseMaterial3D:
 		for slot in BaseMaterial3D.TEXTURE_MAX:
 			var texture: Texture2D = material.get_texture(slot)
 			if texture != null: job.lease.track(texture)
 
 static func dispose(job: Dictionary) -> void:
-	for template: Node in job.templates.values():
-		if is_instance_valid(template): template.free()
+	if job.get("resources") != null:
+		for key: String in job.get("claims", {}).values(): job.resources.release(key)
+	else:
+		for template: Node in job.templates.values():
+			if is_instance_valid(template): template.free()
+	job.claims = {}
+	job.resources = null
+	job.instances = {}
+	job.counts = {}
+	job.borrowed_materials = {}
 	job.templates = {}
 	job.asset_materials = {}
 	job.materials = {}
@@ -191,6 +297,7 @@ static func material_color(key: String) -> Color:
 	return base.lerp(tint, 0.2)
 
 static func cancel(job: Dictionary) -> void:
+	var started := Time.get_ticks_usec()
 	job.cancelled = true
 	dispose(job)
 	if is_instance_valid(job.root) and not job.root.is_queued_for_deletion():
@@ -198,6 +305,10 @@ static func cancel(job: Dictionary) -> void:
 		if parent != null:
 			parent.remove_child(job.root)
 		job.root.queue_free()
+	_release_usec += Time.get_ticks_usec() - started
+
+static func diagnostics() -> Dictionary:
+	return {"advance_usec": _advance_usec, "release_usec": _release_usec, "steps": _steps}
 
 static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 	# Synchronous convenience for existing small editor previews; same renderer source.
