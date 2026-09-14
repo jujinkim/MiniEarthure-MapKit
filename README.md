@@ -28,6 +28,13 @@ Godot 4.7.2 integration: mount this repository at `addons/mapkit` or a nested ad
 Native Windows uses its own Rust build; Android requires the Android Rust target
 and toolchain. Host code must not load `godot/chunk_renderer.gd`.
 
+The development profile uses `opt-level = 2`, including the library loaded by
+Godot editor runs and debug exports. Debug symbols, assertions and overflow checks
+remain enabled. This avoids measuring unoptimized geometry/codec loops as normal
+editor performance. For instruction-level debugging, explicitly set
+`CARGO_PROFILE_DEV_OPT_LEVEL=0`; record the profile in performance comparisons.
+Release settings and generated/package identities are unchanged.
+
 Crates: `mapkit-core` (pure), `mapkit-package` (filesystem/ZIP/PNG adapter),
 `mapkit-cli` (composition), `mapkit-godot` (engine adapter). Shared renderer is
 separate from collision registration, which belongs to the game.

@@ -13,3 +13,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 schemars = "0.8"
+
+# Editor/debug exports load target/debug. Keep symbols and debug/overflow checks,
+# but do not run geometry, validation and archive hashing without optimization.
+# Use CARGO_PROFILE_DEV_OPT_LEVEL=0 for instruction-by-instruction debugging.
+[profile.dev]
+opt-level = 2
