@@ -220,6 +220,10 @@ See [the road/structure contract](spec/FORMAT.md#recipe-2-roads-and-structures-k
 and the original [road fixture](examples/roads/document.json). The public native
 probe includes actual floor/portal/wall/ceiling contacts and matching render faces:
 `python3 scripts/verify_godot_layout.py --godot GODOT --probe roads`.
+Road and placement probes use actual metre scene units for both shapes and queries.
+Their contact allowances retain the original source-centimetre tolerances; the
+road probe also reports the largest native integer-height/contact difference and
+missing contacts. They do not apply the former 1/8 display scale.
 Native OS/device and representative driving acceptance remain in [LIMITATIONS](LIMITATIONS.md).
 
 

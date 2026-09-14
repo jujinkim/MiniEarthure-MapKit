@@ -4,13 +4,16 @@ const DATA = preload("res://addons/outer_runtime/mapkit/chunk_data.gd")
 const RENDERER = preload("res://addons/outer_runtime/mapkit/chunk_renderer.gd")
 var failures: Array[String] = []
 var world: Node3D
+var max_floor_error := 0.0
+var missing_floor_hits := 0
 func check(ok: bool, message: String) -> void:
     if not ok:
         failures.append(message)
         push_error(message)
 func ray(a: Vector3, b: Vector3) -> Dictionary:
     return world.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(world.to_global(a), world.to_global(b)))
-func pos(x: float, h: float, y: float) -> Vector3: return Vector3(x, h, -y) * 0.00125
+# Package coordinates are centimetres; scene units have been actual metres since v2.
+func pos(x: float, h: float, y: float) -> Vector3: return Vector3(x, h, -y) * 0.01
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
     var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
@@ -66,18 +69,22 @@ func run() -> void:
                 check(sample.ok, "continuous native floor query %s %d" % [id,x])
                 if not sample.ok: continue
                 var target := pos(x,float(sample.data.position_cm[1]),y+offset)
-                var hit := ray(target+Vector3.UP*0.1,target-Vector3.UP*0.1)
-                check(not hit.is_empty() and hit.position.distance_to(world.to_global(target)) < 0.0013, "actual floor contact %s %d" % [id,x])
+                var hit := ray(target+Vector3.UP*0.8,target-Vector3.UP*0.8)
+                if hit.is_empty(): missing_floor_hits += 1
+                else: max_floor_error = maxf(max_floor_error, hit.position.distance_to(world.to_global(target)))
+                # Preserve the original 1.04 source-cm allowance for the integer-cm native probe.
+                check(not hit.is_empty() and hit.position.distance_to(world.to_global(target)) < 0.0104, "actual floor contact %s %d" % [id,x])
         var h := -500 if id == "underpass" else -600
         var wall := ray(pos(6000,h+100,y),pos(6000,h+100,y+500))
-        check(not wall.is_empty() and absf(world.to_local(wall.position).z-pos(6000,0,y+300).z)<0.0001, "real side wall %s" % id)
+        check(not wall.is_empty() and absf(world.to_local(wall.position).z-pos(6000,0,y+300).z)<0.0008, "real side wall %s" % id)
         var above := ray(pos(6000,h+100,y),pos(6000,1000,y))
-        if id == "tunnel": check(not above.is_empty() and absf(world.to_local(above.position).y-pos(0,h+300,0).y)<0.0001, "tunnel ceiling contact")
+        if id == "tunnel": check(not above.is_empty() and absf(world.to_local(above.position).y-pos(0,h+300,0).y)<0.0008, "tunnel ceiling contact")
         else: check(above.is_empty(), "underpass has no ceiling or uncut terrain")
     for pair in [["ground-west",2500,1000,0],["bridge",2500,1000,600],["elevated",7500,1400,700]]:
         var target := pos(pair[1],pair[3],pair[2])
-        var hit := ray(target+Vector3.UP*0.05,target-Vector3.UP*0.05)
-        check(not hit.is_empty() and hit.position.distance_to(world.to_global(target))<0.0001,"separate physical layer " + pair[0])
+        var hit := ray(target+Vector3.UP*0.4,target-Vector3.UP*0.4)
+        check(not hit.is_empty() and hit.position.distance_to(world.to_global(target))<0.0008,"separate physical layer " + pair[0])
+    print("road_floor_measurement: max_error_m=", max_floor_error, " missing_hits=", missing_floor_hits)
     world.queue_free()
     await process_frame
     await process_frame

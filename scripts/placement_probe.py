@@ -8,11 +8,12 @@ func check(ok: bool, message: String) -> void:
     if not ok:
         failures.append(message)
         push_error(message)
-func pos(x: float, h: float, y: float) -> Vector3: return Vector3(x, h, -y) * 0.00125
+# Use the same actual-metre world for rendering, solid shapes and contact queries.
+func pos(x: float, h: float, y: float) -> Vector3: return Vector3(x, h, -y) * 0.01
 func occupied(point: Vector3) -> bool:
     var query := PhysicsShapeQueryParameters3D.new()
     var sphere := SphereShape3D.new()
-    sphere.radius = 0.005
+    sphere.radius = 0.04 # Preserve the original four-source-centimetre query radius.
     query.shape = sphere
     query.transform = Transform3D(Basis.IDENTITY, point)
     return not world.get_world_3d().direct_space_state.intersect_shape(query).is_empty()
@@ -47,9 +48,9 @@ func run() -> void:
                 for v in [0,2,1]: faces.append(DATA.scene_vertex(c,t,v))
             check(DATA.prism_count(c) == DATA.prism_count(raw.data.chunk),"exact solid count")
             for i in DATA.prism_count(c):
-                check(DATA.prism_points(c,i,0.125) == DATA.prism_points(raw.data.chunk,i,0.125),"exact six-vertex solid transfer")
+                check(DATA.prism_points(c,i,1.0) == DATA.prism_points(raw.data.chunk,i,1.0),"exact six-vertex solid transfer")
                 var shape := ConvexPolygonShape3D.new()
-                shape.points = DATA.prism_points(c,i,0.125)
+                shape.points = DATA.prism_points(c,i,1.0)
                 var collider := CollisionShape3D.new()
                 collider.shape = shape
                 var body := StaticBody3D.new()
