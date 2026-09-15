@@ -3,7 +3,7 @@ extends RefCounted
 const ASSETS := preload("./asset_library.gd")
 const URBAN := preload("./urban_surface.gdshader")
 var reserve: Callable
-var limit_bytes := 64 * 1024 * 1024
+var limit_bytes := 128 * 1024 * 1024 # Textured templates; still charged to consumer admission.
 var entries: Dictionary = {}
 var retiring: Array = []
 var imports := 0
@@ -42,16 +42,29 @@ static func key_for(id: String, sources: Dictionary) -> String:
 			texture_hash = str(sources[texture_id].content_hash)
 	return str(asset.content_hash) + ":" + str(asset.material_json) + ":" + texture_hash
 
-func claim(id: String, sources: Dictionary) -> String:
-	if closed: return ""
+func environment_key_for(id: String, sources: Dictionary) -> String:
 	var key := key_for(id, sources)
 	if key.is_empty(): return ""
-	key += ":" + JSON.stringify(environment_profile, "", true).sha256_text()
+	# Cell sources carry only their relevant light bindings. Key this asset by
+	# its own binding so adjacent cells still share the same imported template.
+	var binding := {}
+	for light: Dictionary in environment_profile.get("lights",[]):
+		if light.asset_id == id: binding = light
+	key += ":" + JSON.stringify(binding, "", true).sha256_text()
+	return key
+
+func claim(id: String, sources: Dictionary) -> String:
+	if closed: return ""
+	var key := environment_key_for(id,sources)
+	if key.is_empty(): return ""
 	if entries.has(key):
 		entries[key].pins += 1
 		hits += 1
 		return key
-	var amount := int(sources[id].memory_bytes) * (2 if not environment_profile.is_empty() else 1) + 65536
+	# The native import profile already includes CPU/GPU overlap (256 bytes per
+	# vertex, 32 per index, 24 per image pixel). Replacing template meshes shares
+	# textures and releases the old mesh; add a material/clock binding allowance.
+	var amount := int(sources[id].memory_bytes) + 65536
 	if bytes() + amount > limit_bytes or entries.size() >= 256: trim()
 	if bytes() + amount > limit_bytes or entries.size() >= 256: return ""
 	var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null

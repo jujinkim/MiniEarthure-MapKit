@@ -45,7 +45,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 		for id: String in sources:
 			var key: String = resources.claim(id, sources)
 			if key.is_empty():
-				fail(job, "E_MEMORY_BUDGET", "Shared display resources exceed memory allowance")
+				fail(job, "E_MEMORY_BUDGET", "Shared display resources exceed memory allowance: %s (%d bytes cached)" % [id,resources.bytes()])
 				return job
 			job.claims[id] = key
 		for object: Dictionary in view.objects:

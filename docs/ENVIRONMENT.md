@@ -22,6 +22,9 @@ never change existing archive bytes automatically. See `spec/document.schema.jso
   float texture carries wetness/snow/time. A bounded light pool (8 or 4) prioritizes
   the local vehicle and uses emissive distant lamps/windows. Precipitation is a
   bounded camera-centred GPU particle volume; an overhead ray shelters the camera.
+- Shared imported templates have a 128MiB cache ceiling, with every allocation
+  additionally charged to the consumer's overall budget. Cache keys include only
+  the current asset's light binding so adjacent cells share textures and meshes.
 - Original 128px material tiles and the new-project upgrader are in
   `scripts/atmosphere_assets.py`. Existing image-bearing GLBs retain their original
   image bytes and UVs. Geometry, normals, indices, collision and attribution remain

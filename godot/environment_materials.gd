@@ -23,6 +23,9 @@ func surface_material(source: Material, role: int, use_instances := false) -> Ma
 	if source.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED: return source
 	var key := "%d/%d/%d" % [source.get_instance_id(),role,int(use_instances)]
 	if materials.has(key) and materials[key].get_ref() != null: return materials[key].get_ref()
+	if materials.size() >= 256:
+		for retired: String in materials.keys():
+			if materials[retired].get_ref() == null: materials.erase(retired)
 	var result := ShaderMaterial.new()
 	result.shader = shader
 	result.set_shader_parameter("environment_data",texture)
