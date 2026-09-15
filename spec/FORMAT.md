@@ -514,7 +514,9 @@ Decoded pixels and parsed GLB validation data are temporary; Host does not creat
 textures, renderer nodes or GPU resources. Working-set allowances and decoder
 limits are planning controls, not a proof of complete allocator/RSS or display
 memory accounting (some WebP internal allocations are not governed by its memory
-limit). S04/K07/platform performance acceptance remains separate. This changes
+limit). S04/K07 platform-specific function/install acceptance remains separate;
+shared-code primary performance and unscheduled cross-platform repetition follow
+root architecture §44.159. This changes
 admission, not generation/recipe/world hashing or physics. Valid existing v1
 exports and generated v6 hashes are preserved.
 

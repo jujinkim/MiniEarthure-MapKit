@@ -201,8 +201,10 @@ performance profile. Reopen restores into a new adjacent `.source` directory and
 uses ordinary dirty-document protection before adopting it. Existing files and
 unused original payloads remain intact. The legacy bounded authoring document
 limit still applies; source-topology overview does not enable unbounded editing.
-Functional consumer evidence and remaining platform/performance gates belong to
-the owning application reports. This interface does not declare final cutover.
+Functional consumer evidence and remaining platform-specific function/install gates
+belong to the owning application reports. Shared-code primary performance and
+unscheduled cross-platform repetition follow root architecture §44.159. This
+interface does not declare final cutover.
 
 ## L01-C decision before implementation — 2026-09-12
 
