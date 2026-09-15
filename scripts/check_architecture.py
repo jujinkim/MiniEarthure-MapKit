@@ -8,9 +8,10 @@ import re
 
 root = Path(__file__).resolve().parents[1]
 core = tomllib.loads((root / 'crates/mapkit-core/Cargo.toml').read_text())
-allowed = {'serde', 'serde_json', 'sha2', 'schemars', 'libm'}
+allowed = {'serde', 'serde_json', 'sha2', 'schemars', 'libm', 'i_overlay'}
 assert set(core['dependencies']) <= allowed, 'unexpected core dependency'
 assert core['dependencies']['libm'] == '=0.2.16', 'portable math must stay exactly pinned'
+assert core['dependencies']['i_overlay'] == '=8.1.1', 'recipe9 integer subdivision must stay exactly pinned'
 for path in (root / 'crates/mapkit-core/src').rglob('*.rs'):
     source = path.read_text()
     for forbidden in ('std::fs', 'std::net', 'std::time', 'std::env', 'std::thread',
