@@ -392,6 +392,175 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
     Ok((patches, walls))
 }
 
+// Recipe 9 cuts each terrain tile once, before assigning surface identities.
+fn ground_tile(
+    d: &MapDocument,
+    v: [Vertex; 4],
+    patches: &[Patch],
+    b: &mut Builder,
+    work: &mut usize,
+) -> Result<()> {
+    let bounds = Bounds {
+        min: xy(v[0]),
+        max: [v[2][0].min(b.bounds.max[0]), v[2][2].min(b.bounds.max[1])],
+    };
+    if (0..2).any(|i| bounds.min[i] >= bounds.max[i]) {
+        return Ok(());
+    }
+    tick(
+        work,
+        patches.len()
+            + d.surface_areas
+                .iter()
+                .map(|a| a.polygon.len())
+                .sum::<usize>(),
+    )?;
+    let terrain = [[v[0], v[1], v[2]], [v[0], v[2], v[3]]];
+    let nearby: Vec<_> = patches.iter().filter(|p| hit(&p.v, &bounds, 2)).collect();
+    let mut lines = vec![(xy(v[0]), xy(v[2]))];
+    for patch in &nearby {
+        for i in 0..3 {
+            lines.push((xy(patch.v[i]), xy(patch.v[(i + 1) % 3])));
+        }
+        for t in terrain {
+            if patch.terrain_join {
+                let (inside, _) = partition(&t, &patch.v, work)?;
+                if inside
+                    .iter()
+                    .any(|p| (on_plane(&patch.v, *p)[1] - on_plane(&t, *p)[1]).abs() > 1)
+                {
+                    return Err(error("E_GEOMETRY", "ground/structure junction apron must match terrain; author a level approach"));
+                }
+            }
+            if patch.road.kind == RoadKind::Tunnel {
+                let ceiling = patch
+                    .v
+                    .map(|p| [p[0], p[1] + patch.road.clearance_cm.unwrap() as i64, p[2]]);
+                let mut crossing = Vec::new();
+                for i in 0..3 {
+                    let (a, c) = (t[i], t[(i + 1) % 3]);
+                    let (da, dc) = (floor_plane(&ceiling, a), floor_plane(&ceiling, c));
+                    if da == 0 {
+                        crossing.push(xy(a));
+                    }
+                    if (da < 0 && dc > 0) || (da > 0 && dc < 0) {
+                        let p = std::array::from_fn(|j| {
+                            ((a[j] as i128 * (da - dc) + (c[j] - a[j]) as i128 * da) / (da - dc))
+                                as i64
+                        });
+                        crossing.push(xy(p));
+                    }
+                }
+                crossing.sort();
+                crossing.dedup();
+                if crossing.len() >= 2 {
+                    lines.push((crossing[0], *crossing.last().unwrap()));
+                }
+            }
+        }
+    }
+    let paint: Vec<_> = d
+        .surface_areas
+        .iter()
+        .filter(|a| {
+            let verts: Vec<_> = a.polygon.iter().map(|p| [p[0], 0, p[1]]).collect();
+            hit(&verts, &bounds, 2)
+        })
+        .collect();
+    for area in &paint {
+        for i in 0..area.polygon.len() {
+            lines.push((area.polygon[i], area.polygon[(i + 1) % area.polygon.len()]));
+        }
+    }
+    let shapes = crate::road_arrangement::subdivide(&bounds, &lines, work)?;
+    let height = |p: Point| {
+        let t = if (p[0] - bounds.min[0]) * (v[2][2] - v[0][2])
+            >= (p[1] - bounds.min[1]) * (v[2][0] - v[0][0])
+        {
+            terrain[0]
+        } else {
+            terrain[1]
+        };
+        on_plane(&t, [p[0], 0, p[1]])
+    };
+    for rings in shapes {
+        for triangle in crate::road_arrangement::triangulate(&rings, work)? {
+            let center = [
+                triangle.iter().map(|p| p[0]).sum::<i64>(),
+                triangle.iter().map(|p| p[1]).sum::<i64>(),
+            ];
+            let t = if (center[0] - 3 * bounds.min[0]) * (v[2][2] - v[0][2])
+                >= (center[1] - 3 * bounds.min[1]) * (v[2][0] - v[0][0])
+            {
+                terrain[0]
+            } else {
+                terrain[1]
+            };
+            let mut selected = Some((Surface::Grass, "terrain"));
+            let mut road = false;
+            for patch in &nearby {
+                tick(work, 1)?;
+                if !point_in_polygon(center, &patch.v.map(|p| [p[0] * 3, p[2] * 3])) {
+                    continue;
+                }
+                match patch.road.kind {
+                    RoadKind::Ground => {
+                        selected = Some((patch.surface, patch.road.id.as_str()));
+                        road = true;
+                        break;
+                    }
+                    RoadKind::Underpass => {
+                        selected = None;
+                        break;
+                    }
+                    RoadKind::Tunnel => {
+                        let ceiling = patch.v.map(|p| {
+                            [
+                                p[0] * 3,
+                                (p[1] + patch.road.clearance_cm.unwrap() as i64) * 3,
+                                p[2] * 3,
+                            ]
+                        });
+                        let terrain3 = t.map(|p| p.map(|v| v * 3));
+                        if floor_plane(&ceiling, on_plane(&terrain3, [center[0], 0, center[1]]))
+                            <= 0
+                        {
+                            selected = None;
+                            break;
+                        }
+                    }
+                    RoadKind::Elevated | RoadKind::Bridge => {
+                        if patch.v.iter().all(|p| floor_plane(&t, *p) == 0) {
+                            selected = None;
+                            break;
+                        }
+                    }
+                }
+            }
+            if !road && selected.is_some() {
+                for area in &paint {
+                    tick(work, area.polygon.len())?;
+                    if point_in_polygon(
+                        center,
+                        &area
+                            .polygon
+                            .iter()
+                            .map(|p| [p[0] * 3, p[1] * 3])
+                            .collect::<Vec<_>>(),
+                    ) {
+                        selected = Some((area.surface, area.id.as_str()));
+                        break;
+                    }
+                }
+            }
+            if let Some((surface, id)) = selected {
+                b.triangle(triangle.map(height), surface, id, true)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn generate(
     d: &MapDocument,
     bounds: &Bounds,
@@ -415,6 +584,10 @@ pub(crate) fn generate(
                 [px + spacing, height(x + 1, y + 1), py + spacing],
                 [px, height(x, y + 1), py + spacing],
             ];
+            if d.recipe_version >= 9 {
+                ground_tile(d, v, &patches, b, &mut work)?;
+                continue;
+            }
             for terrain in [[v[0], v[1], v[2]], [v[0], v[2], v[3]]] {
                 let tb = Bounds {
                     min: [px, py],
@@ -692,4 +865,113 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod arrangement_probe {
+    use super::*;
+
+    #[test]
+    fn simultaneous_integer_cuts_preserve_curved_cell_area() {
+        for shift in [[0, 0], [-837, -851], [999_990_000, -999_990_000]] {
+            for widths in [
+                [601, 799, 503],
+                [599, 801, 501],
+                [101, 99, 103],
+                [997, 503, 799],
+            ] {
+                check_case(shift, widths);
+            }
+        }
+    }
+
+    fn check_case(shift: Point, widths: [u32; 3]) {
+        let mut d: MapDocument =
+            serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+        d.roads.retain(|r| r.id == "ground-west");
+        d.nodes
+            .retain(|n| ["ground-west-from", "junction"].contains(&n.id.as_str()));
+        d.roads[0].points = vec![
+            [0, 0, 1000],
+            [1801, 0, 1397],
+            [3203, 0, 701],
+            [5000, 0, 1000],
+        ];
+        d.roads[0].widths_cm = widths.to_vec();
+        d.roads[0].surfaces = vec![Surface::Asphalt; 3];
+        let bounds = d.cell_bounds(Cell { x: 0, y: 0 }).unwrap();
+        let (patches, _) = plan(&d, &bounds).unwrap();
+        let point = |p: Point| [p[0] + shift[0], p[1] + shift[1]];
+        let mut work = 0;
+        let mut shapes = Vec::new();
+        for y in (0..5000).step_by(500) {
+            for x in (0..5000).step_by(500) {
+                let tile = Bounds {
+                    min: [x, y],
+                    max: [x + 500, y + 500],
+                };
+                let mut lines = vec![(point([x, y]), point([x + 500, y + 500]))];
+                for patch in patches.iter().filter(|p| hit(&p.v, &tile, 2)) {
+                    for i in 0..3 {
+                        lines.push((point(xy(patch.v[i])), point(xy(patch.v[(i + 1) % 3]))));
+                    }
+                }
+                let shifted = Bounds {
+                    min: point(tile.min),
+                    max: point(tile.max),
+                };
+                shapes.extend(
+                    crate::road_arrangement::subdivide(&shifted, &lines, &mut work).unwrap(),
+                );
+            }
+        }
+        let mut area = 0i128;
+        let mut triangles = Vec::new();
+        for shape in &shapes {
+            assert_eq!(shape.len(), 1, "probe faces are simply connected");
+            let ring = shape[0].clone();
+            for t in crate::generation::polygon_triangles(&ring).unwrap() {
+                triangles.push(t.map(|i| ring[i]));
+            }
+            for (index, ring) in shape.iter().enumerate() {
+                let a: i128 = (0..ring.len())
+                    .map(|i| {
+                        let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                        a[0] as i128 * b[1] as i128 - a[1] as i128 * b[0] as i128
+                    })
+                    .sum();
+                area += if index == 0 { a.abs() } else { -a.abs() };
+            }
+        }
+        assert_eq!(area, 2 * 5000 * 5000);
+        assert_eq!(
+            triangles
+                .iter()
+                .map(|t| cross(t[0], t[1], t[2]).abs())
+                .sum::<i128>(),
+            area
+        );
+        let mut edges = BTreeMap::new();
+        for triangle in &triangles {
+            for i in 0..3 {
+                let (a, b) = (triangle[i], triangle[(i + 1) % 3]);
+                *edges
+                    .entry(if a < b { (a, b) } else { (b, a) })
+                    .or_insert(0) += 1;
+            }
+        }
+        for ((a, b), count) in edges {
+            let outer = (0..2).any(|i| a[i] == b[i] && [shift[i], shift[i] + 5000].contains(&a[i]));
+            assert_eq!(
+                count,
+                if outer { 1 } else { 2 },
+                "unmatched internal edge {a:?}..{b:?}"
+            );
+        }
+        eprintln!(
+            "simultaneous arrangement: {} faces; exact area {}",
+            shapes.len(),
+            area
+        );
+    }
 }

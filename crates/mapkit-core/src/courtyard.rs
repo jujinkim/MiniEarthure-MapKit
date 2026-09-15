@@ -96,14 +96,21 @@ fn canonical(p: &[Point], positive: bool) -> Vec<Point> {
     p
 }
 pub(crate) fn triangulate(b: &Building, work: &mut usize) -> Result<Vec<[Point; 3]>> {
-    if b.holes.is_empty() {
-        return Ok(crate::generation::polygon_triangles(&b.footprint)?
+    triangulate_rings(&b.footprint, &b.holes, work)
+}
+pub(crate) fn triangulate_rings(
+    footprint: &[Point],
+    interior: &[Vec<Point>],
+    work: &mut usize,
+) -> Result<Vec<[Point; 3]>> {
+    if interior.is_empty() {
+        return Ok(crate::generation::polygon_triangles(footprint)?
             .into_iter()
-            .map(|t| t.map(|i| b.footprint[i]))
+            .map(|t| t.map(|i| footprint[i]))
             .collect());
     }
-    let mut ring = canonical(&b.footprint, true);
-    let mut holes: Vec<_> = b.holes.iter().map(|h| canonical(h, false)).collect();
+    let mut ring = canonical(footprint, true);
+    let mut holes: Vec<_> = interior.iter().map(|h| canonical(h, false)).collect();
     holes.sort();
     let target = area(&ring) + holes.iter().map(|h| area(h)).sum::<i128>();
     for hole in &holes {
@@ -150,7 +157,7 @@ pub(crate) fn triangulate(b: &Building, work: &mut usize) -> Result<Vec<[Point; 
                 let p = [a[0] + c[0], a[1] + c[1]];
                 let doubled =
                     |r: &[Point]| r.iter().map(|p| [p[0] * 2, p[1] * 2]).collect::<Vec<_>>();
-                if !point_in_polygon(p, &doubled(&b.footprint))
+                if !point_in_polygon(p, &doubled(footprint))
                     || holes.iter().any(|h| point_in_polygon(p, &doubled(h)))
                 {
                     continue;

@@ -378,3 +378,13 @@ climate/settlement overrides, latitude/longitude, time zone, sunrise/sunset,
 ordered regional polygons and explicit asset material indices for windows/lamps.
 Older documents omit it. These fields contribute to world identity; no existing
 source is silently upgraded. See [the public contract](docs/ENVIRONMENT.md).
+
+
+### Conforming ground subdivision (recipe 9)
+
+Recipe 9 builds an integer planar subdivision before assigning ground road and
+terrain faces. It preserves shared rounded intersections across materials and
+cell boundaries, including height-grid crossfall. Existing recipes retain their
+previous generation paths. See [implementation and verification status](docs/INGAME_BUGFIX.md)
+and [new dependency notices](THIRD_PARTY.md). Consumer integration and actual
+whole-map driving acceptance remain in progress.

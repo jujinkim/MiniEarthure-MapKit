@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 8;
+pub const RECIPE_VERSION: u32 = 9;
 pub const GENERATED_VERSION: u32 = 6;
 pub const SCENE_UNITS_VERSION: u32 = 2;
 pub const WORLD_SCALE: f64 = 1.0;
@@ -963,5 +963,6 @@ pub use archive::{archive_key, archive_limit, decode_archive, encode_archive};
 mod bounds_index;
 mod placement;
 mod roads;
+mod road_arrangement;
 mod urban;
 pub use placement::BuildingPrism;
