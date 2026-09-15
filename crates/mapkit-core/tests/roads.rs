@@ -262,3 +262,19 @@ fn junction_degree_and_negative_partial_bounds_fail_closed() {
         }
     }
 }
+
+#[test]
+fn curved_ground_subdivision_covers_cell_without_gaps_or_overlaps() {
+    let mut d = document();
+    d.roads.retain(|r| r.id == "ground-west");
+    d.nodes.retain(|n| ["ground-west-from", "junction"].contains(&n.id.as_str()));
+    d.roads[0].points = vec![[0,0,1000], [1801,0,1397], [3203,0,701], [5000,0,1000]];
+    d.roads[0].widths_cm = vec![601, 799, 503];
+    d.roads[0].surfaces = vec![Surface::Asphalt; 3];
+    let c = chunk(&d, Cell { x: 0, y: 0 }, None);
+    let area: i128 = c.triangles.iter().filter(|t| t.spawnable).map(|t| {
+        let [a,b,c] = t.vertices;
+        ((b[0]-a[0]) as i128 * (c[2]-a[2]) as i128 - (b[2]-a[2]) as i128 * (c[0]-a[0]) as i128).abs()
+    }).sum();
+    assert_eq!(area, 2 * 5000 * 5000, "terrain and road must partition the cell exactly");
+}
