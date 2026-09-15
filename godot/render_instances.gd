@@ -44,7 +44,7 @@ static func append(group: Dictionary, transform: Transform3D, object_id: String,
 	var index := int(group.next)
 	for part: Dictionary in group.groups:
 		part.multi.set_instance_transform(index, transform * part.transform)
-		part.multi.set_instance_custom_data(index,Color(float((map_id+"/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0,0,0,0))
+		part.multi.set_instance_custom_data(index,Color(float((map_id+"/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0,0,0,1))
 		part.multi.visible_instance_count = index + 1
 	group.ids.append(object_id)
 	group.next = index + 1

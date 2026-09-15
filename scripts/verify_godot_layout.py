@@ -306,8 +306,9 @@ def main():
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'placement.memap'), str(ROOT / 'examples/placement/document.json')], check=True, timeout=30)
         subprocess.run([sys.executable, str(ROOT / 'examples/third_party.py'), str(project / 'roads.memap'), str(ROOT / 'examples/roads/document.json')], check=True, timeout=30)
         make_terrain_fixture(project)
-        for name in ('chunk_renderer.gd', 'chunk_data.gd', 'asset_library.gd', 'render_memory.gd', 'render_instances.gd', 'urban_surface.gdshader'):
-            shutil.copyfile(ROOT / 'godot' / name, addon / name)
+        for resource in (ROOT / 'godot').iterdir():
+            if resource.suffix in ('.gd', '.gdshader', '.uid'):
+                shutil.copyfile(resource, addon / resource.name)
         subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack', str(ROOT / 'examples/minimal'), str(project / 'fixture.memap')], check=True, timeout=60)
         if args.probe is None or 'regional' in args.probe:
             subprocess.run(['cargo', 'run', '--quiet', '--locked', '--manifest-path', str(ROOT / 'Cargo.toml'), '-p', 'mapkit-cli', '--', 'pack-regions', str(ROOT / 'examples/minimal'), str(project / 'fixture.mkregions'), '1'], check=True, timeout=60)

@@ -16,7 +16,7 @@ varying float seed;
 void vertex() {
     world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz;
     world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
-    seed = distant ? UV.x : (INSTANCE_CUSTOM.x > 0.0 ? INSTANCE_CUSTOM.x : building_seed);
+    seed = distant ? UV.x : (INSTANCE_CUSTOM.a > 0.5 ? INSTANCE_CUSTOM.x : building_seed);
 }
 void fragment() {
     vec4 weather = texelFetch(environment_data,ivec2(0,0),0);
