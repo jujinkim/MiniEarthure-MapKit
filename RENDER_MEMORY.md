@@ -63,3 +63,12 @@ hashes, GLB/images, opaque grouping, cancellation and transforms. Actual GPU
 MultiMesh transform queries require a rendered engine; the dummy headless server
 cannot supply them. Caller integration tests cover admission, shared last borrowers,
 failed replacement, worker cancellation and delayed retirement.
+
+## Legacy presentation metadata
+
+Recipes without per-asset content hashes and positive memory bounds retain the
+complete per-cell display reservation and local importer caches, even when the
+caller supplies a session cache. They cannot claim shared immutable templates.
+This preserves old validated custom image/model packages without inventing hashes
+or subtracting unproven shared memory. New recipes retain independent shared leases
+and last-borrower retirement. Generation and serialized package hashes are unchanged.

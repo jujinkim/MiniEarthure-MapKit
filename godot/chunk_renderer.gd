@@ -21,6 +21,10 @@ static func scene_position(value: Array) -> Vector3:
 static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callable(), planned_bytes: int = 0, resources: RefCounted = null) -> Dictionary:
 	var view := DATA.view(chunk)
 	var shared := PLAN.shared_bytes(view) if resources != null else 0
+	# Older validated recipes have no per-asset immutable sharing metadata.
+	# Keep their complete per-job reservation and local importer ownership.
+	if resources != null and shared == 0 and not view.get("presentation", {}).get("assets", {}).is_empty():
+		resources = null
 	var lease: RefCounted
 	if reserve.is_valid():
 		var bytes := planned_bytes - shared
