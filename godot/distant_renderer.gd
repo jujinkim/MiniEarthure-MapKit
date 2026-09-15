@@ -2,7 +2,7 @@ extends RefCounted
 ## Common display-only batches. Caller owns the lease, admission and frame budget.
 const BATCH_VERTICES := 1536
 
-static func begin(data: Dictionary, parent: Node3D, lease: RefCounted) -> Dictionary:
+static func begin(data: Dictionary, parent: Node3D, lease: RefCounted, resources: RefCounted = null) -> Dictionary:
 	var root := Node3D.new()
 	root.set_meta("mapkit_render_root", true)
 	root.name = "MapKitDistant"
@@ -10,10 +10,15 @@ static func begin(data: Dictionary, parent: Node3D, lease: RefCounted) -> Dictio
 	parent.add_child(root)
 	lease.track(root)
 	lease.track(data.geometry)
-	var material := StandardMaterial3D.new()
+	var material: Material = StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
 	material.roughness = 1.0
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if resources != null:
+		var context: RefCounted = resources.environment_context()
+		if context != null:
+			material = context.surface_material(material,0)
+			material.set_shader_parameter("distant",true)
 	lease.track(material)
 	return {"root": root, "owner": data.geometry, "view": data.geometry.view(), "offset": 0,
 		"material": material, "lease": lease, "done": false, "cancelled": false}
@@ -32,6 +37,7 @@ static func advance(job: Dictionary) -> bool:
 	arrays[Mesh.ARRAY_VERTEX] = job.view.vertices.slice(job.offset, end)
 	arrays[Mesh.ARRAY_NORMAL] = job.view.normals.slice(job.offset, end)
 	arrays[Mesh.ARRAY_COLOR] = job.view.colors.slice(job.offset, end)
+	if job.view.has("light_data"): arrays[Mesh.ARRAY_TEX_UV] = job.view.light_data.slice(job.offset,end)
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var instance := MeshInstance3D.new()

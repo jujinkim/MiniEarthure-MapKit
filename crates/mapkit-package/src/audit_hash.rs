@@ -199,6 +199,9 @@ impl Serialize for Document<'_> {
         m.serialize_entry("bounds", &Canonical(&d.bounds))?;
         m.serialize_entry("buildings", &Normalized(&d.buildings, self.1))?;
         fields!(m, d, cell_size_cm);
+        if let Some(environment) = &d.environment {
+            m.serialize_entry("environment", &Canonical(environment))?;
+        }
         m.serialize_entry("heightmaps", &Normalized(&d.heightmaps, self.1))?;
         fields!(m, d, map_id);
         m.serialize_entry("nodes", &Normalized(&d.nodes, self.1))?;
@@ -563,5 +566,33 @@ mod tests {
             assert_eq!(failure.code, "E_CANCELLED", "checkpoint {cutoff}");
             assert_eq!(current, cutoff);
         }
+    }
+}
+
+record!(mapkit_core::environment::EnvironmentProfile, d, m, {
+    if !d.architecture.is_empty() { fields!(m,d,architecture); }
+    if !d.climate.is_empty() { fields!(m,d,climate); }
+    fields!(m, d, concept, latitude_mdeg);
+    m.serialize_entry("lights", &Canonical(&d.lights))?;
+    fields!(m, d, longitude_mdeg);
+    m.serialize_entry("regions", &Canonical(&d.regions))?;
+    if !d.settlement.is_empty() { fields!(m,d,settlement); }
+    fields!(m, d, sunrise_minutes, sunset_minutes, utc_offset_minutes, version);
+});
+record!(mapkit_core::environment::EnvironmentRegion, d, m, {
+    if !d.architecture.is_empty() { fields!(m,d,architecture); }
+    if !d.climate.is_empty() { fields!(m,d,climate); }
+    fields!(m, d, concept, id, polygon);
+    if !d.settlement.is_empty() { fields!(m,d,settlement); }
+});
+record!(mapkit_core::environment::LightBinding, d, m, {
+    fields!(m, d, asset_id, bulb_materials, color, position_cm, range_cm, window_materials);
+});
+
+impl<T> Serialize for Canonical<'_, Vec<T>> where for<'a> Canonical<'a,T>: Serialize {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok,S::Error> {
+        let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+        for item in self.0 { seq.serialize_element(&Canonical(item))?; }
+        seq.end()
     }
 }

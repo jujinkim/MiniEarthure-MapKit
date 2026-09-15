@@ -8,12 +8,13 @@ struct MapKitFarGeometry {
     vertices: PackedVector3Array,
     normals: PackedVector3Array,
     colors: PackedColorArray,
+    light_data: PackedVector2Array,
 }
 #[godot_api]
 impl MapKitFarGeometry {
     #[func]
     fn view(&self) -> VarDictionary {
-        vdict! { "vertices" => &self.vertices, "normals" => &self.normals, "colors" => &self.colors }
+        vdict! { "vertices" => &self.vertices, "normals" => &self.normals, "colors" => &self.colors, "light_data" => &self.light_data }
     }
 }
 pub(super) fn pack(mesh: mapkit_package::distant::DistantMesh) -> VarDictionary {
@@ -45,14 +46,16 @@ pub(super) fn pack(mesh: mapkit_package::distant::DistantMesh) -> VarDictionary 
             )
         })
         .collect();
+    let light_data: Vec<_> = mesh.light_data.iter().map(|p| Vector2::new(p[0],p[1])).collect();
     let triangles = (points.len() / 3) as i64;
     let owner = Gd::from_init_fn(|base| MapKitFarGeometry {
         base,
         vertices: PackedVector3Array::from(points.as_slice()),
         normals: PackedVector3Array::from(normals.as_slice()),
         colors: PackedColorArray::from(colors.as_slice()),
+        light_data: PackedVector2Array::from(light_data.as_slice()),
     });
     vdict! { "geometry" => &owner, "triangles" => triangles,
-    "retained_bytes" => 4096i64 + triangles * 128,
-    "display_bytes" => 65536i64 + triangles * 256 }
+    "retained_bytes" => 4096i64 + triangles * 160,
+    "display_bytes" => 65536i64 + triangles * 288 }
 }

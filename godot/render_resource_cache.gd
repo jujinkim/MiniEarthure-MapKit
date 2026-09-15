@@ -13,6 +13,10 @@ var peak_import_usec := 0
 var _shader: Shader
 var _shader_lease: RefCounted
 var closed := false
+var _environment: RefCounted
+var _environment_lease: RefCounted
+var environment_profile: Dictionary = {}
+
 
 func _init(admission: Callable = Callable()) -> void: reserve = admission
 
@@ -20,6 +24,7 @@ func bytes() -> int:
 	retiring = retiring.filter(func(lease: RefCounted): return not lease.retired())
 	var total := 0
 	if _shader_lease != null: total += int(_shader_lease.bytes)
+	if _environment_lease != null: total += int(_environment_lease.bytes)
 	for item: Dictionary in entries.values(): total += int(item.bytes)
 	for lease: RefCounted in retiring: total += int(lease.bytes)
 	return total
@@ -41,11 +46,12 @@ func claim(id: String, sources: Dictionary) -> String:
 	if closed: return ""
 	var key := key_for(id, sources)
 	if key.is_empty(): return ""
+	key += ":" + JSON.stringify(environment_profile, "", true).sha256_text()
 	if entries.has(key):
 		entries[key].pins += 1
 		hits += 1
 		return key
-	var amount := int(sources[id].memory_bytes) + 65536
+	var amount := int(sources[id].memory_bytes) * (2 if not environment_profile.is_empty() else 1) + 65536
 	if bytes() + amount > limit_bytes or entries.size() >= 256: trim()
 	if bytes() + amount > limit_bytes or entries.size() >= 256: return ""
 	var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null
@@ -63,7 +69,21 @@ func template(key: String, id: String, sources: Dictionary) -> Node3D:
 		import_usec += elapsed
 		peak_import_usec = maxi(peak_import_usec, elapsed)
 		imports += 1
-		if item.template != null: _track_node(item.lease, item.template)
+		if item.template != null:
+			var context := environment_context()
+			if context != null:
+				var binding := {}
+				for light: Dictionary in environment_profile.get("lights",[]):
+					if light.asset_id == id: binding = light
+				var pending: Array = [item.template]
+				while not pending.is_empty():
+					var node: Node3D = pending.pop_back()
+					if node is MeshInstance3D:
+						node.mesh = context.style_mesh(node.mesh,binding)
+						if node.material_override != null:
+							node.material_override = context.surface_material(node.material_override,0)
+					pending.append_array(node.get_children())
+			_track_node(item.lease, item.template)
 	return item.template
 
 func material(key: String, id: String, sources: Dictionary) -> Material:
@@ -105,6 +125,11 @@ func _evict(key: String) -> void:
 
 func shutdown() -> void:
 	closed = true
+	_environment = null
+	if _environment_lease != null:
+		_environment_lease.seal()
+		retiring.append(_environment_lease)
+		_environment_lease = null
 	trim()
 	_shader = null
 	if _shader_lease != null:
@@ -125,6 +150,10 @@ static func _track_node(lease: RefCounted, node: Node) -> void:
 static func _track_material(lease: RefCounted, material: Material) -> void:
 	if lease == null or material == null: return
 	lease.track(material)
+	if material is ShaderMaterial:
+		# Context owns the shared shader/state texture; this lease owns the source bitmap.
+		var albedo: Variant = material.get_shader_parameter("albedo_texture")
+		if albedo is Texture2D: lease.track(albedo)
 	if material is BaseMaterial3D:
 		for slot in BaseMaterial3D.TEXTURE_MAX:
 			var texture: Texture2D = material.get_texture(slot)
@@ -132,3 +161,13 @@ static func _track_material(lease: RefCounted, material: Material) -> void:
 
 func diagnostics() -> Dictionary:
 	return {"entries": entries.size(), "bytes": bytes(), "imports": imports, "hits": hits, "import_usec": import_usec, "peak_import_usec": peak_import_usec}
+
+func environment_context() -> RefCounted:
+	if closed or environment_profile.is_empty(): return null
+	if _environment == null:
+		if bytes() + 1048576 > limit_bytes: return null
+		_environment_lease = reserve.call(1048576) if reserve.is_valid() else null
+		if reserve.is_valid() and _environment_lease == null: return null
+		_environment = preload("./environment_materials.gd").new()
+		_environment.track(_environment_lease)
+	return _environment

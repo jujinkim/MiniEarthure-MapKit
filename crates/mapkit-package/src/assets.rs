@@ -548,6 +548,21 @@ pub(super) fn validate_assets(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>
             return Err(bad("unsupported asset type"));
         }
     }
+    if let Some(environment) = &d.environment {
+        for light in &environment.lights {
+            let asset = d.assets.iter().find(|a| a.id == light.asset_id)
+                .ok_or_else(|| error("E_ENVIRONMENT", "light binding asset missing"))?;
+            if !asset.path.ends_with(".glb") { return Err(error("E_ENVIRONMENT", "light bindings require a GLB")); }
+            let bytes = &files[&asset.path];
+            let end = 20 + le(bytes,12)? as usize;
+            let json = parse_resource_json(&bytes[20..end])?;
+            let count = json.get("materials").and_then(|v| v.as_array()).map_or(0, |v| v.len());
+            if light.window_materials.iter().chain(&light.bulb_materials).any(|i| *i as usize >= count) {
+                return Err(error("E_ENVIRONMENT", "light binding material index is out of range"));
+            }
+        }
+    }
+
     Ok(())
 }
 

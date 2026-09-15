@@ -1,4 +1,5 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
+pub mod environment;
 mod convex;
 pub use convex::{CollisionConvex, GeneratedConvex};
 use schemars::JsonSchema;
@@ -8,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod metadata;
 
 pub const PACKAGE_VERSION: u32 = 1;
-pub const RECIPE_VERSION: u32 = 7;
+pub const RECIPE_VERSION: u32 = 8;
 pub const GENERATED_VERSION: u32 = 6;
 pub const SCENE_UNITS_VERSION: u32 = 2;
 pub const WORLD_SCALE: f64 = 1.0;
@@ -243,6 +244,8 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<environment::EnvironmentProfile>,
     /// An explicit in-memory source topology capability, never accepted from JSON.
     #[serde(skip)]
     #[schemars(skip)]
@@ -255,7 +258,7 @@ pub struct MapDocument {
     pub cell_size_cm: u32,
     #[schemars(range(max = 9007199254740991u64))]
     pub seed: u64,
-    #[schemars(range(min = 1, max = 7))]
+    #[schemars(range(min = 1, max = 8))]
     pub recipe_version: u32,
     #[schemars(regex(pattern = "^(default|urban|rural)$"))]
     pub theme: String,
@@ -407,6 +410,10 @@ impl MapDocument {
         self.validate_inner(true)
     }
     fn validate_inner(&self, source_topology: bool) -> Result<()> {
+        if let Some(environment) = &self.environment {
+            if self.recipe_version < 8 { return Err(error("E_ENVIRONMENT", "Environment authoring requires recipe 8")); }
+            environment.validate(&self.bounds, &self.assets)?;
+        }
         let fail = |m: &str| Err(error("E_GEOMETRY", m));
         if !(1..=RECIPE_VERSION).contains(&self.recipe_version) {
             return Err(error("E_VERSION", "unsupported recipe"));

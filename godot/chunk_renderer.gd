@@ -21,7 +21,6 @@ static func scene_position(value: Array) -> Vector3:
 static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callable(), planned_bytes: int = 0, resources: RefCounted = null) -> Dictionary:
 	var view := DATA.view(chunk)
 	var shared := PLAN.shared_bytes(view) if resources != null else 0
-	if shared <= 0: resources = null
 	var lease: RefCounted
 	if reserve.is_valid():
 		var bytes := planned_bytes - shared
@@ -37,6 +36,11 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 	parent.add_child(root)
 	var job := {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
 	if resources != null:
+		resources.environment_profile = preload("./environment_profile.gd").defaults()
+		var environment_json := str(view.get("presentation",{}).get("environment_json",""))
+		if not environment_json.is_empty():
+			var profile: Variant = JSON.parse_string(environment_json)
+			if profile is Dictionary: resources.environment_profile = profile
 		var sources: Dictionary = view.get("presentation", {}).get("assets", {})
 		for id: String in sources:
 			var key: String = resources.claim(id, sources)
@@ -128,6 +132,7 @@ static func _advance(job: Dictionary) -> bool:
 				material.albedo_color = material_color(key)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
+			material = _environment_surface(job, material)
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
 		track_resources(job, mesh)
@@ -157,9 +162,16 @@ static func _advance(job: Dictionary) -> bool:
 						return false
 					if not job.instances[id].is_empty():
 						var transform := Transform3D(Basis(Vector3.UP, float(object.quarter_turns) * PI / 2.0), scene_position(object.position))
-						INSTANCES.append(job.instances[id], transform, str(object.id))
+						INSTANCES.append(job.instances[id], transform, str(object.id), str(presentation.get("map_id","")))
+						_environment_lamp(job,id,object,presentation)
 						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
+				var pending: Array = [instance]
+				while not pending.is_empty():
+					var piece: Node3D = pending.pop_back()
+					if piece is MeshInstance3D: piece.set_instance_shader_parameter("building_seed",float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0)
+					pending.append_array(piece.get_children())
+				_environment_lamp(job,id,object,presentation)
 				var anchor := Node3D.new()
 				anchor.set_meta("mapkit_asset_id", id)
 				anchor.set_meta("mapkit_object_id", str(object.id))
@@ -223,6 +235,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 		if material == null:
 			mesh.free()
 			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
+		material = _environment_surface(job, material)
 		job.materials[key] = material
 	mesh.material_override = job.materials[key]
 	track_resources(job, mesh)
@@ -329,3 +342,28 @@ static func surface_material(key: String, presentation: Dictionary, shader: Shad
 	for name: String in style:
 		if name != "surface": material.set_shader_parameter(name, style[name])
 	return material
+
+static func _environment_lamp(job: Dictionary, id: String, object: Dictionary, presentation: Dictionary) -> void:
+	var resources: RefCounted = job.get("resources")
+	if resources == null: return
+	for binding: Dictionary in resources.environment_profile.get("lights",[]):
+		if binding.asset_id != id or binding.get("bulb_materials",[]).is_empty(): continue
+		var lamps: Array = job.root.get_meta("environment_lamps",[])
+		var rotation := Basis(Vector3.UP,float(object.quarter_turns)*PI/2.0)
+		var point: Array = binding.position_cm
+		var position: Vector3 = scene_position(object.position)+rotation*Vector3(point[0],point[1],-point[2])*0.01
+		var rgb: Array = binding.color
+		lamps.append({"position":position,"basis":Basis.looking_at(Vector3.DOWN,Vector3.FORWARD),
+			"range":float(binding.range_cm)*0.01,"energy":2.0,"color":Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0)})
+		job.root.set_meta("environment_lamps",lamps)
+		job.root.add_to_group("mapkit_environment_cells")
+
+static func _environment_surface(job: Dictionary, material: Material) -> Material:
+	if job.get("resources") == null: return material
+	var context: RefCounted = job.resources.environment_context()
+	if context == null: return material
+	if material is ShaderMaterial and material.shader == job.get("urban_shader"):
+		material.set_shader_parameter("environment_enabled",true)
+		material.set_shader_parameter("environment_data",context.texture)
+		return material
+	return context.surface_material(material,0)

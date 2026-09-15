@@ -222,6 +222,7 @@ fn widest_road(d: &MapDocument) -> Option<usize> {
 /// Clone metadata without allocating a transient copy of world geometry.
 pub fn source_metadata(d: &MapDocument) -> MapDocument {
     MapDocument {
+        environment: d.environment.as_ref().map(|value| { let mut header=value.clone(); header.lights.clear(); header }),
         indexed_topology: d.indexed_topology,
         map_id: d.map_id.clone(),
         revision: d.revision,
@@ -253,6 +254,7 @@ fn derive_source(
 ) -> Result<MapDocument> {
     region.validate(d)?;
     let mut out = source_metadata(d);
+    out.environment = d.environment.clone();
     let mut bounds = d.cell_bounds(region.min)?;
     bounds.max = d
         .cell_bounds(Cell {
@@ -401,6 +403,9 @@ fn derive_source(
         .filter(|a| needed.contains(&a.id))
         .cloned()
         .collect();
+    if let Some(environment) = &mut out.environment {
+        environment.lights.retain(|light| out.assets.iter().any(|a| a.id == light.asset_id));
+    }
     out.normalize();
     Ok(out)
 }

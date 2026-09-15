@@ -38,6 +38,8 @@ static func template(id: String, source: Dictionary, materials: Dictionary) -> N
 	# Embedded image textures stay in memory. Native validation has rejected every URI.
 	state.handle_binary_image = GLTFState.HANDLE_BINARY_EMBED_AS_UNCOMPRESSED
 	if document.append_from_buffer(source[id].bytes, "", state, GLTFDocument.IMPORT_FLAG_GENERATE_TANGENT_ARRAYS) != OK: return null
+	var imported_materials := state.get_materials()
+	for index in imported_materials.size(): imported_materials[index].set_meta("mapkit_material_index",index)
 	var root := document.generate_scene(state)
 	if root == null: return null
 	var pending: Array[Node] = [root]

@@ -370,3 +370,11 @@ the production allocator. See [the L01-F decision](spec/REGIONAL_SOURCE.md) for
 staged refusal, whole-source validation and the preserved acceptance limits.
 
 Recipe 7 supports [zone-selected vegetation assets](VEGETATION.md): shared GLBs, declared canopy footprints, and live spacing/density without a fixed tree count.
+
+### Environment design (recipe 8)
+
+`MapDocument.environment` optionally supplies concept, independent architecture,
+climate/settlement overrides, latitude/longitude, time zone, sunrise/sunset,
+ordered regional polygons and explicit asset material indices for windows/lamps.
+Older documents omit it. These fields contribute to world identity; no existing
+source is silently upgraded. See [the public contract](docs/ENVIRONMENT.md).

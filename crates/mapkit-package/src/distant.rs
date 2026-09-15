@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct DistantMesh {
     pub vertices: Vec<[f32; 3]>,
     pub colors: Vec<[u8; 4]>,
+    pub light_data: Vec<[f32; 2]>,
 }
 
 #[derive(Clone, Debug)]
@@ -14,13 +15,14 @@ struct Proxy {
     min: [f32; 3],
     max: [f32; 3],
     color: [u8; 4],
+    role: u8,
 }
 
 fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     std::array::from_fn(|c| std::array::from_fn(|r| (0..4).map(|k| a[k][r] * b[c][k]).sum()))
 }
 
-fn proxies(bytes: &[u8], tint: Option<[u8; 4]>) -> Result<Vec<Proxy>> {
+fn proxies(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core::environment::LightBinding>) -> Result<Vec<Proxy>> {
     let glb = gltf::Gltf::from_slice(bytes)
         .map_err(|_| mapkit_core::error("E_ASSET", "invalid distant GLB"))?;
     let blob = glb.blob.as_deref().unwrap_or_default();
@@ -40,7 +42,7 @@ fn proxies(bytes: &[u8], tint: Option<[u8; 4]>) -> Result<Vec<Proxy>> {
         if let Some(mesh) = node.mesh() {
             // One box per material in a mesh: small details merge, while canopy,
             // trunk and differently coloured building volumes stay distinguishable.
-            let mut groups = BTreeMap::<[u8; 4], Proxy>::new();
+            let mut groups = BTreeMap::<([u8; 4], u8), Proxy>::new();
             for primitive in mesh.primitives() {
                 let color = tint.unwrap_or_else(|| {
                     primitive
@@ -49,10 +51,12 @@ fn proxies(bytes: &[u8], tint: Option<[u8; 4]>) -> Result<Vec<Proxy>> {
                         .base_color_factor()
                         .map(|v| (v.clamp(0., 1.) * 255.).round() as u8)
                 });
-                let group = groups.entry(color).or_insert(Proxy {
+                let index = primitive.material().index().unwrap_or(usize::MAX) as u16;
+                let role = binding.map_or(0, |b| if b.window_materials.contains(&index) {1} else if b.bulb_materials.contains(&index) {2} else {0});
+                let group = groups.entry((color,role)).or_insert(Proxy {
                     min: [f32::INFINITY; 3],
                     max: [f32::NEG_INFINITY; 3],
-                    color,
+                    color, role,
                 });
                 if let Some(positions) = primitive.reader(|_| Some(blob)).read_positions() {
                     for point in positions {
@@ -82,7 +86,7 @@ impl Package {
         let mut radius = 1.84_f32;
         for asset in &self.document.assets {
             if !asset.path.ends_with(".glb") { continue; }
-            for proxy in proxies(&self.files[&asset.path], None)? {
+            for proxy in proxies(&self.files[&asset.path], None, None)? {
                 let x = proxy.min[0].abs().max(proxy.max[0].abs());
                 let z = proxy.min[2].abs().max(proxy.max[2].abs());
                 radius = radius.max(x.hypot(z));
@@ -172,6 +176,7 @@ impl Package {
                     .vertices
                     .push([p[0] as f32 * 0.01, p[1] as f32 * 0.01, -p[2] as f32 * 0.01]);
                 result.colors.push(color);
+                result.light_data.push([0.,0.]);
             }
         }
         let mut templates = BTreeMap::new();
@@ -182,10 +187,10 @@ impl Package {
                     &Proxy {
                         min: [-1.84, 2.8, -1.84],
                         max: [1.84, 6.8, 1.84],
-                        color: [72, 100, 71, 255],
+                        color: [72, 100, 71, 255], role:0,
                     },
                     object.position,
-                    object.quarter_turns,
+                    object.quarter_turns, 0.,
                 );
                 continue;
             }
@@ -203,18 +208,21 @@ impl Package {
                     proxies(
                         &self.files[&asset.path],
                         asset.material.as_ref().map(|m| m.albedo_rgba),
+                        self.document.environment.as_ref().and_then(|e| e.lights.iter().find(|b| b.asset_id==asset.id)),
                     )?,
                 );
             }
+            let hash = mapkit_core::sha256(format!("{}/{}",self.document.map_id,object.id).as_bytes());
+            let seed = u32::from_str_radix(&hash[..6],16).unwrap() as f32 / 16777215.;
             for proxy in &templates[&asset.id] {
-                add_box(&mut result, proxy, object.position, object.quarter_turns);
+                add_box(&mut result, proxy, object.position, object.quarter_turns, seed);
             }
         }
         Ok(result)
     }
 }
 
-fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_turns: u8) {
+fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_turns: u8, seed: f32) {
     let points: [[f32; 3]; 8] = std::array::from_fn(|i| {
         let mut p = std::array::from_fn(|a| {
             if i & (1 << a) == 0 {
@@ -243,6 +251,7 @@ fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_
         for i in [0, 1, 2, 0, 2, 3] {
             output.vertices.push(points[face[i]]);
             output.colors.push(proxy.color);
+            output.light_data.push([seed,proxy.role as f32]);
         }
     }
 }
@@ -258,10 +267,10 @@ mod tests {
             &Proxy {
                 min: [1., 2., 3.],
                 max: [2., 5., 4.],
-                color: [1, 2, 3, 255],
+                color: [1, 2, 3, 255], role:0,
             },
             [1000, 2000, 3000],
-            1,
+            1, 0.,
         );
         assert_eq!(mesh.vertices.len(), 36);
         assert!(mesh.vertices.iter().all(|p| (13. ..=14.).contains(&p[0])

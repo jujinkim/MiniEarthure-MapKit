@@ -49,6 +49,16 @@
       "maximum": 102400.0,
       "minimum": 200.0
     },
+    "environment": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/EnvironmentProfile"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "heightmaps": {
       "type": "array",
       "items": {
@@ -78,7 +88,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 7.0,
+      "maximum": 8.0,
       "minimum": 1.0
     },
     "repetitions": {
@@ -427,6 +437,112 @@
       },
       "additionalProperties": false
     },
+    "EnvironmentProfile": {
+      "type": "object",
+      "required": [
+        "concept",
+        "latitude_mdeg",
+        "lights",
+        "longitude_mdeg",
+        "regions",
+        "sunrise_minutes",
+        "sunset_minutes",
+        "utc_offset_minutes",
+        "version"
+      ],
+      "properties": {
+        "architecture": {
+          "type": "string"
+        },
+        "climate": {
+          "type": "string"
+        },
+        "concept": {
+          "type": "string"
+        },
+        "latitude_mdeg": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "lights": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LightBinding"
+          }
+        },
+        "longitude_mdeg": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EnvironmentRegion"
+          }
+        },
+        "settlement": {
+          "type": "string"
+        },
+        "sunrise_minutes": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "sunset_minutes": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
+        "utc_offset_minutes": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "EnvironmentRegion": {
+      "type": "object",
+      "required": [
+        "concept",
+        "id",
+        "polygon"
+      ],
+      "properties": {
+        "architecture": {
+          "type": "string"
+        },
+        "climate": {
+          "type": "string"
+        },
+        "concept": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "polygon": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "settlement": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "Heightmap": {
       "type": "object",
       "required": [
@@ -464,6 +580,63 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "LightBinding": {
+      "type": "object",
+      "required": [
+        "asset_id",
+        "bulb_materials",
+        "color",
+        "position_cm",
+        "range_cm",
+        "window_materials"
+      ],
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "bulb_materials": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
+        },
+        "color": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "range_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "window_materials": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "minimum": 0.0
+          }
         }
       },
       "additionalProperties": false

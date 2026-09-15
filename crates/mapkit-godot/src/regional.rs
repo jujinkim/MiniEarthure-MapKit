@@ -65,6 +65,12 @@ impl MapKitRegionReader {
         })())
     }
     #[func]
+    fn environment_json(&self) -> GString {
+        response(self.world.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open index first"))
+            .map(|world| serde_json::json!({"map_id":world.map_id,"profile":world.environment})))
+    }
+    #[func]
     fn begin_request(&self) -> i64 {
         self.epoch.begin().generation() as i64
     }

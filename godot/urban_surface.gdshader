@@ -1,6 +1,8 @@
 shader_type spatial;
 render_mode cull_disabled;
 uniform vec4 base_color : source_color = vec4(0.19,0.20,0.23,1.0);
+uniform bool environment_enabled = false;
+uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform bool paving = false;
 uniform bool marked = false;
 uniform vec2 road_start;
@@ -60,6 +62,9 @@ void fragment() {
         color=mix(color,vec3(0.92,0.91,0.85),white);
         color=mix(color,vec3(0.93,0.65,0.12),yellow);
     }
+    vec2 weather = environment_enabled ? texelFetch(environment_data,ivec2(0,0),0).xy : vec2(0.0);
+    color *= 1.0-weather.x*0.22;
+    color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
     ALBEDO=color;
-    ROUGHNESS=0.9;
+    ROUGHNESS=mix(mix(0.9,0.27,weather.x),0.95,weather.y);
 }

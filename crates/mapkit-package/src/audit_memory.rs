@@ -117,6 +117,27 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     let mut retained = Retained(u64::try_from(size_of::<MapDocument>()).map_err(|_| overflow())?);
     retained.string(map_id)?;
     retained.string(theme)?;
+    if let Some(environment) = &document.environment {
+        retained.string(&environment.concept)?;
+        retained.string(&environment.architecture)?;
+        retained.string(&environment.climate)?;
+        retained.string(&environment.settlement)?;
+        retained.vector(&environment.regions)?;
+        for region in &environment.regions {
+            retained.string(&region.id)?;
+            retained.string(&region.concept)?;
+            retained.string(&region.architecture)?;
+            retained.string(&region.climate)?;
+            retained.string(&region.settlement)?;
+            retained.vector(&region.polygon)?;
+        }
+        retained.vector(&environment.lights)?;
+        for light in &environment.lights {
+            retained.string(&light.asset_id)?;
+            retained.vector(&light.window_materials)?;
+            retained.vector(&light.bulb_materials)?;
+        }
+    }
     retained.vector(heightmaps)?;
     for Heightmap {
         cell: Cell { x: _, y: _ },
@@ -673,6 +694,7 @@ mod tests {
             "recipe_version",
             "theme",
             "terrain_base_cm",
+            "environment",
             "heightmaps",
             "nodes",
             "roads",

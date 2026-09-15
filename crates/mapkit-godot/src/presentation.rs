@@ -60,7 +60,7 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
     } else {
         0
     };
-    styles
+    environment_cost(&p.document) + styles
         + instances
             .into_iter()
             .map(|(id, count)| {
@@ -85,7 +85,7 @@ pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
         let presentation = chunk.get("presentation").unwrap().to::<VarDictionary>();
         let assets = presentation.get("assets").unwrap().to::<VarDictionary>();
         let objects = chunk.get("objects").unwrap().to::<Array<VarDictionary>>();
-        let mut bytes = presentation
+        let mut bytes = environment_cost(&p.document) + presentation
             .get("road_materials")
             .unwrap()
             .to::<PackedStringArray>()
@@ -234,7 +234,17 @@ pub fn decorate_document(
     let mut presentation =
         vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};
     crate::road_style::decorate(document, &chunk, &mut presentation);
+    if let Some(environment) = &document.environment {
+        presentation.set("environment_json", serde_json::to_string(environment).unwrap().as_str());
+    }
+    presentation.set("map_id", document.map_id.as_str());
     chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);
     Ok(data)
+}
+
+fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
+    // Native serialization plus Godot UTF-32 dictionary presentation, per admitted cell.
+    d.environment.as_ref().map_or(0, |e| serde_json::to_string(e).unwrap().len() as u64 * 8 + 4096)
+        + d.map_id.len() as u64 * 8 + 128
 }

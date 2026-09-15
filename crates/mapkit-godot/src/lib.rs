@@ -180,6 +180,12 @@ impl MapKitBridge {
         }
     }
     #[func]
+    fn environment_json(&self) -> GString {
+        response(self.package.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .map(|p| serde_json::json!({"map_id":p.document.map_id,"profile":p.document.environment})))
+    }
+    #[func]
     fn document_json(&self) -> GString {
         response(
             self.package
