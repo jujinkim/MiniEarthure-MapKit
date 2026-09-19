@@ -17,6 +17,7 @@ var _context: RefCounted
 var _light_candidates: Array = []
 var _scan_at := 0
 var low := false
+var _night_lights := false
 
 func configure(environment: Environment, key: DirectionalLight3D, low_quality: bool) -> void:
 	settings = environment
@@ -72,7 +73,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	precipitation.draw_pass_1 = mesh
 	add_child(precipitation)
 
-func update_environment(state: RefCounted, camera_position: Vector3, vehicles: Array, resources: RefCounted = null) -> void:
+func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: Array, resources: RefCounted = null) -> void:
 	if state == null or state.config.is_empty(): return
 	var celestial: Dictionary = state.celestial()
 	var day := float(celestial.daylight)
@@ -116,7 +117,7 @@ func update_environment(state: RefCounted, camera_position: Vector3, vehicles: A
 		_context = resources.environment_context()
 		if _context != null: _context.update(state.seconds,_wet,_snow,float(celestial.altitude),int(celestial.get("sunset_minutes",state.config.sunset_minutes)))
 	_update_precipitation(state,camera_position)
-	_update_lights(state,camera_position,vehicles)
+	_update_static_lights(state,camera_position)
 
 func _orient(light: DirectionalLight3D, direction: Vector3) -> void:
 	light.basis = Basis.looking_at(-direction,Vector3.FORWARD if absf(direction.y)>0.99 else Vector3.UP)
@@ -137,13 +138,8 @@ func _update_precipitation(state: RefCounted, camera_position: Vector3) -> void:
 	particle_material.gravity = Vector3(0,-0.5 if snowing else -2.0,0)
 	precipitation.draw_pass_1.size = Vector2(0.09,0.09) if snowing else Vector2(0.025,0.25)
 
-func _update_lights(state: RefCounted, camera_position: Vector3, vehicles: Array) -> void:
-	var selected: Array = []
-	for vehicle: Node3D in vehicles:
-		if is_instance_valid(vehicle) and not vehicles.is_empty() and vehicle != vehicles[0] and vehicle.global_position.distance_squared_to(camera_position)>2025.0: continue
-		if not is_instance_valid(vehicle) or not vehicle.is_inside_tree() or not vehicle.get("lights_on"): continue
-		selected.append({"position":vehicle.global_position + vehicle.global_basis*Vector3(0,0.22,-0.30),
-			"basis":vehicle.global_basis,"energy":3.2,"range":30.0,"color":Color(1.0,0.88,0.68)})
+func _update_static_lights(state: RefCounted, camera_position: Vector3) -> void:
+	_night_lights = float(state.celestial().altitude) < 0.0
 	if Time.get_ticks_msec() >= _scan_at:
 		_scan_at = Time.get_ticks_msec()+500
 		_light_candidates.clear()
@@ -152,7 +148,16 @@ func _update_lights(state: RefCounted, camera_position: Vector3, vehicles: Array
 			for candidate: Dictionary in root.get_meta("environment_lamps",[]):
 				if candidate.position.distance_squared_to(camera_position) < 1600.0: _light_candidates.append(candidate)
 		_light_candidates.sort_custom(func(a: Dictionary,b: Dictionary): return a.position.distance_squared_to(camera_position)<b.position.distance_squared_to(camera_position))
-	if float(state.celestial().altitude)<0.0:
+## Render poses are supplied by the consumer after vehicle and camera updates.
+func update_dynamic_lights(camera_position: Vector3, vehicles: Array) -> void:
+	var selected: Array = []
+	for vehicle: Dictionary in vehicles:
+		if selected.size() >= lights.size(): break
+		var pose: Transform3D = vehicle.pose
+		if not vehicle.get("primary",false) and pose.origin.distance_squared_to(camera_position)>2025.0: continue
+		selected.append({"position":pose.origin + pose.basis*Vector3(0,0.22,-0.30),
+			"basis":pose.basis,"energy":3.2,"range":30.0,"color":Color(1.0,0.88,0.68)})
+	if _night_lights:
 		for candidate: Dictionary in _light_candidates:
 			if selected.size() >= lights.size(): break
 			selected.append(candidate)

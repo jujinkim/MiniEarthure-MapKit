@@ -449,6 +449,12 @@ impl MapKitBridge {
             Ok(serde_json::json!({"position_cm":position,"window":p.document.window([x_cm,y_cm])}))
         }))
     }
+    /// Source identity only; no geometry generation, file access or retained cache.
+    #[func]
+    fn is_road_surface(&self, surface: GString) -> bool {
+        let id = surface.to_string();
+        self.package.as_ref().is_some_and(|p| p.document.roads.iter().any(|road| road.id == id))
+    }
     /// Exact local bounds without serializing the full editing document.
     #[func]
     fn map_bounds(&self) -> PackedInt64Array {

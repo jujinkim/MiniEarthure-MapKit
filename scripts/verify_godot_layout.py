@@ -43,6 +43,7 @@ func _initialize() -> void:
     check(not rejected.ok and rejected.error.code == "E_MEMORY_BUDGET", "native validation memory gate")
     check(not JSON.parse_string(bridge.generate_chunk(0, 0)).ok, "budget failure clears prior package")
     check(JSON.parse_string(bridge.open_package_bytes_budgeted(bytes, peak)).ok, "native budgeted retry")
+    check(bridge.is_road_surface("ground-road") and not bridge.is_road_surface("terrain") and not bridge.is_road_surface("ground-road:sidewalk"), "source road identity excludes terrain and sidewalk without generation")
     var bad_bytes := FileAccess.get_file_as_bytes("res://invalid-metadata.memap")
     var metadata_rejected: Dictionary = JSON.parse_string(bridge.open_package_bytes(bad_bytes))
     check(not metadata_rejected.ok and metadata_rejected.error.code == "E_PROVENANCE", "independent invalid provenance rejected at native package boundary")
