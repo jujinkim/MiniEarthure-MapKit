@@ -18,6 +18,28 @@ var _light_candidates: Array = []
 var _scan_at := 0
 var low := false
 var _night_lights := false
+var display_distance := 0.0 # Opt-in scene metres; zero preserves Editor/default weather fog.
+var _weather_fog_density := 0.0008
+var _weather_fog_energy := 0.6
+
+func set_display_distance(distance: float) -> void:
+	if not is_finite(distance) or distance < 0.0: return
+	if is_equal_approx(display_distance, distance): return
+	display_distance = distance
+	_apply_distance_fog()
+
+func _apply_distance_fog() -> void:
+	if settings == null: return
+	var enabled := display_distance > 0.0
+	settings.fog_mode = Environment.FOG_MODE_DEPTH if enabled else Environment.FOG_MODE_EXPONENTIAL
+	settings.fog_density = 1.0 if enabled else _weather_fog_density
+	settings.fog_aerial_perspective = 1.0 if enabled else 0.0
+	settings.fog_sky_affect = 0.0 if enabled else 1.0
+	settings.fog_light_energy = 1.0 if enabled else _weather_fog_energy
+	if enabled:
+		settings.fog_depth_begin = display_distance * 0.60
+		settings.fog_depth_end = display_distance * 0.95
+		settings.fog_depth_curve = 0.7
 
 func configure(environment: Environment, key: DirectionalLight3D, low_quality: bool) -> void:
 	settings = environment
@@ -97,8 +119,9 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	settings.ambient_light_color = Color(0.23,0.32,0.48).lerp(Color(0.62,0.69,0.72),day)
 	settings.ambient_light_energy = lerpf(night_ambient,0.24,day)*(1.0-_clouds*0.35)
 	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.36,0.42,0.46),day)
-	settings.fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
-	settings.fog_light_energy = lerpf(0.04,0.6,day)
+	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
+	_weather_fog_energy = lerpf(0.04,0.6,day)
+	_apply_distance_fog()
 	sky_material.set_shader_parameter("sun_direction",celestial.sun_direction)
 	sky_material.set_shader_parameter("moon_direction",celestial.moon_direction)
 	sky_material.set_shader_parameter("daylight",day)
