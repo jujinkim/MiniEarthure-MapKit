@@ -27,3 +27,12 @@ simulation time; precipitation animation remains live.
 
 Earlier dated design and validation documents preserve evidence of prior formats.
 Their old-reader, version-selection and frozen legacy-output requirements are superseded.
+
+Authored placement validation uses the convex hull of the complete transformed
+collision footprint, rather than its axis-aligned bounding rectangle. Placement
+contact remains forbidden. Bridge/elevated corridors admit a support only when
+its complete collision top is at least one centimetre below every interpolated
+deck segment across the footprint. Ground/tunnel/underpass corridors remain
+excluded. These checks charge the existing bounded placement work allowance.
+The miniature kit and climate ground palette are renderer/source assets; surface
+identities and physical material behavior do not change.

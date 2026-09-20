@@ -133,7 +133,7 @@ static func _advance(job: Dictionary) -> bool:
 				mesh.free()
 				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
 			if material is StandardMaterial3D and not key.begins_with("asset:"):
-				material.albedo_color = material_color(key)
+				material.albedo_color = ground_color(key, presentation)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
 			material = _environment_surface(job, material)
@@ -233,7 +233,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 		else:
 			material = surface_material(key, presentation, job.get("urban_shader"))
 			if material is StandardMaterial3D:
-				material.albedo_color = material_color(key)
+				material.albedo_color = ground_color(key, presentation)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		if material == null:
@@ -312,6 +312,13 @@ static func material_color(key: String) -> Color:
 	var base: Color = {"brick": Color("b46c50"), "wood": Color("997347"), "concrete": Color("b7b8b0")}.get(fields[0], Color.GRAY)
 	var tint: Color = {"residential": Color("f4dfc3"), "commercial": Color("c6dfec"), "industrial": Color("bbbec6"), "public": Color("eee3b2")}.get(fields[1], Color.WHITE)
 	return base.lerp(tint, 0.2)
+
+## Authored climate changes static ground colour only, never surface traction.
+static func ground_color(key: String, presentation: Dictionary) -> Color:
+	if key != "grass": return material_color(key)
+	var profile: Variant = JSON.parse_string(str(presentation.get("environment_json", "{}")))
+	if not profile is Dictionary: return material_color(key)
+	return {"polar":Color("d9e4e8"),"arid":Color("b89a6a"),"tropical":Color("526b40")}.get(str(profile.get("climate", "")),material_color(key))
 
 static func cancel(job: Dictionary) -> void:
 	var started := Time.get_ticks_usec()

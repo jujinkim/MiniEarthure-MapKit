@@ -270,3 +270,49 @@ fn automatic_sidewalk_fits_setback_and_follows_sampled_terrain() {
     let p=c.spawn(&SpawnRequest{position_cm:[8000,6400],surface_id:"street:sidewalk".into()}).unwrap();
     assert_eq!(p[1],1132); // x/10+y/20+12; no flat sidewalk or relative-rounding drift
 }
+
+#[test]
+fn elevated_pier_requires_vertical_separation_and_never_clears_ground() {
+    let mut d = document();
+    d.buildings.clear(); d.zones.clear(); d.placements.clear(); d.repetitions.clear();
+    d.assets = serde_json::from_value(serde_json::json!([{
+        "id":"pier", "path":"pier.glb", "attribution":{"source":"synthetic","license":"MIT","notice":"unit fixture"},
+        "collision":[{"center":[0,200,0],"size_cm":[100,400,100]}]
+    }])).unwrap();
+    d.placements = serde_json::from_value(serde_json::json!([{"id":"column","asset_id":"pier","position":[10000,0,6000],"quarter_turns":0}])).unwrap();
+    d.roads[0].kind = RoadKind::Elevated;
+    for p in &mut d.roads[0].points { p[1] = 600; }
+    for n in &mut d.nodes { n.position[1] = 600; n.level = 1; }
+    d.validate().unwrap();
+    let c=generated(&d,Cell{x:0,y:0});
+    assert!(c.solids.iter().any(|s|s.object_id=="column"));
+    d.placements[0].position[1] = 200;
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+    d.placements[0].position[1] = 0;
+    d.roads[0].kind = RoadKind::Ground;
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+    d.roads[0].kind = RoadKind::Bridge;
+    d.roads[0].points[1][1] = 300;
+    d.nodes[1].position[1] = 300;
+    d.placements[0].position[0] = 23000;
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+}
+
+#[test]
+fn diagonal_proxy_hull_rejects_contact_without_empty_aabb_corners() {
+    let mut d=document();
+    d.buildings.clear();d.zones.clear();d.placements.clear();d.repetitions.clear();
+    d.assets=serde_json::from_value(serde_json::json!([
+        {"id":"brace","path":"brace.glb","attribution":{"source":"synthetic","license":"MIT","notice":"fixture"},
+         "collision":[{"center":[-300,50,-300],"size_cm":[100,100,100]},{"center":[300,50,300],"size_cm":[100,100,100]}]},
+        {"id":"post","path":"post.glb","attribution":{"source":"synthetic","license":"MIT","notice":"fixture"},
+         "collision":[{"center":[0,50,0],"size_cm":[100,100,100]}]}
+    ])).unwrap();
+    d.placements=serde_json::from_value(serde_json::json!([
+        {"id":"brace-one","asset_id":"brace","position":[10000,0,9000],"quarter_turns":0},
+        {"id":"post-one","asset_id":"post","position":[9700,0,9300],"quarter_turns":0}
+    ])).unwrap();
+    d.validate().unwrap();
+    d.placements[1].position=[9700,0,8700];
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+}

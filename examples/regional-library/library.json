@@ -1,0 +1,9627 @@
+{
+  "version": 1,
+  "license": "MIT",
+  "assets": [
+    {
+      "id": "regional-tower-0",
+      "path": "assets/tower-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            690,
+            0
+          ],
+          "size_cm": [
+            700,
+            1300,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            1355,
+            0
+          ],
+          "size_cm": [
+            720,
+            30,
+            620
+          ]
+        },
+        {
+          "center": [
+            100,
+            1410,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-tower-1",
+      "path": "assets/tower-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            840,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            950,
+            0
+          ],
+          "size_cm": [
+            800,
+            1820,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            1875,
+            0
+          ],
+          "size_cm": [
+            820,
+            30,
+            820
+          ]
+        },
+        {
+          "center": [
+            100,
+            1930,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            -200,
+            1915,
+            -100
+          ],
+          "size_cm": [
+            140,
+            80,
+            140
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-tower-2",
+      "path": "assets/tower-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            940,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            1210,
+            0
+          ],
+          "size_cm": [
+            900,
+            2340,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            2395,
+            0
+          ],
+          "size_cm": [
+            920,
+            30,
+            620
+          ]
+        },
+        {
+          "center": [
+            100,
+            2450,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-tower-3",
+      "path": "assets/tower-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            1470,
+            0
+          ],
+          "size_cm": [
+            700,
+            2860,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            2915,
+            0
+          ],
+          "size_cm": [
+            720,
+            30,
+            820
+          ]
+        },
+        {
+          "center": [
+            100,
+            2970,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            -200,
+            2955,
+            -100
+          ],
+          "size_cm": [
+            140,
+            80,
+            140
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-shop-0",
+      "path": "assets/shop-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            315,
+            0
+          ],
+          "size_cm": [
+            720,
+            30,
+            620
+          ]
+        },
+        {
+          "center": [
+            100,
+            370,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -370
+          ],
+          "size_cm": [
+            700,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -355
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-shop-1",
+      "path": "assets/shop-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            840,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            800,
+            520,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            575,
+            0
+          ],
+          "size_cm": [
+            820,
+            30,
+            820
+          ]
+        },
+        {
+          "center": [
+            100,
+            630,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            -200,
+            615,
+            -100
+          ],
+          "size_cm": [
+            140,
+            80,
+            140
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -470
+          ],
+          "size_cm": [
+            800,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -455
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-shop-2",
+      "path": "assets/shop-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            940,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            430,
+            0
+          ],
+          "size_cm": [
+            900,
+            780,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            835,
+            0
+          ],
+          "size_cm": [
+            920,
+            30,
+            620
+          ]
+        },
+        {
+          "center": [
+            100,
+            890,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -370
+          ],
+          "size_cm": [
+            900,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -355
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-shop-3",
+      "path": "assets/shop-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            315,
+            0
+          ],
+          "size_cm": [
+            720,
+            30,
+            820
+          ]
+        },
+        {
+          "center": [
+            100,
+            370,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            -200,
+            355,
+            -100
+          ],
+          "size_cm": [
+            140,
+            80,
+            140
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -470
+          ],
+          "size_cm": [
+            700,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -455
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-stone-0",
+      "path": "assets/stone-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            315,
+            0
+          ],
+          "size_cm": [
+            720,
+            30,
+            620
+          ]
+        },
+        {
+          "center": [
+            100,
+            370,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -370
+          ],
+          "size_cm": [
+            700,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -355
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        },
+        {
+          "center": [
+            400,
+            90,
+            100
+          ],
+          "size_cm": [
+            200,
+            180,
+            300
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-stone-1",
+      "path": "assets/stone-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            840,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            800,
+            520,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            575,
+            0
+          ],
+          "size_cm": [
+            820,
+            30,
+            820
+          ]
+        },
+        {
+          "center": [
+            100,
+            630,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            -200,
+            615,
+            -100
+          ],
+          "size_cm": [
+            140,
+            80,
+            140
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -470
+          ],
+          "size_cm": [
+            800,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -455
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        },
+        {
+          "center": [
+            450,
+            90,
+            100
+          ],
+          "size_cm": [
+            200,
+            180,
+            300
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-stone-2",
+      "path": "assets/stone-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            940,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            430,
+            0
+          ],
+          "size_cm": [
+            900,
+            780,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            835,
+            0
+          ],
+          "size_cm": [
+            920,
+            30,
+            620
+          ]
+        },
+        {
+          "center": [
+            100,
+            890,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -370
+          ],
+          "size_cm": [
+            900,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -355
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        },
+        {
+          "center": [
+            500,
+            90,
+            100
+          ],
+          "size_cm": [
+            200,
+            180,
+            300
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-stone-3",
+      "path": "assets/stone-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            315,
+            0
+          ],
+          "size_cm": [
+            720,
+            30,
+            820
+          ]
+        },
+        {
+          "center": [
+            100,
+            370,
+            100
+          ],
+          "size_cm": [
+            200,
+            110,
+            180
+          ]
+        },
+        {
+          "center": [
+            -200,
+            355,
+            -100
+          ],
+          "size_cm": [
+            140,
+            80,
+            140
+          ]
+        },
+        {
+          "center": [
+            0,
+            270,
+            -470
+          ],
+          "size_cm": [
+            700,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -455
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        },
+        {
+          "center": [
+            400,
+            90,
+            100
+          ],
+          "size_cm": [
+            200,
+            180,
+            300
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-farm-0",
+      "path": "assets/farm-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -345
+            ],
+            [
+              390,
+              300,
+              -345
+            ],
+            [
+              0,
+              440,
+              -345
+            ],
+            [
+              -390,
+              300,
+              345
+            ],
+            [
+              390,
+              300,
+              345
+            ],
+            [
+              0,
+              440,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-farm-1",
+      "path": "assets/farm-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            840,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            800,
+            520,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -440,
+              560,
+              -445
+            ],
+            [
+              440,
+              560,
+              -445
+            ],
+            [
+              0,
+              700,
+              -445
+            ],
+            [
+              -440,
+              560,
+              445
+            ],
+            [
+              440,
+              560,
+              445
+            ],
+            [
+              0,
+              700,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-farm-2",
+      "path": "assets/farm-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            940,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            430,
+            0
+          ],
+          "size_cm": [
+            900,
+            780,
+            600
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -490,
+              820,
+              -345
+            ],
+            [
+              490,
+              820,
+              -345
+            ],
+            [
+              0,
+              960,
+              -345
+            ],
+            [
+              -490,
+              820,
+              345
+            ],
+            [
+              490,
+              820,
+              345
+            ],
+            [
+              0,
+              960,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-farm-3",
+      "path": "assets/farm-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -445
+            ],
+            [
+              390,
+              300,
+              -445
+            ],
+            [
+              0,
+              440,
+              -445
+            ],
+            [
+              -390,
+              300,
+              445
+            ],
+            [
+              390,
+              300,
+              445
+            ],
+            [
+              0,
+              440,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-polar-0",
+      "path": "assets/polar-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -345
+            ],
+            [
+              390,
+              300,
+              -345
+            ],
+            [
+              0,
+              440,
+              -345
+            ],
+            [
+              -390,
+              300,
+              345
+            ],
+            [
+              390,
+              300,
+              345
+            ],
+            [
+              0,
+              440,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-polar-1",
+      "path": "assets/polar-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            840,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            800,
+            520,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -440,
+              560,
+              -445
+            ],
+            [
+              440,
+              560,
+              -445
+            ],
+            [
+              0,
+              700,
+              -445
+            ],
+            [
+              -440,
+              560,
+              445
+            ],
+            [
+              440,
+              560,
+              445
+            ],
+            [
+              0,
+              700,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-polar-2",
+      "path": "assets/polar-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            940,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            430,
+            0
+          ],
+          "size_cm": [
+            900,
+            780,
+            600
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -490,
+              820,
+              -345
+            ],
+            [
+              490,
+              820,
+              -345
+            ],
+            [
+              0,
+              960,
+              -345
+            ],
+            [
+              -490,
+              820,
+              345
+            ],
+            [
+              490,
+              820,
+              345
+            ],
+            [
+              0,
+              960,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-polar-3",
+      "path": "assets/polar-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -445
+            ],
+            [
+              390,
+              300,
+              -445
+            ],
+            [
+              0,
+              440,
+              -445
+            ],
+            [
+              -390,
+              300,
+              445
+            ],
+            [
+              390,
+              300,
+              445
+            ],
+            [
+              0,
+              440,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-stilt-0",
+      "path": "assets/stilt-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            -300,
+            90,
+            -250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            -300,
+            90,
+            250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            300,
+            90,
+            -250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            300,
+            90,
+            250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            0,
+            310,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            410,
+            -370
+          ],
+          "size_cm": [
+            700,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -355
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              440,
+              -345
+            ],
+            [
+              390,
+              440,
+              -345
+            ],
+            [
+              0,
+              580,
+              -345
+            ],
+            [
+              -390,
+              440,
+              345
+            ],
+            [
+              390,
+              440,
+              345
+            ],
+            [
+              0,
+              580,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-stilt-1",
+      "path": "assets/stilt-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            -350,
+            90,
+            -350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            -350,
+            90,
+            350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            350,
+            90,
+            -350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            350,
+            90,
+            350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            0,
+            440,
+            0
+          ],
+          "size_cm": [
+            800,
+            520,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            410,
+            -470
+          ],
+          "size_cm": [
+            800,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -455
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -440,
+              700,
+              -445
+            ],
+            [
+              440,
+              700,
+              -445
+            ],
+            [
+              0,
+              840,
+              -445
+            ],
+            [
+              -440,
+              700,
+              445
+            ],
+            [
+              440,
+              700,
+              445
+            ],
+            [
+              0,
+              840,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-stilt-2",
+      "path": "assets/stilt-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            -400,
+            90,
+            -250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            -400,
+            90,
+            250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            400,
+            90,
+            -250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            400,
+            90,
+            250
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            0,
+            570,
+            0
+          ],
+          "size_cm": [
+            900,
+            780,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            410,
+            -370
+          ],
+          "size_cm": [
+            900,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -355
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -490,
+              960,
+              -345
+            ],
+            [
+              490,
+              960,
+              -345
+            ],
+            [
+              0,
+              1100,
+              -345
+            ],
+            [
+              -490,
+              960,
+              345
+            ],
+            [
+              490,
+              960,
+              345
+            ],
+            [
+              0,
+              1100,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-stilt-3",
+      "path": "assets/stilt-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            -300,
+            90,
+            -350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            -300,
+            90,
+            350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            300,
+            90,
+            -350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            300,
+            90,
+            350
+          ],
+          "size_cm": [
+            40,
+            180,
+            40
+          ]
+        },
+        {
+          "center": [
+            0,
+            310,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            410,
+            -470
+          ],
+          "size_cm": [
+            700,
+            16,
+            150
+          ]
+        },
+        {
+          "center": [
+            0,
+            20,
+            -455
+          ],
+          "size_cm": [
+            200,
+            40,
+            110
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              440,
+              -445
+            ],
+            [
+              390,
+              440,
+              -445
+            ],
+            [
+              0,
+              580,
+              -445
+            ],
+            [
+              -390,
+              440,
+              445
+            ],
+            [
+              390,
+              440,
+              445
+            ],
+            [
+              0,
+              580,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-warehouse-0",
+      "path": "assets/warehouse-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -345
+            ],
+            [
+              390,
+              300,
+              -345
+            ],
+            [
+              0,
+              440,
+              -345
+            ],
+            [
+              -390,
+              300,
+              345
+            ],
+            [
+              390,
+              300,
+              345
+            ],
+            [
+              0,
+              440,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-warehouse-1",
+      "path": "assets/warehouse-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            840,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            800,
+            520,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -440,
+              560,
+              -445
+            ],
+            [
+              440,
+              560,
+              -445
+            ],
+            [
+              0,
+              700,
+              -445
+            ],
+            [
+              -440,
+              560,
+              445
+            ],
+            [
+              440,
+              560,
+              445
+            ],
+            [
+              0,
+              700,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-warehouse-2",
+      "path": "assets/warehouse-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            940,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            430,
+            0
+          ],
+          "size_cm": [
+            900,
+            780,
+            600
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -490,
+              820,
+              -345
+            ],
+            [
+              490,
+              820,
+              -345
+            ],
+            [
+              0,
+              960,
+              -345
+            ],
+            [
+              -490,
+              820,
+              345
+            ],
+            [
+              490,
+              820,
+              345
+            ],
+            [
+              0,
+              960,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-warehouse-3",
+      "path": "assets/warehouse-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            840
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            800
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -445
+            ],
+            [
+              390,
+              300,
+              -445
+            ],
+            [
+              0,
+              440,
+              -445
+            ],
+            [
+              -390,
+              300,
+              445
+            ],
+            [
+              390,
+              300,
+              445
+            ],
+            [
+              0,
+              440,
+              445
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-canopy",
+      "path": "assets/canopy.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            400,
+            0
+          ],
+          "size_cm": [
+            45,
+            800,
+            45
+          ]
+        },
+        {
+          "center": [
+            -70,
+            15,
+            0
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            70,
+            15,
+            0
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            0,
+            15,
+            70
+          ],
+          "size_cm": [
+            140,
+            30,
+            30
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-palm",
+      "path": "assets/palm.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            250,
+            0
+          ],
+          "size_cm": [
+            45,
+            500,
+            45
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-rock",
+      "path": "assets/rock.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -500,
+              0,
+              -400
+            ],
+            [
+              500,
+              0,
+              -400
+            ],
+            [
+              0,
+              600,
+              -400
+            ],
+            [
+              -500,
+              0,
+              400
+            ],
+            [
+              500,
+              0,
+              400
+            ],
+            [
+              0,
+              600,
+              400
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-sandstone",
+      "path": "assets/sandstone.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              600,
+              0,
+              0
+            ],
+            [
+              450,
+              0,
+              300
+            ],
+            [
+              0,
+              0,
+              400
+            ],
+            [
+              -450,
+              0,
+              300
+            ],
+            [
+              -600,
+              0,
+              0
+            ],
+            [
+              -450,
+              0,
+              -300
+            ],
+            [
+              0,
+              0,
+              -400
+            ],
+            [
+              450,
+              0,
+              -300
+            ],
+            [
+              528,
+              585,
+              0
+            ],
+            [
+              396,
+              585,
+              264
+            ],
+            [
+              0,
+              585,
+              352
+            ],
+            [
+              -396,
+              585,
+              264
+            ],
+            [
+              -528,
+              585,
+              0
+            ],
+            [
+              -396,
+              585,
+              -264
+            ],
+            [
+              0,
+              585,
+              -352
+            ],
+            [
+              396,
+              585,
+              -264
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              528,
+              585,
+              0
+            ],
+            [
+              396,
+              585,
+              264
+            ],
+            [
+              0,
+              585,
+              352
+            ],
+            [
+              -396,
+              585,
+              264
+            ],
+            [
+              -528,
+              585,
+              0
+            ],
+            [
+              -396,
+              585,
+              -264
+            ],
+            [
+              0,
+              585,
+              -352
+            ],
+            [
+              396,
+              585,
+              -264
+            ],
+            [
+              480,
+              975,
+              0
+            ],
+            [
+              360,
+              975,
+              240
+            ],
+            [
+              0,
+              975,
+              320
+            ],
+            [
+              -360,
+              975,
+              240
+            ],
+            [
+              -480,
+              975,
+              0
+            ],
+            [
+              -360,
+              975,
+              -240
+            ],
+            [
+              0,
+              975,
+              -320
+            ],
+            [
+              360,
+              975,
+              -240
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              480,
+              975,
+              0
+            ],
+            [
+              360,
+              975,
+              240
+            ],
+            [
+              0,
+              975,
+              320
+            ],
+            [
+              -360,
+              975,
+              240
+            ],
+            [
+              -480,
+              975,
+              0
+            ],
+            [
+              -360,
+              975,
+              -240
+            ],
+            [
+              0,
+              975,
+              -320
+            ],
+            [
+              360,
+              975,
+              -240
+            ],
+            [
+              384,
+              1300,
+              0
+            ],
+            [
+              288,
+              1300,
+              192
+            ],
+            [
+              0,
+              1300,
+              256
+            ],
+            [
+              -288,
+              1300,
+              192
+            ],
+            [
+              -384,
+              1300,
+              0
+            ],
+            [
+              -288,
+              1300,
+              -192
+            ],
+            [
+              0,
+              1300,
+              -256
+            ],
+            [
+              288,
+              1300,
+              -192
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-dune",
+      "path": "assets/dune.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -700,
+              0,
+              -450
+            ],
+            [
+              700,
+              0,
+              -450
+            ],
+            [
+              0,
+              300,
+              -450
+            ],
+            [
+              -700,
+              0,
+              450
+            ],
+            [
+              700,
+              0,
+              450
+            ],
+            [
+              0,
+              300,
+              450
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-snow",
+      "path": "assets/snow.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -600,
+              0,
+              -400
+            ],
+            [
+              600,
+              0,
+              -400
+            ],
+            [
+              0,
+              200,
+              -400
+            ],
+            [
+              -600,
+              0,
+              400
+            ],
+            [
+              600,
+              0,
+              400
+            ],
+            [
+              0,
+              200,
+              400
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-water",
+      "path": "assets/water.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            3,
+            0
+          ],
+          "size_cm": [
+            1596,
+            6,
+            1596
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-field",
+      "path": "assets/field.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            3,
+            0
+          ],
+          "size_cm": [
+            1400,
+            6,
+            1200
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-rice",
+      "path": "assets/rice.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            3,
+            0
+          ],
+          "size_cm": [
+            1400,
+            6,
+            1200
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-quay",
+      "path": "assets/quay.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            60,
+            0
+          ],
+          "size_cm": [
+            1200,
+            120,
+            500
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-wall",
+      "path": "assets/wall.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            100,
+            0
+          ],
+          "size_cm": [
+            800,
+            200,
+            60
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-pier",
+      "path": "assets/pier.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            400,
+            0
+          ],
+          "size_cm": [
+            140,
+            800,
+            140
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-bell-tower",
+      "path": "assets/bell-tower.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            600,
+            0
+          ],
+          "size_cm": [
+            500,
+            1200,
+            500
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -300,
+              1200,
+              -300
+            ],
+            [
+              300,
+              1200,
+              -300
+            ],
+            [
+              0,
+              1400,
+              -300
+            ],
+            [
+              -300,
+              1200,
+              300
+            ],
+            [
+              300,
+              1200,
+              300
+            ],
+            [
+              0,
+              1400,
+              300
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-observatory",
+      "path": "assets/observatory.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            150,
+            0
+          ],
+          "size_cm": [
+            900,
+            300,
+            900
+          ]
+        },
+        {
+          "center": [
+            0,
+            700,
+            0
+          ],
+          "size_cm": [
+            400,
+            800,
+            400
+          ]
+        },
+        {
+          "center": [
+            0,
+            1150,
+            0
+          ],
+          "size_cm": [
+            600,
+            100,
+            600
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-crane",
+      "path": "assets/crane.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            150,
+            0
+          ],
+          "size_cm": [
+            200,
+            300,
+            200
+          ]
+        },
+        {
+          "center": [
+            0,
+            1300,
+            0
+          ],
+          "size_cm": [
+            100,
+            2300,
+            100
+          ]
+        },
+        {
+          "center": [
+            600,
+            2400,
+            0
+          ],
+          "size_cm": [
+            1400,
+            70,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-service-canopy",
+      "path": "assets/service-canopy.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            150,
+            0
+          ],
+          "size_cm": [
+            1000,
+            300,
+            600
+          ]
+        },
+        {
+          "center": [
+            0,
+            400,
+            0
+          ],
+          "size_cm": [
+            1200,
+            40,
+            800
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-courtyard",
+      "path": "assets/courtyard.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            -330,
+            215,
+            0
+          ],
+          "size_cm": [
+            240,
+            430,
+            800
+          ]
+        },
+        {
+          "center": [
+            330,
+            215,
+            0
+          ],
+          "size_cm": [
+            240,
+            430,
+            800
+          ]
+        },
+        {
+          "center": [
+            0,
+            215,
+            300
+          ],
+          "size_cm": [
+            420,
+            430,
+            200
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -250
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -180
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -110
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            350,
+            -40
+          ],
+          "size_cm": [
+            430,
+            12,
+            12
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-sandstone-1",
+      "path": "assets/sandstone-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              700,
+              0,
+              0
+            ],
+            [
+              525,
+              0,
+              375
+            ],
+            [
+              0,
+              0,
+              500
+            ],
+            [
+              -525,
+              0,
+              375
+            ],
+            [
+              -700,
+              0,
+              0
+            ],
+            [
+              -525,
+              0,
+              -375
+            ],
+            [
+              0,
+              0,
+              -500
+            ],
+            [
+              525,
+              0,
+              -375
+            ],
+            [
+              616,
+              720,
+              0
+            ],
+            [
+              462,
+              720,
+              330
+            ],
+            [
+              0,
+              720,
+              440
+            ],
+            [
+              -462,
+              720,
+              330
+            ],
+            [
+              -616,
+              720,
+              0
+            ],
+            [
+              -462,
+              720,
+              -330
+            ],
+            [
+              0,
+              720,
+              -440
+            ],
+            [
+              462,
+              720,
+              -330
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              616,
+              720,
+              0
+            ],
+            [
+              462,
+              720,
+              330
+            ],
+            [
+              0,
+              720,
+              440
+            ],
+            [
+              -462,
+              720,
+              330
+            ],
+            [
+              -616,
+              720,
+              0
+            ],
+            [
+              -462,
+              720,
+              -330
+            ],
+            [
+              0,
+              720,
+              -440
+            ],
+            [
+              462,
+              720,
+              -330
+            ],
+            [
+              560,
+              1200,
+              0
+            ],
+            [
+              420,
+              1200,
+              300
+            ],
+            [
+              0,
+              1200,
+              400
+            ],
+            [
+              -420,
+              1200,
+              300
+            ],
+            [
+              -560,
+              1200,
+              0
+            ],
+            [
+              -420,
+              1200,
+              -300
+            ],
+            [
+              0,
+              1200,
+              -400
+            ],
+            [
+              420,
+              1200,
+              -300
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              560,
+              1200,
+              0
+            ],
+            [
+              420,
+              1200,
+              300
+            ],
+            [
+              0,
+              1200,
+              400
+            ],
+            [
+              -420,
+              1200,
+              300
+            ],
+            [
+              -560,
+              1200,
+              0
+            ],
+            [
+              -420,
+              1200,
+              -300
+            ],
+            [
+              0,
+              1200,
+              -400
+            ],
+            [
+              420,
+              1200,
+              -300
+            ],
+            [
+              448,
+              1600,
+              0
+            ],
+            [
+              336,
+              1600,
+              240
+            ],
+            [
+              0,
+              1600,
+              320
+            ],
+            [
+              -336,
+              1600,
+              240
+            ],
+            [
+              -448,
+              1600,
+              0
+            ],
+            [
+              -336,
+              1600,
+              -240
+            ],
+            [
+              0,
+              1600,
+              -320
+            ],
+            [
+              336,
+              1600,
+              -240
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-sandstone-2",
+      "path": "assets/sandstone-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              800,
+              0,
+              0
+            ],
+            [
+              600,
+              0,
+              450
+            ],
+            [
+              0,
+              0,
+              600
+            ],
+            [
+              -600,
+              0,
+              450
+            ],
+            [
+              -800,
+              0,
+              0
+            ],
+            [
+              -600,
+              0,
+              -450
+            ],
+            [
+              0,
+              0,
+              -600
+            ],
+            [
+              600,
+              0,
+              -450
+            ],
+            [
+              704,
+              855,
+              0
+            ],
+            [
+              528,
+              855,
+              396
+            ],
+            [
+              0,
+              855,
+              528
+            ],
+            [
+              -528,
+              855,
+              396
+            ],
+            [
+              -704,
+              855,
+              0
+            ],
+            [
+              -528,
+              855,
+              -396
+            ],
+            [
+              0,
+              855,
+              -528
+            ],
+            [
+              528,
+              855,
+              -396
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              704,
+              855,
+              0
+            ],
+            [
+              528,
+              855,
+              396
+            ],
+            [
+              0,
+              855,
+              528
+            ],
+            [
+              -528,
+              855,
+              396
+            ],
+            [
+              -704,
+              855,
+              0
+            ],
+            [
+              -528,
+              855,
+              -396
+            ],
+            [
+              0,
+              855,
+              -528
+            ],
+            [
+              528,
+              855,
+              -396
+            ],
+            [
+              640,
+              1425,
+              0
+            ],
+            [
+              480,
+              1425,
+              360
+            ],
+            [
+              0,
+              1425,
+              480
+            ],
+            [
+              -480,
+              1425,
+              360
+            ],
+            [
+              -640,
+              1425,
+              0
+            ],
+            [
+              -480,
+              1425,
+              -360
+            ],
+            [
+              0,
+              1425,
+              -480
+            ],
+            [
+              480,
+              1425,
+              -360
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              640,
+              1425,
+              0
+            ],
+            [
+              480,
+              1425,
+              360
+            ],
+            [
+              0,
+              1425,
+              480
+            ],
+            [
+              -480,
+              1425,
+              360
+            ],
+            [
+              -640,
+              1425,
+              0
+            ],
+            [
+              -480,
+              1425,
+              -360
+            ],
+            [
+              0,
+              1425,
+              -480
+            ],
+            [
+              480,
+              1425,
+              -360
+            ],
+            [
+              512,
+              1900,
+              0
+            ],
+            [
+              384,
+              1900,
+              288
+            ],
+            [
+              0,
+              1900,
+              384
+            ],
+            [
+              -384,
+              1900,
+              288
+            ],
+            [
+              -512,
+              1900,
+              0
+            ],
+            [
+              -384,
+              1900,
+              -288
+            ],
+            [
+              0,
+              1900,
+              -384
+            ],
+            [
+              384,
+              1900,
+              -288
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-sandstone-3",
+      "path": "assets/sandstone-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              900,
+              0,
+              0
+            ],
+            [
+              675,
+              0,
+              525
+            ],
+            [
+              0,
+              0,
+              700
+            ],
+            [
+              -675,
+              0,
+              525
+            ],
+            [
+              -900,
+              0,
+              0
+            ],
+            [
+              -675,
+              0,
+              -525
+            ],
+            [
+              0,
+              0,
+              -700
+            ],
+            [
+              675,
+              0,
+              -525
+            ],
+            [
+              792,
+              990,
+              0
+            ],
+            [
+              594,
+              990,
+              462
+            ],
+            [
+              0,
+              990,
+              616
+            ],
+            [
+              -594,
+              990,
+              462
+            ],
+            [
+              -792,
+              990,
+              0
+            ],
+            [
+              -594,
+              990,
+              -462
+            ],
+            [
+              0,
+              990,
+              -616
+            ],
+            [
+              594,
+              990,
+              -462
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              792,
+              990,
+              0
+            ],
+            [
+              594,
+              990,
+              462
+            ],
+            [
+              0,
+              990,
+              616
+            ],
+            [
+              -594,
+              990,
+              462
+            ],
+            [
+              -792,
+              990,
+              0
+            ],
+            [
+              -594,
+              990,
+              -462
+            ],
+            [
+              0,
+              990,
+              -616
+            ],
+            [
+              594,
+              990,
+              -462
+            ],
+            [
+              720,
+              1650,
+              0
+            ],
+            [
+              540,
+              1650,
+              420
+            ],
+            [
+              0,
+              1650,
+              560
+            ],
+            [
+              -540,
+              1650,
+              420
+            ],
+            [
+              -720,
+              1650,
+              0
+            ],
+            [
+              -540,
+              1650,
+              -420
+            ],
+            [
+              0,
+              1650,
+              -560
+            ],
+            [
+              540,
+              1650,
+              -420
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        },
+        {
+          "vertices": [
+            [
+              720,
+              1650,
+              0
+            ],
+            [
+              540,
+              1650,
+              420
+            ],
+            [
+              0,
+              1650,
+              560
+            ],
+            [
+              -540,
+              1650,
+              420
+            ],
+            [
+              -720,
+              1650,
+              0
+            ],
+            [
+              -540,
+              1650,
+              -420
+            ],
+            [
+              0,
+              1650,
+              -560
+            ],
+            [
+              540,
+              1650,
+              -420
+            ],
+            [
+              576,
+              2200,
+              0
+            ],
+            [
+              432,
+              2200,
+              336
+            ],
+            [
+              0,
+              2200,
+              448
+            ],
+            [
+              -432,
+              2200,
+              336
+            ],
+            [
+              -576,
+              2200,
+              0
+            ],
+            [
+              -432,
+              2200,
+              -336
+            ],
+            [
+              0,
+              2200,
+              -448
+            ],
+            [
+              432,
+              2200,
+              -336
+            ]
+          ],
+          "faces": [
+            [
+              1,
+              2,
+              0
+            ],
+            [
+              10,
+              9,
+              8
+            ],
+            [
+              2,
+              3,
+              0
+            ],
+            [
+              11,
+              10,
+              8
+            ],
+            [
+              3,
+              4,
+              0
+            ],
+            [
+              12,
+              11,
+              8
+            ],
+            [
+              4,
+              5,
+              0
+            ],
+            [
+              13,
+              12,
+              8
+            ],
+            [
+              5,
+              6,
+              0
+            ],
+            [
+              14,
+              13,
+              8
+            ],
+            [
+              6,
+              7,
+              0
+            ],
+            [
+              15,
+              14,
+              8
+            ],
+            [
+              9,
+              1,
+              0
+            ],
+            [
+              8,
+              9,
+              0
+            ],
+            [
+              10,
+              2,
+              1
+            ],
+            [
+              9,
+              10,
+              1
+            ],
+            [
+              11,
+              3,
+              2
+            ],
+            [
+              10,
+              11,
+              2
+            ],
+            [
+              12,
+              4,
+              3
+            ],
+            [
+              11,
+              12,
+              3
+            ],
+            [
+              13,
+              5,
+              4
+            ],
+            [
+              12,
+              13,
+              4
+            ],
+            [
+              14,
+              6,
+              5
+            ],
+            [
+              13,
+              14,
+              5
+            ],
+            [
+              15,
+              7,
+              6
+            ],
+            [
+              14,
+              15,
+              6
+            ],
+            [
+              8,
+              0,
+              7
+            ],
+            [
+              15,
+              8,
+              7
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-windmill",
+      "path": "assets/windmill.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            400,
+            0
+          ],
+          "size_cm": [
+            400,
+            800,
+            400
+          ]
+        },
+        {
+          "center": [
+            0,
+            700,
+            -260
+          ],
+          "size_cm": [
+            30,
+            800,
+            18
+          ]
+        },
+        {
+          "center": [
+            0,
+            700,
+            -260
+          ],
+          "size_cm": [
+            800,
+            30,
+            18
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -250,
+              800,
+              -250
+            ],
+            [
+              250,
+              800,
+              -250
+            ],
+            [
+              0,
+              1000,
+              -250
+            ],
+            [
+              -250,
+              800,
+              250
+            ],
+            [
+              250,
+              800,
+              250
+            ],
+            [
+              0,
+              1000,
+              250
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-watermill",
+      "path": "assets/watermill.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            -130,
+            0
+          ],
+          "size_cm": [
+            740,
+            340,
+            640
+          ]
+        },
+        {
+          "center": [
+            0,
+            170,
+            0
+          ],
+          "size_cm": [
+            700,
+            260,
+            600
+          ]
+        },
+        {
+          "center": [
+            460,
+            150,
+            130
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            215,
+            113
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            263,
+            65
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            280,
+            0
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            263,
+            -65
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            215,
+            -113
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            150,
+            -130
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            85,
+            -113
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            37,
+            -65
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            20,
+            0
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            37,
+            65
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            85,
+            113
+          ],
+          "size_cm": [
+            65,
+            30,
+            30
+          ]
+        },
+        {
+          "center": [
+            460,
+            150,
+            0
+          ],
+          "size_cm": [
+            50,
+            220,
+            18
+          ]
+        }
+      ],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -390,
+              300,
+              -345
+            ],
+            [
+              390,
+              300,
+              -345
+            ],
+            [
+              0,
+              440,
+              -345
+            ],
+            [
+              -390,
+              300,
+              345
+            ],
+            [
+              390,
+              300,
+              345
+            ],
+            [
+              0,
+              440,
+              345
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              2,
+              1
+            ],
+            [
+              3,
+              4,
+              5
+            ],
+            [
+              0,
+              1,
+              4
+            ],
+            [
+              0,
+              4,
+              3
+            ],
+            [
+              1,
+              2,
+              5
+            ],
+            [
+              1,
+              5,
+              4
+            ],
+            [
+              2,
+              0,
+              3
+            ],
+            [
+              2,
+              3,
+              5
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-waterfall",
+      "path": "assets/waterfall.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            900,
+            600,
+            500
+          ]
+        },
+        {
+          "center": [
+            0,
+            300,
+            -260
+          ],
+          "size_cm": [
+            260,
+            600,
+            12
+          ]
+        },
+        {
+          "center": [
+            0,
+            12,
+            -400
+          ],
+          "size_cm": [
+            500,
+            24,
+            300
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-1",
+      "path": "assets/support-1.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            25,
+            0
+          ],
+          "size_cm": [
+            70,
+            50,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-2",
+      "path": "assets/support-2.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            50,
+            0
+          ],
+          "size_cm": [
+            70,
+            100,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-3",
+      "path": "assets/support-3.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            75,
+            0
+          ],
+          "size_cm": [
+            70,
+            150,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-4",
+      "path": "assets/support-4.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            100,
+            0
+          ],
+          "size_cm": [
+            70,
+            200,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-5",
+      "path": "assets/support-5.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            125,
+            0
+          ],
+          "size_cm": [
+            70,
+            250,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-6",
+      "path": "assets/support-6.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            150,
+            0
+          ],
+          "size_cm": [
+            70,
+            300,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-7",
+      "path": "assets/support-7.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            175,
+            0
+          ],
+          "size_cm": [
+            70,
+            350,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-8",
+      "path": "assets/support-8.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            200,
+            0
+          ],
+          "size_cm": [
+            70,
+            400,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-9",
+      "path": "assets/support-9.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            225,
+            0
+          ],
+          "size_cm": [
+            70,
+            450,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-10",
+      "path": "assets/support-10.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            250,
+            0
+          ],
+          "size_cm": [
+            70,
+            500,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-11",
+      "path": "assets/support-11.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            275,
+            0
+          ],
+          "size_cm": [
+            70,
+            550,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-12",
+      "path": "assets/support-12.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            300,
+            0
+          ],
+          "size_cm": [
+            70,
+            600,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-13",
+      "path": "assets/support-13.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            325,
+            0
+          ],
+          "size_cm": [
+            70,
+            650,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-14",
+      "path": "assets/support-14.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            350,
+            0
+          ],
+          "size_cm": [
+            70,
+            700,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-15",
+      "path": "assets/support-15.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            375,
+            0
+          ],
+          "size_cm": [
+            70,
+            750,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-16",
+      "path": "assets/support-16.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            400,
+            0
+          ],
+          "size_cm": [
+            70,
+            800,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-17",
+      "path": "assets/support-17.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            425,
+            0
+          ],
+          "size_cm": [
+            70,
+            850,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-18",
+      "path": "assets/support-18.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            450,
+            0
+          ],
+          "size_cm": [
+            70,
+            900,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-19",
+      "path": "assets/support-19.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            475,
+            0
+          ],
+          "size_cm": [
+            70,
+            950,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-20",
+      "path": "assets/support-20.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            500,
+            0
+          ],
+          "size_cm": [
+            70,
+            1000,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-21",
+      "path": "assets/support-21.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            525,
+            0
+          ],
+          "size_cm": [
+            70,
+            1050,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-22",
+      "path": "assets/support-22.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            550,
+            0
+          ],
+          "size_cm": [
+            70,
+            1100,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-23",
+      "path": "assets/support-23.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            575,
+            0
+          ],
+          "size_cm": [
+            70,
+            1150,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-24",
+      "path": "assets/support-24.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            600,
+            0
+          ],
+          "size_cm": [
+            70,
+            1200,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-25",
+      "path": "assets/support-25.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            625,
+            0
+          ],
+          "size_cm": [
+            70,
+            1250,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-26",
+      "path": "assets/support-26.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            650,
+            0
+          ],
+          "size_cm": [
+            70,
+            1300,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-27",
+      "path": "assets/support-27.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            675,
+            0
+          ],
+          "size_cm": [
+            70,
+            1350,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-28",
+      "path": "assets/support-28.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            700,
+            0
+          ],
+          "size_cm": [
+            70,
+            1400,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-29",
+      "path": "assets/support-29.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            725,
+            0
+          ],
+          "size_cm": [
+            70,
+            1450,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-30",
+      "path": "assets/support-30.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            750,
+            0
+          ],
+          "size_cm": [
+            70,
+            1500,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-31",
+      "path": "assets/support-31.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            775,
+            0
+          ],
+          "size_cm": [
+            70,
+            1550,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-32",
+      "path": "assets/support-32.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            800,
+            0
+          ],
+          "size_cm": [
+            70,
+            1600,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-33",
+      "path": "assets/support-33.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            825,
+            0
+          ],
+          "size_cm": [
+            70,
+            1650,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-34",
+      "path": "assets/support-34.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            850,
+            0
+          ],
+          "size_cm": [
+            70,
+            1700,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-35",
+      "path": "assets/support-35.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            875,
+            0
+          ],
+          "size_cm": [
+            70,
+            1750,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-36",
+      "path": "assets/support-36.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            900,
+            0
+          ],
+          "size_cm": [
+            70,
+            1800,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-37",
+      "path": "assets/support-37.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            925,
+            0
+          ],
+          "size_cm": [
+            70,
+            1850,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-38",
+      "path": "assets/support-38.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            950,
+            0
+          ],
+          "size_cm": [
+            70,
+            1900,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-39",
+      "path": "assets/support-39.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            975,
+            0
+          ],
+          "size_cm": [
+            70,
+            1950,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-support-40",
+      "path": "assets/support-40.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            0,
+            1000,
+            0
+          ],
+          "size_cm": [
+            70,
+            2000,
+            70
+          ]
+        }
+      ],
+      "convex_collision": []
+    },
+    {
+      "id": "regional-rail-0",
+      "path": "assets/rail-0.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -110,
+              12,
+              -8
+            ],
+            [
+              110,
+              12,
+              -8
+            ],
+            [
+              110,
+              12,
+              8
+            ],
+            [
+              -110,
+              12,
+              8
+            ],
+            [
+              -110,
+              78,
+              -8
+            ],
+            [
+              110,
+              78,
+              -8
+            ],
+            [
+              110,
+              78,
+              8
+            ],
+            [
+              -110,
+              78,
+              8
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-15",
+      "path": "assets/rail-15.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -104,
+              12,
+              -36
+            ],
+            [
+              108,
+              12,
+              21
+            ],
+            [
+              104,
+              12,
+              36
+            ],
+            [
+              -108,
+              12,
+              -21
+            ],
+            [
+              -104,
+              78,
+              -36
+            ],
+            [
+              108,
+              78,
+              21
+            ],
+            [
+              104,
+              78,
+              36
+            ],
+            [
+              -108,
+              78,
+              -21
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-30",
+      "path": "assets/rail-30.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -91,
+              12,
+              -62
+            ],
+            [
+              99,
+              12,
+              48
+            ],
+            [
+              91,
+              12,
+              62
+            ],
+            [
+              -99,
+              12,
+              -48
+            ],
+            [
+              -91,
+              78,
+              -62
+            ],
+            [
+              99,
+              78,
+              48
+            ],
+            [
+              91,
+              78,
+              62
+            ],
+            [
+              -99,
+              78,
+              -48
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-45",
+      "path": "assets/rail-45.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -72,
+              12,
+              -83
+            ],
+            [
+              83,
+              12,
+              72
+            ],
+            [
+              72,
+              12,
+              83
+            ],
+            [
+              -83,
+              12,
+              -72
+            ],
+            [
+              -72,
+              78,
+              -83
+            ],
+            [
+              83,
+              78,
+              72
+            ],
+            [
+              72,
+              78,
+              83
+            ],
+            [
+              -83,
+              78,
+              -72
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-60",
+      "path": "assets/rail-60.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -48,
+              12,
+              -99
+            ],
+            [
+              62,
+              12,
+              91
+            ],
+            [
+              48,
+              12,
+              99
+            ],
+            [
+              -62,
+              12,
+              -91
+            ],
+            [
+              -48,
+              78,
+              -99
+            ],
+            [
+              62,
+              78,
+              91
+            ],
+            [
+              48,
+              78,
+              99
+            ],
+            [
+              -62,
+              78,
+              -91
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-75",
+      "path": "assets/rail-75.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              -21,
+              12,
+              -108
+            ],
+            [
+              36,
+              12,
+              104
+            ],
+            [
+              21,
+              12,
+              108
+            ],
+            [
+              -36,
+              12,
+              -104
+            ],
+            [
+              -21,
+              78,
+              -108
+            ],
+            [
+              36,
+              78,
+              104
+            ],
+            [
+              21,
+              78,
+              108
+            ],
+            [
+              -36,
+              78,
+              -104
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-90",
+      "path": "assets/rail-90.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              8,
+              12,
+              -110
+            ],
+            [
+              8,
+              12,
+              110
+            ],
+            [
+              -8,
+              12,
+              110
+            ],
+            [
+              -8,
+              12,
+              -110
+            ],
+            [
+              8,
+              78,
+              -110
+            ],
+            [
+              8,
+              78,
+              110
+            ],
+            [
+              -8,
+              78,
+              110
+            ],
+            [
+              -8,
+              78,
+              -110
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-105",
+      "path": "assets/rail-105.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              36,
+              12,
+              -104
+            ],
+            [
+              -21,
+              12,
+              108
+            ],
+            [
+              -36,
+              12,
+              104
+            ],
+            [
+              21,
+              12,
+              -108
+            ],
+            [
+              36,
+              78,
+              -104
+            ],
+            [
+              -21,
+              78,
+              108
+            ],
+            [
+              -36,
+              78,
+              104
+            ],
+            [
+              21,
+              78,
+              -108
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-120",
+      "path": "assets/rail-120.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              62,
+              12,
+              -91
+            ],
+            [
+              -48,
+              12,
+              99
+            ],
+            [
+              -62,
+              12,
+              91
+            ],
+            [
+              48,
+              12,
+              -99
+            ],
+            [
+              62,
+              78,
+              -91
+            ],
+            [
+              -48,
+              78,
+              99
+            ],
+            [
+              -62,
+              78,
+              91
+            ],
+            [
+              48,
+              78,
+              -99
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-135",
+      "path": "assets/rail-135.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              83,
+              12,
+              -72
+            ],
+            [
+              -72,
+              12,
+              83
+            ],
+            [
+              -83,
+              12,
+              72
+            ],
+            [
+              72,
+              12,
+              -83
+            ],
+            [
+              83,
+              78,
+              -72
+            ],
+            [
+              -72,
+              78,
+              83
+            ],
+            [
+              -83,
+              78,
+              72
+            ],
+            [
+              72,
+              78,
+              -83
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-150",
+      "path": "assets/rail-150.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              99,
+              12,
+              -48
+            ],
+            [
+              -91,
+              12,
+              62
+            ],
+            [
+              -99,
+              12,
+              48
+            ],
+            [
+              91,
+              12,
+              -62
+            ],
+            [
+              99,
+              78,
+              -48
+            ],
+            [
+              -91,
+              78,
+              62
+            ],
+            [
+              -99,
+              78,
+              48
+            ],
+            [
+              91,
+              78,
+              -62
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-rail-165",
+      "path": "assets/rail-165.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [],
+      "convex_collision": [
+        {
+          "vertices": [
+            [
+              108,
+              12,
+              -21
+            ],
+            [
+              -104,
+              12,
+              36
+            ],
+            [
+              -108,
+              12,
+              21
+            ],
+            [
+              104,
+              12,
+              -36
+            ],
+            [
+              108,
+              78,
+              -21
+            ],
+            [
+              -104,
+              78,
+              36
+            ],
+            [
+              -108,
+              78,
+              21
+            ],
+            [
+              104,
+              78,
+              -36
+            ]
+          ],
+          "faces": [
+            [
+              0,
+              1,
+              2
+            ],
+            [
+              0,
+              2,
+              3
+            ],
+            [
+              4,
+              6,
+              5
+            ],
+            [
+              4,
+              7,
+              6
+            ],
+            [
+              0,
+              4,
+              5
+            ],
+            [
+              0,
+              5,
+              1
+            ],
+            [
+              1,
+              5,
+              6
+            ],
+            [
+              1,
+              6,
+              2
+            ],
+            [
+              2,
+              6,
+              7
+            ],
+            [
+              2,
+              7,
+              3
+            ],
+            [
+              3,
+              7,
+              4
+            ],
+            [
+              3,
+              4,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "regional-sign-post",
+      "path": "assets/sign-post.glb",
+      "attribution": {
+        "source": "mapkit-regional-miniatures",
+        "license": "MIT",
+        "notice": "Original authored modular geometry. No external datasets, fonts or extracted game assets."
+      },
+      "collision": [
+        {
+          "center": [
+            -125,
+            90,
+            0
+          ],
+          "size_cm": [
+            14,
+            180,
+            14
+          ]
+        },
+        {
+          "center": [
+            125,
+            90,
+            0
+          ],
+          "size_cm": [
+            14,
+            180,
+            14
+          ]
+        }
+      ],
+      "convex_collision": []
+    }
+  ],
+  "sha256": {
+    "assets/tower-0.glb": "2abd8721eda933b839ef2f31ee73cb2d2eb90d07a2373962fe32b8e7ceac1d28",
+    "assets/tower-1.glb": "8cc438f020b73e4a35eca06dd81b1c3252966d054acc848396ca171a3ecc8f7c",
+    "assets/tower-2.glb": "0df97e5880ddf5f1134803ef17cf3501669dc1158e4e9e8a0bbb385376a5e3f3",
+    "assets/tower-3.glb": "20fb21b53416e8a0617fc7f5bc4ec0f6da84649b07fc0c0402f8a9c808d21467",
+    "assets/shop-0.glb": "f0fe2f673cf1d645b17beafbc01cf45d55f7dcf10cb1229210c4bd03e7e5ed54",
+    "assets/shop-1.glb": "e3f9c4d1b2c68f2782d4eda6ea7d00bb075de8fb6516336f263c13851e72e0a3",
+    "assets/shop-2.glb": "d992c61c53550045bf24ce655f641cc7d55fdd9a592ea79a69eb56053b956ba9",
+    "assets/shop-3.glb": "a3a5f06a924a8b228985a0ed4776088c3c7227337bddf5cd0518ae6105733404",
+    "assets/stone-0.glb": "8f7688562d0c47fb138a6053a7c624d84f90a85289dc823152ee2c8f969cc385",
+    "assets/stone-1.glb": "57d9e6b34a0c2c01da5663a19b9840be237982f8d2a603580d31d7f93ab83072",
+    "assets/stone-2.glb": "44be50423881b4cdca4968b021731972a1bc6566635969f1afab721d9b08877f",
+    "assets/stone-3.glb": "ddb3b7e515f33c7afa2721c8ee26edc7d0ffc12d73ffa4e8998658461e37c6c8",
+    "assets/farm-0.glb": "072da6d1b5d8253c198c47372a66697b7bd11fefb0a240de4dc9745101676c3b",
+    "assets/farm-1.glb": "54eab8b5b42a009282df313560c491c09a3eed8e668e04da9aa3928cfbcc9275",
+    "assets/farm-2.glb": "571766da43e8a4df9e3e1e17a4bd3c21fa45fade0f697a43a90d770c647ecbc9",
+    "assets/farm-3.glb": "aed027b5a958c3139d17e34a993a3333e33dc84cc8552c5b9b8bf31089d1af87",
+    "assets/polar-0.glb": "44a6fb7c3f65e329f96070da52c1d6c0fd18e71f93f7a93aea9b5b74f1b70fc6",
+    "assets/polar-1.glb": "da3c29b4a56e3a11b40546b61466549ffb5e42cbb619e7feb03389294f4934d9",
+    "assets/polar-2.glb": "ee69c6c2069b0fdb004f781da524547dcc93fcc989cba3ec1c8c3e924e874801",
+    "assets/polar-3.glb": "7f3064f3ac8747a08aaf4e142beb44d3f1e41c81a9222b38e028bfb76f2802d0",
+    "assets/stilt-0.glb": "af10c55b058dc25b0274f6507cd8251728e5ccd4c5a793b731c3cda6a87c26bc",
+    "assets/stilt-1.glb": "0506b0bc62004b7da93f251748fd036a3b5c282b2997eaa40dcff30e78e5c3b7",
+    "assets/stilt-2.glb": "3599abaee2b79fe05dfa78189fb517593d605406001d7093a0ee487f4d20ac78",
+    "assets/stilt-3.glb": "8b328ad120bca9014e2ab6c3c7ce9cfbc10cfafbfeb3b3347a50829796eb2086",
+    "assets/warehouse-0.glb": "997adfe6cad812c265fff5668cbd58a9a1e8fe1d8db067ec04440c5e53b745b8",
+    "assets/warehouse-1.glb": "9bc043e676527269c1bc2a5a1db9d58b4c8030570852e5288d0ea49480a3890e",
+    "assets/warehouse-2.glb": "8cd85920c8f6bc8a437654281eb54e19541e52a8b7d7d5b049d43519753027f4",
+    "assets/warehouse-3.glb": "fadc4157a2009d6ae329a82a18a3f07c4199d6fd655edd1095de019ac8280169",
+    "assets/canopy.glb": "b8c7004257f6189ee6f46e98b615f212dad72b3d7c86551e346b1bc078cd6fca",
+    "assets/palm.glb": "53812e5386ec862e6abb8d9940b7374e22dcd82befd1de0a3c3c28d17144a12a",
+    "assets/rock.glb": "b629df8ecd0269a1a581dc236380522234d918a200fe08ada9ed7839663ee8e0",
+    "assets/sandstone.glb": "ac8e95075a78e979fece394ee59cbb420dbac90569da48e708156b0c4922e811",
+    "assets/dune.glb": "0a366943553256b131eb35981d57282abdf8e8f2faca7d60e48436732aa33b4c",
+    "assets/snow.glb": "e5434614991c947ca0825a118ed80e2dd380ff844ed100b78cd3919a0b5e83d0",
+    "assets/water.glb": "0700db426b6f3fef1830de8090e2aea9f94c6c34f7f58a7e5da1fa25b379ba9a",
+    "assets/field.glb": "4cc82a6c05cf9785dd925cbb8843d4420b97e236861615b7b63ab3b8ee6c818d",
+    "assets/rice.glb": "3a3ea3c460d81dd0a3b9be89d21ee2ffae0c3e40e5248f06ac785092ba6204b1",
+    "assets/quay.glb": "2092c69480202c4be9f183a3588c9ab7121c63c181027a66a873a91de070816e",
+    "assets/wall.glb": "fe139ee2e380cb83239911aa806647ed0abe50556ceb291632de8caa1677d809",
+    "assets/pier.glb": "10efe10bbd8d6153550ad060669efa918490a9c62caf5883bc1fdc896749a409",
+    "assets/bell-tower.glb": "6a8d462a466125b11b4c82260e367c8b867d23625909d4ba1bac610580a800b8",
+    "assets/observatory.glb": "7d94880267f9def60c74c039c7d0116b64a2f6bd0b7ae945178cae0b91a39d7f",
+    "assets/crane.glb": "9a412e3d8c3b72eb5e0e94ff009ef9e6d923a2d8a2ae48fa23786cc1cefa47fb",
+    "assets/service-canopy.glb": "a547587aa12121765503f906bf19d826f6880b3b2060fcbe93db6b60037501ef",
+    "assets/courtyard.glb": "e7472fb69080d9d9e1c7e510686076c177d892fa6343b68dc000e04a23dccdcd",
+    "assets/sandstone-1.glb": "58d2742f67fc22631f46d34d051bc571dc2853fe8d09c8c2526098e2bbffd2be",
+    "assets/sandstone-2.glb": "2014448aa998f61ee88d79559171fe344d55dd0486e4c2a283f32695398f88d8",
+    "assets/sandstone-3.glb": "11d0a686c4ccc338d601b5e1d3b8c3e256df4e2d55444cac85a8238a94a4e410",
+    "assets/windmill.glb": "94f5d7ce9fb914ae850b57991ad62e5dc82734a2bbf6d1305fb068aad1311ecf",
+    "assets/watermill.glb": "fd804f953b2d1e73ec572f43c753ca8f91935fe696c80a841a31ad18851a7c2b",
+    "assets/waterfall.glb": "25a41264039b34c1872955f25a498b3211cff2ac47b4b3852fdf26bd50a7145a",
+    "assets/support-1.glb": "63b7125b16118ceb3233dd29dc3678c4056c7c435e033bd5be08d2c5c0956c78",
+    "assets/support-2.glb": "99c246e41c677a36985dc45fad4c08c45c5ccf8d25d75c3d51b3692e984c1fbb",
+    "assets/support-3.glb": "bfb08b5cf5fd3dac76827534f1dc601b330fc50e793f53ff081b929194a00edf",
+    "assets/support-4.glb": "4d780d53a000ec06c25bc0c5eee65c0ed63f7f92d61b8932b9913fd9e9acd778",
+    "assets/support-5.glb": "29999cd558bcd6a0d580f04018eb4a6c00ac2a8f0490580d59fd7cd2c799816c",
+    "assets/support-6.glb": "b1023b18e0b7197591ecf036d9e622f761208e8e1f9d1496c0ed9c6613aaafef",
+    "assets/support-7.glb": "5927702db4dc5aa603537184bc5d4e77f4815372a6c40c349c8b56cc134b050e",
+    "assets/support-8.glb": "6e2095aed09fc9b6418442d45c26d3061067c37bd65e3d150dd7ae5a4e2d7a15",
+    "assets/support-9.glb": "ac4268ca1bcd8f93421bfb416aaa9b3faa0cb354008f3c4d66e25b3eef408212",
+    "assets/support-10.glb": "def5841f7322524c8f386614cb247a8f006cbba7a7a026e7e335439f47bd2d8c",
+    "assets/support-11.glb": "1c37c9004c65e7a5b1f44020a55c5b5b015dfdb5e8700674a508b3757ae781a1",
+    "assets/support-12.glb": "92d65695002d5cdb3fd7c4f9cd525b391dd51c23b08f3f395a798b2747df8e5c",
+    "assets/support-13.glb": "184e53ec4dc55715809f4dc42c5205e1e69d3faabf61b46a26ef53bf87fbdb91",
+    "assets/support-14.glb": "4d96db55c2d2a4e1ba3917ccbeb2fe13366e803c1a0031be7230323f5baf6b37",
+    "assets/support-15.glb": "ffcc94efc96d6920411ada617b9e7b3aed209516a62ec4ae8c6a3b9d1769a251",
+    "assets/support-16.glb": "69f840ed923d9f5f26eb16500630504647aee961650d4731082f6972a7150195",
+    "assets/support-17.glb": "09bf548ea54bd1cd138c493c1e37084b79e8a58b00a2b86657fea6a20f92db66",
+    "assets/support-18.glb": "6c6004932adc45ca862f6008f31781b027c4fcc3ef8a4bf29b1da68f589a6e54",
+    "assets/support-19.glb": "89c0aad5803a63085957bf5960d3037c8f2e4f8b42382d0f448d1a3c84c9d0f5",
+    "assets/support-20.glb": "7b0b64bcc226553708b08e56d3d5217895a117e06604d73e43e74329ea5bd2d7",
+    "assets/support-21.glb": "6b9c81f1d2d9435c135eaabbecb454aac24870a8c8363300fe468868c8c24fb2",
+    "assets/support-22.glb": "14b4d4985c16343b4c1971bfe3dfb88c83318750b7c822abc8a045df1fba0d32",
+    "assets/support-23.glb": "a2973a2dbe078ce9951413239a3cb3734828bae29493b0da87804beac221dfdf",
+    "assets/support-24.glb": "671b87d5ada9173cc6bc3d0ccd2506931db8d5adeeb531951a1a25f2f4b419d3",
+    "assets/support-25.glb": "4c286fdcd17c1639c5118821a8fd330907b18f7e607b791b49c7523d0dfb9b33",
+    "assets/support-26.glb": "628e85a41c9a52ae789fdf5b18334fc01f600e34316082fc5fb95b818047f3fd",
+    "assets/support-27.glb": "856d7db57de4761afc117dc0eaa6ba829da5cd0d5bed436eac26a6a7125bdae3",
+    "assets/support-28.glb": "7cd0feac736ad6f7bebad508d93f48d7cc1603a74fd131b1c4016f8e4fc25218",
+    "assets/support-29.glb": "1e15168cc211d09e4c2b0fe9cf12677fa04c05879634efc74f8f26b24c432862",
+    "assets/support-30.glb": "de4bd0134cbfc29664a3c5cb3531598540524dc4d62a9bdb8e1fa5b46440350a",
+    "assets/support-31.glb": "384479fea5b5c8b067a886c8a13bfed030876b381748e53e510f732e9d764b9f",
+    "assets/support-32.glb": "b223ae49e5dd8a1d1cfb41e67a5283e3c15fd421925470dc944b4e0becd6466f",
+    "assets/support-33.glb": "20a1e5cda7533c2f06fb9281ee9d29240ae83a69eaac466040f85b3907e4d8a5",
+    "assets/support-34.glb": "ebf7b9cb7886eb7b4c2d965a0d2b6db8d5726909da5e1691558d012552acadbd",
+    "assets/support-35.glb": "f844008f8a9fe38dc1961443b2d8cf36b774adcf8b18af2f425784c4329e6ec9",
+    "assets/support-36.glb": "b0d2e02d9c65923d9c3b45495357bf32277d5bd98c40038057c990cf13cb0d1b",
+    "assets/support-37.glb": "38c9442fad6f4843e296f5734cf010cd3bcd07389be5e64f783a4dab9c1794b8",
+    "assets/support-38.glb": "45fceb526ca6c269a69be5a951de01cac18b6bc164351913abbdbaec46f1de79",
+    "assets/support-39.glb": "f5c6d540938094cd296dcb52a0840c813f4804e8472686e4463fdd9615a7b658",
+    "assets/support-40.glb": "34185416736a3b96e74f990b8e4ce9609c8c2cd725053fe2072c436082ecbbd3",
+    "assets/rail-0.glb": "e238edc6517fce30ed24cbe7fae987ca38b4be51975a1bd182372a4636b76283",
+    "assets/rail-15.glb": "ee6fe759f947e63a0f8c42b7ada8b3e6d2b15a94a2fcf24d83f8cb48c2193b26",
+    "assets/rail-30.glb": "6a638381dcc16e2d0b3acf682b6620d3cd65f518b5144687749c0c4fc938d58f",
+    "assets/rail-45.glb": "4d42e02c06d102f738fa0cbd78740da6a8b63521d3eec8ddfb58bc23f2e6300a",
+    "assets/rail-60.glb": "776b38aec20d02508fcf9a51b7a0df62069580982b7ac66cd98f5d2a7c413042",
+    "assets/rail-75.glb": "ee54741d906e9855493ea29b9866798183da2a8333e5ff783ceba1028ddce430",
+    "assets/rail-90.glb": "3b110353ba6336919828ae6252b2344da68e5e20216c68ad398c9ef20cfa2b12",
+    "assets/rail-105.glb": "e932093cc550e602accbd9eaf6620d35c45d2ac78be6dc1c2e22976af8cd8fb0",
+    "assets/rail-120.glb": "44538ed82f94f5cd6f00287d69eae6f5dd8366c9133d0cbf07d217943f7e06c6",
+    "assets/rail-135.glb": "ad802b2a9ebdad5bff7eb38966fc14871b6c3d409557ea1899286040e773e467",
+    "assets/rail-150.glb": "2e5edb83b9e90d271c4b5bb59da8e584f37af416fcf2c0eb207051ba2f26f73d",
+    "assets/rail-165.glb": "855efc635a94d04b7e2cde77b25875233bf80f6e9c89d9d306b3a1e78d16338b",
+    "assets/sign-post.glb": "3d9e5e426ad8026c20077f1ff86c767702cbe9df569c62fd6221260b617aa4a0"
+  }
+}

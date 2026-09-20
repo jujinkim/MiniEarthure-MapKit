@@ -200,7 +200,7 @@ pub(crate) fn on_plane(v: &[Vertex; 3], p: Vertex) -> Vertex {
         / area;
     [p[0], height as i64, p[2]]
 }
-fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
+pub(crate) fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
     points.sort_by_key(|p| (p[0], p[2], p[1]));
     points.dedup_by_key(|p| (p[0], p[2]));
     if points.len() < 3 {

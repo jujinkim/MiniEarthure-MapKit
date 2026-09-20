@@ -233,38 +233,50 @@ pub(crate) fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
         )
         .to_vec();
     }
-    let mut boxes = proxies(d, p);
+    let mut points = vec![];
+    for b in proxies(d, p) {
+        let min = [b.center[0] - b.size_cm[0] as i64 / 2, b.center[2] - b.size_cm[2] as i64 / 2];
+        let max = [min[0] + b.size_cm[0] as i64, min[1] + b.size_cm[2] as i64];
+        points.extend(rectangle(min, max).map(|p| [p[0], 0, p[1]]));
+    }
     if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
         for c in &asset.convex_collision {
-            let c = c.placed(p);
-            let min: Vertex =
-                std::array::from_fn(|a| c.vertices.iter().map(|v| v[a]).min().unwrap());
-            let max: Vertex =
-                std::array::from_fn(|a| c.vertices.iter().map(|v| v[a]).max().unwrap());
-            boxes.push(CollisionBox {
-                center: std::array::from_fn(|a| min[a] + (max[a] - min[a]) / 2),
-                size_cm: std::array::from_fn(|a| (max[a] - min[a]) as u32),
-            });
+            points.extend(c.placed(p).vertices.into_iter().map(|v| [v[0], 0, v[2]]));
         }
     }
-    let min = std::array::from_fn(|a| {
-        boxes
-            .iter()
-            .map(|b| b.center[a * 2] - i64::from(b.size_cm[a * 2] / 2))
-            .min()
-            .unwrap()
-    });
-    let max = std::array::from_fn(|a| {
-        boxes
-            .iter()
-            .map(|b| {
-                b.center[a * 2] - i64::from(b.size_cm[a * 2] / 2) + i64::from(b.size_cm[a * 2])
-            })
-            .max()
-            .unwrap()
-    });
-    rectangle(min, max).to_vec()
+    crate::roads::hull(points).into_iter().map(xy).collect()
 }
+
+/// A pier may occupy the space below an independently elevated deck. Ground,
+/// tunnel and underpass corridors remain excluded. Use the minimum deck height
+/// over the complete footprint, not the centre, and require a 1 cm separation.
+fn below_deck(d: &MapDocument, p: &Placement, poly: &[Point], r: &Road, work: &mut usize) -> Result<bool> {
+    if !matches!(r.kind, RoadKind::Bridge | RoadKind::Elevated) { return Ok(false); }
+    tick(work, poly.len() * r.points.len().saturating_sub(1))?;
+    let mut top = i64::MIN;
+    for b in proxies(d, p) {
+        top = top.max(b.center[1] - b.size_cm[1] as i64 / 2 + b.size_cm[1] as i64);
+    }
+    if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
+        for c in &asset.convex_collision {
+            for v in c.placed(p).vertices { top = top.max(v[1]); }
+        }
+    }
+    // Every authored segment is considered, including adjoining approaches.
+    // This is conservative where a bent deck folds back over the same parcel.
+    Ok(r.points.windows(2).all(|s| {
+        let dx = (s[1][0] - s[0][0]) as i128;
+        let dz = (s[1][2] - s[0][2]) as i128;
+        let length = dx * dx + dz * dz;
+        if length == 0 { return false; }
+        poly.iter().all(|v| {
+            let dot = ((v[0] - s[0][0]) as i128 * dx + (v[1] - s[0][2]) as i128 * dz).clamp(0, length);
+            let deck = s[0][1] as i128 * length + (s[1][1] - s[0][1]) as i128 * dot;
+            (top as i128 + 1) * length <= deck
+        })
+    }))
+}
+
 fn source_clear(
     d: &MapDocument,
     poly: &[Point],
@@ -935,7 +947,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
             }
         }
         for j in roads.query(area, work)? {
-            if road_overlap(poly, &d.roads[j], 0, work)? {
+            if road_overlap(poly, &d.roads[j], 0, work)? && !below_deck(d, p, poly, &d.roads[j], work)? {
                 return Err(error(
                     "E_GEOMETRY",
                     format!("placement {} intersects road {}", p.id, d.roads[j].id),
