@@ -35,7 +35,7 @@ fn closed_seams_outer_edges_and_negative_origins_match_exhaustive_intersection()
                         .collect::<Vec<_>>()
                 };
                 assert_eq!(plan.geometry_cells, expected(0), "{bounds:?}");
-                assert_eq!(plan.occupancy_cells, expected(20), "{bounds:?}");
+                assert_eq!(plan.occupancy_cells, expected(200), "{bounds:?}");
             }
         }
     }

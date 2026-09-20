@@ -47,7 +47,7 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
     {
         *instances.entry(&asset.id).or_default() += 1;
     }
-    let styles = if p.document.recipe_version >= 6 {
+    let styles = {
         p.document
             .estimate(cell, 500_000)
             .map_or(0, |c| c.triangles * 256)
@@ -57,10 +57,9 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
                 .filter(|r| r.markings.is_some())
                 .map(|r| (r.points.len() - 1) as u64 * 4096)
                 .sum::<u64>()
-    } else {
-        0
     };
-    environment_cost(&p.document) + styles
+    environment_cost(&p.document)
+        + styles
         + instances
             .into_iter()
             .map(|(id, count)| {
@@ -80,45 +79,49 @@ fn asset_cost(p: &Package, a: &mapkit_core::Asset) -> u64 {
 }
 pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
     let mut data = decorate_document(&p.document, &p.files, data)?;
-    if p.document.recipe_version >= 6 {
-        let chunk = data.get("chunk").unwrap().to::<VarDictionary>();
-        let presentation = chunk.get("presentation").unwrap().to::<VarDictionary>();
-        let assets = presentation.get("assets").unwrap().to::<VarDictionary>();
-        let objects = chunk.get("objects").unwrap().to::<Array<VarDictionary>>();
-        let mut bytes = environment_cost(&p.document) + presentation
+
+    let chunk = data.get("chunk").unwrap().to::<VarDictionary>();
+    let presentation = chunk.get("presentation").unwrap().to::<VarDictionary>();
+    let assets = presentation.get("assets").unwrap().to::<VarDictionary>();
+    let objects = chunk.get("objects").unwrap().to::<Array<VarDictionary>>();
+    let mut bytes = environment_cost(&p.document)
+        + presentation
             .get("road_materials")
             .unwrap()
             .to::<PackedStringArray>()
             .len() as u64
             * 256
-            + presentation
-                .get("road_styles")
-                .unwrap()
-                .to::<VarDictionary>()
-                .len() as u64
-                * 4096;
-        for asset in &p.document.assets {
-            if !assets.contains_key(asset.id.as_str()) {
-                continue;
-            }
-            // Additive presentation metadata, excluded from generated serialization/hash.
-            // The consumer can reserve one immutable resource across multiple cells.
-            let mut view = assets.get(asset.id.as_str()).unwrap().to::<VarDictionary>();
-            view.set("content_hash", mapkit_core::sha256(&p.files[&asset.path]).as_str());
-            view.set("memory_bytes", asset_cost(p, asset) as i64);
-            bytes += asset_cost(p, asset);
-            bytes += objects
-                .iter_shared()
-                .filter(|o| o.get("asset_id").unwrap().to::<GString>().to_string() == asset.id)
-                .count() as u64
-                * p.asset_instance_cost(&asset.id).unwrap();
+        + presentation
+            .get("road_styles")
+            .unwrap()
+            .to::<VarDictionary>()
+            .len() as u64
+            * 4096;
+    for asset in &p.document.assets {
+        if !assets.contains_key(asset.id.as_str()) {
+            continue;
         }
-        if let Some(value) = data.get("generated_counts") {
-            let mut counts = value.to::<VarDictionary>();
-            counts.set("presentation_bytes", bytes as i64);
-            data.set("generated_counts", &counts);
-        }
+        // Additive presentation metadata, excluded from generated serialization/hash.
+        // The consumer can reserve one immutable resource across multiple cells.
+        let mut view = assets.get(asset.id.as_str()).unwrap().to::<VarDictionary>();
+        view.set(
+            "content_hash",
+            mapkit_core::sha256(&p.files[&asset.path]).as_str(),
+        );
+        view.set("memory_bytes", asset_cost(p, asset) as i64);
+        bytes += asset_cost(p, asset);
+        bytes += objects
+            .iter_shared()
+            .filter(|o| o.get("asset_id").unwrap().to::<GString>().to_string() == asset.id)
+            .count() as u64
+            * p.asset_instance_cost(&asset.id).unwrap();
     }
+    if let Some(value) = data.get("generated_counts") {
+        let mut counts = value.to::<VarDictionary>();
+        counts.set("presentation_bytes", bytes as i64);
+        data.set("generated_counts", &counts);
+    }
+
     Ok(data)
 }
 pub fn decorate_document(
@@ -235,7 +238,10 @@ pub fn decorate_document(
         vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};
     crate::road_style::decorate(document, &chunk, &mut presentation);
     if let Some(environment) = &document.environment {
-        presentation.set("environment_json", serde_json::to_string(environment).unwrap().as_str());
+        presentation.set(
+            "environment_json",
+            serde_json::to_string(environment).unwrap().as_str(),
+        );
     }
     presentation.set("map_id", document.map_id.as_str());
     chunk.set("presentation", &presentation);
@@ -245,6 +251,8 @@ pub fn decorate_document(
 
 fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
     // Native serialization plus Godot UTF-32 dictionary presentation, per admitted cell.
-    d.environment.as_ref().map_or(0, |e| serde_json::to_string(e).unwrap().len() as u64 * 8 + 4096)
-        + d.map_id.len() as u64 * 8 + 128
+    d.environment.as_ref().map_or(0, |e| {
+        serde_json::to_string(e).unwrap().len() as u64 * 8 + 4096
+    }) + d.map_id.len() as u64 * 8
+        + 128
 }

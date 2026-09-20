@@ -2,7 +2,6 @@ use crate::{error, Bounds, Cell, MapDocument, Result};
 use serde::{Deserialize, Serialize};
 
 // Shared with generation: centre-owned trunks can extend into another cell.
-pub(crate) const TREE_PROXY_SIZE_CM: [u32; 3] = [40, 400, 40];
 
 /// Broad-phase requirements only; no generation, allocation reservation or readiness.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -32,8 +31,7 @@ impl MapDocument {
         // Recipe 7 may use any small custom tree inside the existing 2 m
         // vegetation footprint. Metadata-only indexed queries need this same
         // envelope before loading source regions or knowing individual assets.
-        let halo = if self.recipe_version >= 7 { [200, 200] }
-            else { [TREE_PROXY_SIZE_CM[0] / 2, TREE_PROXY_SIZE_CM[2] / 2] };
+        let halo = { [200, 200] };
         let expanded = Bounds {
             min: std::array::from_fn(|a| query.min[a] - i64::from(halo[a])),
             max: std::array::from_fn(|a| query.max[a] + i64::from(halo[a])),

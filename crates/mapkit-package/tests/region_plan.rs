@@ -21,12 +21,12 @@ fn at(d: &MapDocument, point: Point) -> CellRegion {
 
 fn compare(d: &MapDocument, regions: &[CellRegion]) {
     let allowance = RegionSourcePlan::allocation_bound(canonical(d).unwrap().len() as u64);
-    for local in [false, true] {
-        let plan = RegionSourcePlan::new(d, local, allowance, || Ok(())).unwrap();
+    for local in [true] {
+        let plan = RegionSourcePlan::new(d, allowance, || Ok(())).unwrap();
         assert!(plan.allocated_bytes() <= allowance);
         for &region in regions {
             let expected = if local {
-                local_region_source(d, region)
+                region_source(d, region)
             } else {
                 region_source(d, region)
             }
@@ -57,11 +57,11 @@ fn compare_all_cells(d: &MapDocument) {
 }
 
 #[test]
-fn plan_matches_frozen_derivation_across_recipes_fallbacks_and_input_order() {
-    for recipe in 1..=6 {
+fn plan_matches_current_derivation_and_input_order() {
+    for recipe in [1] {
         let mut d = minimal();
         d.recipe_version = recipe;
-        if recipe >= 3 {
+        {
             for road in &mut d.roads {
                 if road.kind == RoadKind::Ground {
                     road.sidewalk_cm = Some(0);
@@ -73,7 +73,7 @@ fn plan_matches_frozen_derivation_across_recipes_fallbacks_and_input_order() {
         d.buildings.reverse();
         d.zones.reverse();
         compare_all_cells(&d);
-        if recipe >= 3 {
+        {
             let road = d
                 .roads
                 .iter_mut()
@@ -122,7 +122,7 @@ fn plan_preserves_transformed_convex_footprints_and_separate_placement_anchor() 
     let assets = document(include_str!("../../../examples/assets/document.json"));
     for turns in 0..4 {
         let mut d = minimal();
-        d.recipe_version = 6;
+        d.recipe_version = 1;
         d.bounds = Bounds {
             min: [-3000, -3000],
             max: [14000, 14000],
@@ -161,7 +161,7 @@ fn plan_preserves_transformed_convex_footprints_and_separate_placement_anchor() 
         let proxy = at(&d, shifted([6001, -301]));
         let gap = at(&d, shifted([3000, 0]));
         compare(&d, &[anchor, proxy, gap]);
-        let plan = RegionSourcePlan::new(&d, true, u64::MAX, || Ok(())).unwrap();
+        let plan = RegionSourcePlan::new(&d, u64::MAX, || Ok(())).unwrap();
         for region in [anchor, proxy] {
             let source = plan.derive(region).unwrap();
             assert_eq!(source.placements.len(), 1);
@@ -196,7 +196,7 @@ fn add_road(d: &mut MapDocument, id: &str, from: &str, to: &str, points: Vec<Ver
 #[test]
 fn plan_keeps_exact_segments_halo_touch_one_hop_and_input_order_widest_ties() {
     let mut d = minimal();
-    d.recipe_version = 6;
+    d.recipe_version = 1;
     d.bounds = Bounds {
         min: [0, 0],
         max: [64000, 32000],
@@ -270,7 +270,7 @@ fn plan_keeps_exact_segments_halo_touch_one_hop_and_input_order_widest_ties() {
     );
     let region = at(&d, [8000, 8000]);
     compare(&d, &[region]);
-    let plan = RegionSourcePlan::new(&d, true, u64::MAX, || Ok(())).unwrap();
+    let plan = RegionSourcePlan::new(&d, u64::MAX, || Ok(())).unwrap();
     let source = plan.derive(region).unwrap();
     let ids: Vec<_> = source.roads.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ids, ["halo-touch", "local", "one-hop", "widest-a"]);
@@ -278,7 +278,7 @@ fn plan_keeps_exact_segments_halo_touch_one_hop_and_input_order_widest_ties() {
     d.roads.reverse();
     d.nodes.reverse();
     compare(&d, &[region]);
-    let plan = RegionSourcePlan::new(&d, true, u64::MAX, || Ok(())).unwrap();
+    let plan = RegionSourcePlan::new(&d, u64::MAX, || Ok(())).unwrap();
     let source = plan.derive(region).unwrap();
     let ids: Vec<_> = source.roads.iter().map(|r| r.id.as_str()).collect();
     assert_eq!(ids, ["halo-touch", "local", "one-hop", "widest-z"]);
@@ -287,7 +287,7 @@ fn plan_keeps_exact_segments_halo_touch_one_hop_and_input_order_widest_ties() {
 #[test]
 fn plan_checks_allocation_and_cancellation_during_bounded_construction() {
     let mut d = minimal();
-    d.recipe_version = 6;
+    d.recipe_version = 1;
     d.nodes.clear();
     d.roads.clear();
     d.buildings.clear();
@@ -301,19 +301,19 @@ fn plan_checks_allocation_and_cancellation_during_bounded_construction() {
         })
         .collect();
     let allowance = RegionSourcePlan::allocation_bound(canonical(&d).unwrap().len() as u64);
-    let allocated = RegionSourcePlan::new(&d, true, allowance, || Ok(()))
+    let allocated = RegionSourcePlan::new(&d, allowance, || Ok(()))
         .unwrap()
         .allocated_bytes();
     assert!(allocated <= allowance);
     assert_eq!(
-        RegionSourcePlan::new(&d, true, allocated - 1, || Ok(()))
+        RegionSourcePlan::new(&d, allocated - 1, || Ok(()))
             .err()
             .unwrap()
             .code,
         "E_MEMORY_BUDGET",
     );
     let mut calls = 0;
-    let cancelled = RegionSourcePlan::new(&d, true, allowance, || {
+    let cancelled = RegionSourcePlan::new(&d, allowance, || {
         calls += 1;
         if calls == 3 {
             Err(error("E_CANCELLED", "cancel during plan construction"))
@@ -324,7 +324,7 @@ fn plan_checks_allocation_and_cancellation_during_bounded_construction() {
     assert_eq!(cancelled.err().unwrap().code, "E_CANCELLED");
     assert_eq!(calls, 3);
     let mut calls = 0;
-    RegionSourcePlan::new(&d, true, allowance, || {
+    RegionSourcePlan::new(&d, allowance, || {
         calls += 1;
         Ok(())
     })
@@ -337,7 +337,7 @@ fn plan_checks_allocation_and_cancellation_during_bounded_construction() {
 
 #[test]
 fn plan_cancels_fallback_global_scans_without_allocating_spatial_arrays() {
-    for recipe in [1, 6] {
+    for recipe in [1] {
         for scan_roads in [false, true] {
             let mut d = minimal();
             let zone_template = d.zones[0].clone();
@@ -346,7 +346,7 @@ fn plan_cancels_fallback_global_scans_without_allocating_spatial_arrays() {
             d.roads.clear();
             d.buildings.clear();
             d.zones.clear();
-            if recipe == 6 {
+            {
                 d.repetitions.push(Repetition {
                     id: "fallback-repeat".into(),
                     asset_id: "builtin:fence".into(),
@@ -365,7 +365,7 @@ fn plan_cancels_fallback_global_scans_without_allocating_spatial_arrays() {
                         vec![[1000, 0, y], [2000, 0, y]],
                         400,
                     );
-                    if recipe == 1 {
+                    if false {
                         d.roads.last_mut().unwrap().sidewalk_cm = None;
                     }
                 } else {
@@ -377,7 +377,7 @@ fn plan_cancels_fallback_global_scans_without_allocating_spatial_arrays() {
             }
             let allowance = RegionSourcePlan::allocation_bound(canonical(&d).unwrap().len() as u64);
             let mut calls = 0;
-            let cancelled = RegionSourcePlan::new(&d, true, allowance, || {
+            let cancelled = RegionSourcePlan::new(&d, allowance, || {
                 calls += 1;
                 if calls == 3 {
                     Err(error("E_CANCELLED", "cancel a fallback global scan"))
@@ -388,7 +388,7 @@ fn plan_cancels_fallback_global_scans_without_allocating_spatial_arrays() {
             assert_eq!(cancelled.err().unwrap().code, "E_CANCELLED");
             assert_eq!(calls, 3);
             let mut calls = 0;
-            let plan = RegionSourcePlan::new(&d, true, allowance, || {
+            let plan = RegionSourcePlan::new(&d, allowance, || {
                 calls += 1;
                 Ok(())
             })

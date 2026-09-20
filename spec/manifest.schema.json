@@ -67,8 +67,8 @@
     "generated_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 6.0,
-      "minimum": 6.0
+      "maximum": 1.0,
+      "minimum": 1.0
     },
     "map_id": {
       "type": "string",
@@ -81,7 +81,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 8.0,
+      "maximum": 1.0,
       "minimum": 1.0
     },
     "revision": {

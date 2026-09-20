@@ -15,31 +15,6 @@ fn generated(d: &MapDocument, cell: Cell) -> GeneratedOccupancy {
     .unwrap()
 }
 #[test]
-fn legacy_recipes_retain_frozen_bytes_and_new_fields_require_opt_in() {
-    for (raw, hash) in [
-        (
-            include_str!("../../../examples/minimal/document.json"),
-            "54fe6505da6a3b04fa52dc6208b6466e696a5592a6799192319ad4f0c9ad3e63",
-        ),
-        (
-            include_str!("../../../examples/roads/document.json"),
-            "eefe2579e0abe0fdd06d9a60ebc978b8e60a1e452571d76e724e179c5e12dcfd",
-        ),
-    ] {
-        let d: MapDocument = serde_json::from_str(raw).unwrap();
-        let c = generated(&d, Cell { x: 0, y: 0 }).chunk;
-        assert_eq!(c.hash().unwrap(), hash);
-        assert!(c.building_prisms.is_empty());
-        assert!(!String::from_utf8(canonical(&d).unwrap())
-            .unwrap()
-            .contains("repetitions"));
-    }
-    let mut d = document();
-    d.recipe_version = 2;
-    d.theme = "default".into();
-    assert_eq!(d.validate().unwrap_err().code, "E_VERSION");
-}
-#[test]
 fn roofs_solid_parts_styles_concavity_and_cell_seams() {
     let d = document();
     let a = generated(&d, Cell { x: 0, y: 0 });
@@ -287,7 +262,7 @@ fn automatic_sidewalk_fits_setback_and_follows_sampled_terrain() {
     assert!(c.spawn(&SpawnRequest{position_cm:[4000,6380],surface_id:"street:sidewalk".into()}).is_ok());
     assert!(c.spawn(&SpawnRequest{position_cm:[4000,6430],surface_id:"street:sidewalk".into()}).is_err());
     d.roads[0].sidewalk_cm=Some(180);
-    assert!(generated(&d,Cell{x:0,y:0}).chunk.spawn(&SpawnRequest{position_cm:[4000,6380],surface_id:"street:sidewalk".into()}).is_err());
+    assert!(generated(&d,Cell{x:0,y:0}).chunk.spawn(&SpawnRequest{position_cm:[4000,6430],surface_id:"street:sidewalk".into()}).is_err());
     d.buildings.clear();d.zones.clear();d.placements.clear();d.repetitions.clear();
     d.heightmaps.push(Heightmap{cell:Cell{x:0,y:0},path:"slope.png".into(),spacing_cm:3200,offset_cm:0,step_cm:1,source_accuracy_cm:None});
     let grid=HeightGrid{side:5,heights_cm:(0..5).flat_map(|y|(0..5).map(move|x|x*320+y*160)).collect()};

@@ -181,7 +181,7 @@ fn rotated_proxies_concave_buildings_and_negative_origin_are_bounded() {
         d.placements.push(Placement {
             id: format!("proxy-{turn}"),
             asset_id: "asset".into(),
-            position: [12800 + turn as i64 * 100, 0, 12800],
+            position: [12800 + turn as i64 * 1000, 0, 10000],
             quarter_turns: turn,
         });
     }

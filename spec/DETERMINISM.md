@@ -1,5 +1,7 @@
 # Determinism and boundary audit
 
+> Current contract: [CURRENT_V1](CURRENT_V1.md). The dated version/compatibility records below are historical and do not authorize old loaders or generation branches.
+
 K08, 2026-09-09. The checked scope adds executable regression evidence without
 changing recipes 1–4, generated v6, source bytes, cache keys or production code.
 Native Windows/Linux/Android parity and reference-map driving remain acceptance

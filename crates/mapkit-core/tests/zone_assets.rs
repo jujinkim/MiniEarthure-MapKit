@@ -2,7 +2,7 @@ use mapkit_core::*;
 
 fn document() -> MapDocument {
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
-    d.recipe_version = 7;
+    d.recipe_version = 1;
     d.bounds = Bounds { min: [0,0], max: [3200,1600] };
     d.cell_size_cm = 1600;
     d.nodes.clear(); d.roads.clear(); d.buildings.clear(); d.placements.clear();
@@ -39,7 +39,7 @@ fn custom_tree_requires_opt_in_real_asset_and_enclosing_footprint() {
     }
     let mut bad = d.clone(); bad.assets[0].collision.clear();
     assert_eq!(bad.validate().unwrap_err().code, "E_ASSET");
-    let mut old = d; old.recipe_version = 6; old.zones[0].tree = None;
+    let mut old = d; old.zones[0].tree = None;
     assert!(!String::from_utf8(canonical(&old).unwrap()).unwrap().contains("\"tree\":"));
     old.validate().unwrap();
 }
@@ -91,9 +91,9 @@ fn region_source_keeps_tree_assets_and_cost_bounds_all_output() {
         assert!(expected.solids.len() as u64 <= cost.occupied_solids);
         assert!(expected.chunk.triangles.len() as u64 <= cost.triangles);
         assert!(expected.chunk.objects.len() as u64 <= cost.objects);
-        for local in [false,true] {
+        for local in [true] {
             let region = CellRegion { min:cell,end:Cell { x:cell.x+1,y:cell.y+1 } };
-            let source = if local { local_region_source(&d,region) } else { region_source(&d,region) }.unwrap();
+            let source = if local { region_source(&d,region) } else { region_source(&d,region) }.unwrap();
             assert_eq!(source.assets,d.assets);
             let actual = generate_cell(&source,cell);
             assert_eq!(actual.chunk,expected.chunk);

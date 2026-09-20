@@ -25,7 +25,7 @@ func run() -> void:
     if not opened.ok:
         quit(1)
         return
-    check(JSON.parse_string(bridge.cell_window(0,0)).data.recipe_version == 3, "opened recipe metadata")
+    check(JSON.parse_string(bridge.cell_window(0,0)).data.recipe_version == 1, "opened recipe metadata")
     world = Node3D.new()
     root.add_child(world)
     var identities := {}

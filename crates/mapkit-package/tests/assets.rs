@@ -19,7 +19,7 @@ fn independent_assets_roundtrip_materials_costs_and_exact_cached_geometry() {
     let cost = estimate_generation(&package.document, chunk.cell, 500_000).unwrap();
     let key = archive_key(&package.inspection.world_content_hash, chunk.cell);
     let cached = encode_archive(&chunk, &key, archive_limit(&cost)).unwrap();
-    assert_eq!(&cached[..8], b"MKCELL03");
+    assert_eq!(&cached[..8], b"MKCELL01");
     assert_eq!(
         decode_archive(&cached, &key, chunk.cell, &cost).unwrap(),
         chunk

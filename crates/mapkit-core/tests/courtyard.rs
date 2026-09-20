@@ -95,7 +95,7 @@ fn ring_rotation_winding_hole_order_and_collinearity_are_deterministic() {
 }
 #[test]
 fn invalid_topology_version_roof_and_limits_fail_closed() {
-    for version in 1..5 {
+    for version in [0, 2, 9] {
         let mut d = doc();
         d.recipe_version = version;
         assert_eq!(d.validate().unwrap_err().code, "E_VERSION");

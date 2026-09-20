@@ -197,29 +197,11 @@ pub(super) fn polygon_triangles(poly: &[Point]) -> Result<Vec<[usize; 3]>> {
     out.push([ring[0], ring[1], ring[2]]);
     Ok(out)
 }
-pub(super) fn road_contains(p: Point, r: &Road, extra: i64) -> bool {
-    r.points.windows(2).enumerate().any(|(i, s)| {
-        let a = [s[0][0], s[0][2]];
-        let b = [s[1][0], s[1][2]];
-        let dx = (b[0] - a[0]) as i128;
-        let dy = (b[1] - a[1]) as i128;
-        let len = dx * dx + dy * dy;
-        let dot = ((p[0] - a[0]) as i128 * dx + (p[1] - a[1]) as i128 * dy).clamp(0, len);
-        let q = [
-            a[0] + (dx * dot / len) as i64,
-            a[1] + (dy * dot / len) as i64,
-        ];
-        let d = (p[0] - q[0]) as i128 * (p[0] - q[0]) as i128
-            + (p[1] - q[1]) as i128 * (p[1] - q[1]) as i128;
-        let radius = r.widths_cm[i] as i64 / 2 + extra;
-        d <= radius as i128 * radius as i128
-    })
-}
 pub fn generate(input: GenerationInput<'_>) -> Result<GeneratedChunk> {
     generate_internal(input, None).map(|result| result.chunk)
 }
 
-/// Optional occupied-volume sidecar; does not change generated v6 bytes or hashes.
+/// Optional occupied-volume sidecar; does not change generated geometry or hashes.
 /// See `GeneratedOccupancy` for cell ownership and completeness requirements.
 pub fn generate_with_occupancy(
     input: GenerationInput<'_>,
@@ -287,11 +269,7 @@ fn generate_validated(
             objects: vec![],
         },
         bounds: bounds.clone(),
-        max: if d.recipe_version >= 2 {
-            cost.triangles as usize
-        } else {
-            input.max_triangles.min(2_000_000)
-        },
+        max: { cost.triangles as usize },
         occupancy,
     };
     let descriptor = d.heightmaps.iter().find(|h| h.cell == input.cell);
@@ -314,212 +292,11 @@ fn generate_validated(
             ));
         }
     }
-    let height = |x: usize, y: usize| {
-        input
-            .heightgrid
-            .map_or(d.terrain_base_cm, |g| g.heights_cm[y * side + x])
-    };
-    if d.recipe_version >= 2 {
-        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
-    } else {
-        for y in 0..side - 1 {
-            for x in 0..side - 1 {
-                let px = bounds.min[0] + x as i64 * spacing;
-                let py = bounds.min[1] + y as i64 * spacing;
-                b.quad(
-                    [
-                        [px, height(x, y), py],
-                        [px + spacing, height(x + 1, y), py],
-                        [px + spacing, height(x + 1, y + 1), py + spacing],
-                        [px, height(x, y + 1), py + spacing],
-                    ],
-                    Surface::Grass,
-                    "terrain",
-                    true,
-                )?;
-            }
-        }
-        for r in &d.roads {
-            for (i, s) in r.points.windows(2).enumerate() {
-                let dx = (s[1][0] - s[0][0]) as f64;
-                let dy = (s[1][2] - s[0][2]) as f64;
-                let len = libm::sqrt(dx * dx + dy * dy);
-                let half = r.widths_cm[i] as f64 / 2.0;
-                let nx = libm::round(-dy / len * half) as i64;
-                let ny = libm::round(dx / len * half) as i64;
-                let v = [
-                    [s[0][0] + nx, s[0][1], s[0][2] + ny],
-                    [s[1][0] + nx, s[1][1], s[1][2] + ny],
-                    [s[1][0] - nx, s[1][1], s[1][2] - ny],
-                    [s[0][0] - nx, s[0][1], s[0][2] - ny],
-                ];
-                b.quad(v, r.surfaces[i], &r.id, true)?;
-                if matches!(r.kind, RoadKind::Tunnel | RoadKind::Underpass) {
-                    let h = r.clearance_cm.unwrap() as i64;
-                    let top = v.map(|p| [p[0], p[1] + h, p[2]]);
-                    for (a, c) in [(0, 1), (2, 3)] {
-                        b.quad(
-                            [v[a], v[c], top[c], top[a]],
-                            Surface::Concrete,
-                            &r.id,
-                            false,
-                        )?;
-                    }
-                    if r.kind == RoadKind::Tunnel {
-                        b.quad(top, Surface::Concrete, &r.id, false)?;
-                    }
-                }
-            }
-        }
-    } // Frozen recipe-v1 terrain/road strategy.
-    if d.recipe_version >= 3 {
-        crate::placement::generate(d, input.cell, &mut b)?;
-        return Ok(GeneratedOccupancy {
-            chunk: b.chunk,
-            solids: b.occupancy.map_or_else(Vec::new, |v| v.solids),
-        });
-    }
-    for building in &d.buildings {
-        let top = building.base_cm + building.height_cm as i64;
-        for t in polygon_triangles(&building.footprint)? {
-            if b.occupancy.is_some() {
-                b.solid(
-                    &building.id,
-                    SolidShape::TriangularPrism {
-                        footprint: t.map(|i| building.footprint[i]),
-                        bottom_cm: building.base_cm,
-                        top_cm: top,
-                    },
-                )?;
-            }
-            b.triangle(
-                t.map(|i| [building.footprint[i][0], top, building.footprint[i][1]]),
-                Surface::Concrete,
-                &building.id,
-                false,
-            )?;
-        }
-        for i in 0..building.footprint.len() {
-            let (a, c) = (
-                building.footprint[i],
-                building.footprint[(i + 1) % building.footprint.len()],
-            );
-            b.quad(
-                [
-                    [a[0], building.base_cm, a[1]],
-                    [c[0], building.base_cm, c[1]],
-                    [c[0], top, c[1]],
-                    [a[0], top, a[1]],
-                ],
-                Surface::Concrete,
-                &building.id,
-                false,
-            )?;
-        }
-    }
-    // Global lattice and per-object seed make placement independent of spawn/chunk order.
-    for zone in &d.zones {
-        let s = zone.spacing_cm as i64;
-        let mut candidates = 0usize;
-        for y in bounds.min[1].div_euclid(s) - 1..=bounds.max[1].div_euclid(s) + 1 {
-            for x in bounds.min[0].div_euclid(s) - 1..=bounds.max[0].div_euclid(s) + 1 {
-                candidates += 1;
-                if candidates > 300_000 {
-                    return Err(error("E_BUDGET", "zone candidate budget exceeded"));
-                }
-                let seed = sha256(&canonical(&(d.seed, &zone.id, "vegetation-v1", x, y))?);
-                let random = u64::from_str_radix(&seed[..16], 16).unwrap();
-                if random % 1000 >= zone.density_per_mille as u64 {
-                    continue;
-                }
-                let jitter = if zone.kind == ZoneKind::Forest {
-                    s / 3
-                } else {
-                    0
-                };
-                let jx = if jitter > 0 {
-                    ((random >> 10) % (jitter as u64 * 2 + 1)) as i64 - jitter
-                } else {
-                    0
-                };
-                let jy = if jitter > 0 {
-                    ((random >> 32) % (jitter as u64 * 2 + 1)) as i64 - jitter
-                } else {
-                    0
-                };
-                let p = [x * s + jx, y * s + jy];
-                if d.cell_at(p) != Some(input.cell)
-                    || !point_in_polygon(p, &zone.polygon)
-                    || zone.exclusions.iter().any(|v| point_in_polygon(p, v))
-                    || d.buildings
-                        .iter()
-                        .any(|v| point_in_polygon(p, &v.footprint))
-                    || d.roads.iter().any(|r| road_contains(p, r, 100))
-                {
-                    continue;
-                }
-                let id = format!("{}:{x}:{y}", zone.id);
-                let request = SpawnRequest {
-                    position_cm: p,
-                    surface_id: "terrain".into(),
-                };
-                let position = if d.recipe_version == 1 {
-                    b.chunk.recipe_v1_spawn(&request)?
-                } else {
-                    // A cut is empty space, never an invented tree support.
-                    let Ok(position) = b.chunk.spawn(&request) else {
-                        continue;
-                    };
-                    position
-                };
-                b.box_shape(
-                    [
-                        position[0],
-                        position[1] + i64::from(crate::query::TREE_PROXY_SIZE_CM[1] / 2),
-                        position[2],
-                    ],
-                    crate::query::TREE_PROXY_SIZE_CM,
-                    &id,
-                )?;
-                b.chunk.objects.push(GeneratedObject {
-                    id,
-                    asset_id: "builtin:tree".into(),
-                    position,
-                    quarter_turns: (random % 4) as u8,
-                });
-            }
-        }
-    }
-    for p in &d.placements {
-        let asset = d.assets.iter().find(|a| a.id == p.asset_id).unwrap();
-        for proxy in &asset.collision {
-            let mut c = proxy.center;
-            let mut size = proxy.size_cm;
-            for _ in 0..p.quarter_turns {
-                c = [-c[2], c[1], c[0]];
-                size.swap(0, 2);
-            }
-            b.box_shape(
-                [
-                    p.position[0] + c[0],
-                    p.position[1] + c[1],
-                    p.position[2] + c[2],
-                ],
-                size,
-                &p.id,
-            )?;
-        }
-        if d.cell_at([p.position[0], p.position[2]]) == Some(input.cell) {
-            b.chunk.objects.push(GeneratedObject {
-                id: p.id.clone(),
-                asset_id: p.asset_id.clone(),
-                position: p.position,
-                quarter_turns: p.quarter_turns,
-            });
-        }
-    }
-    Ok(GeneratedOccupancy {
+    crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
+
+    crate::placement::generate(d, input.cell, &mut b)?;
+    return Ok(GeneratedOccupancy {
         chunk: b.chunk,
-        solids: b.occupancy.map_or_else(Vec::new, |value| value.solids),
-    })
+        solids: b.occupancy.map_or_else(Vec::new, |v| v.solids),
+    });
 }

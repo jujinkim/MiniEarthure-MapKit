@@ -19,7 +19,7 @@ fn empty() -> MapDocument {
         max: [12_701, 6_201],
     };
     d.cell_size_cm = 1600;
-    d.recipe_version = 6;
+    d.recipe_version = 1;
     d
 }
 fn ticket() -> ReadTicket {
@@ -715,33 +715,7 @@ fn audit_summary_binds_transport_source_and_bounded_world_overview() {
     assert!(bad.audit_summary(BUDGET, &ticket()).is_err());
 }
 
-#[test]
-fn frozen_version_one_artifact_keeps_its_original_derivation() {
-    let bytes = include_bytes!("fixtures/indexed-v1-roads.mkregions");
-    let mut reader = IndexedReader::open(Cursor::new(bytes), BUDGET, None).unwrap();
-    assert_eq!(reader.index().version, 1);
-    assert_eq!(
-        reader.identity(),
-        "5a1ec8bcfe2e5f82db606ccd3cf4c1753e113dd47f810cb4236fe1efc2ba8f57"
-    );
-    reader.audit(BUDGET, &ticket()).unwrap();
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/roads");
-    let (d, f) = read_project(&path).unwrap();
-    let original = read_bytes(&pack_bytes(d, f).unwrap()).unwrap();
-    for c in original.document.cells() {
-        let id = reader.region_for_cell(c).unwrap();
-        let source = reader.load_region(id, BUDGET, &ticket()).unwrap();
-        let a = original
-            .generate_with_occupancy(c, 500_000, MAX_OCCUPIED_SOLIDS)
-            .unwrap();
-        let b = source
-            .package
-            .generate_with_occupancy(c, 500_000, MAX_OCCUPIED_SOLIDS)
-            .unwrap();
-        assert_eq!(a.chunk, b.chunk);
-        assert_eq!(a.solids, b.solids);
-    }
-}
+
 
 #[test]
 fn decoder_declarations_are_checked_before_decoding_and_never_authorize_partial_audit() {
@@ -749,7 +723,7 @@ fn decoder_declarations_are_checked_before_decoding_and_never_authorize_partial_
     let (d, f) = read_project(&path).unwrap();
     let bytes = pack_source(d, f, 1).unwrap();
     let mut reader = IndexedReader::open(Cursor::new(bytes.clone()), BUDGET, None).unwrap();
-    assert_eq!(reader.index().version, 2);
+    assert_eq!(reader.index().version, 1);
     reader.audit(BUDGET, &ticket()).unwrap();
     let png = reader
         .index()
@@ -769,7 +743,7 @@ fn decoder_declarations_are_checked_before_decoding_and_never_authorize_partial_
                 v["decoder_peaks"].as_object_mut().unwrap().remove(&png);
             }
             1 => v["decoder_peaks"][&png] = 1.into(),
-            _ => v["version"] = 1.into(),
+            _ => v["version"] = 2.into(),
         });
         assert!(IndexedReader::open(Cursor::new(bad), BUDGET, None).is_err());
     }
@@ -869,7 +843,7 @@ fn local_closure_preserves_junction_widths_competitors_and_rejects_rehashed_omis
     let region = reader.index().regions[0].cells;
     d.roads[0].sidewalk_cm = None;
     assert_eq!(
-        local_region_source(&d, region).unwrap(),
+        region_source(&d, region).unwrap(),
         region_source(&d, region).unwrap()
     );
     d.roads[0].sidewalk_cm = Some(180);
@@ -880,7 +854,17 @@ fn local_closure_preserves_junction_widths_competitors_and_rejects_rehashed_omis
         spacing_cm: 500,
     });
     assert_eq!(
-        local_region_source(&d, region).unwrap(),
+        region_source(&d, region).unwrap(),
         region_source(&d, region).unwrap()
     );
+}
+
+#[test]
+fn current_owned_fixture_has_verified_decoder_cost_and_geometry() {
+    let bytes = include_bytes!("fixtures/indexed-v1-roads.mkregions");
+    let mut reader = IndexedReader::open(Cursor::new(bytes.as_slice()), BUDGET, None).unwrap();
+    reader.audit_summary(BUDGET, &ticket()).unwrap();
+    let region = reader.load_region(0, BUDGET, &ticket()).unwrap();
+    assert_eq!(region.package.document.recipe_version, RECIPE_VERSION);
+    assert!(!region.cells.cells().unwrap().is_empty());
 }

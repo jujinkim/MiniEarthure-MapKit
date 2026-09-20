@@ -49,12 +49,7 @@ impl CellRegion {
 /// their full placement/building context instead of silently changing generation.
 /// This conservative fallback is intentional and is reported in source byte counts.
 pub fn region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument> {
-    derive_source(d, region, false, None)
-}
-
-/// Version-2 closure. Version-1 derivation remains byte-for-byte reproducible.
-pub fn local_region_source(d: &MapDocument, region: CellRegion) -> Result<MapDocument> {
-    derive_source(d, region, true, None)
+    derive_source(d, region, None)
 }
 
 /// Bounded, immutable selection scratch for repeated regional derivation.
@@ -64,7 +59,6 @@ pub fn local_region_source(d: &MapDocument, region: CellRegion) -> Result<MapDoc
 /// or retained beyond the input borrow, and no caller-supplied bounds are trusted.
 pub struct RegionSourcePlan<'a> {
     document: &'a MapDocument,
-    local: bool,
     placements: Vec<Bounds>,
     roads: Vec<Bounds>,
     margin: i64,
@@ -87,7 +81,6 @@ impl<'a> RegionSourcePlan<'a> {
 
     pub fn new(
         document: &'a MapDocument,
-        local: bool,
         memory_limit: u64,
         mut check: impl FnMut() -> Result<()>,
     ) -> Result<Self> {
@@ -102,7 +95,7 @@ impl<'a> RegionSourcePlan<'a> {
         if bytes > memory_limit {
             return Err(error("E_MEMORY_BUDGET", "regional plan exceeds allowance"));
         }
-        let mut prune = document.recipe_version >= 3 && document.repetitions.is_empty();
+        let mut prune = document.repetitions.is_empty();
         let mut widest = None;
         let mut maximum_width = 0;
         for (i, road) in document.roads.iter().enumerate() {
@@ -135,7 +128,7 @@ impl<'a> RegionSourcePlan<'a> {
                 )));
             }
         }
-        let use_local = local && prune && document.recipe_version >= 6;
+        let use_local = prune;
         let mut roads = Vec::with_capacity(if use_local { document.roads.len() } else { 0 });
         if use_local {
             for (i, road) in document.roads.iter().enumerate() {
@@ -147,7 +140,6 @@ impl<'a> RegionSourcePlan<'a> {
         }
         let plan = Self {
             document,
-            local,
             placements,
             roads,
             margin: maximum_spacing.max(501) + 1000,
@@ -170,7 +162,7 @@ impl<'a> RegionSourcePlan<'a> {
     }
 
     pub fn derive(&self, region: CellRegion) -> Result<MapDocument> {
-        derive_source(self.document, region, self.local, Some(self))
+        derive_source(self.document, region, Some(self))
     }
 }
 
@@ -195,8 +187,11 @@ fn bounds_hit(candidate: &Bounds, bounds: &Bounds) -> bool {
 fn competition_margin(d: &MapDocument) -> i64 {
     d.zones
         .iter()
-        .map(|z| i64::from(z.spacing_cm).max(
-            z.tree.as_ref().map_or(0, |t| i64::from(t.radius_cm) * 2 + i64::from(t.clearance_cm) + 1)))
+        .map(|z| {
+            i64::from(z.spacing_cm).max(z.tree.as_ref().map_or(0, |t| {
+                i64::from(t.radius_cm) * 2 + i64::from(t.clearance_cm) + 1
+            }))
+        })
         .max()
         .unwrap_or(0)
         .max(501)
@@ -204,8 +199,7 @@ fn competition_margin(d: &MapDocument) -> i64 {
 }
 
 fn can_prune(d: &MapDocument) -> bool {
-    d.recipe_version >= 3
-        && d.repetitions.is_empty()
+    d.repetitions.is_empty()
         && d.roads
             .iter()
             .all(|r| r.kind != RoadKind::Ground || r.sidewalk_cm.is_some())
@@ -222,7 +216,11 @@ fn widest_road(d: &MapDocument) -> Option<usize> {
 /// Clone metadata without allocating a transient copy of world geometry.
 pub fn source_metadata(d: &MapDocument) -> MapDocument {
     MapDocument {
-        environment: d.environment.as_ref().map(|value| { let mut header=value.clone(); header.lights.clear(); header }),
+        environment: d.environment.as_ref().map(|value| {
+            let mut header = value.clone();
+            header.lights.clear();
+            header
+        }),
         indexed_topology: d.indexed_topology,
         map_id: d.map_id.clone(),
         revision: d.revision,
@@ -249,7 +247,6 @@ pub fn source_metadata(d: &MapDocument) -> MapDocument {
 fn derive_source(
     d: &MapDocument,
     region: CellRegion,
-    local: bool,
     plan: Option<&RegionSourcePlan<'_>>,
 ) -> Result<MapDocument> {
     region.validate(d)?;
@@ -314,7 +311,7 @@ fn derive_source(
         .cloned()
         .collect();
     out.repetitions = d.repetitions.clone();
-    if local && prune && d.recipe_version >= 6 {
+    if prune {
         let road_margin = plan.map_or_else(
             || crate::roads::influence_margin(d) + 1000,
             |p| p.road_margin,
@@ -382,7 +379,11 @@ fn derive_source(
         .iter()
         .map(|p| p.asset_id.clone())
         .chain(out.repetitions.iter().map(|p| p.asset_id.clone()))
-        .chain(out.zones.iter().filter_map(|z| z.tree.as_ref().map(|t| t.asset_id.clone())))
+        .chain(
+            out.zones
+                .iter()
+                .filter_map(|z| z.tree.as_ref().map(|t| t.asset_id.clone())),
+        )
         .collect();
     loop {
         let before = needed.len();
@@ -404,7 +405,9 @@ fn derive_source(
         .cloned()
         .collect();
     if let Some(environment) = &mut out.environment {
-        environment.lights.retain(|light| out.assets.iter().any(|a| a.id == light.asset_id));
+        environment
+            .lights
+            .retain(|light| out.assets.iter().any(|a| a.id == light.asset_id));
     }
     out.normalize();
     Ok(out)

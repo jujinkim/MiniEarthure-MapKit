@@ -3,7 +3,7 @@ import json
 
 def fixture(root):
     d=json.loads((root/'examples/minimal/document.json').read_text())
-    d.update(recipe_version=6,bounds={'min':[0,0],'max':[3200,3200]},cell_size_cm=1600,
+    d.update(recipe_version=1,bounds={'min':[0,0],'max':[3200,3200]},cell_size_cm=1600,
              buildings=[],zones=[],placements=[],assets=[],heightmaps=[])
     d['nodes']=[dict(id=name,position=p,level=0) for name,p in [('a',[0,0,800]),('b',[3200,0,800]),('c',[0,-1,1400]),('d',[3200,-1,1400])]]
     marks=dict(lanes=2,center_line=True,edge_lines=True,crosswalk_start=True,crosswalk_end=True)

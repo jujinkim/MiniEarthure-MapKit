@@ -142,9 +142,9 @@ fn anchors_are_owned_once_while_clipped_proxies_keep_the_original_id() {
         }],
     });
     for (id, position) in [
-        ("origin", [-600, 0, -800]),
+        ("origin", [-580, 0, -780]),
         ("corner", [-200, 0, -400]),
-        ("maximum", [201, 0, 1]),
+        ("maximum", [181, 0, -19]),
     ] {
         d.placements.push(Placement {
             id: id.into(),
@@ -188,7 +188,7 @@ fn anchors_are_owned_once_while_clipped_proxies_keep_the_original_id() {
         }
     }
     assert_eq!(owners.len(), 3);
-    assert_eq!(owners["maximum"], Cell { x: 2, y: 2 });
+    assert_eq!(owners["maximum"], Cell { x: 1, y: 1 });
     assert_eq!(references.len(), 4);
     d.placements.reverse();
     for cell in d.cells().into_iter().rev() {

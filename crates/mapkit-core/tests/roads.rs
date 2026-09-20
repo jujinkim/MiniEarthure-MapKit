@@ -32,7 +32,7 @@ fn surface_count(c: &GeneratedChunk, p: Point, height: i64) -> usize {
             let one = GeneratedChunk {
                 asset_convexes: vec![],
                 building_prisms: vec![],
-                format_version: 6,
+                format_version: 1,
                 cell: c.cell,
                 triangles: vec![(*t).clone()],
                 objects: vec![],
@@ -43,7 +43,7 @@ fn surface_count(c: &GeneratedChunk, p: Point, height: i64) -> usize {
 }
 #[test]
 fn explicit_graph_segment_material_width_and_layered_profiles() {
-    for recipe in [2, 9] {
+    for recipe in [1] {
         let d = document_recipe(recipe);
         d.validate().unwrap();
         assert_eq!(
@@ -74,7 +74,7 @@ fn explicit_graph_segment_material_width_and_layered_profiles() {
 }
 #[test]
 fn terrain_conformance_has_one_surface_and_keeps_crossfall() {
-    for recipe in [2, 9] {
+    for recipe in [1] {
         let mut d = document_recipe(recipe);
         d.bounds.max = [5000, 5000];
         d.roads.retain(|r| r.id == "ground-west");
@@ -113,7 +113,7 @@ fn terrain_conformance_has_one_surface_and_keeps_crossfall() {
 }
 #[test]
 fn open_cut_tunnel_portals_ceiling_and_bend_have_continuous_floors() {
-    for recipe in [2, 9] {
+    for recipe in [1] {
         let d = document_recipe(recipe);
         for x in [0, 1] {
             for y in [0, 1] {
@@ -159,7 +159,7 @@ fn open_cut_tunnel_portals_ceiling_and_bend_have_continuous_floors() {
 }
 #[test]
 fn order_seams_budget_and_archive_are_stable() {
-    for recipe in [2, 9] {
+    for recipe in [1] {
         let mut d = document_recipe(recipe);
         let a = chunk(&d, Cell { x: 0, y: 1 }, None);
         let c = chunk(&d, Cell { x: 1, y: 1 }, None);
@@ -201,7 +201,7 @@ fn order_seams_budget_and_archive_are_stable() {
 
 #[test]
 fn explicit_ground_portal_connects_and_rejects_an_incompatible_apron() {
-    for recipe in [2, 9] {
+    for recipe in [1] {
         let mut d = document_recipe(recipe);
         d.nodes.push(RoadNode {
             id: "approach-end".into(),
@@ -246,7 +246,7 @@ fn explicit_ground_portal_connects_and_rejects_an_incompatible_apron() {
 }
 #[test]
 fn junction_degree_and_negative_partial_bounds_fail_closed() {
-    for recipe in [2, 9] {
+    for recipe in [1] {
         let mut d = document_recipe(recipe);
         let r = d.roads.iter().find(|r| r.id == "branch").unwrap().clone();
         for i in 0..33 {
@@ -272,7 +272,7 @@ fn junction_degree_and_negative_partial_bounds_fail_closed() {
         let cost = estimate_generation(&d, c.cell, 200_000).unwrap();
         assert_eq!(
             cost.generation_scratch_bytes,
-            (if recipe >= 3 { 48 } else { 16 }) * 1024 * 1024
+            48 * 1024 * 1024
         );
         assert!(c.triangles.len() as u64 <= cost.triangles);
         for t in &c.triangles {
@@ -286,7 +286,7 @@ fn junction_degree_and_negative_partial_bounds_fail_closed() {
 #[test]
 fn curved_ground_subdivision_covers_cell_without_gaps_or_overlaps() {
     let mut d = document();
-    d.recipe_version = 9;
+    d.recipe_version = 1;
     d.roads.retain(|r| r.id == "ground-west");
     d.nodes
         .retain(|n| ["ground-west-from", "junction"].contains(&n.id.as_str()));
@@ -319,7 +319,7 @@ fn curved_ground_subdivision_covers_cell_without_gaps_or_overlaps() {
 
 #[test]
 fn recipe_nine_curved_cells_share_all_three_dimensional_edges() {
-    let mut d = document_recipe(9);
+    let mut d = document_recipe(1);
     d.bounds.max = [10000, 5000];
     d.roads.retain(|r| r.id == "ground-west");
     d.nodes
@@ -385,7 +385,7 @@ fn recipe_nine_curved_cells_share_all_three_dimensional_edges() {
 
 #[test]
 fn recipe_nine_partial_cells_keep_exact_domain_edges() {
-    let mut d = document_recipe(9);
+    let mut d = document_recipe(1);
     d.bounds.max = [10003, 5003];
     d.roads.retain(|r| r.id == "ground-west");
     d.nodes

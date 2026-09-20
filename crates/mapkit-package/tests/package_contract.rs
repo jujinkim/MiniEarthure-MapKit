@@ -89,7 +89,7 @@ fn spawn_uses_explicit_surface_and_never_rooftop() {
             surface_id: "bridge-road".into(),
         })
         .unwrap();
-    assert_eq!(ground[1], 20);
+    assert_eq!(ground[1], 0);
     assert_eq!(bridge[1], 700);
     assert!(c
         .spawn(&SpawnRequest {
@@ -398,24 +398,14 @@ fn boundary_only_validation_preserves_both_seam_directions() {
 }
 
 #[test]
-fn recipes_are_explicit_preserved_and_manifest_bound() {
-    let mut d: MapDocument=serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
-    let bytes=package(d.clone()); let p=read_bytes(&bytes).unwrap();
-    assert_eq!(p.manifest.recipe_version,2);
+fn current_recipe_is_strict_and_manifest_bound() {
+    let d: MapDocument=serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+    let bytes=package(d); let p=read_bytes(&bytes).unwrap();
+    assert_eq!(p.manifest.recipe_version,1);
     assert_eq!(bytes,pack_bytes(p.document.clone(),p.files.clone()).unwrap());
-    let hash=p.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap();
-    d.recipe_version=1; let old=read_bytes(&package(d)).unwrap();
-    assert_eq!(old.manifest.recipe_version,1);
-    assert_ne!(old.inspection.world_content_hash,p.inspection.world_content_hash);
-    assert_ne!(old.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap(),hash);
     let bad=rewrite(&bytes,|entries| {
         let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
-        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=1.into();*b=canonical(&m).unwrap();
-    });
-    rejected(&bad,"E_MANIFEST");
-    let bad=rewrite(&bytes,|entries| {
-        let (_,b)=entries.iter_mut().find(|(name,_)|name=="manifest.json").unwrap();
-        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=(mapkit_core::RECIPE_VERSION+1).into();*b=canonical(&m).unwrap();
+        let mut m:serde_json::Value=serde_json::from_slice(b).unwrap();m["recipe_version"]=2.into();*b=canonical(&m).unwrap();
     });
     rejected(&bad,"E_VERSION");
 }
@@ -424,7 +414,7 @@ fn recipes_are_explicit_preserved_and_manifest_bound() {
 fn recipe_three_roundtrips_extensions_and_solid_content() {
     let d:MapDocument=serde_json::from_str(include_str!("../../../examples/placement/document.json")).unwrap();
     let bytes=package(d);let p=read_bytes(&bytes).unwrap();
-    assert_eq!(p.manifest.recipe_version,3);
+    assert_eq!(p.manifest.recipe_version,1);
     assert_eq!(bytes,pack_bytes(p.document.clone(),p.files.clone()).unwrap());
     assert!(!p.document.repetitions.is_empty());
     let generated=p.generate(Cell{x:0,y:0},500_000).unwrap();
@@ -440,7 +430,7 @@ fn recipe_five_courtyard_roundtrip_preserves_holes_and_content_identity() {
     let d: MapDocument=serde_json::from_str(include_str!("../../../examples/courtyard/document.json")).unwrap();
     let bytes=package(d.clone());let p=read_bytes(&bytes).unwrap();
     assert_eq!(p.document.buildings[0].holes,d.buildings[0].holes);
-    assert_eq!(p.manifest.recipe_version,5);
+    assert_eq!(p.manifest.recipe_version,1);
     assert_eq!(bytes,pack_bytes(p.document.clone(),p.files.clone()).unwrap());
     let mut filled=d.clone();filled.buildings[0].holes.clear();let solid=read_bytes(&package(filled)).unwrap();
     assert_ne!(p.inspection.world_content_hash,solid.inspection.world_content_hash);

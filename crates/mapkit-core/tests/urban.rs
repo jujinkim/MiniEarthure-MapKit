@@ -2,7 +2,7 @@ use mapkit_core::*;
 fn doc(height: i64) -> MapDocument {
     let mut d: MapDocument =
         serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
-    d.recipe_version = 6;
+    d.recipe_version = 1;
     d.bounds.max = [3200, 3200];
     d.cell_size_cm = 1600;
     d.nodes = vec![
@@ -55,7 +55,7 @@ fn sample(c: &GeneratedChunk, id: &str, p: Point) -> Result<Vertex> {
 }
 #[test]
 fn exact_overlap_removed_but_one_centimetre_cover_and_clearance_survive() {
-    for recipe in [6, 9] {
+    for recipe in [1] {
         for height in [-100, -1, 0, 1, 100] {
             let d = doc_recipe(height, recipe);
             for x in [0, 1] {
@@ -65,15 +65,12 @@ fn exact_overlap_removed_but_one_centimetre_cover_and_clearance_survive() {
                 assert_eq!(sample(&c, "terrain", p).is_ok(), height != 0);
                 assert_eq!(sample(&c, "terrain", [p[0], 1101]).unwrap()[1], 0);
             }
-            let mut old = d;
-            old.recipe_version = 5;
-            assert!(sample(&generate_cell(&old, 0), "terrain", [711, 803]).is_ok());
         }
     }
 }
 #[test]
 fn paving_partitions_ground_preserves_road_material_and_rejects_overlap() {
-    for recipe in [6, 9] {
+    for recipe in [1] {
         let mut d = doc_recipe(-1, recipe);
         d.surface_areas.push(SurfaceArea {
             id: "soil".into(),
@@ -97,13 +94,13 @@ fn paving_partitions_ground_preserves_road_material_and_rejects_overlap() {
         d.surface_areas.push(other);
         assert_eq!(d.validate().unwrap_err().code, "E_GEOMETRY");
         d.surface_areas.pop();
-        d.recipe_version = 5;
+        d.recipe_version = 2;
         assert_eq!(d.validate().unwrap_err().code, "E_VERSION");
     }
 }
 #[test]
 fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
-    for recipe in [6, 9] {
+    for recipe in [1] {
         let mut d = doc_recipe(0, recipe);
         d.roads[0].kind = RoadKind::Ground;
         d.roads[0].sidewalk_cm = Some(100);
@@ -152,7 +149,7 @@ fn indexed_validation_retains_manual_overlap_rejection() {
     let original: MapDocument = serde_json::from_str(source).unwrap();
     for case in 0..4 {
         let mut d = original.clone();
-        d.recipe_version = 6;
+        d.recipe_version = 1;
         match case {
             0 => d.placements[0].position = [1900, 0, 2000],
             1 => {
@@ -170,12 +167,12 @@ fn indexed_validation_retains_manual_overlap_rejection() {
         assert_eq!(d.validate().unwrap_err().code, "E_GEOMETRY");
     }
     let mut d = original;
-    d.recipe_version = 6;
+    d.recipe_version = 1;
     d.validate().unwrap();
 }
 #[test]
 fn paving_and_sidewalks_share_the_sloping_terrain_plane() {
-    for recipe in [6, 9] {
+    for recipe in [1] {
         let mut d = doc_recipe(0, recipe);
         d.roads[0].kind = RoadKind::Ground;
         d.roads[0].sidewalk_cm = Some(100);

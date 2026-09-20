@@ -41,7 +41,7 @@ fn convex_admission_rejects_open_inverted_nonconvex_degenerate_and_oversized_inp
     let mut bad = source.clone();
     bad.vertices.push([0, 20, 0]);
     assert!(!bad.valid(100_000));
-    for version in 1..=3 {
+    for version in [0, 2, 9] {
         let mut d = d.clone();
         d.recipe_version = version;
         assert_eq!(d.validate().unwrap_err().code, "E_VERSION");
@@ -123,17 +123,4 @@ fn exact_proxy_transform_seams_budget_archives_and_order_are_preserved() {
         0
     )
     .is_err());
-}
-#[test]
-fn recipe_three_frozen_geometry_survives_display_extension() {
-    let d: MapDocument =
-        serde_json::from_str(include_str!("../../../examples/placement/document.json")).unwrap();
-    let c = generated(&d, Cell { x: 0, y: 0 }).chunk;
-    assert!(c.asset_convexes.is_empty());
-    // Existing canonical source still omits all new defaults.
-    let raw = String::from_utf8(canonical(&d).unwrap()).unwrap();
-    assert!(!raw.contains("convex_collision"));
-    assert!(!String::from_utf8(canonical(&c).unwrap())
-        .unwrap()
-        .contains("asset_convexes"));
 }

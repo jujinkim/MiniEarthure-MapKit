@@ -1,12 +1,8 @@
 //! Recipe 6 ground paint. Integer subdivisions share the road clipping rule.
-use crate::generation::{polygon_triangles, Builder};
-use crate::roads::{emit, partition, tick, valid};
+use crate::generation::polygon_triangles;
+use crate::roads::{partition, tick, valid};
 use crate::*;
 
-pub(crate) struct Paint<'a> {
-    triangle: [Vertex; 3],
-    area: &'a SurfaceArea,
-}
 fn overlaps(a: &[Vertex], b: &[Vertex]) -> bool {
     [0, 2].iter().all(|&i| {
         a.iter().map(|p| p[i]).min().unwrap() <= b.iter().map(|p| p[i]).max().unwrap()
@@ -14,14 +10,6 @@ fn overlaps(a: &[Vertex], b: &[Vertex]) -> bool {
     })
 }
 pub(crate) fn validate(d: &MapDocument) -> Result<()> {
-    if d.recipe_version < 6
-        && (!d.surface_areas.is_empty() || d.roads.iter().any(|r| r.markings.is_some()))
-    {
-        return Err(error(
-            "E_VERSION",
-            "surface areas and road markings require recipe 6",
-        ));
-    }
     for road in &d.roads {
         if road
             .markings
@@ -55,64 +43,6 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
                 }
             }
         }
-    }
-    Ok(())
-}
-pub(crate) fn areas<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<Vec<Paint<'a>>> {
-    let mut out = vec![];
-    for area in &d.surface_areas {
-        if (0..2).any(|i| {
-            area.polygon.iter().map(|p| p[i]).max().unwrap() < bounds.min[i]
-                || area.polygon.iter().map(|p| p[i]).min().unwrap() > bounds.max[i]
-        }) {
-            continue;
-        }
-        for t in polygon_triangles(&area.polygon)? {
-            out.push(Paint {
-                triangle: t.map(|i| [area.polygon[i][0], 0, area.polygon[i][1]]),
-                area,
-            });
-        }
-    }
-    Ok(out)
-}
-pub(crate) fn paint(
-    b: &mut Builder,
-    poly: &[Vertex],
-    areas: &[Paint],
-    terrain: &[Vertex; 3],
-    work: &mut usize,
-) -> Result<()> {
-    let mut remaining = vec![poly.to_vec()];
-    for paint in areas {
-        let mut next = vec![];
-        for p in remaining {
-            tick(work, 1)?;
-            if !overlaps(&p, &paint.triangle) {
-                next.push(p);
-                continue;
-            }
-            let (inside, outside) = partition(&p, &paint.triangle, work)?;
-            let inside: Vec<_> = inside
-                .into_iter()
-                .map(|p| crate::roads::on_plane(terrain, p))
-                .collect();
-            emit(b, &inside, paint.area.surface, &paint.area.id, true)?;
-            next.extend(outside);
-        }
-        remaining = next;
-        if remaining.len() > 16384 {
-            return Err(error("E_BUDGET", "surface fragments exceeded"));
-        }
-    }
-    for mut p in remaining {
-        if !areas.is_empty() {
-            p = p
-                .into_iter()
-                .map(|p| crate::roads::on_plane(terrain, p))
-                .collect();
-        }
-        emit(b, &p, Surface::Grass, "terrain", true)?;
     }
     Ok(())
 }

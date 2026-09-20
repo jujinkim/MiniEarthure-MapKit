@@ -1,5 +1,7 @@
 # MiniEarthure MapKit
 
+> Current contract: [CURRENT_V1](spec/CURRENT_V1.md). The dated version/compatibility records below are historical and do not authorize old loaders or generation branches.
+
 Independent MIT map document, deterministic generation and `.memap` package tools.
 No private MiniEarthure repository is required. Development foundation; current
 scope and outstanding gameplay requirements are explicit in [LIMITATIONS.md](LIMITATIONS.md).

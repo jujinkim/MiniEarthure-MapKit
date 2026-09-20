@@ -95,7 +95,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	precipitation.draw_pass_1 = mesh
 	add_child(precipitation)
 
-func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: Array, resources: RefCounted = null) -> void:
+func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: Array, resources: RefCounted = null, immediate := false) -> void:
 	if state == null or state.config.is_empty(): return
 	var celestial: Dictionary = state.celestial()
 	var day := float(celestial.daylight)
@@ -105,8 +105,8 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	var now := Time.get_ticks_msec()
 	var delta := 0.1 if _last_update < 0 else clampf(float(now - _last_update) / 1000.0,0.0,0.25)
 	_last_update = now
-	_wet = move_toward(_wet,float(state.wet)*0.5,delta*0.2)
-	_snow = move_toward(_snow,float(state.snow)*0.5,delta*0.15)
+	_wet = float(state.wet)*0.5 if immediate else move_toward(_wet,float(state.wet)*0.5,delta*0.2)
+	_snow = float(state.snow)*0.5 if immediate else move_toward(_snow,float(state.snow)*0.5,delta*0.15)
 	var cover := {"clear":0.18,"cloudy":0.83,"rain":0.97,"snow":0.94}
 	_clouds = lerpf(float(cover.get(state.previous_weather,0.18)),float(cover.get(state.weather,0.18)),state.blend())
 	_orient(sun,celestial.sun_direction)

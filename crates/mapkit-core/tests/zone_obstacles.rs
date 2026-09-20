@@ -4,7 +4,7 @@ use mapkit_core::*;
 fn custom_canopies_avoid_roads_buildings_and_authored_placements() {
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
     let road = d.roads[0].clone();
-    d.recipe_version=7; d.cell_size_cm=3200; d.bounds=Bounds { min:[0,0],max:[3200,3200] };
+    d.recipe_version=1; d.cell_size_cm=3200; d.bounds=Bounds { min:[0,0],max:[3200,3200] };
     d.nodes.clear();d.roads.clear();d.buildings.clear();d.zones.clear();d.assets.clear();d.placements.clear();
     d.nodes.push(RoadNode { id:"a".into(),position:[0,0,1000],level:0 });
     d.nodes.push(RoadNode { id:"b".into(),position:[3200,0,1000],level:0 });

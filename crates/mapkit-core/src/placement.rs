@@ -345,15 +345,6 @@ pub(crate) fn repeated(d: &MapDocument) -> Result<Vec<Placement>> {
     Ok(result)
 }
 pub(crate) fn validate(d: &MapDocument) -> Result<()> {
-    if d.recipe_version < 3 {
-        if !d.repetitions.is_empty() || d.buildings.iter().any(|b| !b.entrances.is_empty()) {
-            return Err(error(
-                "E_VERSION",
-                "placement extensions require explicit recipe 3",
-            ));
-        }
-        return Ok(());
-    }
     for r in &d.roads {
         if r.sidewalk_cm.is_some_and(|w| w > 1000 || w > 0 && w < 20) {
             return Err(error("E_GEOMETRY", "sidewalk width exceeds 1000 cm"));
@@ -457,88 +448,10 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         }
         road_bounds.push(area);
     }
-    if d.recipe_version >= 6 {
-        return validate_indexed(d, &road_bounds, &mut work);
-    }
-    for (i, b) in d.buildings.iter().enumerate() {
-        for other in &d.buildings[..i] {
-            if b.base_cm < other.base_cm + other.height_cm as i64 + roof_rise(other)
-                && other.base_cm < b.base_cm + b.height_cm as i64 + roof_rise(b)
-                && building_overlap(&b.footprint, other, &mut work)?
-                && building_overlap(&other.footprint, b, &mut work)?
-            {
-                return Err(error(
-                    "E_GEOMETRY",
-                    "overlapping building footprints/height ranges",
-                ));
-            }
-        }
-        let area = aabb(&b.footprint);
-        for (index, road) in d.roads.iter().enumerate() {
-            tick(&mut work, 1)?;
-            if !overlaps(&area, &road_bounds[index]) {
-                continue;
-            }
-            // Conservative horizontal clearance is deliberate for authored buildings.
-            let overlaps = if b.holes.is_empty() {
-                road_overlap(&b.footprint, road, 0, &mut work)?
-            } else {
-                let mut hit = false;
-                for triangle in crate::courtyard::triangulate(b, &mut work)? {
-                    if road_overlap(&triangle, road, 0, &mut work)? {
-                        hit = true;
-                        break;
-                    }
-                }
-                hit
-            };
-            if overlaps {
-                return Err(error(
-                    "E_GEOMETRY",
-                    format!(
-                        "building {} footprint intersects road {} corridor",
-                        b.id, road.id
-                    ),
-                ));
-            }
-        }
-    }
-    for (i, p) in d.placements.iter().enumerate() {
-        if builtin(&p.asset_id).is_none()
-            && d.assets
-                .iter()
-                .find(|a| a.id == p.asset_id)
-                .unwrap()
-                .collision
-                .is_empty()
-            && d.assets
-                .iter()
-                .find(|a| a.id == p.asset_id)
-                .unwrap()
-                .convex_collision
-                .is_empty()
-        {
-            return Err(error(
-                "E_GEOMETRY",
-                "recipe-3 manual assets require a declared footprint proxy",
-            ));
-        }
-        let poly = footprint(d, p);
-        if !source_clear_indexed(d, &poly, 0, &mut work, Some(&road_bounds))? {
-            return Err(error(
-                "E_GEOMETRY",
-                "manual placement footprint intersects bounds/building/access/road",
-            ));
-        }
-        for other in &d.placements[..i] {
-            if polygons_overlap(&poly, &footprint(d, other), &mut work)? {
-                return Err(error("E_GEOMETRY", "manual placement footprints overlap"));
-            }
-        }
-    }
-    repeated(d)?; // bound repetition expansion before any geometry allocation
-    Ok(())
+
+    return validate_indexed(d, &road_bounds, &mut work);
 }
+
 fn roof_rise(b: &Building) -> i64 {
     if b.roof != "gable" {
         return 0;
@@ -669,140 +582,6 @@ pub(crate) fn sidewalk_width(d: &MapDocument, r: &Road) -> u32 {
         _ => 0,
     }
 }
-fn sidewalks(d: &MapDocument, b: &mut Builder, work: &mut usize) -> Result<()> {
-    let terrain_count = b.chunk.triangles.len();
-    for r in &d.roads {
-        let width = i64::from(sidewalk_width(d, r));
-        if width == 0 {
-            continue;
-        }
-        for (index, s) in r.points.windows(2).enumerate() {
-            let (dx, dy) = ((s[1][0] - s[0][0]) as f64, (s[1][2] - s[0][2]) as f64);
-            let length = libm::sqrt(dx * dx + dy * dy);
-            let half = (i64::from(r.widths_cm[index]) + 1) / 2;
-            // Open approaches around every explicit endpoint/bend. Other roads
-            // and authored access corridors also suppress whole 2 m pieces.
-            let gap = half + width + 100;
-            let steps = libm::ceil(length / 200.0) as i64;
-            for step in 0..steps {
-                tick(work, 1)?;
-                let start = step * 200;
-                let end = ((step + 1) * 200).min(libm::floor(length) as i64);
-                if start < gap || end > libm::floor(length) as i64 - gap {
-                    continue;
-                }
-                for side in [-1, 1] {
-                    let point = |along: i64, away: i64| {
-                        [
-                            s[0][0]
-                                + libm::round(
-                                    (dx * along as f64 - dy * (away * side) as f64) / length,
-                                ) as i64,
-                            s[0][2]
-                                + libm::round(
-                                    (dy * along as f64 + dx * (away * side) as f64) / length,
-                                ) as i64,
-                        ]
-                    };
-                    let mut poly = [
-                        point(start, half + 1),
-                        point(end, half + 1),
-                        point(end, half + width),
-                        point(start, half + width),
-                    ];
-                    if !overlaps(&aabb(&poly), &b.bounds) {
-                        continue;
-                    }
-                    if r.sidewalk_cm.is_none() {
-                        let mut fitted = width;
-                        loop {
-                            let mut touches = false;
-                            for building in &d.buildings {
-                                if building_overlap(&poly, building, work)? {
-                                    touches = true;
-                                    break;
-                                }
-                            }
-                            if !touches || fitted <= 50 {
-                                break;
-                            }
-                            fitted = (fitted - 25).max(50);
-                            poly[2] = point(end, half + fitted);
-                            poly[3] = point(start, half + fitted);
-                        }
-                    }
-                    let mut blocked = false;
-                    for building in &d.buildings {
-                        if building_overlap(&poly, building, work)? {
-                            blocked = true;
-                            break;
-                        }
-                        for entrance in &building.entrances {
-                            if polygons_overlap(&poly, entrance, work)? {
-                                blocked = true;
-                                break;
-                            }
-                        }
-                    }
-                    for other in &d.roads {
-                        if other.id != r.id && road_overlap(&poly, other, 100, work)? {
-                            blocked = true;
-                            break;
-                        }
-                    }
-                    for p in &d.placements {
-                        if polygons_overlap(&poly, &footprint(d, p), work)? {
-                            blocked = true;
-                            break;
-                        }
-                    }
-                    if blocked {
-                        continue;
-                    }
-                    let id = format!("{}:sidewalk", r.id);
-                    for i in 0..terrain_count {
-                        tick(work, 1)?;
-                        let triangle = &b.chunk.triangles[i];
-                        if triangle.object_id != "terrain"
-                            || !overlaps(&aabb(&triangle.vertices.map(xy)), &aabb(&poly))
-                        {
-                            continue;
-                        }
-                        let original = triangle.vertices;
-                        let mut clipped = original.to_vec();
-                        let sign = cross(poly[0], poly[1], poly[2]).signum();
-                        for j in 0..4 {
-                            clipped = crate::roads::split(&clipped, |p| {
-                                cross(poly[j], poly[(j + 1) % 4], xy(p)) * sign
-                            })
-                            .0;
-                        }
-                        clipped = clipped
-                            .into_iter()
-                            .map(|p| crate::roads::on_plane(&original, p))
-                            .collect();
-                        for j in 1..clipped.len().saturating_sub(1) {
-                            let top = [clipped[0], clipped[j], clipped[j + 1]]
-                                .map(|p| [p[0], p[1] + 12, p[2]]);
-                            b.triangle(top, Surface::Concrete, &id, true)?;
-                        }
-                        for j in 0..clipped.len() {
-                            let a = clipped[j];
-                            let c = clipped[(j + 1) % clipped.len()];
-                            b.quad(
-                                [a, c, [c[0], c[1] + 12, c[2]], [a[0], a[1] + 12, a[2]]],
-                                Surface::Concrete,
-                                &id,
-                                false,
-                            )?;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
 fn emit_placement(
     d: &MapDocument,
     cell: Cell,
@@ -862,7 +641,9 @@ fn candidate(d: &MapDocument, zone: usize, x: i64, y: i64) -> Result<Option<Cand
     }))
 }
 pub(crate) fn zone_tree_radius(zone: &Zone) -> i64 {
-    zone.tree.as_ref().map_or(TREE_RADIUS, |tree| i64::from(tree.radius_cm))
+    zone.tree
+        .as_ref()
+        .map_or(TREE_RADIUS, |tree| i64::from(tree.radius_cm))
 }
 fn tree_footprint(p: Point, radius: i64) -> [Point; 4] {
     rectangle(
@@ -878,7 +659,10 @@ fn eligible(
 ) -> Result<bool> {
     let zone = &d.zones[c.zone];
     let poly = tree_footprint(c.p, zone_tree_radius(zone));
-    let clearance = zone.tree.as_ref().map_or(100, |tree| i64::from(tree.clearance_cm));
+    let clearance = zone
+        .tree
+        .as_ref()
+        .map_or(100, |tree| i64::from(tree.clearance_cm));
     if !inside(&poly, &zone.polygon, work)? || !source_clear(d, &poly, clearance, work)? {
         return Ok(false);
     }
@@ -888,7 +672,11 @@ fn eligible(
         }
     }
     for p in occupied {
-        let footprint = if zone.tree.is_some() { tree_footprint(c.p, zone_tree_radius(zone) + clearance) } else { poly };
+        let footprint = if zone.tree.is_some() {
+            tree_footprint(c.p, zone_tree_radius(zone) + clearance)
+        } else {
+            poly
+        };
         if polygons_overlap(&footprint, p, work)? {
             return Ok(false);
         }
@@ -896,7 +684,12 @@ fn eligible(
     // Reserve the authored/automatic sidewalk width, even when a piece is
     // suppressed. Vegetation must never occupy a future access strip.
     for road in &d.roads {
-        if road_overlap(&poly, road, i64::from(sidewalk_width(d, road)) + clearance, work)? {
+        if road_overlap(
+            &poly,
+            road,
+            i64::from(sidewalk_width(d, road)) + clearance,
+            work,
+        )? {
             return Ok(false);
         }
     }
@@ -935,9 +728,13 @@ fn vegetation(
                 // rejection chains cannot create seam duplicates or overlap.
                 for (other_index, other) in d.zones.iter().enumerate() {
                     let radii = zone_tree_radius(zone) + zone_tree_radius(other);
-                    let gap = zone.tree.as_ref().map_or(0, |t| i64::from(t.clearance_cm))
+                    let gap = zone
+                        .tree
+                        .as_ref()
+                        .map_or(0, |t| i64::from(t.clearance_cm))
                         .max(other.tree.as_ref().map_or(0, |t| i64::from(t.clearance_cm)));
-                    let reach = i64::from(zone.spacing_cm.max(other.spacing_cm)).max(radii + gap + 1);
+                    let reach =
+                        i64::from(zone.spacing_cm.max(other.spacing_cm)).max(radii + gap + 1);
                     let other_s = i64::from(other.spacing_cm);
                     let jitter = if other.kind == ZoneKind::Forest {
                         other_s / 3
@@ -989,7 +786,10 @@ fn vegetation(
                 };
                 let p = Placement {
                     id: format!("{}:{x}:{y}", zone.id),
-                    asset_id: zone.tree.as_ref().map_or_else(|| "builtin:tree".into(), |t| t.asset_id.clone()),
+                    asset_id: zone
+                        .tree
+                        .as_ref()
+                        .map_or_else(|| "builtin:tree".into(), |t| t.asset_id.clone()),
                     position,
                     quarter_turns: (c.rank % 4) as u8,
                 };
@@ -1001,11 +801,9 @@ fn vegetation(
 }
 pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder) -> Result<()> {
     let mut work = 0;
-    if d.recipe_version >= 6 {
-        crate::roads::sidewalks(d, b)?;
-    } else {
-        sidewalks(d, b, &mut work)?;
-    }
+
+    crate::roads::sidewalks(d, b)?;
+
     buildings(d, b)?;
     let mut occupied: Vec<_> = d.placements.iter().map(|p| footprint(d, p)).collect();
     for p in &d.placements {

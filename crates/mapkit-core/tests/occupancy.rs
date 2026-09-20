@@ -14,7 +14,7 @@ fn input(d: &MapDocument, cell: Cell) -> GenerationInput<'_> {
 fn contains(solid: &OccupiedSolid, p: Vertex) -> bool {
     match &solid.shape {
         SolidShape::Convex(c) => c.planes().all(|(n,v)|(0..3).map(|a|n[a]*(p[a]-v[a]) as i128).sum::<i128>()<=0),
-        SolidShape::SlopedPrism { .. } => panic!("legacy fixture"),
+        SolidShape::SlopedPrism { footprint, bottom_cm, top_cm } => p[1] >= *bottom_cm && p[1] <= *top_cm.iter().min().unwrap() && point_in_polygon([p[0], p[2]], footprint),
         SolidShape::Box { min, max } => (0..3).all(|a| min[a] <= p[a] && p[a] <= max[a]),
         SolidShape::TriangularPrism {
             footprint,
@@ -92,9 +92,10 @@ fn concave_building_keeps_notch_empty_and_enclosed_interior_occupied() {
 }
 
 #[test]
-fn whole_cell_inside_building_retains_full_prisms_without_local_walls() {
+fn whole_cell_inside_building_retains_complete_occupied_prisms() {
     let mut d = document();
     d.bounds.max = [153600, 153600];
+    d.roads.clear(); d.nodes.clear();
     d.zones.clear();
     d.buildings[0].footprint = vec![[100, 100], [153500, 100], [153500, 153500], [100, 153500]];
     let result = generate_with_occupancy(input(&d, Cell { x: 1, y: 1 }), 2).unwrap();
@@ -103,12 +104,9 @@ fn whole_cell_inside_building_retains_full_prisms_without_local_walls() {
         .solids
         .iter()
         .any(|s| contains(s, [75000, 500, 76000])));
-    assert!(result
-        .chunk
-        .triangles
-        .iter()
-        .filter(|t| t.object_id == "building-1")
-        .all(|t| t.vertices.iter().all(|p| p[1] == 1500)));
+    assert!(!result.chunk.building_prisms.is_empty());
+    assert!(result.chunk.building_prisms.iter().all(|p| p.bottom_cm == 0 && p.top_cm == [1500;3]));
+
 }
 
 #[test]
@@ -174,6 +172,7 @@ fn budgets_fail_closed_and_normalized_order_is_stable() {
     );
     let mut second = d.buildings[0].clone();
     second.id = "another".into();
+    for p in &mut second.footprint { p[0] += 10000; }
     d.buildings.push(second);
     let first = generate_with_occupancy(input(&d, cell), 4).unwrap();
     d.buildings.reverse();
@@ -212,11 +211,7 @@ fn boundary_trunk_requires_neighbor_owner_cell_and_keeps_unclipped_volume() {
         }
     );
     assert!(contains(solid, [49999, 200, 31000]));
-    // Existing face clipping is intentionally unchanged by the optional sidecar.
-    assert!(right
-        .chunk
-        .triangles
-        .iter()
-        .filter(|t| t.object_id == id)
-        .all(|t| t.vertices.iter().all(|p| p[0] >= 50000)));
+    // Current trees keep one complete proxy on their anchor owner.
+    assert!(right.chunk.triangles.iter().filter(|t| t.object_id == id)
+        .flat_map(|t| t.vertices).any(|p| p[0] == 49980));
 }

@@ -4,9 +4,6 @@ use mapkit_core::MapDocument;
 use std::collections::BTreeMap;
 
 pub fn decorate(d: &MapDocument, chunk: &VarDictionary, presentation: &mut VarDictionary) {
-    if d.recipe_version < 6 {
-        return;
-    }
     let roads: BTreeMap<_, _> = d
         .roads
         .iter()

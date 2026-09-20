@@ -35,7 +35,7 @@ def create(root=ROOT):
     j=json.dumps(gltf,separators=(',',':')).encode();j+=b' '*(-len(j)%4);data+=b'\0'*(-len(data)%4)
     (root/'tetra.glb').write_bytes(b'glTF'+struct.pack('<II',2,28+len(j)+len(data))+struct.pack('<I',len(j))+b'JSON'+j+struct.pack('<I',len(data))+b'BIN\0'+data)
     d=json.loads((ROOT.parent/'minimal/document.json').read_text())
-    d.update(map_id='synthetic-assets',recipe_version=4,bounds={'min':[0,0],'max':[25600,25600]},cell_size_cm=12800,nodes=[],roads=[],buildings=[],zones=[],repetitions=[])
+    d.update(map_id='synthetic-assets',recipe_version=1,bounds={'min':[0,0],'max':[25600,25600]},cell_size_cm=12800,nodes=[],roads=[],buildings=[],zones=[],repetitions=[])
     attribution={'source':'MapKit synthetic assets/create.py','license':'MIT','notice':'Original procedural fixture; no third-party imagery'}
     material={'albedo_rgba':[180,230,255,255],'metallic_per_mille':100,'roughness_per_mille':700,'double_sided':True,'albedo_texture':'checker'}
     d['assets']=[{'id':'tetra','path':'tetra.glb','attribution':attribution,'collision':[], 'convex_collision':[{'vertices':vertices,'faces':faces}]},

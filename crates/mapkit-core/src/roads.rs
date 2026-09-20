@@ -4,7 +4,6 @@ use crate::generation::Builder;
 use crate::*;
 
 pub(crate) const SCRATCH_BYTES: u64 = 16 * 1024 * 1024;
-const MAX_VERTICES: usize = 65_536;
 const MAX_LOCAL_PATCHES: usize = 16_384;
 const MAX_FRAGMENTS: usize = 16_384;
 const MAX_WORK: usize = 8_000_000;
@@ -570,7 +569,6 @@ pub(crate) fn generate(
     b: &mut Builder,
 ) -> Result<()> {
     let (patches, walls) = plan(d, bounds)?;
-    let paving = crate::urban::areas(d, bounds)?;
     let height =
         |x: usize, y: usize| grid.map_or(d.terrain_base_cm, |g| g.heights_cm[y * side + x]);
     let mut work = 0;
@@ -584,85 +582,8 @@ pub(crate) fn generate(
                 [px + spacing, height(x + 1, y + 1), py + spacing],
                 [px, height(x, y + 1), py + spacing],
             ];
-            if d.recipe_version >= 9 {
-                ground_tile(d, v, &patches, b, &mut work)?;
-                continue;
-            }
-            for terrain in [[v[0], v[1], v[2]], [v[0], v[2], v[3]]] {
-                let tb = Bounds {
-                    min: [px, py],
-                    max: [px + spacing, py + spacing],
-                };
-                for patch in patches
-                    .iter()
-                    .filter(|p| p.terrain_join && hit(&p.v, &tb, 0))
-                {
-                    let (inside, _) = partition(&terrain, &patch.v, &mut work)?;
-                    if inside
-                        .iter()
-                        .any(|p| (on_plane(&patch.v, *p)[1] - on_plane(&terrain, *p)[1]).abs() > 1)
-                    {
-                        return Err(error("E_GEOMETRY", "ground/structure junction apron must match terrain; author a level approach"));
-                    }
-                }
-                let mut remaining = vec![terrain.to_vec()];
-                for patch in &patches {
-                    tick(&mut work, 1)?;
-                    let coincident = d.recipe_version >= 6
-                        && matches!(patch.road.kind, RoadKind::Elevated | RoadKind::Bridge)
-                        && orient(patch.v[0], patch.v[1], patch.v[2]) != 0
-                        && patch.v.iter().all(|p| floor_plane(&terrain, *p) == 0);
-                    if (!matches!(
-                        patch.road.kind,
-                        RoadKind::Ground | RoadKind::Underpass | RoadKind::Tunnel
-                    ) && !coincident)
-                        || !hit(&patch.v, &tb, 0)
-                    {
-                        continue;
-                    }
-                    let mut next = vec![];
-                    let mut vertices = 0;
-                    for poly in remaining {
-                        let (mut inside, mut outside) = partition(&poly, &patch.v, &mut work)?;
-                        for p in &mut inside {
-                            *p = on_plane(&terrain, *p);
-                        }
-                        for poly in &mut outside {
-                            for p in poly {
-                                *p = on_plane(&terrain, *p);
-                            }
-                        }
-                        vertices += outside.iter().map(Vec::len).sum::<usize>();
-                        next.append(&mut outside);
-                        if valid(&inside) {
-                            match patch.road.kind {
-                                RoadKind::Ground => {
-                                    emit(b, &inside, patch.surface, &patch.road.id, true)?
-                                }
-                                RoadKind::Underpass => {}
-                                RoadKind::Tunnel => {
-                                    let ceiling = patch.v.map(|p| {
-                                        [p[0], p[1] + patch.road.clearance_cm.unwrap() as i64, p[2]]
-                                    });
-                                    let (above, _) = split(&inside, |p| floor_plane(&ceiling, p));
-                                    if valid(&above) {
-                                        vertices += above.len();
-                                        next.push(above);
-                                    }
-                                }
-                                RoadKind::Elevated | RoadKind::Bridge => {} // exact coincident terrain only
-                            }
-                        }
-                        if next.len() > MAX_FRAGMENTS || vertices > MAX_VERTICES {
-                            return Err(error("E_BUDGET", "recipe 2 terrain fragment limit"));
-                        }
-                    }
-                    remaining = next;
-                }
-                for poly in remaining {
-                    crate::urban::paint(b, &poly, &paving, &terrain, &mut work)?;
-                }
-            }
+
+            ground_tile(d, v, &patches, b, &mut work)?;
         }
     }
     for patch in &patches {

@@ -17,13 +17,13 @@ pub const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILES: usize = 8192;
 mod assets;
-pub mod distant;
 mod audit_hash;
 mod container;
+pub mod distant;
 use assets::validate_assets;
-mod read_cost;
 mod audit_json;
 mod audit_memory;
+mod read_cost;
 pub use read_cost::{inspect_read_cost, ReadCost};
 mod export_limits;
 pub mod indexed;
@@ -44,9 +44,9 @@ pub struct PackageManifest {
     pub format: String,
     #[schemars(range(min = 1, max = 1))]
     pub format_version: u32,
-    #[schemars(range(min = 1, max = 8))]
+    #[schemars(range(min = 1, max = 1))]
     pub recipe_version: u32,
-    #[schemars(range(min = 6, max = 6))]
+    #[schemars(range(min = 1, max = 1))]
     pub generated_version: u32,
     #[schemars(length(min = 1, max = 128))]
     pub map_id: String,
@@ -250,7 +250,11 @@ pub fn decode_heightmap(h: &Heightmap, cell_size: u32, bytes: &[u8]) -> Result<H
 fn validate_heightmaps(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
     validate_heightmaps_region(d, files, None)
 }
-fn validate_heightmaps_region(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>, region: Option<CellRegion>) -> Result<()> {
+fn validate_heightmaps_region(
+    d: &MapDocument,
+    files: &BTreeMap<String, Vec<u8>>,
+    region: Option<CellRegion>,
+) -> Result<()> {
     // Keep only seams, rather than every decoded map-sized grid at once.
     // Direction order: west, east, south, north (local y grows north).
     let mut grids = BTreeMap::new();
@@ -268,9 +272,24 @@ fn validate_heightmaps_region(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>
     }
     // Only a non-flat descriptor or its west/south neighbor can create a seam.
     // This remains bounded by source descriptors, not world area.
-    let cells: BTreeSet<Cell> = d.heightmaps.iter().flat_map(|h| [h.cell,
-        Cell { x: h.cell.x - 1, y: h.cell.y }, Cell { x: h.cell.x, y: h.cell.y - 1 }])
-        .filter(|c| d.has_cell(*c)).collect();
+    let cells: BTreeSet<Cell> = d
+        .heightmaps
+        .iter()
+        .flat_map(|h| {
+            [
+                h.cell,
+                Cell {
+                    x: h.cell.x - 1,
+                    y: h.cell.y,
+                },
+                Cell {
+                    x: h.cell.x,
+                    y: h.cell.y - 1,
+                },
+            ]
+        })
+        .filter(|c| d.has_cell(*c))
+        .collect();
     for c in cells {
         for n in [Cell { x: c.x + 1, y: c.y }, Cell { x: c.x, y: c.y + 1 }] {
             if !d.has_cell(n) || region.is_some_and(|r| !r.contains(c) && !r.contains(n)) {
@@ -505,7 +524,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     let manifest: PackageManifest = json(&files.remove("manifest.json").unwrap())?;
     if manifest.format != "memap"
         || manifest.format_version != PACKAGE_VERSION
-        || !(1..=RECIPE_VERSION).contains(&manifest.recipe_version)
+        || manifest.recipe_version != RECIPE_VERSION
         || manifest.generated_version != GENERATED_VERSION
     {
         return Err(error("E_VERSION", "unsupported package contract"));
@@ -595,7 +614,11 @@ impl Package {
 
     /// Scene-node allowance when instances share the cell's imported resources.
     pub fn asset_instance_cost(&self, id: &str) -> Result<u64> {
-        let a = self.document.assets.iter().find(|a| a.id == id)
+        let a = self
+            .document
+            .assets
+            .iter()
+            .find(|a| a.id == id)
             .ok_or_else(|| error("E_REFERENCE", "unknown asset"))?;
         Ok(assets::instance_cost(&a.path, &self.files[&a.path]))
     }

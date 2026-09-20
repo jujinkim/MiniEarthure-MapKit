@@ -73,8 +73,7 @@ pub struct Index {
     pub regions: Vec<RegionRecord>,
     pub records: Vec<Record>,
     pub payload_bytes: u64,
-    /// Untrusted version-2 planning declarations, checked against verified bytes.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    /// Untrusted planning declarations, checked against verified bytes.
     pub decoder_peaks: BTreeMap<String, u64>,
 }
 
@@ -186,7 +185,7 @@ fn regions(d: &MapDocument, side: u32) -> Result<Vec<CellRegion>> {
 }
 impl Index {
     fn validate(&self, length: u64, payload_start: u64) -> Result<()> {
-        if !matches!(self.version, 1 | 2) {
+        if self.version != 1 {
             return Err(error("E_VERSION", "unsupported indexed source version"));
         }
         if canonical(&metadata(&self.world))? != canonical(&self.world)?
@@ -194,13 +193,11 @@ impl Index {
         {
             return Err(bad("invalid world metadata"));
         }
-        if (self.version == 1 && !self.decoder_peaks.is_empty())
-            || (self.version == 2
-                && (self.decoder_peaks.keys().ne(self.payloads.keys())
-                    || self
-                        .decoder_peaks
-                        .values()
-                        .any(|n| !(8 * 1024 * 1024..=256 * 1024 * 1024).contains(n))))
+        if self.decoder_peaks.keys().ne(self.payloads.keys())
+            || self
+                .decoder_peaks
+                .values()
+                .any(|n| !(8 * 1024 * 1024..=256 * 1024 * 1024).contains(n))
         {
             return Err(bad("invalid decoder planning inventory"));
         }
@@ -479,9 +476,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         let start = profile.start();
         for (path, id) in payloads {
             let bytes = self.record(*id, ticket)?;
-            if self.index.version == 2
-                && self.index.decoder_peaks[path] != payload_decoder_peak(path, &bytes)
-            {
+            if self.index.decoder_peaks[path] != payload_decoder_peak(path, &bytes) {
                 return Err(bad(
                     "decoder planning declaration differs from verified payload",
                 ));
@@ -808,7 +803,6 @@ impl<R: Read + Seek> IndexedReader<R> {
         let start = profile.start();
         let plan = RegionSourcePlan::new(
             &d,
-            self.index.version != 1,
             RegionSourcePlan::allocation_bound(self.index.records[source].size),
             || ticket.check(),
         )?;
@@ -954,7 +948,7 @@ pub fn pack_source(
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     let mut index = Index {
-        version: 2,
+        version: 1,
         world: metadata(&d),
         world_content_hash: content_hash(&d, &files)?,
         side_cells,
@@ -1017,7 +1011,7 @@ pub fn pack_source(
         index.payloads.insert(path.clone(), id);
     }
     for cells in regions(&index.world, side_cells)? {
-        let source = local_region_source(&d, cells)?;
+        let source = region_source(&d, cells)?;
         // Region validation has all existing geometry/ownership/work limits.
         source.validate_source()?;
         let bytes = canonical(&source)?;

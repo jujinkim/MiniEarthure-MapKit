@@ -136,11 +136,11 @@ fn noncanonical_source_and_container_repack_to_the_same_export() {
 }
 
 #[test]
-fn normalized_export_keeps_the_existing_v1_bytes_and_hashes() {
+fn normalized_current_export_has_stable_bytes_and_hashes() {
     let bytes = package();
     assert_eq!(
         sha256(&bytes),
-        "3e72644cafa75a526cc5bbc82d71e2d872087d585d1e0a16bf52c275b1045244"
+        "ac46a208bd4be869ee650f9d93eb6e0d6e7cbe99730b28a5d82ae38a3f334da9"
     );
     assert_eq!(
         read_bytes(&bytes).unwrap().inspection.world_content_hash,

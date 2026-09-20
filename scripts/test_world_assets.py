@@ -29,7 +29,7 @@ class WorldAssets(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             folder=Path(tmp)/'library';catalog=create(folder)
             doc=json.loads((ROOT/'examples/minimal/document.json').read_text())
-            doc.update(recipe_version=6,bounds={'min':[0,0],'max':[6400,6400]},cell_size_cm=1600,
+            doc.update(recipe_version=1,bounds={'min':[0,0],'max':[6400,6400]},cell_size_cm=1600,
                 roads=[],nodes=[],buildings=[],heightmaps=[],zones=[],repetitions=[])
             for record in catalog['assets']:
                 with self.subTest(asset=record['id']):

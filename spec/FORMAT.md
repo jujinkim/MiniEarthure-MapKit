@@ -1,5 +1,7 @@
 # MEMAP v1 development specification
 
+> Current contract: [CURRENT_V1](CURRENT_V1.md). The dated version/compatibility records below are historical and do not authorize old loaders or generation branches.
+
 Status: implementation draft; not yet the active MiniEarthure game contract.
 The public package/core/CLI are independent of private game code. The current
 renderer and editor are prototypes. See LIMITATIONS.md before production use.

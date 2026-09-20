@@ -88,7 +88,7 @@
     "recipe_version": {
       "type": "integer",
       "format": "uint32",
-      "maximum": 8.0,
+      "maximum": 1.0,
       "minimum": 1.0
     },
     "repetitions": {

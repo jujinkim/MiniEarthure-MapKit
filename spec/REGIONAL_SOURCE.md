@@ -1,5 +1,7 @@
 # L01 regional source storage — decision, 2026-09-11
 
+> Current contract: [CURRENT_V1](CURRENT_V1.md). The dated version/compatibility records below are historical and do not authorize old loaders or generation branches.
+
 MapKit owns this opt-in, independently indexed source format. It is a separate
 `.mkregions` artifact, magic `MKREGN01`; it is not a replacement interpretation of
 `.memap` v1. Existing packages, recipes 1–6, generated-v6 bytes, recovery originals

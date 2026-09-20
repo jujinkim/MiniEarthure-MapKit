@@ -293,59 +293,21 @@ fn surface_queries_round_the_shared_height_independently_of_triangle_origin() {
 }
 
 #[test]
-fn recipe_v1_tree_anchor_quantization_stays_frozen_while_queries_are_corrected() {
+fn tree_anchor_matches_current_surface_quantization() {
     let mut d = document();
-    d.cell_size_cm = 400;
-    d.bounds = Bounds {
-        min: [-1, -1],
-        max: [399, 399],
-    };
-    d.zones.push(Zone {
-                tree: None,
-        id: "orchard".into(),
-        polygon: vec![[-1, -1], [399, -1], [399, 399], [-1, 399]],
-        kind: ZoneKind::Orchard,
-        spacing_cm: 200,
-        density_per_mille: 1000,
-        exclusions: vec![],
-    });
-    d.heightmaps.push(Heightmap {
-        cell: Cell { x: 0, y: 0 },
-        path: "terrain/h.png".into(),
-        spacing_cm: 200,
-        offset_cm: -50,
-        step_cm: 1,
-        source_accuracy_cm: None,
-    });
-    let p = read_bytes(
-        &pack_bytes(
-            d,
-            BTreeMap::from([(
-                "terrain/h.png".into(),
-                png(3, &[100, 0, 0, 100, 100, 100, 100, 100, 100]),
-            )]),
-        )
-        .unwrap(),
-    )
-    .unwrap();
-    let chunk = p.generate(Cell { x: 0, y: 0 }, 1000).unwrap();
-    let tree = chunk
-        .objects
-        .iter()
-        .find(|o| o.id == "orchard:1:0")
-        .unwrap();
-    assert_eq!(
-        tree.position,
-        [200, -50, 0],
-        "recipe-v1 generated tree bytes must not migrate"
-    );
-    assert_eq!(
-        chunk
-            .spawn(&SpawnRequest {
-                position_cm: [200, 0],
-                surface_id: "terrain".into()
-            })
-            .unwrap(),
-        [200, -49, 0]
-    );
+    d.cell_size_cm = 1200;
+    d.bounds = Bounds { min: [0,0], max: [1200,1200] };
+    d.zones.push(Zone { tree: None, id: "orchard".into(),
+        polygon: vec![[0,0],[1200,0],[1200,1200],[0,1200]], kind: ZoneKind::Orchard,
+        spacing_cm: 400, density_per_mille: 1000, exclusions: vec![] });
+    d.heightmaps.push(Heightmap { cell: Cell { x:0,y:0 }, path: "terrain/h.png".into(),
+        spacing_cm:200, offset_cm:-50, step_cm:1, source_accuracy_cm:None });
+    let heights: Vec<u16> = (0..49).map(|i| (i % 7 * 11 + i / 7 * 3) as u16).collect();
+    let package = read_bytes(&pack_bytes(d, BTreeMap::from([("terrain/h.png".into(),png(7,&heights))])).unwrap()).unwrap();
+    let chunk = package.generate(Cell { x:0,y:0 },1000).unwrap();
+    assert!(!chunk.objects.is_empty());
+    for tree in &chunk.objects {
+        let surface = chunk.spawn(&SpawnRequest { position_cm:[tree.position[0],tree.position[2]],surface_id:"terrain".into() }).unwrap();
+        assert_eq!(tree.position,surface);
+    }
 }

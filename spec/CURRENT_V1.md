@@ -1,0 +1,29 @@
+# Current v1 contract
+
+The 2026-09-20 replacement removes versioned implementations. Package, recipe,
+generated geometry, scene units, regional index and generated archive use v1.
+Changing implementation updates this contract in place; version increments need
+explicit user approval. Existing data is neither searched for conversion nor deleted.
+
+Generation always uses integer road arrangement, connected sidewalks, courtyard
+buildings, indexed placement validation, authored tree assets and environment
+profiles. The latest road partition and three-dimensional seam rules remain.
+Regional source uses the local dependency closure, retaining complete context only
+where implicit widths or repetitions require it. Decoder peak declarations are
+mandatory and verified against payload bytes. Size, cancellation, allocation,
+content hash and audit checks remain binding.
+
+Generated caches have one MKCELL01 layout: fixed header, triangle/object arrays,
+prism count and records, convex count and records, including zero counts. Their key
+includes BUILD_FINGERPRINT, generated version, world identity and cell. Cargo derives
+the fingerprint from sorted relative source/schema/dependency paths and UTF-8 contents
+with LF line endings and length delimiters. Absolute paths, platform, timestamps and
+build output do not enter the digest. Archive roundtrip and corruption tests remain;
+portable geometry vectors use a fixed test key independent of source edits.
+
+The renderer's update_environment accepts `immediate` to apply road wetness/snow
+without blending at a race boundary. It consumes resolved state and never advances
+simulation time; precipitation animation remains live.
+
+Earlier dated design and validation documents preserve evidence of prior formats.
+Their old-reader, version-selection and frozen legacy-output requirements are superseded.

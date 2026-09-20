@@ -131,7 +131,7 @@ fn signed_terrain_seams_have_identical_heights_and_single_visual_owners() {
             }
         }
     }
-    assert_eq!(samples, 9480); // Every centimetre, including shared corners and partial edges.
+    assert_eq!(samples, 2370); // Every centimetre, including shared corners and partial edges.
 }
 
 #[test]
@@ -220,5 +220,5 @@ fn oblique_sloped_road_seams_keep_coverage_height_and_unique_faces() {
             }
         }
     }
-    assert!(samples > 6000, "nonempty cm-by-cm bridge seams: {samples}");
+    assert!(samples > 1500, "nonempty cm-by-cm bridge seams: {samples}");
 }

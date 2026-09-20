@@ -63,17 +63,11 @@ pub(crate) fn estimate_validated(
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
         triangles: 0,
-        generation_scratch_bytes: (if d.recipe_version >= 2
-            && (!d.roads.is_empty() || !d.surface_areas.is_empty())
-        {
-            crate::roads::SCRATCH_BYTES * if d.recipe_version >= 6 { 2 } else { 1 }
+        generation_scratch_bytes: (if !d.roads.is_empty() || !d.surface_areas.is_empty() {
+            crate::roads::SCRATCH_BYTES * { 2 }
         } else {
             0
-        }) + if d.recipe_version >= 3 {
-            crate::placement::SCRATCH_BYTES
-        } else {
-            0
-        },
+        }) + { crate::placement::SCRATCH_BYTES },
         objects: 0,
         occupied_solids: 0,
         building_prisms: 0,
@@ -100,48 +94,32 @@ pub(crate) fn estimate_validated(
     }
     let road_margin = crate::roads::influence_margin(d);
     for r in &d.roads {
-        for (index, points) in r.points.windows(2).enumerate() {
-            let shape = bounds(
-                points.iter().map(|p| [p[0], p[2]]),
-                r.widths_cm[index] as i64 / 2 + 1,
-            );
-            let count = match r.kind {
-                RoadKind::Tunnel => 8,
-                RoadKind::Underpass => 6,
-                _ => 2,
-            };
-            if d.recipe_version == 1 {
-                add(count * clip_factor(&shape, &area), r.id.len());
-            } else {
-                // Corridors plus their two aprons. This is a source-derived
-                // output allowance, also enforced by recipe-2 generation.
-                let local = bounds(points.iter().map(|p| [p[0], p[2]]), road_margin);
-                if clip_factor(&local, &area) != 0 {
-                    let span = |axis: usize| {
-                        ((local.max[axis].min(area.max[axis])
-                            - local.min[axis].max(area.min[axis]))
+        for points in r.points.windows(2) {
+            // Corridors plus their two aprons. This is a source-derived
+            // output allowance, also enforced by recipe-2 generation.
+            let local = bounds(points.iter().map(|p| [p[0], p[2]]), road_margin);
+            if clip_factor(&local, &area) != 0 {
+                let span = |axis: usize| {
+                    ((local.max[axis].min(area.max[axis]) - local.min[axis].max(area.min[axis]))
                         .max(0)
-                            / spacing
-                            + 2) as u64
-                    };
-                    let touched = span(0).saturating_mul(span(1));
-                    add(touched.saturating_mul(128).saturating_add(256), r.id.len());
-                    if d.recipe_version >= 3 {
-                        let width = crate::placement::sidewalk_width(d, r) as i64;
-                        if width > 0 {
-                            let local_span = ((local.max[0].min(area.max[0])
-                                - local.min[0].max(area.min[0]))
-                            .max(0)
-                                + (local.max[1].min(area.max[1]) - local.min[1].max(area.min[1]))
-                                    .max(0))
-                                / 200
-                                + 4;
-                            add(
-                                local_span as u64 * 96 * (width / spacing + 2) as u64,
-                                r.id.len() + 9,
-                            );
-                        }
-                    }
+                        / spacing
+                        + 2) as u64
+                };
+                let touched = span(0).saturating_mul(span(1));
+                add(touched.saturating_mul(128).saturating_add(256), r.id.len());
+
+                let width = crate::placement::sidewalk_width(d, r) as i64;
+                if width > 0 {
+                    let local_span = ((local.max[0].min(area.max[0])
+                        - local.min[0].max(area.min[0]))
+                    .max(0)
+                        + (local.max[1].min(area.max[1]) - local.min[1].max(area.min[1])).max(0))
+                        / 200
+                        + 4;
+                    add(
+                        local_span as u64 * 96 * (width / spacing + 2) as u64,
+                        r.id.len() + 9,
+                    );
                 }
             }
         }
@@ -151,23 +129,15 @@ pub(crate) fn estimate_validated(
         let n = (building.footprint.len()
             + building.holes.iter().map(Vec::len).sum::<usize>()
             + 2 * building.holes.len()) as u64;
-        if d.recipe_version >= 3 {
-            let parts = if building.roof == "gable" { 4 } else { n - 2 };
-            let clipped = parts * clip_factor(&shape, &area);
-            cost.building_prisms = cost.building_prisms.saturating_add(clipped);
-            if clipped > 0 {
-                cost.occupied_solids = cost.occupied_solids.saturating_add(parts);
-            }
-            add(clipped * 8, building.id.len());
-            continue;
+
+        let parts = if building.roof == "gable" { 4 } else { n - 2 };
+        let clipped = parts * clip_factor(&shape, &area);
+        cost.building_prisms = cost.building_prisms.saturating_add(clipped);
+        if clipped > 0 {
+            cost.occupied_solids = cost.occupied_solids.saturating_add(parts);
         }
-        if clip_factor(&shape, &area) != 0 {
-            cost.occupied_solids = cost.occupied_solids.saturating_add(n - 2);
-        }
-        add(
-            (n - 2 + 2 * n) * clip_factor(&shape, &area),
-            building.id.len(),
-        );
+        add(clipped * 8, building.id.len());
+        continue;
     }
     for zone in &d.zones {
         if zone.density_per_mille == 0 {
@@ -197,34 +167,35 @@ pub(crate) fn estimate_validated(
         if let Some(tree) = &zone.tree {
             let asset = d.assets.iter().find(|a| a.id == tree.asset_id).unwrap();
             cost.occupied_solids = cost.occupied_solids.saturating_add(
-                candidates.saturating_mul((asset.collision.len() + asset.convex_collision.len()) as u64));
-            cost.asset_convexes = cost.asset_convexes.saturating_add(
-                candidates.saturating_mul(asset.convex_collision.len() as u64));
+                candidates
+                    .saturating_mul((asset.collision.len() + asset.convex_collision.len()) as u64),
+            );
+            cost.asset_convexes = cost
+                .asset_convexes
+                .saturating_add(candidates.saturating_mul(asset.convex_collision.len() as u64));
             let triangles = asset.collision.len() as u64 * 12
-                + asset.convex_collision.iter().map(|c| c.faces.len() as u64).sum::<u64>();
-            add(candidates.saturating_mul(triangles).saturating_mul(5),
-                (zone.id.len() + 42).max(tree.asset_id.len()));
+                + asset
+                    .convex_collision
+                    .iter()
+                    .map(|c| c.faces.len() as u64)
+                    .sum::<u64>();
+            add(
+                candidates.saturating_mul(triangles).saturating_mul(5),
+                (zone.id.len() + 42).max(tree.asset_id.len()),
+            );
         } else {
             cost.occupied_solids = cost.occupied_solids.saturating_add(candidates);
             add(candidates.saturating_mul(12 * 5), zone.id.len() + 42);
         }
     }
-    let repeated = if d.recipe_version >= 3 {
-        crate::placement::repeated(d)?
-    } else {
-        vec![]
-    };
-    if d.recipe_version >= 3 {
-        cost.generation_scratch_bytes = cost
-            .generation_scratch_bytes
-            .saturating_add((d.placements.len() + repeated.len()) as u64 * 512);
-    }
+    let repeated = { crate::placement::repeated(d)? };
+
+    cost.generation_scratch_bytes = cost
+        .generation_scratch_bytes
+        .saturating_add((d.placements.len() + repeated.len()) as u64 * 512);
+
     for placement in d.placements.iter().chain(&repeated) {
-        let builtin = if d.recipe_version >= 3 {
-            crate::placement::builtin(&placement.asset_id)
-        } else {
-            None
-        };
+        let builtin = { crate::placement::builtin(&placement.asset_id) };
         let collision = builtin.as_ref().unwrap_or_else(|| {
             &d.assets
                 .iter()

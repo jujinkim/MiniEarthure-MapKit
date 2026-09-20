@@ -22,19 +22,19 @@ impl Fixture {
 pub fn fixtures() -> Vec<Fixture> {
     let mut out: Vec<_> = [
         (
-            "recipe1",
+            "minimal",
             include_str!("../../../../examples/minimal/document.json"),
         ),
         (
-            "recipe2",
+            "roads",
             include_str!("../../../../examples/roads/document.json"),
         ),
         (
-            "recipe3",
+            "placement",
             include_str!("../../../../examples/placement/document.json"),
         ),
         (
-            "recipe4",
+            "assets",
             include_str!("../../../../examples/assets/document.json"),
         ),
     ]
@@ -100,7 +100,7 @@ pub fn fixtures() -> Vec<Fixture> {
         document: d,
         grids: BTreeMap::new(),
     });
-    for recipe in 1..=4 {
+    for recipe in [1] {
         let mut d = out[3].document.clone();
         d.recipe_version = recipe;
         d.assets.clear();
@@ -142,7 +142,7 @@ pub fn fixtures() -> Vec<Fixture> {
             grids,
         });
     }
-    for recipe in 1..=4 {
+    for recipe in [1] {
         let mut d = out[3].document.clone();
         d.recipe_version = recipe;
         d.assets.clear();
@@ -206,7 +206,8 @@ pub fn record(fixture: &Fixture) -> Value {
                 generate_with_occupancy(fixture.input(cell), MAX_OCCUPIED_SOLIDS).unwrap();
             let c = &generated.chunk;
             let cost = estimate_generation(&d, cell, 500_000).unwrap();
-            let key = archive_key(&input_hash, cell);
+            // Fixed vector key isolates archive encoding from source-build invalidation.
+            let key = sha256(format!("vector/{input_hash}/{}/{}", cell.x, cell.y).as_bytes());
             let archive = encode_archive(c, &key, archive_limit(&cost)).unwrap();
             assert_eq!(decode_archive(&archive, &key, cell, &cost).unwrap(), *c);
             assert_eq!(c.hash().unwrap(), sha256(&canonical(c).unwrap()));

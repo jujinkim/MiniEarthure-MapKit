@@ -136,7 +136,7 @@ def upgrade(source, destination, concept='metropolis'):
     architecture,climate,settlement={'polar':('timber','polar','sparse'),'metropolis':('modern','temperate','urban'),'countryside':('rural','temperate','village'),'middle-eastern':('adobe','arid','urban'),'desert':('adobe','arid','wilderness'),'jungle':('tropical','tropical','wilderness'),'southeast-asian':('tropical','tropical','village')}[concept]
     doc['environment']=dict(architecture=architecture,climate=climate,settlement=settlement,version=1,concept=concept,latitude_mdeg=latitude,longitude_mdeg=0,utc_offset_minutes=0,
         sunrise_minutes=360,sunset_minutes=1080,regions=[],lights=lights)
-    doc['recipe_version']=8;doc['revision']+=1
+    doc['recipe_version']=1;doc['revision']+=1
     doc['attributions'].append(dict(source='mapkit-atmosphere-materials-v1',license='MIT',notice='Original deterministic miniature material images and projected UV authoring; original geometry and source attribution retained.'))
     (destination/'document.json').write_bytes(canonical(doc))
     for name in ['driving.json','world.json']:

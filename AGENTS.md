@@ -13,3 +13,5 @@ standalone startup. Full integration, recursive clean-clone and export matrices
 require an explicit user request. Record known failures and user checks
 separately; do not report unperformed tests as passed. This supersedes earlier
 automatic full-suite/final-acceptance requirements.
+
+Current contract: `spec/CURRENT_V1.md`. Only the current v1 format and latest algorithms are supported. Do not add old readers, automatic upgrades, compatibility fallbacks or increment versions without explicit user instruction. Build fingerprints invalidate disposable generated caches. Keep epochs/revisions for runtime ordering.
