@@ -20,7 +20,7 @@ fn main() {
     let mut files = vec![PathBuf::from("Cargo.toml"), PathBuf::from("Cargo.lock")];
     files.extend(["spec/document.schema.json", "spec/manifest.schema.json"].map(PathBuf::from));
     collect(&root, &root.join("crates"), &mut files);
-    files.sort();
+    files.sort_by_key(|path| path.to_str().unwrap().replace('\\', "/"));
     let mut hash = Sha256::new();
     for relative in files {
         let path = root.join(&relative);

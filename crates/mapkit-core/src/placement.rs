@@ -1,4 +1,4 @@
-//! Explicit recipe-3 buildings and placement. All decisions use source identity,
+//! Explicit current buildings and placement. All decisions use source identity,
 //! bounded integer geometry and portable math, never a loaded-neighbour cache.
 use crate::generation::Builder;
 use crate::*;
@@ -56,7 +56,7 @@ impl BuildingPrism {
 pub(crate) fn tick(work: &mut usize, amount: usize) -> Result<()> {
     *work = work.saturating_add(amount);
     if *work > MAX_WORK {
-        Err(error("E_BUDGET", "recipe-3 placement work limit"))
+        Err(error("E_BUDGET", "current placement work limit"))
     } else {
         Ok(())
     }
@@ -383,7 +383,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
     if d.zones.iter().any(|z| z.spacing_cm > 100_000) {
         return Err(error(
             "E_GEOMETRY",
-            "recipe-3 zone spacing exceeds 100000 cm",
+            "current zone spacing exceeds 100000 cm",
         ));
     }
     let source_ids: BTreeSet<_> = d
@@ -410,7 +410,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         {
             return Err(error(
                 "E_ID",
-                "source ID aliases recipe-3 generated identity",
+                "source ID aliases current generated identity",
             ));
         }
     }

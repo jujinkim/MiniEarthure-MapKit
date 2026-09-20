@@ -6,7 +6,7 @@ use super::*;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationCost {
     pub triangles: u64,
-    /// Bounded recipe-2 road planning/subdivision workspace, separate from output.
+    /// Bounded road road planning/subdivision workspace, separate from output.
     pub generation_scratch_bytes: u64,
     pub objects: u64,
     /// Upper bound for optional occupied-volume records, independent of face clipping.
@@ -96,7 +96,7 @@ pub(crate) fn estimate_validated(
     for r in &d.roads {
         for points in r.points.windows(2) {
             // Corridors plus their two aprons. This is a source-derived
-            // output allowance, also enforced by recipe-2 generation.
+            // output allowance, also enforced by road generation.
             let local = bounds(points.iter().map(|p| [p[0], p[2]]), road_margin);
             if clip_factor(&local, &area) != 0 {
                 let span = |axis: usize| {

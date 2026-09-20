@@ -324,7 +324,7 @@
           "minimum": 0.0
         },
         "holes": {
-          "description": "Strictly interior, disjoint open courtyards; explicit recipe 5, flat roof.",
+          "description": "Strictly interior, disjoint open courtyards; flat roof.",
           "type": "array",
           "items": {
             "type": "array",
@@ -994,7 +994,7 @@
           "minimum": 0.0
         },
         "tree": {
-          "description": "Recipe 7: declared visual footprint and shared asset for generated trees.",
+          "description": "Declared visual footprint and shared asset for generated trees.",
           "anyOf": [
             {
               "$ref": "#/definitions/ZoneTree"

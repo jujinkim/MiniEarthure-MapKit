@@ -28,7 +28,7 @@ impl MapDocument {
         if !(1..=16_384).contains(&max_cells) {
             return Err(error("E_BUDGET", "invalid query cell allowance"));
         }
-        // Recipe 7 may use any small custom tree inside the existing 2 m
+        // Vegetation may use any small custom tree inside the existing 2 m
         // vegetation footprint. Metadata-only indexed queries need this same
         // envelope before loading source regions or knowing individual assets.
         let halo = { [200, 200] };

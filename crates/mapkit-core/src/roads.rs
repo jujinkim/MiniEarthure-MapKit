@@ -1,4 +1,4 @@
-//! Recipe 2: explicit graph aprons and planar terrain/road subdivision.
+//! explicit graph aprons and planar terrain/road subdivision.
 //! Recipe 1 remains in generation.rs. All cuts use one integer half-plane rule.
 use crate::generation::Builder;
 use crate::*;
@@ -92,7 +92,7 @@ pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
             let n = degree.entry(id).or_insert(0usize);
             *n += 1;
             if *n > 32 {
-                return Err(error("E_LIMIT", "recipe 2 junction exceeds 32 arms"));
+                return Err(error("E_LIMIT", "road junction exceeds 32 arms"));
             }
         }
         if r.from == r.to && r.points.len() == 2 {
@@ -104,7 +104,7 @@ pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
 pub(crate) fn tick(work: &mut usize, n: usize) -> Result<()> {
     *work = work.saturating_add(n);
     if *work > MAX_WORK {
-        Err(error("E_BUDGET", "recipe 2 subdivision work exceeded"))
+        Err(error("E_BUDGET", "road subdivision work exceeded"))
     } else {
         Ok(())
     }
@@ -235,7 +235,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
             if hit(s, bounds, margin) {
                 local_segments += 1;
                 if local_segments > MAX_LOCAL_PATCHES / 8 {
-                    return Err(error("E_BUDGET", "recipe 2 local segment limit"));
+                    return Err(error("E_BUDGET", "road local segment limit"));
                 }
                 relevant.insert(key(r, i));
                 relevant.insert(key(r, i + 1));
@@ -250,7 +250,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
                 if relevant.contains(&k) {
                     arm_count += 1;
                     if arm_count > MAX_LOCAL_PATCHES {
-                        return Err(error("E_BUDGET", "recipe 2 local arm limit"));
+                        return Err(error("E_BUDGET", "road local arm limit"));
                     }
                     groups.entry(k).or_default().push(Arm {
                         road: r,
@@ -350,7 +350,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
             }
         }
         if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
-            return Err(error("E_BUDGET", "recipe 2 local junction limit"));
+            return Err(error("E_BUDGET", "road local junction limit"));
         }
     }
     for r in &d.roads {
@@ -375,7 +375,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
                 }
             }
             if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
-                return Err(error("E_BUDGET", "recipe 2 local corridor limit"));
+                return Err(error("E_BUDGET", "road local corridor limit"));
             }
         }
     }
@@ -391,7 +391,7 @@ fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<
     Ok((patches, walls))
 }
 
-// Recipe 9 cuts each terrain tile once, before assigning surface identities.
+// The current arrangement cuts each terrain tile once, before assigning surface identities.
 fn ground_tile(
     d: &MapDocument,
     v: [Vertex; 4],
@@ -683,7 +683,7 @@ pub(crate) fn generate(
     Ok(())
 }
 
-/// Recipe 6 widened graph aprons cover corners; only restored ground receives
+/// Widened graph aprons cover corners; only restored ground receives
 /// sidewalk tops. Road carriageways, independent decks and portals are untouched.
 pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
     let expanded = Bounds {

@@ -148,7 +148,7 @@ pub struct SurfaceArea {
 pub struct Building {
     pub id: String,
     pub footprint: Vec<Point>,
-    /// Strictly interior, disjoint open courtyards; explicit recipe 5, flat roof.
+    /// Strictly interior, disjoint open courtyards; flat roof.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub holes: Vec<Vec<Point>>,
     pub base_cm: i64,
@@ -175,7 +175,7 @@ pub struct Zone {
     pub spacing_cm: u32,
     pub density_per_mille: u16,
     pub exclusions: Vec<Vec<Point>>,
-    /// Recipe 7: declared visual footprint and shared asset for generated trees.
+    /// Declared visual footprint and shared asset for generated trees.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tree: Option<ZoneTree>,
 }
@@ -748,7 +748,7 @@ pub struct GeneratedObject {
 pub struct GeneratedChunk {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub asset_convexes: Vec<GeneratedConvex>,
-    /// Recipe-3 convex building parts. Empty is omitted to preserve v1/v2 bytes.
+    /// Convex building parts. Empty collections are omitted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub building_prisms: Vec<BuildingPrism>,
     pub format_version: u32,

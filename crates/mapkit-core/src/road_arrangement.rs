@@ -1,4 +1,4 @@
-//! Bounded simultaneous integer subdivision for recipe 9 ground surfaces.
+//! Bounded simultaneous integer subdivision for current ground surfaces.
 //! Every neighboring face receives the same rounded intersection before emission.
 use crate::*;
 use i_overlay::{

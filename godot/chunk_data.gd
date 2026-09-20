@@ -1,5 +1,5 @@
 extends RefCounted
-## Read-only display/collision adapter. Packed integers preserve generated v6 centimetres.
+## Read-only display/collision adapter. Packed integers preserve generated v1 centimetres.
 const SURFACES := ["asphalt", "concrete", "dirt", "gravel", "grass"]
 
 static func view(chunk: Dictionary) -> Dictionary:

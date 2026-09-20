@@ -76,7 +76,7 @@ def main():
         chunk_path = work / 'chunk.json'
         generated_hash = run('generate-chunk', package, 0, 0, chunk_path)
         assert generated_hash == hashlib.sha256(chunk_path.read_bytes()).hexdigest()
-        assert json.loads(chunk_path.read_bytes())['format_version'] == 6
+        assert json.loads(chunk_path.read_bytes())['format_version'] == 1
         for kind in schemas:
             destination = work / f'{kind}.schema.json'
             run('schema', kind, destination)

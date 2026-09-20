@@ -9,7 +9,7 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
     var vectors: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://determinism-vectors.json"))
-    var packages := {"recipe1":"fixture", "recipe2":"roads", "recipe3":"placement", "recipe4":"assets"}
+    var packages := {"minimal":"fixture", "roads":"roads", "placement":"placement", "assets":"assets"}
     var count := 0
     for fixture: Dictionary in vectors.fixtures:
         if not packages.has(fixture.name): continue
@@ -49,7 +49,7 @@ func run() -> void:
             var regenerated: Dictionary = bridge.generate_chunk_packed(x,y)
             check(regenerated.ok and regenerated.data.generated_sha256 == expected.generated_sha256, "queries and view edits do not seed generation")
             count += 1
-    check(count == 16, "four recipes and four cells actually checked")
+    check(count == 16, "four fixtures and four cells actually checked")
     print("mapkit_determinism: " + ("PASS (16 core/JSON/packed/cache goldens, reverse cells, spawn, display isolation)" if failures.is_empty() else str(failures)))
     quit(0 if failures.is_empty() else 1)
 '''

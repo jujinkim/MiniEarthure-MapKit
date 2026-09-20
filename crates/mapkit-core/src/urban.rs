@@ -1,4 +1,4 @@
-//! Recipe 6 ground paint. Integer subdivisions share the road clipping rule.
+//! Ground paint. Integer subdivisions share the road clipping rule.
 use crate::generation::polygon_triangles;
 use crate::roads::{partition, tick, valid};
 use crate::*;

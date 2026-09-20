@@ -617,7 +617,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             .unwrap_or(0);
         // Validation and derivation are sequential. Keep all original files and
         // typed source charged while holding one expected source/canonical tree.
-        // The original-clone allowance also covers conservative legacy closures.
+        // The original-clone allowance also covers conservative source closures.
         cost.validation_peak_bytes.max(
             cost.retained_memory_bytes
                 + self.index.records[self.index.authoring_source].size * 32
@@ -902,7 +902,7 @@ impl IndexedReader<File> {
     }
 }
 
-/// Explicit indexed-source authoring entry point; never changes legacy read_project.
+/// Explicit indexed-source authoring entry point; separate from ordinary project directories.
 pub fn read_source_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
     let root = path.canonicalize().map_err(io)?;
     let doc_path = root.join("document.json").canonicalize().map_err(io)?;

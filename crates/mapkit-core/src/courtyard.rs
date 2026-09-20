@@ -1,4 +1,4 @@
-//! Recipe 5: bounded integer rings and deterministic visible bridges. No inserted
+//! bounded integer rings and deterministic visible bridges. No inserted
 //! rounded vertices: triangulation, solids and roofs share original centimetres.
 use crate::*;
 const MAX_WORK: usize = 4_000_000;
@@ -80,7 +80,7 @@ pub(crate) fn validate(b: &Building, bounds: &Bounds, work: &mut usize) -> Resul
 }
 fn canonical(p: &[Point], positive: bool) -> Vec<Point> {
     let mut p = p.to_vec();
-    // Remove redundant collinear vertices only in the new courtyard recipe path.
+    // Remove redundant collinear vertices for courtyard triangulation.
     loop {
         let n = p.len();
         let Some(i) = (0..n).find(|&i| cross(p[(i + n - 1) % n], p[i], p[(i + 1) % n]) == 0) else {

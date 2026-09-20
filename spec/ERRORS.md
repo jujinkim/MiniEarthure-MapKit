@@ -54,3 +54,6 @@ Common renderer jobs use `E_RENDER_ASSET` for missing validated presentation byt
 failed image/GLB backend decode, unknown builtins or non-static engine import
 results. This is a presentation-job error, not a CLI package-acceptance result.
 Consumers must reject readiness and retain any already committed driving region.
+
+Current v1 also reports `E_INDEX` for malformed regional directories or identities,
+`E_CANCELLED` when an owning request is retired, and `E_ENVIRONMENT` for invalid map environment profiles.
