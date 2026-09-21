@@ -444,6 +444,10 @@ pub fn pack_bytes(
 pub fn read(path: &Path) -> Result<Package> {
     read_bytes(&bounded_read(path, MAX_PACKAGE_BYTES)?)
 }
+/// File-backed equivalent of the budgeted byte reader; bounds input before allocation.
+pub fn read_with_budget(path: &Path, memory_limit: u64) -> Result<Package> {
+    read_bytes_with_budget(&bounded_read(path, MAX_PACKAGE_BYTES.min(memory_limit))?, memory_limit)
+}
 pub fn read_bytes(bytes: &[u8]) -> Result<Package> {
     read_bytes_with_budget(bytes, u64::MAX)
 }

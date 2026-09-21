@@ -40,6 +40,33 @@ fn reproducible_third_party_roundtrip() {
     assert_eq!(first, pack_bytes(p.document, p.files).unwrap());
 }
 #[test]
+fn file_budget_and_restore_preserve_source_and_existing_destination() {
+    let root = std::env::temp_dir().join(format!("mapkit-restore-{}-{}", std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    std::fs::create_dir(&root).unwrap();
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+    }
+    let _scratch = Scratch(root.clone());
+    let bytes = package(document());
+    let source = root.join("source.memap");
+    std::fs::write(&source, &bytes).unwrap();
+    let cost = inspect_read_cost(&bytes).unwrap();
+    assert!(read_with_budget(&source, bytes.len() as u64 - 1).is_err());
+    assert_eq!(read_with_budget(&source, cost.validation_peak_bytes - 1).err().unwrap().code, "E_MEMORY_BUDGET");
+    let validated = read_with_budget(&source, cost.validation_peak_bytes).unwrap();
+    let restored = root.join("restored");
+    unpack(&validated, &restored).unwrap();
+    let (document, files) = read_project(&restored).unwrap();
+    assert_eq!(pack_bytes(document, files).unwrap(), bytes);
+    let marker = restored.join("user-file.txt");
+    std::fs::write(&marker, b"preserve").unwrap();
+    assert!(unpack(&validated, &restored).is_err());
+    assert_eq!(std::fs::read(marker).unwrap(), b"preserve");
+    assert_eq!(std::fs::read(source).unwrap(), bytes);
+}
+#[test]
 fn provenance_does_not_change_world_or_generated_hash() {
     let a = read_bytes(&package(document())).unwrap();
     let mut d = document();

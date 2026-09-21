@@ -36,3 +36,10 @@ deck segment across the footprint. Ground/tunnel/underpass corridors remain
 excluded. These checks charge the existing bounded placement work allowance.
 The miniature kit and climate ground palette are renderer/source assets; surface
 identities and physical material behavior do not change.
+
+File-backed `read_with_budget(path, allowance)` bounds compressed input before
+allocation and checks the existing validation peak before inflation. Godot exposes
+`open_package_budgeted(path, allowance)` and `unpack_source(destination)`. Restore
+uses the already validated immutable package, retains every original payload and
+requires a new destination directory. Failed opens clear prior native state.
+These APIs do not introduce another format or a migration path.

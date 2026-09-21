@@ -78,6 +78,19 @@ impl MapKitBridge {
             info
         }))
     }
+    #[func]
+    fn open_package_budgeted(&mut self, path: GString, memory_limit: i64) -> GString {
+        self.package = None;
+        if memory_limit <= 0 {
+            return response(Err(mapkit_core::error("E_MEMORY_BUDGET", "positive memory allowance required")));
+        }
+        response(mapkit_package::read_with_budget(Path::new(&path.to_string()), memory_limit as u64).map(|p| {
+            let info = serde_json::to_value(&p.inspection).unwrap();
+            self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
+            self.package = Some(p);
+            info
+        }))
+    }
     /// Caller-supplied validation allowance, checked before payload inflation.
     #[func]
     fn open_package_bytes_budgeted(
@@ -414,6 +427,16 @@ impl MapKitBridge {
                     Ok(serde_json::to_value(p.inspection).unwrap())
                 }),
         )
+    }
+    /// Restore only the already validated immutable package. Never replace a project.
+    #[func]
+    fn unpack_source(&self, destination: GString) -> GString {
+        response(self.package.as_ref()
+            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .and_then(|package| {
+                mapkit_package::unpack(package, Path::new(&destination.to_string()))?;
+                Ok(serde_json::json!({"path": destination.to_string()}))
+            }))
     }
     /// Reserve before native generation; retain output allowance through decode/use.
     #[func]
