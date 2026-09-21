@@ -316,3 +316,14 @@ fn diagonal_proxy_hull_rejects_contact_without_empty_aabb_corners() {
     d.placements[1].position=[9700,0,8700];
     assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
 }
+
+#[test]
+fn prepared_source_index_preserves_order_hash_and_boundary_occupancy() {
+    let d=document(); let prepared=PreparedMap::new(d.clone()).unwrap();
+    for cell in d.cells() {
+        let old=generated(&d,cell);
+        let new=prepared.generate_with_occupancy(cell,None,500_000,Some(20_000)).unwrap();
+        assert_eq!(old.chunk.hash().unwrap(),new.chunk.hash().unwrap());
+        assert_eq!(old.solids,new.solids);
+    }
+}

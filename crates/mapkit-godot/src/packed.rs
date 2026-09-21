@@ -127,6 +127,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
     let mut ids = PackedStringArray::new();
     let mut index = BTreeMap::<&str, i32>::new();
     for triangle in &chunk.triangles {
+        mapkit_core::cancellation::checkpoint()?;
         let points = [0, 2, 1].map(|i| {
             let v = triangle.vertices[i];
             Vector3::new(v[0] as f32, v[1] as f32, -v[2] as f32)
@@ -173,6 +174,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
     }
     let mut objects = Array::<VarDictionary>::new();
     for object in &chunk.objects {
+        mapkit_core::cancellation::checkpoint()?;
         objects.push(&vdict! {
             "id" => object.id.as_str(), "asset_id" => object.asset_id.as_str(),
             "position" => &varray![object.position[0], object.position[1], object.position[2]],
@@ -184,6 +186,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
     let mut materials = vec![GString::new(); ids.len()];
     let mut usages = materials.clone();
     for prism in &chunk.building_prisms {
+        mapkit_core::cancellation::checkpoint()?;
         let id = *index
             .get(prism.object_id.as_str())
             .ok_or_else(|| mapkit_core::error("E_GEOMETRY", "building prism has no faces"))?;
@@ -196,6 +199,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
     let mut convex_offsets = vec![0i32];
     let mut convex_ids = PackedStringArray::new();
     for c in &chunk.asset_convexes {
+        mapkit_core::cancellation::checkpoint()?;
         convex_vertices.extend(c.shape.vertices.iter().flatten().copied());
         convex_offsets.push(convex_vertices.len() as i32);
         convex_ids.push(&GString::from(c.object_id.as_str()));

@@ -22,11 +22,12 @@ static func supports_batches(chunk: Dictionary) -> bool:
 		if presentation.get("assets", {}).has(id): return false # Image alpha/order stays on the legacy path.
 	return chunk.has("scene_vertices")
 
-static func prepare_batches(chunk: Dictionary) -> Array:
+static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable()) -> Array:
 	if not supports_batches(chunk): return []
 	var groups: Dictionary = {}
 	var hidden: Variant = chunk.get("presentation", {}).get("hidden_proxies", PackedStringArray())
 	for triangle in DATA.count(chunk):
+		if triangle % TRIANGLES_PER_BATCH == 0 and cancelled.is_valid() and cancelled.call(): return []
 		if DATA.object_id(chunk, triangle) in hidden: continue
 		var key := material_key(chunk, triangle)
 		if not groups.has(key): groups[key] = PackedInt32Array()
@@ -35,6 +36,7 @@ static func prepare_batches(chunk: Dictionary) -> Array:
 	for key: String in groups:
 		var indices: PackedInt32Array = groups[key]
 		for first in range(0, indices.size(), TRIANGLES_PER_BATCH):
+			if cancelled.is_valid() and cancelled.call(): return []
 			var count := mini(TRIANGLES_PER_BATCH, indices.size() - first) * 3
 			var vertices := PackedVector3Array()
 			var normals := PackedVector3Array()

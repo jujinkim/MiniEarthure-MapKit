@@ -109,6 +109,7 @@ impl ReadTicket {
         self.generation
     }
     pub fn check(&self) -> Result<()> {
+        mapkit_core::cancellation::checkpoint()?;
         if self.epoch.0.load(Ordering::SeqCst) == self.generation {
             Ok(())
         } else {
@@ -372,7 +373,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         }
         let retained = self.index_retained
             + expanded * 2
-            + structured * 32
+            + structured * 40
+            + 32 * 1024 * 1024
             + (payloads.len() as u64 + 1) * 4096
             + 16_384 * 256;
         ReadCost {

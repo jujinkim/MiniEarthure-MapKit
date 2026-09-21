@@ -22,6 +22,7 @@ impl Builder {
         id: &str,
         spawnable: bool,
     ) -> Result<()> {
+        crate::cancellation::checkpoint()?;
         let mut poly = v.to_vec();
         for (axis, limit, lower) in [
             (0, self.bounds.min[0], true),
@@ -234,6 +235,7 @@ fn generate_internal(
         },
         occupancy,
         &cost,
+        None,
     )
 }
 
@@ -241,6 +243,7 @@ pub(crate) fn generate_prepared(
     input: GenerationInput<'_>,
     solids: Option<usize>,
     cost: &GenerationCost,
+    placements: Option<&crate::placement::PreparedPlacements>,
 ) -> Result<GeneratedOccupancy> {
     generate_validated(
         input,
@@ -249,6 +252,7 @@ pub(crate) fn generate_prepared(
             max,
         }),
         cost,
+        placements,
     )
 }
 
@@ -256,6 +260,7 @@ fn generate_validated(
     input: GenerationInput<'_>,
     occupancy: Option<Occupancy>,
     cost: &GenerationCost,
+    placements: Option<&crate::placement::PreparedPlacements>,
 ) -> Result<GeneratedOccupancy> {
     let d = input.document;
     let bounds = d.cell_bounds(input.cell)?;
@@ -294,7 +299,7 @@ fn generate_validated(
     }
     crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
 
-    crate::placement::generate(d, input.cell, &mut b)?;
+    crate::placement::generate(d, input.cell, &mut b, placements)?;
     return Ok(GeneratedOccupancy {
         chunk: b.chunk,
         solids: b.occupancy.map_or_else(Vec::new, |v| v.solids),

@@ -341,7 +341,14 @@ fn bounded_read(path: &Path, limit: u64) -> Result<Vec<u8>> {
         return Err(error("E_LIMIT", "file exceeds supported profile"));
     }
     let mut bytes = vec![];
-    file.take(limit + 1).read_to_end(&mut bytes).map_err(io)?;
+    let mut reader = file.take(limit + 1);
+    let mut block = [0u8; 64 * 1024];
+    loop {
+        mapkit_core::cancellation::checkpoint()?;
+        let count=reader.read(&mut block).map_err(io)?;
+        if count==0 { break; }
+        bytes.extend_from_slice(&block[..count]);
+    }
     if bytes.len() as u64 > limit {
         return Err(error("E_LIMIT", "file grew beyond limit"));
     }
@@ -609,9 +616,7 @@ impl Package {
     pub fn asset_presentation_cost(&self, id: &str) -> Result<u64> {
         let a = self
             .document
-            .assets
-            .iter()
-            .find(|a| a.id == id)
+            .asset(id)
             .ok_or_else(|| error("E_REFERENCE", "unknown asset"))?;
         Ok(assets::presentation_cost(&a.path, &self.files[&a.path]))
     }
@@ -620,23 +625,21 @@ impl Package {
     pub fn asset_instance_cost(&self, id: &str) -> Result<u64> {
         let a = self
             .document
-            .assets
-            .iter()
-            .find(|a| a.id == id)
+            .asset(id)
             .ok_or_else(|| error("E_REFERENCE", "unknown asset"))?;
         Ok(assets::instance_cost(&a.path, &self.files[&a.path]))
     }
 
     fn generation_heightgrid(&self, cell: Cell) -> Result<Option<HeightGrid>> {
         self.document
-            .heightmaps
-            .iter()
-            .find(|h| h.cell == cell)
+            .heightmap(cell)
             .map(|h| decode_heightmap(h, self.document.cell_size_cm, &self.files[&h.path]))
             .transpose()
     }
     pub fn generate(&self, cell: Cell, max_triangles: usize) -> Result<GeneratedChunk> {
+        mapkit_core::cancellation::checkpoint()?;
         let grid = self.generation_heightgrid(cell)?;
+        mapkit_core::cancellation::checkpoint()?;
         self.document.generate(cell, grid.as_ref(), max_triangles)
     }
     /// Uses the identical package terrain decoder and generator as ordinary chunks.
@@ -649,7 +652,9 @@ impl Package {
         if max_solids > MAX_OCCUPIED_SOLIDS {
             return Err(error("E_BUDGET", "occupancy limit exceeds 200000 solids"));
         }
+        mapkit_core::cancellation::checkpoint()?;
         let grid = self.generation_heightgrid(cell)?;
+        mapkit_core::cancellation::checkpoint()?;
         self.document
             .generate_with_occupancy(cell, grid.as_ref(), max_triangles, Some(max_solids))
     }

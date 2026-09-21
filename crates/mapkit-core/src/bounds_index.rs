@@ -1,10 +1,12 @@
 //! Transient deterministic broad phase. Exact predicates remain authoritative.
 use crate::*;
+#[derive(Debug)]
 struct Node {
     bounds: Bounds,
     children: Option<(usize, usize)>,
     items: Vec<usize>,
 }
+#[derive(Debug)]
 pub(crate) struct BoundsIndex {
     nodes: Vec<Node>,
 }

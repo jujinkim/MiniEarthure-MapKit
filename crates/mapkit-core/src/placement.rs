@@ -54,6 +54,7 @@ impl BuildingPrism {
     }
 }
 pub(crate) fn tick(work: &mut usize, amount: usize) -> Result<()> {
+    crate::cancellation::checkpoint()?;
     *work = work.saturating_add(amount);
     if *work > MAX_WORK {
         Err(error("E_BUDGET", "current placement work limit"))
@@ -666,7 +667,7 @@ fn tree_footprint(p: Point, radius: i64) -> [Point; 4] {
 fn eligible(
     d: &MapDocument,
     c: &Candidate,
-    occupied: &[Vec<Point>],
+    prepared: &PreparedPlacements,
     work: &mut usize,
 ) -> Result<bool> {
     let zone = &d.zones[c.zone];
@@ -675,7 +676,7 @@ fn eligible(
         .tree
         .as_ref()
         .map_or(100, |tree| i64::from(tree.clearance_cm));
-    if !inside(&poly, &zone.polygon, work)? || !source_clear(d, &poly, clearance, work)? {
+    if !inside(&poly, &zone.polygon, work)? || !prepared.source_clear(d, &poly, clearance, work)? {
         return Ok(false);
     }
     for excluded in &zone.exclusions {
@@ -683,7 +684,9 @@ fn eligible(
             return Ok(false);
         }
     }
-    for p in occupied {
+    let occupied_area = aabb(&tree_footprint(c.p, zone_tree_radius(zone) + clearance));
+    for i in prepared.occupied_index.query(&occupied_area, work)? {
+        let p = &prepared.occupied[i];
         let footprint = if zone.tree.is_some() {
             tree_footprint(c.p, zone_tree_radius(zone) + clearance)
         } else {
@@ -695,7 +698,10 @@ fn eligible(
     }
     // Reserve the authored/automatic sidewalk width, even when a piece is
     // suppressed. Vegetation must never occupy a future access strip.
-    for road in &d.roads {
+    let mut road_area = aabb(&poly);
+    for a in 0..2 { road_area.min[a] -= 1000 + clearance; road_area.max[a] += 1000 + clearance; }
+    for i in prepared.roads.query(&road_area, work)? {
+        let road = &d.roads[i];
         if road_overlap(
             &poly,
             road,
@@ -711,7 +717,7 @@ fn vegetation(
     d: &MapDocument,
     cell: Cell,
     b: &mut Builder,
-    occupied: &[Vec<Point>],
+    prepared: &PreparedPlacements,
     work: &mut usize,
 ) -> Result<()> {
     for (zi, zone) in d.zones.iter().enumerate() {
@@ -731,7 +737,7 @@ fn vegetation(
                 let Some(c) = candidate(d, zi, x, y)? else {
                     continue;
                 };
-                if d.cell_at(c.p) != Some(cell) || !eligible(d, &c, occupied, work)? {
+                if d.cell_at(c.p) != Some(cell) || !eligible(d, &c, prepared, work)? {
                     continue;
                 }
                 let mut blocked = false;
@@ -773,7 +779,7 @@ fn vegetation(
                             let overlap = dx.abs() <= i128::from(radii + gap)
                                 && dy.abs() <= i128::from(radii + gap);
                             if (overlap || dx * dx + dy * dy < (reach as i128) * (reach as i128))
-                                && eligible(d, &other_c, occupied, work)?
+                                && eligible(d, &other_c, prepared, work)?
                             {
                                 blocked = true;
                                 break;
@@ -811,40 +817,90 @@ fn vegetation(
     }
     Ok(())
 }
-pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder) -> Result<()> {
-    let mut work = 0;
-
-    crate::roads::sidewalks(d, b)?;
-
-    buildings(d, b)?;
-    let mut occupied: Vec<_> = d.placements.iter().map(|p| footprint(d, p)).collect();
-    for p in &d.placements {
-        emit_placement(d, cell, p, b, false)?;
-    }
-    for p in repeated(d)? {
-        let poly = footprint(d, &p);
-        if !source_clear(d, &poly, 0, &mut work)? {
-            continue;
-        }
-        let mut blocked = false;
-        for prior in &occupied {
-            tick(&mut work, 1)?;
-            let a = aabb(&poly);
-            let c = aabb(prior);
-            // Declared proxy footprints are rectangles. Adjacent fence panels
-            // may share an edge; they must never share positive-area interiors.
-            if (0..2).all(|i| a.min[i] < c.max[i] && c.min[i] < a.max[i]) {
-                blocked = true;
-                break;
+/// Source-global decisions are immutable. Keep the accepted repetition sequence
+/// and ALL occupied footprints: a cell-local subset would change vegetation seams.
+#[derive(Debug)]
+pub(crate) struct PreparedPlacements {
+    repeated: Vec<Placement>,
+    occupied: Vec<Vec<Point>>,
+    index: crate::bounds_index::BoundsIndex,
+    occupied_index: crate::bounds_index::BoundsIndex,
+    roads: crate::bounds_index::BoundsIndex,
+    buildings: crate::bounds_index::BoundsIndex,
+}
+impl PreparedPlacements {
+    pub(crate) fn new(d: &MapDocument) -> Result<Self> {
+        let mut work = 0;
+        let mut occupied: Vec<_> = d.placements.iter().map(|p| footprint(d, p)).collect();
+        let mut accepted = vec![];
+        for p in repeated(d)? {
+            crate::cancellation::checkpoint()?;
+            let poly = footprint(d, &p);
+            if !source_clear(d, &poly, 0, &mut work)? { continue; }
+            let area = aabb(&poly);
+            let mut blocked = false;
+            for prior in &occupied {
+                tick(&mut work, 1)?;
+                let other = aabb(prior);
+                if (0..2).all(|i| area.min[i] < other.max[i] && other.min[i] < area.max[i]) {
+                    blocked = true; break;
+                }
             }
+            if !blocked { occupied.push(poly); accepted.push(p); }
         }
-        if blocked {
-            continue;
-        }
-        emit_placement(d, cell, &p, b, false)?;
-        occupied.push(poly);
+        let bounds: Vec<_> = occupied.iter().zip(d.placements.iter().chain(&accepted)).map(|(poly,p)| {
+            let mut area=aabb(poly);
+            // Display belongs to the anchor cell even for offset proxy geometry.
+            for (a,coord) in [p.position[0],p.position[2]].into_iter().enumerate() {
+                area.min[a]=area.min[a].min(coord); area.max[a]=area.max[a].max(coord);
+            }
+            area
+        }).collect();
+        let road_bounds: Vec<_> = d.roads.iter().map(|r| {
+            let mut b=aabb(&r.points.iter().copied().map(xy).collect::<Vec<_>>());
+            let radius=i64::from(r.widths_cm.iter().copied().max().unwrap_or(0).div_ceil(2));
+            for a in 0..2 { b.min[a]-=radius; b.max[a]+=radius; } b
+        }).collect();
+        let building_bounds: Vec<_> = d.buildings.iter().map(|b| {
+            let mut area=aabb(&b.footprint);
+            for ring in &b.entrances { let other=aabb(ring); for a in 0..2 {
+                area.min[a]=area.min[a].min(other.min[a]); area.max[a]=area.max[a].max(other.max[a]);
+            }} area
+        }).collect();
+        Ok(Self { repeated: accepted,
+            occupied_index: crate::bounds_index::BoundsIndex::new(&occupied.iter().map(|p|aabb(p)).collect::<Vec<_>>()),
+            occupied, index: crate::bounds_index::BoundsIndex::new(&bounds),
+            roads: crate::bounds_index::BoundsIndex::new(&road_bounds),
+            buildings: crate::bounds_index::BoundsIndex::new(&building_bounds) })
     }
-    vegetation(d, cell, b, &occupied, &mut work)
+}
+impl PreparedPlacements {
+    fn source_clear(&self, d: &MapDocument, poly: &[Point], margin: i64, work: &mut usize) -> Result<bool> {
+        if !poly.iter().all(|p| d.bounds.contains(*p)) { return Ok(false); }
+        let mut area=aabb(poly);
+        for i in self.buildings.query(&area,work)? {
+            let b=&d.buildings[i];
+            if building_overlap(poly,b,work)? { return Ok(false); }
+            for entrance in &b.entrances { if polygons_overlap(poly,entrance,work)? { return Ok(false); } }
+        }
+        for a in 0..2 { area.min[a]-=margin; area.max[a]+=margin; }
+        for i in self.roads.query(&area,work)? {
+            if road_overlap(poly,&d.roads[i],margin,work)? { return Ok(false); }
+        }
+        Ok(true)
+    }
+}
+pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder, prepared: Option<&PreparedPlacements>) -> Result<()> {
+    let mut work=0;
+    crate::roads::sidewalks(d,b)?;
+    buildings(d,b)?;
+    let owned;
+    let prepared = if let Some(value)=prepared { value } else { owned=PreparedPlacements::new(d)?; &owned };
+    for i in prepared.index.query(&b.bounds, &mut work)? {
+        let p=if i < d.placements.len() { &d.placements[i] } else { &prepared.repeated[i-d.placements.len()] };
+        emit_placement(d,cell,p,b,false)?;
+    }
+    vegetation(d,cell,b,prepared,&mut work)
 }
 
 fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -> Result<()> {

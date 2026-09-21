@@ -1,3 +1,4 @@
+mod work_token;
 mod occupied;
 mod packed;
 mod presentation;
@@ -316,6 +317,7 @@ impl MapKitBridge {
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
             let cell = Cell { x, y };
             let chunk = p.generate(cell, 500_000)?;
+            mapkit_core::cancellation::checkpoint()?;
             let archive = mapkit_core::encode_archive(
                 &chunk,
                 &mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
@@ -459,6 +461,7 @@ impl MapKitBridge {
                         .cell_at([x_cm, y_cm])
                         .ok_or_else(|| mapkit_core::error("E_SPAWN", "outside map"))?;
                     let chunk = p.generate(cell, 500_000)?;
+            mapkit_core::cancellation::checkpoint()?;
                     let options = chunk.spawn_options([x_cm, y_cm])?;
                     Ok(serde_json::json!({"surfaces": options}))
                 }),

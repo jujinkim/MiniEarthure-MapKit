@@ -7,6 +7,12 @@ use std::{ops::Deref, sync::RwLock};
 pub struct PreparedMap {
     document: MapDocument,
     #[serde(skip)]
+    placements: crate::placement::PreparedPlacements,
+    #[serde(skip)]
+    assets_by_id: BTreeMap<String, usize>,
+    #[serde(skip)]
+    heights_by_cell: BTreeMap<Cell, usize>,
+    #[serde(skip)]
     costs: RwLock<BTreeMap<(Cell, usize), GenerationCost>>,
     #[serde(skip)]
     region: Option<CellRegion>,
@@ -17,6 +23,9 @@ impl PreparedMap {
         document.normalize();
         document.validate()?;
         Ok(Self {
+            assets_by_id: document.assets.iter().enumerate().map(|(i,a)|(a.id.clone(),i)).collect(),
+            heights_by_cell: document.heightmaps.iter().enumerate().map(|(i,h)|(h.cell,i)).collect(),
+            placements: crate::placement::PreparedPlacements::new(&document)?,
             document,
             costs: RwLock::new(BTreeMap::new()),
             region: None,
@@ -28,9 +37,18 @@ impl PreparedMap {
         // Normalization only reorders checked records; it cannot invalidate
         // geometry or references and must follow untrusted-input work limits.
         document.normalize();
-        Ok(Self { document, costs: RwLock::new(BTreeMap::new()), region: Some(region) })
+        Ok(Self {
+            assets_by_id: document.assets.iter().enumerate().map(|(i,a)|(a.id.clone(),i)).collect(),
+            heights_by_cell: document.heightmaps.iter().enumerate().map(|(i,h)|(h.cell,i)).collect(),
+            placements: crate::placement::PreparedPlacements::new(&document)?, document, costs: RwLock::new(BTreeMap::new()), region: Some(region) })
     }
     /// Editing must create a new validated snapshot; no mutable source alias exists.
+    pub fn asset(&self, id: &str) -> Option<&Asset> {
+        self.assets_by_id.get(id).map(|&i| &self.document.assets[i])
+    }
+    pub fn heightmap(&self, cell: Cell) -> Option<&Heightmap> {
+        self.heights_by_cell.get(&cell).map(|&i| &self.document.heightmaps[i])
+    }
     pub fn to_document(&self) -> MapDocument {
         self.document.clone()
     }
@@ -80,6 +98,7 @@ impl PreparedMap {
             },
             solids,
             &cost,
+            Some(&self.placements),
         )
     }
 }

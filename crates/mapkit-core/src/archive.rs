@@ -36,6 +36,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
     {
         convex.extend_from_slice(&(chunk.asset_convexes.len() as u32).to_le_bytes());
         for c in &chunk.asset_convexes {
+        crate::cancellation::checkpoint()?;
             if !c.shape.valid(100_000_000) {
                 return Err(invalid());
             }
@@ -82,6 +83,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
     out.extend_from_slice(&(chunk.triangles.len() as u32).to_le_bytes());
     out.extend_from_slice(&(chunk.objects.len() as u32).to_le_bytes());
     for t in &chunk.triangles {
+        crate::cancellation::checkpoint()?;
         for v in t.vertices.iter().flatten() {
             out.extend_from_slice(&v.to_le_bytes());
         }
@@ -96,6 +98,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
         string(&mut out, &t.object_id);
     }
     for o in &chunk.objects {
+        crate::cancellation::checkpoint()?;
         string(&mut out, &o.id);
         string(&mut out, &o.asset_id);
         for v in o.position {
@@ -106,6 +109,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
     {
         out.extend_from_slice(&(chunk.building_prisms.len() as u32).to_le_bytes());
         for p in &chunk.building_prisms {
+        crate::cancellation::checkpoint()?;
             string(&mut out, &p.object_id);
             string(&mut out, &p.material);
             string(&mut out, &p.usage);
@@ -196,6 +200,7 @@ pub fn decode_archive(
     };
     let id_limit = cost.max_object_id_bytes.max(128);
     for _ in 0..triangles {
+        crate::cancellation::checkpoint()?;
         let vertices = [r.vertex()?, r.vertex()?, r.vertex()?];
         let surface = match r.take(1)?[0] {
             0 => Surface::Asphalt,
@@ -218,6 +223,7 @@ pub fn decode_archive(
         });
     }
     for _ in 0..objects {
+        crate::cancellation::checkpoint()?;
         let id = r.string(id_limit)?;
         let asset_id = r.string(id_limit)?;
         let position = r.vertex()?;
@@ -239,6 +245,7 @@ pub fn decode_archive(
         }
         chunk.building_prisms.reserve(count);
         for _ in 0..count {
+        crate::cancellation::checkpoint()?;
             let object_id = r.string(id_limit)?;
             let material = r.string(16)?;
             let usage = r.string(16)?;
@@ -270,6 +277,7 @@ pub fn decode_archive(
             return Err(invalid());
         }
         for _ in 0..count {
+        crate::cancellation::checkpoint()?;
             let object_id = r.string(id_limit)?;
             let vertices = r.u32()? as usize;
             let faces = r.u32()? as usize;

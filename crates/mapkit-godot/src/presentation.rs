@@ -98,6 +98,7 @@ pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
             .len() as u64
             * 4096;
     for asset in &p.document.assets {
+        mapkit_core::cancellation::checkpoint()?;
         if !assets.contains_key(asset.id.as_str()) {
             continue;
         }
@@ -177,6 +178,7 @@ pub fn decorate_document(
     let mut hidden = PackedStringArray::new();
     let mut materials = VarDictionary::new();
     for placement in &document.placements {
+        mapkit_core::cancellation::checkpoint()?;
         if !ids.contains(&placement.id) {
             continue;
         }

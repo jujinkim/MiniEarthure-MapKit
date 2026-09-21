@@ -1,4 +1,5 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
+pub mod cancellation;
 mod convex;
 pub mod environment;
 pub use convex::{CollisionConvex, GeneratedConvex};
