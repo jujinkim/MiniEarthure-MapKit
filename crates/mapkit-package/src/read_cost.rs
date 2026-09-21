@@ -78,11 +78,12 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     }
     // Payload vectors, typed document/manifest and their strings. GLB JSON is
     // bounded conservatively by its complete entry size before decoding headers.
-    // Immutable estimate cache: at most 16384 entries, 256 bytes each.
+    // Immutable core estimate and bridge preparation caches: at most 16384 entries,
+    // 256 + 4096 bytes each, including serialized keys and allocation overhead.
     // Source-proportional spatial/lookup indices plus 32 MiB for up to 20000
     // accepted repetition records, occupied footprints and their broad phase.
     // These bytes remain charged while the prepared source is retained.
-    let retained = expanded * 2 + structured * 40 + metadata + 16_384 * 256 + 32 * 1024 * 1024;
+    let retained = expanded * 2 + structured * 40 + metadata + 16_384 * (256 + 4096) + 32 * 1024 * 1024;
     // Strict JSON key validation, typed parsing and content-hash canonicalization
     // overlap with retained data. Image decoder limits are sequential; heightmap
     // seams retain at most four edges of 513 i64 samples per PNG under v1 limits.

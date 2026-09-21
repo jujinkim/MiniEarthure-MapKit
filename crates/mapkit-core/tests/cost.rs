@@ -200,3 +200,23 @@ fn rotated_proxies_concave_buildings_and_negative_origin_are_bounded() {
         estimate_generation(&d, Cell { x: 2, y: 2 }, 500_000).unwrap()
     );
 }
+
+#[test]
+fn authored_candidates_include_visual_anchors_and_proxy_overlap() {
+    let source: mapkit_core::MapDocument = serde_json::from_str(include_str!("../../../examples/assets/document.json")).unwrap();
+    let prepared = mapkit_core::PreparedMap::new(source).unwrap();
+    for cell in prepared.cells() {
+        let candidates = prepared.authored_placement_candidates(cell).unwrap();
+        let generated = prepared.generate(cell, None, 500_000).unwrap();
+        for triangle in &generated.triangles {
+            if prepared.placements.iter().any(|p| p.id == triangle.object_id) {
+                assert!(candidates.iter().any(|p| p.id == triangle.object_id));
+            }
+        }
+        for placement in &prepared.placements {
+            if prepared.cell_at([placement.position[0], placement.position[2]]) == Some(cell) {
+                assert!(candidates.iter().any(|p| p.id == placement.id));
+            }
+        }
+    }
+}

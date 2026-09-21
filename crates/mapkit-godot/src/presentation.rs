@@ -4,19 +4,48 @@ use mapkit_core::{Cell, Result};
 use mapkit_package::Package;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub fn cost(p: &Package, cell: Cell) -> u64 {
+#[derive(Default)]
+pub struct Cache {
+    assets: BTreeMap<String, (Option<PackedByteArray>, String, u64, u64)>,
+    placements: BTreeMap<String, usize>,
+}
+impl Cache {
+    fn bytes(&mut self, p: &Package, id: &str) -> PackedByteArray {
+        self.asset(p, id);
+        self.assets
+            .get_mut(id)
+            .unwrap()
+            .0
+            .get_or_insert_with(|| {
+                PackedByteArray::from(p.files[&p.document.asset(id).unwrap().path].as_slice())
+            })
+            .clone()
+    }
+    fn asset(&mut self, p: &Package, id: &str) -> &(Option<PackedByteArray>, String, u64, u64) {
+        self.assets.entry(id.to_owned()).or_insert_with(|| {
+            let a = p.document.asset(id).unwrap();
+            (
+                None,
+                mapkit_core::sha256(&p.files[&a.path]),
+                asset_cost(p, a),
+                p.asset_instance_cost(id).unwrap(),
+            )
+        })
+    }
+}
+pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
     // The common renderer imports each asset once per cell; duplicate(0) shares
     // resources. Count importer/shared data once and scene nodes per instance.
     let mut instances = BTreeMap::<&str, u64>::new();
     for asset in p
         .document
-        .placements
-        .iter()
+        .authored_placement_candidates(cell)?
+        .into_iter()
         .filter(|v| {
             if p.document.cell_at([v.position[0], v.position[2]]) == Some(cell) {
                 return true;
             }
-            let Some(asset) = p.document.assets.iter().find(|a| a.id == v.asset_id) else {
+            let Some(asset) = p.document.asset(&v.asset_id) else {
                 return false;
             };
             let area = p.document.cell_bounds(cell).unwrap();
@@ -43,7 +72,7 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
                     })
                 })
         })
-        .filter_map(|v| p.document.assets.iter().find(|a| a.id == v.asset_id))
+        .filter_map(|v| p.document.asset(&v.asset_id))
     {
         *instances.entry(&asset.id).or_default() += 1;
     }
@@ -58,15 +87,15 @@ pub fn cost(p: &Package, cell: Cell) -> u64 {
                 .map(|r| (r.points.len() - 1) as u64 * 4096)
                 .sum::<u64>()
     };
-    environment_cost(&p.document)
+    Ok(environment_cost(&p.document)
         + styles
         + instances
             .into_iter()
             .map(|(id, count)| {
-                let asset = p.document.assets.iter().find(|a| a.id == id).unwrap();
-                asset_cost(p, asset) + p.asset_instance_cost(id).unwrap() * count
+                let asset = cache.asset(p, id);
+                asset.2 + asset.3 * count
             })
-            .sum::<u64>()
+            .sum::<u64>())
 }
 fn asset_cost(p: &Package, a: &mapkit_core::Asset) -> u64 {
     let own = p.asset_presentation_cost(&a.id).unwrap();
@@ -77,8 +106,8 @@ fn asset_cost(p: &Package, a: &mapkit_core::Asset) -> u64 {
         .and_then(|id| p.document.assets.iter().find(|a| &a.id == id))
         .map_or(0, |texture| p.asset_presentation_cost(&texture.id).unwrap())
 }
-pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
-    let mut data = decorate_document(&p.document, &p.files, data)?;
+pub fn decorate(p: &Package, data: VarDictionary, cache: &mut Cache) -> Result<VarDictionary> {
+    let mut data = decorate_inner(&p.document, &p.files, data, Some((p, cache)))?;
 
     let chunk = data.get("chunk").unwrap().to::<VarDictionary>();
     let presentation = chunk.get("presentation").unwrap().to::<VarDictionary>();
@@ -105,17 +134,14 @@ pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
         // Additive presentation metadata, excluded from generated serialization/hash.
         // The consumer can reserve one immutable resource across multiple cells.
         let mut view = assets.get(asset.id.as_str()).unwrap().to::<VarDictionary>();
-        view.set(
-            "content_hash",
-            mapkit_core::sha256(&p.files[&asset.path]).as_str(),
-        );
-        view.set("memory_bytes", asset_cost(p, asset) as i64);
-        bytes += asset_cost(p, asset);
+        view.set("content_hash", cache.asset(p, &asset.id).1.as_str());
+        view.set("memory_bytes", cache.asset(p, &asset.id).2 as i64);
+        bytes += cache.asset(p, &asset.id).2;
         bytes += objects
             .iter_shared()
             .filter(|o| o.get("asset_id").unwrap().to::<GString>().to_string() == asset.id)
             .count() as u64
-            * p.asset_instance_cost(&asset.id).unwrap();
+            * cache.asset(p, &asset.id).3;
     }
     if let Some(value) = data.get("generated_counts") {
         let mut counts = value.to::<VarDictionary>();
@@ -127,8 +153,16 @@ pub fn decorate(p: &Package, data: VarDictionary) -> Result<VarDictionary> {
 }
 pub fn decorate_document(
     document: &mapkit_core::MapDocument,
+    files: &BTreeMap<String, Vec<u8>>,
+    data: VarDictionary,
+) -> Result<VarDictionary> {
+    decorate_inner(document, files, data, None)
+}
+fn decorate_inner(
+    document: &mapkit_core::MapDocument,
     files: &std::collections::BTreeMap<String, Vec<u8>>,
     mut data: VarDictionary,
+    mut cached: Option<(&Package, &mut Cache)>,
 ) -> Result<VarDictionary> {
     let mut chunk: VarDictionary = data
         .get("chunk")
@@ -177,7 +211,22 @@ pub fn decorate_document(
     }
     let mut hidden = PackedStringArray::new();
     let mut materials = VarDictionary::new();
-    for placement in &document.placements {
+    let placements: Vec<_> = if let Some((_, cache)) = cached.as_mut() {
+        if cache.placements.is_empty() {
+            cache.placements = document
+                .placements
+                .iter()
+                .enumerate()
+                .map(|(i, p)| (p.id.clone(), i))
+                .collect();
+        }
+        ids.iter()
+            .filter_map(|id| cache.placements.get(id).map(|&i| &document.placements[i]))
+            .collect()
+    } else {
+        document.placements.iter().collect()
+    };
+    for placement in placements {
         mapkit_core::cancellation::checkpoint()?;
         if !ids.contains(&placement.id) {
             continue;
@@ -206,11 +255,18 @@ pub fn decorate_document(
             .find(|r| id.starts_with(&format!("{}:repeat:", r.id)))
         {
             materials.set(id.as_str(), repetition.asset_id.as_str());
-        } else if let Some(v) = document
-            .placements
-            .iter()
-            .find(|v| v.id == *id && v.asset_id.starts_with("builtin:"))
-        {
+        } else if let Some(v) = if let Some((_, cache)) = cached.as_ref() {
+            cache
+                .placements
+                .get(id)
+                .map(|&i| &document.placements[i])
+                .filter(|v| v.asset_id.starts_with("builtin:"))
+        } else {
+            document
+                .placements
+                .iter()
+                .find(|v| v.id == *id && v.asset_id.starts_with("builtin:"))
+        } {
             materials.set(id.as_str(), v.asset_id.as_str());
         }
     }
@@ -233,8 +289,16 @@ pub fn decorate_document(
             .iter()
             .find(|a| a.id == id)
             .ok_or_else(|| mapkit_core::error("E_ASSET", "missing display asset"))?;
-        assets.set(id.as_str(),&vdict!{"path"=>a.path.as_str(),"bytes"=>&PackedByteArray::from(files[&a.path].as_slice()),
-            "material_json"=>serde_json::to_string(&a.material).unwrap().as_str()});
+        let bytes = if let Some((p, cache)) = cached.as_mut() {
+            cache.bytes(p, &id)
+        } else {
+            PackedByteArray::from(files[&a.path].as_slice())
+        };
+        assets.set(
+            id.as_str(),
+            &vdict! {"path"=>a.path.as_str(),"bytes"=>&bytes,
+            "material_json"=>serde_json::to_string(&a.material).unwrap().as_str()},
+        );
     }
     let mut presentation =
         vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};

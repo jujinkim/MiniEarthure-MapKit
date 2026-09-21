@@ -43,3 +43,19 @@ allocation and checks the existing validation peak before inflation. Godot expos
 uses the already validated immutable package, retains every original payload and
 requires a new destination directory. Failed opens clear prior native state.
 These APIs do not introduce another format or a migration path.
+
+
+### Immutable source preparation and menu preview
+
+The Godot bridge caches cell cost/archive descriptors on the validated source
+(maximum 16,384 entries, included in the source read allowance). Authored
+placement candidates use the existing spatial index. Asset hashes and costs are
+computed once per source; packed display bytes are created lazily only on the
+presentation path and shared across chunks. Generated geometry and canonical
+hashes are unchanged. No headless path creates display bytes or GPU resources.
+
+`cargo run -p mapkit-cli --example menu_preview -- INPUT.memap OUTPUT.json`
+creates a v1 roads-and-bounds overview tied to the original package SHA-256.
+It does not alter the package or grant spawn authority. Consumers must validate
+the package and selected surface before entry. The `cache_population` example
+creates valid disposable cell archives from a synthetic package for cache tests.

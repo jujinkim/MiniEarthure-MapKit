@@ -875,6 +875,11 @@ impl PreparedPlacements {
     }
 }
 impl PreparedPlacements {
+    pub(crate) fn authored_candidates<'a>(&self, d: &'a MapDocument, cell: Cell) -> Result<Vec<&'a Placement>> {
+        let mut work = 0;
+        Ok(self.index.query(&d.cell_bounds(cell)?, &mut work)?.into_iter()
+            .filter_map(|i| d.placements.get(i)).collect())
+    }
     fn source_clear(&self, d: &MapDocument, poly: &[Point], margin: i64, work: &mut usize) -> Result<bool> {
         if !poly.iter().all(|p| d.bounds.contains(*p)) { return Ok(false); }
         let mut area=aabb(poly);

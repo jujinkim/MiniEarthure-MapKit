@@ -46,6 +46,10 @@ impl PreparedMap {
     pub fn asset(&self, id: &str) -> Option<&Asset> {
         self.assets_by_id.get(id).map(|&i| &self.document.assets[i])
     }
+    /// Conservative candidates include proxy overlap and offset visual anchors.
+    pub fn authored_placement_candidates(&self, cell: Cell) -> Result<Vec<&Placement>> {
+        self.placements.authored_candidates(&self.document, cell)
+    }
     pub fn heightmap(&self, cell: Cell) -> Option<&Heightmap> {
         self.heights_by_cell.get(&cell).map(|&i| &self.document.heightmaps[i])
     }

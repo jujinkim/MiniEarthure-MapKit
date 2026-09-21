@@ -18,6 +18,8 @@ struct MapKitBridge {
     base: Base<RefCounted>,
     package: Option<Package>,
     visual_margin_cm: i64,
+    presentation: std::cell::RefCell<presentation::Cache>,
+    prepared: std::cell::RefCell<std::collections::BTreeMap<Cell, serde_json::Value>>,
 }
 #[godot_api]
 impl IRefCounted for MapKitBridge {
@@ -26,6 +28,8 @@ impl IRefCounted for MapKitBridge {
             base,
             package: None,
             visual_margin_cm: 0,
+            prepared: Default::default(),
+            presentation: Default::default(),
         }
     }
 }
@@ -72,6 +76,8 @@ impl MapKitBridge {
     #[func]
     fn open_package(&mut self, path: GString) -> GString {
         self.package = None;
+        self.prepared.get_mut().clear();
+        *self.presentation.get_mut() = Default::default();
         response(read(Path::new(&path.to_string())).map(|p| {
             let info = serde_json::to_value(&p.inspection).unwrap();
             self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
@@ -82,6 +88,8 @@ impl MapKitBridge {
     #[func]
     fn open_package_budgeted(&mut self, path: GString, memory_limit: i64) -> GString {
         self.package = None;
+        self.prepared.get_mut().clear();
+        *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
             return response(Err(mapkit_core::error("E_MEMORY_BUDGET", "positive memory allowance required")));
         }
@@ -100,6 +108,8 @@ impl MapKitBridge {
         memory_limit: i64,
     ) -> GString {
         self.package = None;
+        self.prepared.get_mut().clear();
+        *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
             return response(Err(mapkit_core::error(
                 "E_MEMORY_BUDGET",
@@ -121,6 +131,8 @@ impl MapKitBridge {
     #[func]
     fn open_package_bytes(&mut self, bytes: PackedByteArray) -> GString {
         self.package = None;
+        self.prepared.get_mut().clear();
+        *self.presentation.get_mut() = Default::default();
         response(read_bytes(bytes.as_slice()).map(|p| {
             let info = serde_json::to_value(&p.inspection).unwrap();
             self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
@@ -157,6 +169,8 @@ impl MapKitBridge {
     #[func]
     fn open_project(&mut self, path: GString) -> GString {
         self.package = None;
+        self.prepared.get_mut().clear();
+        *self.presentation.get_mut() = Default::default();
         response(
             read_project(Path::new(&path.to_string()))
                 .and_then(|(d, f)| pack_bytes(d, f))
@@ -216,9 +230,20 @@ impl MapKitBridge {
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
                 .and_then(|p| {
                     let cell = Cell { x, y };
-                    let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
-                    cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell));
+                    if let Some(cost) = self.prepared.borrow().get(&cell) {
+                        return Ok(cost.clone());
+                    }
+                    let estimate = p.document.estimate(cell, 500_000)?;
+                    let mut cost = serde_json::json!(estimate);
+                    cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell, &mut self.presentation.borrow_mut())?);
                     cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
+                    cost["archive_info"] = serde_json::json!({
+                        "key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
+                        "max_bytes": mapkit_core::archive_limit(&estimate)});
+                    // A bounded cache belongs to this validated snapshot and is reset on open.
+                    if self.prepared.borrow().len() < 16_384 {
+                        self.prepared.borrow_mut().insert(cell, cost.clone());
+                    }
                     Ok(cost)
                 }),
         )
@@ -230,7 +255,7 @@ impl MapKitBridge {
             let cell = mapkit_core::Cell { x, y };
             let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
             cost["distant_triangles"] = serde_json::json!(p.distant_triangle_bound(cell)?);
-            cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell));
+            cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell, &mut self.presentation.borrow_mut())?);
             cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
             Ok(cost)
         }))
@@ -289,7 +314,7 @@ impl MapKitBridge {
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-                .and_then(|p| presentation::decorate(p, data)),
+                .and_then(|p| presentation::decorate(p, data, &mut self.presentation.borrow_mut())),
         )
     }
     /// Archive identity and pre-allocation size bound; storage/leases belong to callers.

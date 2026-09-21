@@ -262,6 +262,8 @@ impl MapKitRegionReader {
                 base,
                 visual_margin_cm: snapshot.package.visual_margin_cm().unwrap_or(i64::from(snapshot.package.document.cell_size_cm)),
                 package: Some(snapshot.package),
+                prepared: Default::default(),
+                presentation: Default::default(),
             });
             out.set("bridge", &bridge);
             ticket.check()?;
