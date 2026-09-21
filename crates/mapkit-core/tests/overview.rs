@@ -60,7 +60,9 @@ fn overview_cost_counts_escaped_bytes_and_enforces_boundary() {
 fn overview_reports_custom_assets_without_copying_asset_metadata() {
     let mut d = document();
     assert!(!overview(&d).unwrap().has_custom_assets);
-    d.assets.push(Asset { convex_collision: vec![], material: None,
+    d.assets.push(Asset {
+        convex_collision: vec![],
+        material: None,
         id: "custom".into(),
         path: "custom.glb".into(),
         attribution: Attribution {
@@ -73,4 +75,29 @@ fn overview_reports_custom_assets_without_copying_asset_metadata() {
     let json = overview(&d).unwrap().to_json(u64::MAX).unwrap();
     assert!(overview(&d).unwrap().has_custom_assets);
     assert!(!json.contains("custom.glb") && !json.contains("preserved in package"));
+}
+
+#[test]
+fn overview_exposes_authored_levels_and_widths_for_navigation() {
+    let d: MapDocument =
+        serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+    let view = overview(&d).unwrap();
+    for road in &view.roads {
+        let source = d.roads.iter().find(|r| r.id == road.id).unwrap();
+        assert_eq!(road.from, source.from);
+        assert_eq!(road.to, source.to);
+        assert_eq!(road.widths_cm, source.widths_cm);
+        assert_eq!(road.points, source.points);
+    }
+    let cost = view.cost().unwrap();
+    let body: serde_json::Value =
+        serde_json::from_str(&view.to_json(cost.json_bytes).unwrap()).unwrap();
+    assert_eq!(body["version"], 1);
+    assert!(view.to_json(cost.json_bytes - 1).is_err());
+    let topology_bytes: u64 = d
+        .roads
+        .iter()
+        .map(|r| (r.id.len() + r.from.len() + r.to.len()) as u64)
+        .sum();
+    assert!(cost.text_bytes >= topology_bytes);
 }

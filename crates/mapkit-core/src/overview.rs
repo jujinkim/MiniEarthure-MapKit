@@ -5,6 +5,10 @@ use super::*;
 pub struct OverviewRoad<'a> {
     pub id: &'a str,
     pub kind: &'a RoadKind,
+    /// Authored connectivity; spatial crossings do not imply a junction.
+    pub from: &'a str,
+    pub to: &'a str,
+    pub widths_cm: &'a [u32],
     pub points: &'a [Vertex],
 }
 #[derive(Debug, Serialize)]
@@ -70,7 +74,11 @@ impl MapOverview<'_> {
                 + self.buildings.iter().map(|b| b.holes.len()).sum::<usize>())
                 as u64,
             text_bytes: self.map_id.len() as u64
-                + self.roads.iter().map(|r| r.id.len() as u64).sum::<u64>()
+                + self
+                    .roads
+                    .iter()
+                    .map(|r| (r.id.len() + r.from.len() + r.to.len()) as u64)
+                    .sum::<u64>()
                 + self
                     .buildings
                     .iter()
@@ -109,6 +117,9 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
         .map(|r| OverviewRoad {
             id: &r.id,
             kind: &r.kind,
+            from: &r.from,
+            to: &r.to,
+            widths_cm: &r.widths_cm,
             points: &r.points,
         })
         .collect();

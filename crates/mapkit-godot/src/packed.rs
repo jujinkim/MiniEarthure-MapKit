@@ -27,6 +27,59 @@ pub struct MapKitPackedGeometry {
 }
 #[godot_api]
 impl MapKitPackedGeometry {
+    /// Read-only query over this already reserved immutable generated geometry.
+    /// Uses the exact core surface selector; callers own cache lifetime/budget.
+    #[func]
+    fn surface_probe(&self, x_cm: i64, y_cm: i64, surface: GString) -> GString {
+        let request = mapkit_core::SpawnRequest {
+            position_cm: [x_cm, y_cm],
+            surface_id: surface.to_string(),
+        };
+        let id = self.ids.as_slice().iter().position(|id| id == &surface);
+        super::response((|| {
+            let id = id.ok_or_else(|| {
+                mapkit_core::error("E_SPAWN", "requested surface not in generated cell")
+            })?;
+            for (i, object) in self.indices.as_slice().iter().enumerate() {
+                if *object != id as i32 || self.spawnable[i] == 0 {
+                    continue;
+                }
+                let v = &self.vertices.as_slice()[i * 9..i * 9 + 9];
+                let vertices = [[v[0], v[1], v[2]], [v[3], v[4], v[5]], [v[6], v[7], v[8]]];
+                if (0..2).any(|axis| {
+                    let p = request.position_cm[axis];
+                    p < vertices.iter().map(|v| v[axis * 2]).min().unwrap()
+                        || p > vertices.iter().map(|v| v[axis * 2]).max().unwrap()
+                }) {
+                    continue;
+                }
+                // Material does not participate in core surface selection/normal.
+                let chunk = GeneratedChunk {
+                    format_version: 1,
+                    cell: mapkit_core::Cell { x: 0, y: 0 },
+                    triangles: vec![mapkit_core::Triangle {
+                        vertices,
+                        surface: Surface::Asphalt,
+                        object_id: request.surface_id.clone(),
+                        spawnable: true,
+                    }],
+                    objects: vec![],
+                    building_prisms: vec![],
+                    asset_convexes: vec![],
+                };
+                if let Ok(sample) = chunk.surface_probe(&request) {
+                    return Ok(
+                        serde_json::json!({"position_cm":sample.position_cm,"normal_q":sample.normal_q,
+                        "surface_id":sample.surface_id}),
+                    );
+                }
+            }
+            Err(mapkit_core::error(
+                "E_SPAWN",
+                "requested surface not drivable at this position",
+            ))
+        })())
+    }
     #[func]
     fn view(&self) -> VarDictionary {
         vdict! {
@@ -181,5 +234,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         "building_prisms" => chunk.building_prisms.len() as i64,
         "asset_convexes" => chunk.asset_convexes.len() as i64,
     };
-    Ok(vdict! { "chunk" => &data, "generated_sha256" => hash.as_str(), "generated_counts" => &counts })
+    Ok(
+        vdict! { "chunk" => &data, "generated_sha256" => hash.as_str(), "generated_counts" => &counts },
+    )
 }
