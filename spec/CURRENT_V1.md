@@ -59,3 +59,20 @@ creates a v1 roads-and-bounds overview tied to the original package SHA-256.
 It does not alter the package or grant spawn authority. Consumers must validate
 the package and selected surface before entry. The `cache_population` example
 creates valid disposable cell archives from a synthetic package for cache tests.
+
+## Course authoring and completion references (2026-09-22)
+
+`MapDocument.courses` is an optional list of up to 64 public current-v1 course documents.
+Definitions include map ID, name, driving-content hash, ordered 3D sphere/upward-hemisphere
+checkpoints (1–1000 m radius), circuit/sprint mode, ground/air start and explicit horizontal
+direction. Circuit finish reuses checkpoint zero. Lap count is a hosting choice, not geometry.
+Overlaps are legal. Surface labels are authoring hints, not completion constraints.
+
+Optional completion references identify bounded opaque consumer records by hash, size and
+`course-validation/<sha256>.mevalidation`. MapKit verifies bytes and references, never
+certifies player completion. Courses and their records participate in package integrity but
+are excluded from driving-content hashes in both containers. Projects preserve stale
+references so consumers can display revalidation required after geometry/map changes.
+
+Verification: package unit tests 15, course tests 2, indexed tests 16 and package contract
+tests 20 passed locally. Runtime certification and application acceptance are separate.

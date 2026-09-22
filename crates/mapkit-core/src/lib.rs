@@ -1,5 +1,6 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod cancellation;
+pub mod course;
 mod convex;
 pub mod environment;
 pub use convex::{CollisionConvex, GeneratedConvex};
@@ -247,6 +248,8 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub courses: Vec<course::Course>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<environment::EnvironmentProfile>,
     /// An explicit in-memory source topology capability, never accepted from JSON.
@@ -388,6 +391,7 @@ mod courtyard;
 
 impl MapDocument {
     pub fn normalize(&mut self) {
+        self.courses.sort_by(|a, b| a.course_id.cmp(&b.course_id));
         self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
         self.roads.sort_by(|a, b| a.id.cmp(&b.id));
         self.surface_areas.sort_by(|a, b| a.id.cmp(&b.id));
@@ -413,6 +417,14 @@ impl MapDocument {
         self.validate_inner(true)
     }
     fn validate_inner(&self, source_topology: bool) -> Result<()> {
+        if self.courses.len() > course::MAX_COURSES { return Err(error("E_COURSE_LIMIT", "too many map courses")); }
+        let mut ids = BTreeSet::new();
+        for c in &self.courses {
+            c.validate_document(&self.bounds)?;
+            if c.definition.map_id != self.map_id || !ids.insert(&c.course_id) {
+                return Err(error("E_COURSE_MAP", "map course identity mismatch or duplicate"));
+            }
+        }
         if let Some(environment) = &self.environment {
             environment.validate(&self.bounds, &self.assets)?;
         }

@@ -49,6 +49,12 @@
       "maximum": 102400.0,
       "minimum": 200.0
     },
+    "courses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Course"
+      }
+    },
     "environment": {
       "anyOf": [
         {
@@ -372,6 +378,54 @@
       },
       "additionalProperties": false
     },
+    "Checkpoint": {
+      "type": "object",
+      "required": [
+        "placement_mode",
+        "position_cm",
+        "radius_cm",
+        "shape",
+        "surface_id"
+      ],
+      "properties": {
+        "placement_mode": {
+          "description": "Authoring hints only; neither field restricts checkpoint passage.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/PlacementMode"
+            }
+          ]
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "radius_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "shape": {
+          "$ref": "#/definitions/CheckpointShape"
+        },
+        "surface_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CheckpointShape": {
+      "type": "string",
+      "enum": [
+        "sphere",
+        "hemisphere"
+      ]
+    },
     "CollisionBox": {
       "type": "object",
       "required": [
@@ -433,6 +487,88 @@
             "maxItems": 3,
             "minItems": 3
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Course": {
+      "type": "object",
+      "required": [
+        "course_id",
+        "definition",
+        "format",
+        "format_version"
+      ],
+      "properties": {
+        "course_id": {
+          "type": "string"
+        },
+        "definition": {
+          "$ref": "#/definitions/CourseBody"
+        },
+        "format": {
+          "type": "string"
+        },
+        "format_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "validation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ValidationReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "CourseBody": {
+      "type": "object",
+      "required": [
+        "checkpoints",
+        "display_name",
+        "map_id",
+        "mode",
+        "start_direction",
+        "start_mode",
+        "world_content_hash"
+      ],
+      "properties": {
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Checkpoint"
+          }
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "map_id": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/definitions/Mode"
+        },
+        "start_direction": {
+          "description": "Horizontal direction in map x/z coordinates. Nonzero, normalized by the consumer.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "start_mode": {
+          "$ref": "#/definitions/StartMode"
+        },
+        "world_content_hash": {
+          "type": "string"
         }
       },
       "additionalProperties": false
@@ -641,6 +777,13 @@
       },
       "additionalProperties": false
     },
+    "Mode": {
+      "type": "string",
+      "enum": [
+        "circuit",
+        "sprint"
+      ]
+    },
     "Placement": {
       "type": "object",
       "required": [
@@ -672,6 +815,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "PlacementMode": {
+      "type": "string",
+      "enum": [
+        "free",
+        "road_snap"
+      ]
     },
     "Provenance": {
       "type": "object",
@@ -900,6 +1050,13 @@
       },
       "additionalProperties": false
     },
+    "StartMode": {
+      "type": "string",
+      "enum": [
+        "ground",
+        "air"
+      ]
+    },
     "Surface": {
       "type": "string",
       "enum": [
@@ -935,6 +1092,36 @@
         },
         "surface": {
           "$ref": "#/definitions/Surface"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ValidationReference": {
+      "type": "object",
+      "required": [
+        "bytes",
+        "geometry_hash",
+        "path",
+        "sha256",
+        "world_content_hash"
+      ],
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "geometry_hash": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "world_content_hash": {
+          "type": "string"
         }
       },
       "additionalProperties": false

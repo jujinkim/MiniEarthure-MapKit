@@ -486,6 +486,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             files.insert(path.clone(), bytes);
         }
         ticket.check()?;
+        validate_course_files(&document, &files)?;
         profile.finish("payload_read_decode_hash_planning", start);
         Ok((document, files))
     }
@@ -791,7 +792,8 @@ impl<R: Read + Seek> IndexedReader<R> {
         let payloads = self.index.payloads.clone();
         let (d, files) = self.finish_source_files(d, bytes, &payloads, ticket, profile)?;
         let start = profile.start();
-        validate_assets(&d, &files)?;
+        validate_course_files(&d, &files)?;
+    validate_assets(&d, &files)?;
         profile.finish("audit_assets_validation", start);
         let start = profile.start();
         validate_heightmaps(&d, &files)?;
@@ -947,6 +949,7 @@ pub fn pack_source(
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
         return Err(error("E_REFERENCE", "source inventory mismatch"));
     }
+    validate_course_files(&d, &files)?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     let mut index = Index {

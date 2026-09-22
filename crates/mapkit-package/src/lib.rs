@@ -169,14 +169,27 @@ fn content_hash(document: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Re
     let mut value = serde_json::to_value(doc).map_err(io)?;
     value.as_object_mut().unwrap().remove("provenance");
     value.as_object_mut().unwrap().remove("attributions");
+    value.as_object_mut().unwrap().remove("courses");
     let hashes: BTreeMap<_, _> = files
         .iter()
-        .filter(|(p, _)| p.as_str() != "document.json")
+        .filter(|(p, _)| p.as_str() != "document.json" && !p.starts_with("course-validation/"))
         .map(|(p, b)| (p, sha256(b)))
         .collect();
     Ok(sha256(&canonical(&(value, hashes))?))
 }
+fn validate_course_files(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
+    for reference in d.courses.iter().filter_map(|c| c.validation.as_ref()) {
+        let bytes = files.get(&reference.path).ok_or_else(|| error("E_REFERENCE", "missing course validation"))?;
+        if bytes.len() != reference.bytes as usize || sha256(bytes) != reference.sha256 {
+            return Err(error("E_HASH", "course validation size/hash mismatch"));
+        }
+    }
+    Ok(())
+}
 fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
+    if d.assets.iter().map(|a| &a.path).chain(d.heightmaps.iter().map(|h| &h.path)).any(|p| p.starts_with("course-validation/")) {
+        return Err(error("E_PATH", "course-validation is reserved for completion records"));
+    }
     let mut paths = BTreeSet::from(["document.json".into()]);
     let mut folded = BTreeSet::from(["document.json".to_string(), "manifest.json".to_string()]);
     for p in d
@@ -184,6 +197,7 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
         .iter()
         .map(|h| &h.path)
         .chain(d.assets.iter().map(|a| &a.path))
+        .chain(d.courses.iter().filter_map(|c| c.validation.as_ref().map(|v| &v.path)))
     {
         if !safe_path(p) || p == "document.json" || p == "manifest.json" {
             return Err(error("E_PATH", "unsafe/reserved reference"));
@@ -382,6 +396,7 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
         files.insert(p, bytes);
     }
     export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
+    validate_course_files(&d, &files)?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     Ok((d, files))
@@ -399,6 +414,7 @@ pub fn pack_bytes(
     }
     let payload_size =
         export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
+    validate_course_files(&d, &files)?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     let manifest = PackageManifest {
@@ -585,6 +601,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     if manifest.world_content_hash != content_hash(&document, &files)? {
         return Err(error("E_HASH", "world content hash mismatch"));
     }
+    validate_course_files(&document, &files)?;
     validate_assets(&document, &files)?;
     validate_heightmaps(&document, &files)?;
     let asset_paths: BTreeSet<_> = document.assets.iter().map(|a| a.path.as_str()).collect();

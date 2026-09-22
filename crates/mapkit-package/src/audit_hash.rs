@@ -85,7 +85,7 @@ impl Serialize for PayloadHashes<'_> {
     ) -> std::result::Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         for (path, bytes) in self.0 {
-            if path != "document.json" {
+            if path != "document.json" && !path.starts_with("course-validation/") {
                 self.1.check()?;
                 let mut digest = Sha256::new();
                 for chunk in bytes.chunks(64 * 1024) {
@@ -351,6 +351,7 @@ mod tests {
         let mut value = serde_json::to_value(normalized).unwrap();
         value.as_object_mut().unwrap().remove("provenance");
         value.as_object_mut().unwrap().remove("attributions");
+        value.as_object_mut().unwrap().remove("courses");
         let mut check = || Ok(());
         let probe = Probe {
             check: RefCell::new(&mut check),

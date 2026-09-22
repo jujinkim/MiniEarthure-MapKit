@@ -432,6 +432,17 @@ impl MapKitBridge {
         response(engine_document(&document.to_string()).map_err(|e|mapkit_core::error("E_JSON",e.to_string())).and_then(|d|mapkit_core::generate(GenerationInput{document:&d,cell:Cell{x,y},heightgrid:None,max_triangles:500_000})).map(|chunk|serde_json::json!({"generated_sha256":chunk.hash().unwrap(),"chunk":chunk})))
     }
     #[func]
+    fn seal_course(&self, definition: GString, extent: PackedInt64Array) -> GString {
+        response((|| {
+            let v = extent.as_slice();
+            if v.len() != 4 { return Err(mapkit_core::error("E_COURSE_BOUNDS", "four bounds coordinates required")); }
+            let b = mapkit_core::Bounds { min: [v[0], v[1]], max: [v[2], v[3]] };
+            let body = mapkit_core::course::decode(definition.to_string().as_bytes())?;
+            let course = mapkit_core::course::Course::from_definition(body, &b)?;
+            Ok(serde_json::json!({"document":course,"canonical":String::from_utf8(canonical(&course)?).unwrap()}))
+        })())
+    }
+    #[func]
     fn validate_document(&self, document: GString) -> GString {
         response(
             engine_document(&document.to_string())
