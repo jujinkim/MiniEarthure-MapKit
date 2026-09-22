@@ -76,3 +76,9 @@ references so consumers can display revalidation required after geometry/map cha
 
 Verification: package unit tests 15, course tests 2, indexed tests 16 and package contract
 tests 20 passed locally. Runtime certification and application acceptance are separate.
+
+## Dynamic light inputs (2026-09-22)
+
+Consumers supply atomic generic light groups instead of inferred vehicle poses.
+See [light group contract](../docs/LIGHT_GROUPS.md). Pool and shadow caps remain
+unchanged; no vehicle design data or serialized map contract is added.

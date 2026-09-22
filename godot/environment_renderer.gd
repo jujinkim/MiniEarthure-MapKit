@@ -171,15 +171,17 @@ func _update_static_lights(state: RefCounted, camera_position: Vector3) -> void:
 			for candidate: Dictionary in root.get_meta("environment_lamps",[]):
 				if candidate.position.distance_squared_to(camera_position) < 1600.0: _light_candidates.append(candidate)
 		_light_candidates.sort_custom(func(a: Dictionary,b: Dictionary): return a.position.distance_squared_to(camera_position)<b.position.distance_squared_to(camera_position))
-## Render poses are supplied by the consumer after vehicle and camera updates.
-func update_dynamic_lights(camera_position: Vector3, vehicles: Array) -> void:
+## Consumers supply generic atomic groups in world coordinates; no vehicle design here.
+func update_dynamic_lights(camera_position: Vector3, groups: Array) -> void:
+	var ordered := groups.duplicate()
+	ordered.sort_custom(func(a: Dictionary, b: Dictionary):
+		if a.priority != b.priority: return a.priority < b.priority
+		return a.position.distance_squared_to(camera_position) < b.position.distance_squared_to(camera_position))
 	var selected: Array = []
-	for vehicle: Dictionary in vehicles:
-		if selected.size() >= lights.size(): break
-		var pose: Transform3D = vehicle.pose
-		if not vehicle.get("primary",false) and pose.origin.distance_squared_to(camera_position)>2025.0: continue
-		selected.append({"position":pose.origin + pose.basis*Vector3(0,0.22,-0.30),
-			"basis":pose.basis,"energy":3.2,"range":30.0,"color":Color(1.0,0.88,0.68)})
+	for group: Dictionary in ordered:
+		if group.lights.is_empty() or selected.size() + group.lights.size() > lights.size(): continue
+		if group.position.distance_squared_to(camera_position) > float(group.get("distance", 45.0)) ** 2: continue
+		selected.append_array(group.lights)
 	if _night_lights:
 		for candidate: Dictionary in _light_candidates:
 			if selected.size() >= lights.size(): break
@@ -194,3 +196,4 @@ func update_dynamic_lights(camera_position: Vector3, vehicles: Array) -> void:
 		light.light_color = candidate.color
 		light.light_energy = candidate.energy
 		light.spot_range = candidate.range
+		light.spot_angle = float(candidate.get("angle", 48.0))
