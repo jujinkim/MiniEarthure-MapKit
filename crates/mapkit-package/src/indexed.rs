@@ -434,6 +434,21 @@ impl<R: Read + Seek> IndexedReader<R> {
         }
         Ok(out)
     }
+    pub fn course_validation(&mut self, hash: &str, ticket: &ReadTicket) -> Result<Vec<u8>> {
+        if !mapkit_core::course::valid_hash(hash) {
+            return Err(error("E_COURSE_VALIDATION", "invalid evidence hash"));
+        }
+        let path = format!("course-validation/{hash}.mevalidation");
+        let id = *self
+            .index
+            .payloads
+            .get(&path)
+            .ok_or_else(|| error("E_REFERENCE", "evidence not in package"))?;
+        if self.index.records[id].size > mapkit_core::course::VALIDATION_BYTES as u64 {
+            return Err(error("E_LIMIT", "evidence too large"));
+        }
+        self.record(id, ticket)
+    }
     fn source_files(
         &mut self,
         source: usize,
@@ -793,7 +808,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         let (d, files) = self.finish_source_files(d, bytes, &payloads, ticket, profile)?;
         let start = profile.start();
         validate_course_files(&d, &files)?;
-    validate_assets(&d, &files)?;
+        validate_assets(&d, &files)?;
         profile.finish("audit_assets_validation", start);
         let start = profile.start();
         validate_heightmaps(&d, &files)?;

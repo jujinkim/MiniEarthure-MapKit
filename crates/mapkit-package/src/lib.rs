@@ -179,7 +179,9 @@ fn content_hash(document: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Re
 }
 fn validate_course_files(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
     for reference in d.courses.iter().filter_map(|c| c.validation.as_ref()) {
-        let bytes = files.get(&reference.path).ok_or_else(|| error("E_REFERENCE", "missing course validation"))?;
+        let bytes = files
+            .get(&reference.path)
+            .ok_or_else(|| error("E_REFERENCE", "missing course validation"))?;
         if bytes.len() != reference.bytes as usize || sha256(bytes) != reference.sha256 {
             return Err(error("E_HASH", "course validation size/hash mismatch"));
         }
@@ -187,8 +189,16 @@ fn validate_course_files(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> 
     Ok(())
 }
 fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
-    if d.assets.iter().map(|a| &a.path).chain(d.heightmaps.iter().map(|h| &h.path)).any(|p| p.starts_with("course-validation/")) {
-        return Err(error("E_PATH", "course-validation is reserved for completion records"));
+    if d.assets
+        .iter()
+        .map(|a| &a.path)
+        .chain(d.heightmaps.iter().map(|h| &h.path))
+        .any(|p| p.starts_with("course-validation/"))
+    {
+        return Err(error(
+            "E_PATH",
+            "course-validation is reserved for completion records",
+        ));
     }
     let mut paths = BTreeSet::from(["document.json".into()]);
     let mut folded = BTreeSet::from(["document.json".to_string(), "manifest.json".to_string()]);
@@ -197,7 +207,11 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
         .iter()
         .map(|h| &h.path)
         .chain(d.assets.iter().map(|a| &a.path))
-        .chain(d.courses.iter().filter_map(|c| c.validation.as_ref().map(|v| &v.path)))
+        .chain(
+            d.courses
+                .iter()
+                .filter_map(|c| c.validation.as_ref().map(|v| &v.path)),
+        )
     {
         if !safe_path(p) || p == "document.json" || p == "manifest.json" {
             return Err(error("E_PATH", "unsafe/reserved reference"));
@@ -359,8 +373,10 @@ fn bounded_read(path: &Path, limit: u64) -> Result<Vec<u8>> {
     let mut block = [0u8; 64 * 1024];
     loop {
         mapkit_core::cancellation::checkpoint()?;
-        let count=reader.read(&mut block).map_err(io)?;
-        if count==0 { break; }
+        let count = reader.read(&mut block).map_err(io)?;
+        if count == 0 {
+            break;
+        }
         bytes.extend_from_slice(&block[..count]);
     }
     if bytes.len() as u64 > limit {
@@ -469,7 +485,10 @@ pub fn read(path: &Path) -> Result<Package> {
 }
 /// File-backed equivalent of the budgeted byte reader; bounds input before allocation.
 pub fn read_with_budget(path: &Path, memory_limit: u64) -> Result<Package> {
-    read_bytes_with_budget(&bounded_read(path, MAX_PACKAGE_BYTES.min(memory_limit))?, memory_limit)
+    read_bytes_with_budget(
+        &bounded_read(path, MAX_PACKAGE_BYTES.min(memory_limit))?,
+        memory_limit,
+    )
 }
 pub fn read_bytes(bytes: &[u8]) -> Result<Package> {
     read_bytes_with_budget(bytes, u64::MAX)

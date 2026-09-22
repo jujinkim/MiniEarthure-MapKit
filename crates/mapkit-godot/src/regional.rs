@@ -66,9 +66,34 @@ impl MapKitRegionReader {
     }
     #[func]
     fn environment_json(&self) -> GString {
-        response(self.world.as_ref()
-            .ok_or_else(|| mapkit_core::error("E_STATE", "open index first"))
-            .map(|world| serde_json::json!({"map_id":world.map_id,"profile":world.environment})))
+        response(
+            self.world
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open index first"))
+                .map(
+                    |world| serde_json::json!({"map_id":world.map_id,"profile":world.environment}),
+                ),
+        )
+    }
+    #[func]
+    fn courses_json(&self) -> GString {
+        response(
+            self.world
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open index first"))
+                .map(|w| serde_json::json!({"map_id":w.map_id,"courses":w.courses})),
+        )
+    }
+    #[func]
+    fn course_validation_json(&self, hash: GString) -> GString {
+        let ticket = ReadEpoch::default().begin();
+        self.reader
+            .as_ref()
+            .and_then(|r| r.lock().ok())
+            .and_then(|mut r| r.course_validation(&hash.to_string(), &ticket).ok())
+            .and_then(|b| String::from_utf8(b).ok())
+            .map(|s| GString::from(s.as_str()))
+            .unwrap_or_default()
     }
     #[func]
     fn begin_request(&self) -> i64 {
@@ -260,7 +285,10 @@ impl MapKitRegionReader {
             );
             let bridge = Gd::from_init_fn(|base| MapKitBridge {
                 base,
-                visual_margin_cm: snapshot.package.visual_margin_cm().unwrap_or(i64::from(snapshot.package.document.cell_size_cm)),
+                visual_margin_cm: snapshot
+                    .package
+                    .visual_margin_cm()
+                    .unwrap_or(i64::from(snapshot.package.document.cell_size_cm)),
                 package: Some(snapshot.package),
                 prepared: Default::default(),
                 presentation: Default::default(),

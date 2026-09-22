@@ -117,11 +117,23 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     let mut retained = Retained(u64::try_from(size_of::<MapDocument>()).map_err(|_| overflow())?);
     retained.vector(&document.courses)?;
     for c in &document.courses {
-        for text in [&c.format, &c.course_id, &c.definition.map_id, &c.definition.display_name, &c.definition.world_content_hash] { retained.string(text)?; }
+        for text in [
+            &c.format,
+            &c.course_id,
+            &c.definition.map_id,
+            &c.definition.display_name,
+            &c.definition.world_content_hash,
+        ] {
+            retained.string(text)?;
+        }
         retained.vector(&c.definition.checkpoints)?;
-        for cp in &c.definition.checkpoints { retained.string(&cp.surface_id)?; }
+        for cp in &c.definition.checkpoints {
+            retained.string(&cp.surface_id)?;
+        }
         if let Some(v) = &c.validation {
-            for text in [&v.sha256, &v.path, &v.world_content_hash, &v.geometry_hash] { retained.string(text)?; }
+            for text in [&v.sha256, &v.path, &v.world_content_hash, &v.geometry_hash] {
+                retained.string(text)?;
+            }
         }
     }
     retained.string(map_id)?;
@@ -242,7 +254,9 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         retained.string(id)?;
         retained.vector(polygon)?;
         retained.polygons(exclusions)?;
-        if let Some(tree) = tree { retained.string(&tree.asset_id)?; }
+        if let Some(tree) = tree {
+            retained.string(&tree.asset_id)?;
+        }
     }
     retained.vector(assets)?;
     for Asset {
@@ -401,7 +415,11 @@ mod tests {
         d.zones = vector(
             19,
             Zone {
-                tree: Some(mapkit_core::ZoneTree { asset_id: string(177), radius_cm: 58, clearance_cm: 5 }),
+                tree: Some(mapkit_core::ZoneTree {
+                    asset_id: string(177),
+                    radius_cm: 58,
+                    clearance_cm: 5,
+                }),
                 id: string(173),
                 polygon: vector(23, [0, 0]),
                 kind: ZoneKind::Forest,

@@ -1,10 +1,10 @@
-mod work_token;
+mod distant;
 mod occupied;
 mod packed;
 mod presentation;
-mod distant;
-mod road_style;
 mod regional;
+mod road_style;
+mod work_token;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
 use mapkit_package::{pack_bytes, read, read_bytes, read_project, write_new, Package};
@@ -80,7 +80,9 @@ impl MapKitBridge {
         *self.presentation.get_mut() = Default::default();
         response(read(Path::new(&path.to_string())).map(|p| {
             let info = serde_json::to_value(&p.inspection).unwrap();
-            self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
+            self.visual_margin_cm = p
+                .visual_margin_cm()
+                .unwrap_or(i64::from(p.document.cell_size_cm));
             self.package = Some(p);
             info
         }))
@@ -91,14 +93,22 @@ impl MapKitBridge {
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
-            return response(Err(mapkit_core::error("E_MEMORY_BUDGET", "positive memory allowance required")));
+            return response(Err(mapkit_core::error(
+                "E_MEMORY_BUDGET",
+                "positive memory allowance required",
+            )));
         }
-        response(mapkit_package::read_with_budget(Path::new(&path.to_string()), memory_limit as u64).map(|p| {
-            let info = serde_json::to_value(&p.inspection).unwrap();
-            self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
-            self.package = Some(p);
-            info
-        }))
+        response(
+            mapkit_package::read_with_budget(Path::new(&path.to_string()), memory_limit as u64)
+                .map(|p| {
+                    let info = serde_json::to_value(&p.inspection).unwrap();
+                    self.visual_margin_cm = p
+                        .visual_margin_cm()
+                        .unwrap_or(i64::from(p.document.cell_size_cm));
+                    self.package = Some(p);
+                    info
+                }),
+        )
     }
     /// Caller-supplied validation allowance, checked before payload inflation.
     #[func]
@@ -120,7 +130,9 @@ impl MapKitBridge {
             mapkit_package::read_bytes_with_budget(bytes.as_slice(), memory_limit as u64).map(
                 |p| {
                     let info = serde_json::to_value(&p.inspection).unwrap();
-                    self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
+                    self.visual_margin_cm = p
+                        .visual_margin_cm()
+                        .unwrap_or(i64::from(p.document.cell_size_cm));
                     self.package = Some(p);
                     info
                 },
@@ -135,7 +147,9 @@ impl MapKitBridge {
         *self.presentation.get_mut() = Default::default();
         response(read_bytes(bytes.as_slice()).map(|p| {
             let info = serde_json::to_value(&p.inspection).unwrap();
-            self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
+            self.visual_margin_cm = p
+                .visual_margin_cm()
+                .unwrap_or(i64::from(p.document.cell_size_cm));
             self.package = Some(p);
             info
         }))
@@ -177,7 +191,9 @@ impl MapKitBridge {
                 .and_then(|b| read_bytes(&b))
                 .map(|p| {
                     let info = serde_json::to_value(&p.inspection).unwrap();
-                    self.visual_margin_cm = p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
+                    self.visual_margin_cm = p
+                        .visual_margin_cm()
+                        .unwrap_or(i64::from(p.document.cell_size_cm));
                     self.package = Some(p);
                     info
                 }),
@@ -214,6 +230,25 @@ impl MapKitBridge {
             .map(|p| serde_json::json!({"map_id":p.document.map_id,"profile":p.document.environment})))
     }
     #[func]
+    fn courses_json(&self) -> GString {
+        response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .map(|p| serde_json::json!({"map_id":p.document.map_id,"courses":p.document.courses})))
+    }
+    #[func]
+    fn course_validation_json(&self, hash: GString) -> GString {
+        let h = hash.to_string();
+        if !mapkit_core::course::valid_hash(&h) {
+            return GString::new();
+        }
+        self.package
+            .as_ref()
+            .and_then(|p| p.files.get(&format!("course-validation/{h}.mevalidation")))
+            .filter(|b| b.len() <= mapkit_core::course::VALIDATION_BYTES)
+            .and_then(|b| std::str::from_utf8(b).ok())
+            .map(GString::from)
+            .unwrap_or_default()
+    }
+    #[func]
     fn document_json(&self) -> GString {
         response(
             self.package
@@ -235,7 +270,11 @@ impl MapKitBridge {
                     }
                     let estimate = p.document.estimate(cell, 500_000)?;
                     let mut cost = serde_json::json!(estimate);
-                    cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell, &mut self.presentation.borrow_mut())?);
+                    cost["presentation_bytes"] = serde_json::json!(presentation::cost(
+                        p,
+                        cell,
+                        &mut self.presentation.borrow_mut()
+                    )?);
                     cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
                     cost["archive_info"] = serde_json::json!({
                         "key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
@@ -251,19 +290,33 @@ impl MapKitBridge {
     /// Display-only product; callers reserve source, generation and display first.
     #[func]
     fn estimate_far_chunk(&self, x: i32, y: i32) -> GString {
-        response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first")).and_then(|p| {
-            let cell = mapkit_core::Cell { x, y };
-            let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
-            cost["distant_triangles"] = serde_json::json!(p.distant_triangle_bound(cell)?);
-            cost["presentation_bytes"] = serde_json::json!(presentation::cost(p, cell, &mut self.presentation.borrow_mut())?);
-            cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
-            Ok(cost)
-        }))
+        response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| {
+                    let cell = mapkit_core::Cell { x, y };
+                    let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
+                    cost["distant_triangles"] = serde_json::json!(p.distant_triangle_bound(cell)?);
+                    cost["presentation_bytes"] = serde_json::json!(presentation::cost(
+                        p,
+                        cell,
+                        &mut self.presentation.borrow_mut()
+                    )?);
+                    cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
+                    Ok(cost)
+                }),
+        )
     }
     #[func]
     fn generate_far_chunk(&self, x: i32, y: i32) -> VarDictionary {
-        packed::respond(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|p| p.generate_distant(mapkit_core::Cell { x, y })).map(distant::pack))
+        packed::respond(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| p.generate_distant(mapkit_core::Cell { x, y }))
+                .map(distant::pack),
+        )
     }
     /// Bounded broad-phase plan; callers estimate and reserve each required cell.
     #[func]
@@ -435,11 +488,21 @@ impl MapKitBridge {
     fn seal_course(&self, definition: GString, extent: PackedInt64Array) -> GString {
         response((|| {
             let v = extent.as_slice();
-            if v.len() != 4 { return Err(mapkit_core::error("E_COURSE_BOUNDS", "four bounds coordinates required")); }
-            let b = mapkit_core::Bounds { min: [v[0], v[1]], max: [v[2], v[3]] };
+            if v.len() != 4 {
+                return Err(mapkit_core::error(
+                    "E_COURSE_BOUNDS",
+                    "four bounds coordinates required",
+                ));
+            }
+            let b = mapkit_core::Bounds {
+                min: [v[0], v[1]],
+                max: [v[2], v[3]],
+            };
             let body = mapkit_core::course::decode(definition.to_string().as_bytes())?;
             let course = mapkit_core::course::Course::from_definition(body, &b)?;
-            Ok(serde_json::json!({"document":course,"canonical":String::from_utf8(canonical(&course)?).unwrap()}))
+            Ok(
+                serde_json::json!({"document":course,"canonical":String::from_utf8(canonical(&course)?).unwrap()}),
+            )
         })())
     }
     #[func]
@@ -469,12 +532,15 @@ impl MapKitBridge {
     /// Restore only the already validated immutable package. Never replace a project.
     #[func]
     fn unpack_source(&self, destination: GString) -> GString {
-        response(self.package.as_ref()
-            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|package| {
-                mapkit_package::unpack(package, Path::new(&destination.to_string()))?;
-                Ok(serde_json::json!({"path": destination.to_string()}))
-            }))
+        response(
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|package| {
+                    mapkit_package::unpack(package, Path::new(&destination.to_string()))?;
+                    Ok(serde_json::json!({"path": destination.to_string()}))
+                }),
+        )
     }
     /// Reserve before native generation; retain output allowance through decode/use.
     #[func]
@@ -497,7 +563,7 @@ impl MapKitBridge {
                         .cell_at([x_cm, y_cm])
                         .ok_or_else(|| mapkit_core::error("E_SPAWN", "outside map"))?;
                     let chunk = p.generate(cell, 500_000)?;
-            mapkit_core::cancellation::checkpoint()?;
+                    mapkit_core::cancellation::checkpoint()?;
                     let options = chunk.spawn_options([x_cm, y_cm])?;
                     Ok(serde_json::json!({"surfaces": options}))
                 }),
@@ -515,7 +581,9 @@ impl MapKitBridge {
     #[func]
     fn is_road_surface(&self, surface: GString) -> bool {
         let id = surface.to_string();
-        self.package.as_ref().is_some_and(|p| p.document.roads.iter().any(|road| road.id == id))
+        self.package
+            .as_ref()
+            .is_some_and(|p| p.document.roads.iter().any(|road| road.id == id))
     }
     /// Exact local bounds without serializing the full editing document.
     #[func]

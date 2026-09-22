@@ -1,7 +1,7 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod cancellation;
-pub mod course;
 mod convex;
+pub mod course;
 pub mod environment;
 pub use convex::{CollisionConvex, GeneratedConvex};
 use schemars::JsonSchema;
@@ -417,12 +417,17 @@ impl MapDocument {
         self.validate_inner(true)
     }
     fn validate_inner(&self, source_topology: bool) -> Result<()> {
-        if self.courses.len() > course::MAX_COURSES { return Err(error("E_COURSE_LIMIT", "too many map courses")); }
+        if self.courses.len() > course::MAX_COURSES {
+            return Err(error("E_COURSE_LIMIT", "too many map courses"));
+        }
         let mut ids = BTreeSet::new();
         for c in &self.courses {
             c.validate_document(&self.bounds)?;
             if c.definition.map_id != self.map_id || !ids.insert(&c.course_id) {
-                return Err(error("E_COURSE_MAP", "map course identity mismatch or duplicate"));
+                return Err(error(
+                    "E_COURSE_MAP",
+                    "map course identity mismatch or duplicate",
+                ));
             }
         }
         if let Some(environment) = &self.environment {

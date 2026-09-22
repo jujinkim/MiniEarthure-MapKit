@@ -9,23 +9,37 @@ pub const VALIDATION_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_COURSES: usize = 64;
 
 pub fn valid_hash(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    s.len() == 64
+        && s.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 fn label(s: &str, max: usize) -> bool {
     !s.trim().is_empty() && s.len() <= max && !s.chars().any(char::is_control)
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum Mode { Circuit, Sprint }
+pub enum Mode {
+    Circuit,
+    Sprint,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum PlacementMode { Free, RoadSnap }
+pub enum PlacementMode {
+    Free,
+    RoadSnap,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum CheckpointShape { Sphere, Hemisphere }
+pub enum CheckpointShape {
+    Sphere,
+    Hemisphere,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum StartMode { Ground, Air }
+pub enum StartMode {
+    Ground,
+    Air,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Checkpoint {
@@ -59,10 +73,17 @@ pub struct ValidationReference {
 }
 impl ValidationReference {
     pub fn validate(&self) -> Result<()> {
-        if !valid_hash(&self.sha256) || !valid_hash(&self.world_content_hash)
-            || !valid_hash(&self.geometry_hash) || self.bytes == 0 || self.bytes as usize > VALIDATION_BYTES
-            || self.path != format!("course-validation/{}.mevalidation", self.sha256) {
-            return Err(error("E_COURSE_VALIDATION", "invalid bounded validation reference"));
+        if !valid_hash(&self.sha256)
+            || !valid_hash(&self.world_content_hash)
+            || !valid_hash(&self.geometry_hash)
+            || self.bytes == 0
+            || self.bytes as usize > VALIDATION_BYTES
+            || self.path != format!("course-validation/{}.mevalidation", self.sha256)
+        {
+            return Err(error(
+                "E_COURSE_VALIDATION",
+                "invalid bounded validation reference",
+            ));
         }
         Ok(())
     }
@@ -79,35 +100,60 @@ pub struct Course {
 }
 impl CourseBody {
     pub fn validate(&self, bounds: &Bounds) -> Result<()> {
-        if !label(&self.map_id, 128) || !label(&self.display_name, 256)
-            || !valid_hash(&self.world_content_hash) || !(2..=64).contains(&self.checkpoints.len())
-            || self.start_direction == [0, 0] || self.start_direction.iter().any(|v| v.unsigned_abs() > 1_000_000_000) {
-            return Err(error("E_COURSE", "invalid course identity, direction or checkpoint count"));
+        if !label(&self.map_id, 128)
+            || !label(&self.display_name, 256)
+            || !valid_hash(&self.world_content_hash)
+            || !(2..=64).contains(&self.checkpoints.len())
+            || self.start_direction == [0, 0]
+            || self
+                .start_direction
+                .iter()
+                .any(|v| v.unsigned_abs() > 1_000_000_000)
+        {
+            return Err(error(
+                "E_COURSE",
+                "invalid course identity, direction or checkpoint count",
+            ));
         }
         for cp in &self.checkpoints {
             if !bounds.contains([cp.position_cm[0], cp.position_cm[2]])
-                || cp.position_cm.iter().any(|v| v.unsigned_abs() > 1_000_000_000)
-                || !(100..=100_000).contains(&cp.radius_cm) || cp.surface_id.len() > 256
-                || cp.surface_id.chars().any(char::is_control) {
-                return Err(error("E_CHECKPOINT", "checkpoint exceeds position, radius or hint limits"));
+                || cp
+                    .position_cm
+                    .iter()
+                    .any(|v| v.unsigned_abs() > 1_000_000_000)
+                || !(100..=100_000).contains(&cp.radius_cm)
+                || cp.surface_id.len() > 256
+                || cp.surface_id.chars().any(char::is_control)
+            {
+                return Err(error(
+                    "E_CHECKPOINT",
+                    "checkpoint exceeds position, radius or hint limits",
+                ));
             }
         }
         Ok(())
     }
     pub fn geometry_hash(&self) -> Result<String> {
         // Names and driving content are separate identities. No reference points back into this hash.
-        Ok(sha256(&canonical(&serde_json::json!({"map_id":self.map_id, "mode":self.mode,
+        Ok(sha256(&canonical(
+            &serde_json::json!({"map_id":self.map_id, "mode":self.mode,
             "start_mode":self.start_mode, "start_direction":self.start_direction,
             "checkpoints":self.checkpoints.iter().map(|c| serde_json::json!({
-                "position_cm":c.position_cm,"radius_cm":c.radius_cm,"shape":c.shape})).collect::<Vec<_>>()}))?))
+                "position_cm":c.position_cm,"radius_cm":c.radius_cm,"shape":c.shape})).collect::<Vec<_>>()}),
+        )?))
     }
 }
 impl Course {
     pub fn from_definition(definition: CourseBody, bounds: &Bounds) -> Result<Self> {
         definition.validate(bounds)?;
         let course_id = sha256(&canonical(&definition)?);
-        let value = Self { format: "miniearthure-course".into(), format_version: COURSE_VERSION,
-            course_id, definition, validation: None };
+        let value = Self {
+            format: "miniearthure-course".into(),
+            format_version: COURSE_VERSION,
+            course_id,
+            definition,
+            validation: None,
+        };
         value.validate_document(bounds)?;
         Ok(value)
     }
@@ -130,31 +176,51 @@ impl Course {
         if self.course_id != sha256(&canonical(&self.definition)?) {
             return Err(error("E_COURSE_HASH", "course identity mismatch"));
         }
-        if let Some(reference) = &self.validation { reference.validate()?; }
-        if canonical(self)?.len() > COURSE_BYTES { return Err(error("E_RACE_SIZE", "course exceeds byte limit")); }
+        if let Some(reference) = &self.validation {
+            reference.validate()?;
+        }
+        if canonical(self)?.len() > COURSE_BYTES {
+            return Err(error("E_RACE_SIZE", "course exceeds byte limit"));
+        }
         Ok(())
     }
     pub fn validate(&self, world: &str, bounds: &Bounds) -> Result<()> {
         self.validate_document(bounds)?;
         if self.definition.world_content_hash != world {
-            return Err(error("E_COURSE_WORLD", "course requires validation on this driving content"));
+            return Err(error(
+                "E_COURSE_WORLD",
+                "course requires validation on this driving content",
+            ));
         }
         Ok(())
     }
 }
 // Godot JSON emits integral floating tokens; reject fractions before typed decoding.
 pub fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T> {
-    if bytes.len() > COURSE_BYTES { return Err(error("E_RACE_SIZE", "course exceeds byte limit")); }
-    let mut v: serde_json::Value = serde_json::from_slice(bytes).map_err(|e| error("E_COURSE_JSON", e.to_string()))?;
+    if bytes.len() > COURSE_BYTES {
+        return Err(error("E_RACE_SIZE", "course exceeds byte limit"));
+    }
+    let mut v: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|e| error("E_COURSE_JSON", e.to_string()))?;
     fn integers(v: &mut serde_json::Value) -> Result<()> {
         match v {
             serde_json::Value::Number(n) if n.is_f64() => {
                 let f = n.as_f64().unwrap();
-                if f.fract() != 0.0 || f.abs() > 9_007_199_254_740_991.0 { return Err(error("E_COURSE_JSON", "exact integer required")); }
+                if f.fract() != 0.0 || f.abs() > 9_007_199_254_740_991.0 {
+                    return Err(error("E_COURSE_JSON", "exact integer required"));
+                }
                 *n = (f as i64).into();
-            },
-            serde_json::Value::Array(a) => for v in a { integers(v)?; },
-            serde_json::Value::Object(o) => for v in o.values_mut() { integers(v)?; },
+            }
+            serde_json::Value::Array(a) => {
+                for v in a {
+                    integers(v)?;
+                }
+            }
+            serde_json::Value::Object(o) => {
+                for v in o.values_mut() {
+                    integers(v)?;
+                }
+            }
             _ => (),
         }
         Ok(())
