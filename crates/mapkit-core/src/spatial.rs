@@ -90,4 +90,23 @@ impl MapDocument {
             ],
         })
     }
+
+    /// Collision preparation includes the complete declared sweep and landing
+    /// envelope of structures touching the ordinary driving window. Consumers
+    /// still apply their unchanged cell/memory caps before materialization.
+    pub fn driving_window(&self, p: Point) -> Vec<Cell> {
+        let mut cells = self.window(p);
+        let base = cells.clone();
+        for g in &self.gimmicks {
+            if !base.iter().any(|c| self.cell_bounds(*c).is_ok_and(|b| g.intersects(&b))) { continue; }
+            let Some(lo) = self.cell_at([g.safety_min_cm[0], g.safety_min_cm[2]]) else { continue; };
+            let Some(hi) = self.cell_at([g.safety_max_cm[0], g.safety_max_cm[2]]) else { continue; };
+            for y in lo.y..=hi.y { for x in lo.x..=hi.x {
+                let cell = Cell { x, y };
+                if !cells.contains(&cell) { cells.push(cell); }
+            }}
+        }
+        cells.sort_by_key(|c| (c.y, c.x));
+        cells
+    }
 }

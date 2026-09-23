@@ -14,7 +14,8 @@ mandatory and verified against payload bytes. Size, cancellation, allocation,
 content hash and audit checks remain binding.
 
 Generated caches have one MKCELL01 layout: fixed header, triangle/object arrays,
-prism count and records, convex count and records, including zero counts. Their key
+prism count and records, convex count and records, then a required u32 byte length and canonical gimmick JSON,
+including empty arrays/counts. Their key
 includes BUILD_FINGERPRINT, generated version, world identity and cell. Cargo derives
 the fingerprint from sorted relative source/schema/dependency paths and UTF-8 contents
 with LF line endings and length delimiters. Absolute paths, platform, timestamps and
@@ -82,3 +83,32 @@ tests 20 passed locally. Runtime certification and application acceptance are se
 Consumers supply atomic generic light groups instead of inferred vehicle poses.
 See [light group contract](../docs/LIGHT_GROUPS.md). Pool and shadow caps remain
 unchanged; no vehicle design data or serialized map contract is added.
+
+## Declarative driving structures (2026-09-24)
+
+`MapDocument.gimmicks` declares at most 128 stable IDs. Each record has centimetre
+position, millidegree Euler YXZ rotation, per-mille scale, 1–32 validated convex
+parts, a surface and RGBA color. Motion is `static`, cosine ping-pong `translate`,
+continuous `rotate`, `boost` or `launch`. Motion stores period/phase milliseconds,
+world-space displacement/impulse, rotation axis and per-vehicle cooldown. No
+executable user scripts are accepted. See [the reusable library](../examples/driving-library/README.md).
+
+Required safety bounds enclose the full transformed motion and authored landing
+area. Validation uses a conservative integer L1 radius, bounded displacement,
+period, scale, impulse and total extent; bounds must remain inside the map.
+Generated cells include each intersecting definition. Consumers deduplicate by ID
+within their world generation and retain a global motion phase through cell reloads.
+`driving_window` extends the ordinary 3×3 set to include complete safety rectangles
+for definitions touching that set. Consumers retain their own cell and memory caps.
+
+Canonical source/chunk hashes, regional metadata, the packed `gimmicks_json` field
+and archive audits include these definitions. Cost declares 16 KiB plus 32 KiB per
+convex part per intersecting object/cell; occupancy includes per-part static or
+translation bounds and full rotation sweeps. Hollow passages retain separate parts.
+The generated archive layout changes within v1; build fingerprints invalidate
+old disposable caches. There is no fallback decoder or original-package conversion.
+
+`godot/gimmick_geometry.gd` is pure shared geometry/pose/contact-velocity math.
+The consumer supplies authority time, generation, reset and activation policy.
+MapKit never starts a simulation clock. Geometry is transformed once into scene
+coordinates; scale is baked into physics shapes by the physics consumer.

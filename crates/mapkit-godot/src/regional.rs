@@ -176,7 +176,7 @@ impl MapKitRegionReader {
                 .cell_at([x_cm, y_cm])
                 .ok_or_else(|| mapkit_core::error("E_CELL", "position outside map"))?;
             Ok(
-                serde_json::json!({"cell":cell,"cells":d.window([x_cm,y_cm]),"bounds":d.bounds,
+                serde_json::json!({"cell":cell,"cells":d.driving_window([x_cm,y_cm]),"bounds":d.bounds,
                 "cell_bounds":d.cell_bounds(cell)?,"cell_size_cm":d.cell_size_cm,"world_scale":mapkit_core::WORLD_SCALE,
                 "scene_units_version":mapkit_core::SCENE_UNITS_VERSION,"package_format_version":mapkit_core::PACKAGE_VERSION,
                 "recipe_version":d.recipe_version,"generated_format_version":mapkit_core::GENERATED_VERSION}),

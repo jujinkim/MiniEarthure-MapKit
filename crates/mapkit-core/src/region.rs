@@ -216,6 +216,7 @@ fn widest_road(d: &MapDocument) -> Option<usize> {
 /// Clone metadata without allocating a transient copy of world geometry.
 pub fn source_metadata(d: &MapDocument) -> MapDocument {
     MapDocument {
+        gimmicks: d.gimmicks.clone(),
         courses: d.courses.clone(),
         environment: d.environment.as_ref().map(|value| {
             let mut header = value.clone();

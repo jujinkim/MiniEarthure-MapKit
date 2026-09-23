@@ -1,4 +1,5 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
+pub mod gimmick;
 pub mod cancellation;
 mod convex;
 pub mod course;
@@ -249,6 +250,8 @@ pub struct Repetition {
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gimmicks: Vec<gimmick::Gimmick>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub courses: Vec<course::Course>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<environment::EnvironmentProfile>,
@@ -391,6 +394,7 @@ mod courtyard;
 
 impl MapDocument {
     pub fn normalize(&mut self) {
+        self.gimmicks.sort_by(|a, b| a.id.cmp(&b.id));
         self.courses.sort_by(|a, b| a.course_id.cmp(&b.course_id));
         self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
         self.roads.sort_by(|a, b| a.id.cmp(&b.id));
@@ -706,6 +710,7 @@ impl MapDocument {
                 return fail("invalid placement");
             }
         }
+        gimmick::validate(self)?;
         placement::validate(self)?;
         Ok(())
     }
@@ -765,6 +770,8 @@ pub struct GeneratedObject {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct GeneratedChunk {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gimmicks: Vec<gimmick::Gimmick>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub asset_convexes: Vec<GeneratedConvex>,
     /// Convex building parts. Empty collections are omitted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -804,6 +811,10 @@ impl GeneratedChunk {
         hash.update(canonical(&self.cell)?);
         hash.update(b",\"format_version\":");
         hash.update(canonical(&self.format_version)?);
+        if !self.gimmicks.is_empty() {
+            hash.update(b",\"gimmicks\":");
+            hash.update(canonical(&self.gimmicks)?);
+        }
         hash.update(b",\"objects\":[");
         for (index, object) in self.objects.iter().enumerate() {
             if index > 0 {

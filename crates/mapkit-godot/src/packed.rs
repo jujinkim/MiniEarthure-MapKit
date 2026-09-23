@@ -55,6 +55,7 @@ impl MapKitPackedGeometry {
                 }
                 // Material does not participate in core surface selection/normal.
                 let chunk = GeneratedChunk {
+                    gimmicks: vec![],
                     format_version: 1,
                     cell: mapkit_core::Cell { x: 0, y: 0 },
                     triangles: vec![mapkit_core::Triangle {
@@ -224,6 +225,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         usages: PackedStringArray::from(usages.as_slice()),
     });
     let data = vdict! {
+        "gimmicks_json" => serde_json::to_string(&chunk.gimmicks).unwrap().as_str(),
         "packed_version" => 1i64,
         "format_version" => chunk.format_version as i64,
         "cell" => &vdict! { "x" => chunk.cell.x, "y" => chunk.cell.y },

@@ -5,6 +5,7 @@ use super::*;
 /// representation-specific byte allowances. Estimates do not affect world hashes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationCost {
+    pub gimmick_bytes: u64,
     pub triangles: u64,
     /// Bounded road road planning/subdivision workspace, separate from output.
     pub generation_scratch_bytes: u64,
@@ -62,6 +63,7 @@ pub(crate) fn estimate_validated(
     let spacing = descriptor.map_or(d.cell_size_cm, |h| h.spacing_cm) as i64;
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
+        gimmick_bytes: d.gimmicks.iter().filter(|g| g.intersects(&area)).map(|g| g.memory_bytes()).sum(),
         triangles: 0,
         generation_scratch_bytes: (if !d.roads.is_empty() || !d.surface_areas.is_empty() {
             crate::roads::SCRATCH_BYTES * { 2 }
@@ -69,11 +71,11 @@ pub(crate) fn estimate_validated(
             0
         }) + { crate::placement::SCRATCH_BYTES },
         objects: 0,
-        occupied_solids: 0,
+        occupied_solids: d.gimmicks.iter().filter(|g| g.intersects(&area)).map(|g| g.parts.len() as u64).sum(),
         building_prisms: 0,
         asset_convexes: 0,
         height_samples: if descriptor.is_some() { side * side } else { 0 },
-        max_object_id_bytes: 7,
+        max_object_id_bytes: d.gimmicks.iter().map(|g| g.id.len() as u64).max().unwrap_or(7).max(7),
     };
     let mut add = |count: u64, id_bytes: usize| {
         cost.triangles = cost.triangles.saturating_add(count);

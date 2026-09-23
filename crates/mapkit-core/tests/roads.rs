@@ -30,6 +30,7 @@ fn surface_count(c: &GeneratedChunk, p: Point, height: i64) -> usize {
                 return false;
             }
             let one = GeneratedChunk {
+                gimmicks: vec![],
                 asset_convexes: vec![],
                 building_prisms: vec![],
                 format_version: 1,

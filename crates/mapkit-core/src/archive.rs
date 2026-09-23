@@ -15,7 +15,8 @@ pub fn archive_key(world: &str, cell: Cell) -> String {
 }
 pub fn archive_limit(cost: &GenerationCost) -> u64 {
     let id = cost.max_object_id_bytes.max(128);
-    (HEADER as u64 + 8)
+    (HEADER as u64 + 14)
+        .saturating_add(cost.gimmick_bytes)
         .saturating_add(cost.asset_convexes.saturating_mul(960 + id))
         .saturating_add(cost.triangles.saturating_mul(78 + id))
         .saturating_add(cost.objects.saturating_mul(33 + 2 * id))
@@ -126,6 +127,10 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
         }
     }
     out.extend(convex);
+    let motion = canonical(&chunk.gimmicks)?;
+    if out.len() as u64 + 4 + motion.len() as u64 > max_bytes { return Err(invalid()); }
+    out.extend_from_slice(&(motion.len() as u32).to_le_bytes());
+    out.extend(motion);
     Ok(out)
 }
 struct Reader<'a> {
@@ -191,6 +196,7 @@ pub fn decode_archive(
         return Err(invalid());
     }
     let mut chunk = GeneratedChunk {
+        gimmicks: vec![],
         asset_convexes: vec![],
         building_prisms: vec![],
         format_version: GENERATED_VERSION,
@@ -304,6 +310,10 @@ pub fn decode_archive(
                 .push(GeneratedConvex { object_id, shape });
         }
     }
+    let motion_len = r.u32()? as usize;
+    if motion_len as u64 > cost.gimmick_bytes + 2 { return Err(invalid()); }
+    chunk.gimmicks = serde_json::from_slice(r.take(motion_len)?).map_err(|_| invalid())?;
+    if chunk.gimmicks.len() > gimmick::MAX_GIMMICKS || chunk.gimmicks.iter().any(|g| !g.valid()) || chunk.gimmicks.iter().map(|g| g.memory_bytes()).sum::<u64>() > cost.gimmick_bytes { return Err(invalid()); }
     if r.offset != bytes.len() || chunk.hash()?.as_bytes() != hash {
         return Err(invalid());
     }
@@ -316,6 +326,7 @@ mod tests {
     #[test]
     fn archive_roundtrip_corruption_and_allocation_limits() {
         let chunk = GeneratedChunk {
+            gimmicks: vec![],
             asset_convexes: vec![],
             building_prisms: vec![],
             format_version: GENERATED_VERSION,
@@ -334,6 +345,7 @@ mod tests {
             }],
         };
         let cost = GenerationCost {
+            gimmick_bytes: 0,
             asset_convexes: 0,
             triangles: 1,
             generation_scratch_bytes: 0,

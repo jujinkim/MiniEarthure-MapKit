@@ -266,6 +266,7 @@ fn generate_validated(
     let bounds = d.cell_bounds(input.cell)?;
     let mut b = Builder {
         chunk: GeneratedChunk {
+            gimmicks: d.gimmicks.iter().filter(|g| g.intersects(&bounds)).cloned().collect(),
             asset_convexes: vec![],
             building_prisms: vec![],
             format_version: GENERATED_VERSION,
@@ -300,6 +301,13 @@ fn generate_validated(
     crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
 
     crate::placement::generate(d, input.cell, &mut b, placements)?;
+    if let Some(occupied) = &mut b.occupancy {
+        for g in &b.chunk.gimmicks {
+            for (min,max) in g.occupancy_bounds() {
+                occupied.push(&g.id, SolidShape::Box {min,max}, &bounds)?;
+            }
+        }
+    }
     return Ok(GeneratedOccupancy {
         chunk: b.chunk,
         solids: b.occupancy.map_or_else(Vec::new, |v| v.solids),

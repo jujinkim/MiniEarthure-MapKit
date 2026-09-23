@@ -167,7 +167,7 @@ impl MapKitBridge {
                         .cell_at([x_cm, y_cm])
                         .ok_or_else(|| mapkit_core::error("E_CELL", "position outside map"))?;
                     Ok(serde_json::json!({
-                        "cell": cell, "cells": p.document.window([x_cm, y_cm]),
+                        "cell": cell, "cells": p.document.driving_window([x_cm, y_cm]),
                         "bounds": p.document.bounds, "cell_bounds": p.document.cell_bounds(cell)?,
                         "cell_size_cm": p.document.cell_size_cm,
                         "visual_margin_cm": self.visual_margin_cm,

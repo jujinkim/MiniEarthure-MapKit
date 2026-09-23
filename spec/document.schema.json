@@ -65,6 +65,12 @@
         }
       ]
     },
+    "gimmicks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Gimmick"
+      }
+    },
     "heightmaps": {
       "type": "array",
       "items": {
@@ -679,6 +685,96 @@
       },
       "additionalProperties": false
     },
+    "Gimmick": {
+      "type": "object",
+      "required": [
+        "color",
+        "id",
+        "motion",
+        "parts",
+        "position",
+        "rotation_mdeg",
+        "safety_max_cm",
+        "safety_min_cm",
+        "scale_per_mille",
+        "surface"
+      ],
+      "properties": {
+        "color": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
+        "id": {
+          "type": "string"
+        },
+        "motion": {
+          "$ref": "#/definitions/Motion"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CollisionConvex"
+          }
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "rotation_mdeg": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "safety_max_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "safety_min_cm": {
+          "description": "Conservative full swept envelope AND the predicted pad landing area.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "scale_per_mille": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "surface": {
+          "$ref": "#/definitions/Surface"
+        }
+      },
+      "additionalProperties": false
+    },
     "Heightmap": {
       "type": "object",
       "required": [
@@ -782,6 +878,72 @@
       "enum": [
         "circuit",
         "sprint"
+      ]
+    },
+    "Motion": {
+      "type": "object",
+      "required": [
+        "axis",
+        "cooldown_ms",
+        "delta_cm",
+        "impulse_cmps",
+        "kind",
+        "period_ms",
+        "phase_ms"
+      ],
+      "properties": {
+        "axis": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "cooldown_ms": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "delta_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "impulse_cmps": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "kind": {
+          "$ref": "#/definitions/MotionKind"
+        },
+        "period_ms": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "phase_ms": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "MotionKind": {
+      "type": "string",
+      "enum": [
+        "static",
+        "translate",
+        "rotate",
+        "boost",
+        "launch"
       ]
     },
     "Placement": {
