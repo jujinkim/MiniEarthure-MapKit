@@ -744,6 +744,8 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
         .cloned()
         .collect();
     let mut work = 0;
+    let mut edges = Vec::new();
+    let mut tops = Vec::new();
     for t in ground {
         let area = crate::bounds_index::bounds(&t.vertices.map(xy));
         let nearby = exclusion_index.query(&area, &mut work)?;
@@ -767,14 +769,10 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
                         let bottom: Vec<_> = p.iter().map(|p| on_plane(&t.vertices, *p)).collect();
                         let top: Vec<_> = bottom.iter().map(|p| [p[0], p[1] + 12, p[2]]).collect();
                         emit(b, &top, Surface::Concrete, &id, true)?;
+                        tops.push(top.iter().copied().map(xy).collect::<Vec<_>>());
                         for i in 0..top.len() {
                             let j = (i + 1) % top.len();
-                            b.quad(
-                                [bottom[i], bottom[j], top[j], top[i]],
-                                Surface::Concrete,
-                                &id,
-                                false,
-                            )?;
+                            edges.push((bottom[i], bottom[j], patch.road.id.as_str()));
                         }
                     }
                 }
@@ -785,7 +783,248 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
             }
         }
     }
+    sidewalk_boundary_walls(b, &edges, &tops, &mut work)?;
     Ok(())
+}
+
+/// Clip fragment edges against one another before making the visible step.
+/// Terrain triangles and apron patches split the top into many polygons; a
+/// wall on each polygon edge would leave solid vertical faces inside the top.
+fn sidewalk_boundary_walls(
+    b: &mut Builder,
+    edges: &[(Vertex, Vertex, &str)],
+    tops: &[Vec<Point>],
+    work: &mut usize,
+) -> Result<()> {
+    use i_overlay::{
+        core::{
+            fill_rule::FillRule,
+            overlay::{Overlay, ShapeType},
+            overlay_rule::OverlayRule,
+        },
+        i_float::int::point::IntPoint,
+    };
+    let mut overlay = Overlay::<i64>::new(edges.len());
+    for top in tops {
+        tick(work, top.len())?;
+        let mut contour = top.clone();
+        let area: i128 = (0..contour.len())
+            .map(|i| {
+                let (a, c) = (contour[i], contour[(i + 1) % contour.len()]);
+                a[0] as i128 * c[1] as i128 - a[1] as i128 * c[0] as i128
+            })
+            .sum();
+        if area < 0 {
+            contour.reverse();
+        }
+        overlay.add_contour(
+            &contour
+                .iter()
+                .map(|p| IntPoint::new(p[0], p[1]))
+                .collect::<Vec<_>>(),
+            ShapeType::Subject,
+        );
+    }
+    let outlines = overlay.overlay(OverlayRule::Subject, FillRule::NonZero);
+    let index = crate::bounds_index::BoundsIndex::new(
+        &edges
+            .iter()
+            .map(|(a, c, _)| crate::bounds_index::bounds(&[xy(*a), xy(*c)]))
+            .collect::<Vec<_>>(),
+    );
+    let top_index = crate::bounds_index::BoundsIndex::new(
+        &tops
+            .iter()
+            .map(|poly| crate::bounds_index::bounds(poly))
+            .collect::<Vec<_>>(),
+    );
+    for shape in outlines {
+        for ring in shape {
+            for i in 0..ring.len() {
+                let p = [ring[i].x, ring[i].y];
+                let q = [ring[(i + 1) % ring.len()].x, ring[(i + 1) % ring.len()].y];
+                if p == q
+                    || p[0] == q[0] && (p[0] == b.bounds.min[0] || p[0] == b.bounds.max[0])
+                    || p[1] == q[1] && (p[1] == b.bounds.min[1] || p[1] == b.bounds.max[1])
+                {
+                    continue;
+                }
+                let coordinate = if p[0] != q[0] { 0 } else { 1 };
+                let mut intervals = Vec::new();
+                let mut area = crate::bounds_index::bounds(&[p, q]);
+                for axis in 0..2 {
+                    area.min[axis] -= 2;
+                    area.max[axis] += 2;
+                }
+                for candidate in index.query(&area, work)? {
+                    tick(work, 1)?;
+                    let (a, c, _) = edges[candidate];
+                    let tolerance = 2 * (q[0] - p[0]).abs().max((q[1] - p[1]).abs()) as i128;
+                    if cross(p, q, xy(a)).abs() > tolerance
+                        || cross(p, q, xy(c)).abs() > tolerance
+                        || a[coordinate * 2] == c[coordinate * 2]
+                    {
+                        continue;
+                    }
+                    let lo = p[coordinate]
+                        .min(q[coordinate])
+                        .max(a[coordinate * 2].min(c[coordinate * 2]) - 2);
+                    let hi = p[coordinate]
+                        .max(q[coordinate])
+                        .min(a[coordinate * 2].max(c[coordinate * 2]) + 2);
+                    if lo < hi {
+                        intervals.push((lo, hi, candidate));
+                    }
+                }
+                intervals.sort_unstable();
+                let end = p[coordinate].max(q[coordinate]);
+                let mut at = p[coordinate].min(q[coordinate]);
+                while at < end {
+                    tick(work, 1)?;
+                    let covering = intervals
+                        .iter()
+                        .filter(|(lo, hi, _)| *lo <= at && *hi > at)
+                        .max_by_key(|(_, hi, _)| *hi);
+                    let (hi, candidate) = if let Some(&(_, hi, candidate)) = covering {
+                        (hi, candidate)
+                    } else {
+                        // Integer overlay intersections can round an outline
+                        // endpoint a centimetre off its source edge.
+                        let next = intervals
+                            .iter()
+                            .filter(|(lo, _, _)| *lo > at)
+                            .map(|(lo, _, _)| *lo)
+                            .min()
+                            .unwrap_or(end);
+                        let midpoint = std::array::from_fn::<_, 2, _>(|j| {
+                            p[j] + (((q[j] - p[j]) as i128
+                                * ((at + next) / 2 - p[coordinate]) as i128)
+                                / (q[coordinate] - p[coordinate]) as i128)
+                                as i64
+                        });
+                        let nearby = Bounds {
+                            min: midpoint.map(|v| v - 25),
+                            max: midpoint.map(|v| v + 25),
+                        };
+                        let candidate = index
+                            .query(&nearby, work)?
+                            .into_iter()
+                            .min_by_key(|&index| {
+                                let (a, c, _) = edges[index];
+                                let (dx, dz) = (c[0] - a[0], c[2] - a[2]);
+                                let length = dx as i128 * dx as i128 + dz as i128 * dz as i128;
+                                if length == 0 {
+                                    return i128::MAX;
+                                }
+                                let dot = (midpoint[0] - a[0]) as i128 * dx as i128
+                                    + (midpoint[1] - a[2]) as i128 * dz as i128;
+                                let squared = if dot < 0 {
+                                    (midpoint[0] - a[0]) as i128 * (midpoint[0] - a[0]) as i128
+                                        + (midpoint[1] - a[2]) as i128
+                                            * (midpoint[1] - a[2]) as i128
+                                } else if dot > length {
+                                    (midpoint[0] - c[0]) as i128 * (midpoint[0] - c[0]) as i128
+                                        + (midpoint[1] - c[2]) as i128
+                                            * (midpoint[1] - c[2]) as i128
+                                } else {
+                                    let area = cross(xy(a), xy(c), midpoint);
+                                    area * area / length
+                                };
+                                squared
+                            })
+                            .ok_or_else(|| {
+                                error("E_GEOMETRY", "sidewalk boundary has no nearby source")
+                            })?;
+                        (next, candidate)
+                    };
+                    let (a, c, id) = edges[candidate];
+                    let point = |value: i64| -> Vertex {
+                        let xy = std::array::from_fn::<_, 2, _>(|j| {
+                            p[j] + (((q[j] - p[j]) as i128 * (value - p[coordinate]) as i128)
+                                / (q[coordinate] - p[coordinate]) as i128)
+                                as i64
+                        });
+                        let dx = (c[0] - a[0]) as i128;
+                        let dz = (c[2] - a[2]) as i128;
+                        let dot = (xy[0] - a[0]) as i128 * dx + (xy[1] - a[2]) as i128 * dz;
+                        [
+                            xy[0],
+                            a[1] + (((c[1] - a[1]) as i128 * dot) / (dx * dx + dz * dz)) as i64,
+                            xy[1],
+                        ]
+                    };
+                    let (first, last) = if p[coordinate] < q[coordinate] {
+                        (point(at), point(hi))
+                    } else {
+                        (point(hi), point(at))
+                    };
+                    let middle = [(first[0] + last[0]) / 2, (first[2] + last[2]) / 2];
+                    let dx = (last[0] - first[0]).signum();
+                    let dz = (last[2] - first[2]).signum();
+                    if sidewalk_contains(tops, &top_index, [middle[0] - dz, middle[1] + dx], work)?
+                        && sidewalk_contains(
+                            tops,
+                            &top_index,
+                            [middle[0] + dz, middle[1] - dx],
+                            work,
+                        )?
+                    {
+                        at = hi;
+                        continue;
+                    }
+                    b.quad(
+                        [
+                            first,
+                            last,
+                            [last[0], last[1] + 12, last[2]],
+                            [first[0], first[1] + 12, first[2]],
+                        ],
+                        Surface::Concrete,
+                        &format!("{id}:sidewalk"),
+                        false,
+                    )?;
+                    at = hi;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn sidewalk_contains(
+    tops: &[Vec<Point>],
+    index: &crate::bounds_index::BoundsIndex,
+    point: Point,
+    work: &mut usize,
+) -> Result<bool> {
+    let bounds = Bounds {
+        min: point,
+        max: point,
+    };
+    for candidate in index.query(&bounds, work)? {
+        tick(work, 1)?;
+        let poly = &tops[candidate];
+        let mut inside = false;
+        for i in 0..poly.len() {
+            let a = poly[i];
+            let c = poly[(i + 1) % poly.len()];
+            let side = cross(a, c, point);
+            if side == 0
+                && (0..2).all(|axis| {
+                    point[axis] >= a[axis].min(c[axis]) && point[axis] <= a[axis].max(c[axis])
+                })
+            {
+                return Ok(true);
+            }
+            if (a[1] > point[1]) != (c[1] > point[1]) && (side > 0) == (c[1] > a[1]) {
+                inside = !inside;
+            }
+        }
+        if inside {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]

@@ -144,6 +144,41 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
 }
 
 #[test]
+fn sidewalk_walls_only_follow_exposed_edges_not_fragment_or_cell_seams() {
+    let mut d = doc_recipe(0, 1);
+    d.roads[0].kind = RoadKind::Ground;
+    d.roads[0].sidewalk_cm = Some(100);
+    let mut exterior_walls = 0;
+    for x in [0, 1] {
+        let c = generate_cell(&d, x);
+        for wall in c
+            .triangles
+            .iter()
+            .filter(|t| t.object_id == "road:sidewalk" && !t.spawnable)
+        {
+            let mut edge: Vec<Point> = wall.vertices.iter().map(|v| [v[0], v[2]]).collect();
+            edge.sort_unstable();
+            edge.dedup();
+            assert_eq!(edge.len(), 2);
+            let (a, b) = (edge[0], edge[1]);
+            assert_ne!((a[0], b[0]), (1600, 1600), "cell seam wall");
+            let middle = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+            let dx = (b[0] - a[0]).signum();
+            let dz = (b[1] - a[1]).signum();
+            let left = [middle[0] - dz, middle[1] + dx];
+            let right = [middle[0] + dz, middle[1] - dx];
+            assert!(
+                sample(&c, "road:sidewalk", left).is_err()
+                    || sample(&c, "road:sidewalk", right).is_err(),
+                "internal sidewalk wall along {a:?}..{b:?}"
+            );
+            exterior_walls += 1;
+        }
+    }
+    assert!(exterior_walls > 0, "exposed sidewalk still has a step");
+}
+
+#[test]
 fn indexed_validation_retains_manual_overlap_rejection() {
     let source = include_str!("../../../examples/placement/document.json");
     let original: MapDocument = serde_json::from_str(source).unwrap();
