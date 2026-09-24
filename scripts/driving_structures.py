@@ -20,8 +20,35 @@ def box(width,height,length,x=0,y=0,z=0):
 def ramp(width=200,length=450,height=45,reverse=False):
     v=box(width,20,length)['vertices']
     for p in v:
-        p[1]=(-5 if p[1]<0 else 6+round(height*((-p[2] if reverse else p[2])+length/2)/length))
+        # Bury the underside; the driving face starts exactly at the surface.
+        p[1]=(-5 if p[1]<0 else round(height*((-p[2] if reverse else p[2])+length/2)/length))
     return prism(v)
+
+def fit_to_surface(g, sample_height):
+    """Bake static structure contact into its shared visual/collision vertices.
+
+    Sample both entry corners (including crossfall), not just centreline pitch.
+    The convex hull tolerates quantized, non-planar terrain without open facets.
+    All coordinates and the callable's heights are map centimetres.
+    """
+    if g['motion']['kind'] != 'static':
+        raise ValueError('surface fitting requires a static structure')
+    yaw=math.radians(g['rotation_mdeg'][1]/1000)
+    c,s=math.cos(yaw),math.sin(yaw)
+    g['rotation_mdeg'][0]=g['rotation_mdeg'][2]=0
+    for part in g['parts']:
+        vertices=[]
+        for x,y,z in part['vertices']:
+            sx=x*g['scale_per_mille'][0]/1000
+            sz=z*g['scale_per_mille'][2]/1000
+            wx=g['position'][0]+c*sx+s*sz
+            wz=g['position'][2]-s*sx+c*sz
+            vertices.append([x,round(y+(sample_height(wx,wz)-g['position'][1])*1000/g['scale_per_mille'][1]),z])
+        part.update(convex_hull(vertices))
+    radius=math.ceil(max(sum(abs(v[a]*g['scale_per_mille'][a]/1000) for a in range(3)) for p in g['parts'] for v in p['vertices']))
+    g['safety_min_cm']=[v-radius for v in g['position']]
+    g['safety_max_cm']=[v+radius for v in g['position']]
+    return g
 
 def tube(radius=100,length=600,half=False):
     result=[]

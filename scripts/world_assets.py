@@ -9,7 +9,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from world_geometry import Model, GLASS, cm
+from world_geometry import Model, GLASS, FACES, cm
 
 STONE=(.72,.67,.54,1); WOOD=(.35,.21,.12,1); DARK=(.14,.19,.21,1)
 CREAM=(.89,.84,.69,1); RED=(.60,.22,.12,1); GREEN=(.18,.36,.18,1)
@@ -140,6 +140,35 @@ def tree(kind):
         for x,z,hh,w in [(-1.3,0,h,3.4),(1.4,.8,h+.9,3.5),(0,-1,h+1.8,3.8)]:
             m.solid((x,hh,z),(w,1.5,w),GREEN)
         for x,z in [(-.7,0),(.7,0),(0,.7)]:m.solid((x,.15,z),(1.4,.3,.3),WOOD,True)
+    return m
+
+def street_tree(kind):
+    """Fuller replacement for new authoring; existing library artifacts stay intact.
+
+    Canopy: 78 triangles, palm: 44; each retains two shared materials. Tint is
+    a vertex attribute so overlapping foliage does not add material surfaces.
+    """
+    m=new();h=8 if kind=='canopy' else 5
+    trunk=[(x*r,y,z*r) for y,r in [(0,.34),(h,.13)] for x,z in [(-1,-1),(1,-1),(1,1),(-1,1)]]
+    m.faces(trunk,outward(trunk,FACES),WOOD)
+    m.collision.append(dict(center=[0,round(h*50),0],size_cm=[45,round(h*100),45]))
+    if kind=='palm':
+        for n in range(8):
+            a=n*math.tau/8
+            vertices=[(0,h,0),(math.cos(a-.34)*1.8,h+.4,math.sin(a-.34)*1.8),
+                (math.cos(a)*3.2,h-1,math.sin(a)*3.2),(math.cos(a+.34)*1.8,h+.4,math.sin(a+.34)*1.8)]
+            m.panel(vertices,(0,1,0),GREEN);m.panel(list(reversed(vertices)),(0,-1,0),GREEN)
+    else:
+        for x,z,y,w,t in [(-1.15,.2,h-.2,2.4,1.4),(1.1,.65,h+.4,2.5,1.65),(.2,-1,h+.9,2.4,1.65),(0,.2,h+1.6,1.95,1.3)]:
+            vs=[(x,y+t,z),(x,y-t,z)]+[(x+w*math.cos(a*math.tau/6),y,z+w*math.sin(a*math.tau/6)) for a in range(6)]
+            fs=[f for a in range(6) for f in [(0,2+a,2+(a+1)%6),(1,2+(a+1)%6,2+a)]]
+            m.faces(vs,outward(vs,fs),GREEN)
+        # Three tapered triangular roots, broad at ground and joined to trunk.
+        for a in [0,math.tau/3,math.tau*2/3]:
+            vs=[(0,.7,0),(0,0,0),(1.25*math.cos(a),0,1.25*math.sin(a)),(.32*math.cos(a+.7),0,.32*math.sin(a+.7)),(.32*math.cos(a-.7),0,.32*math.sin(a-.7))]
+            fs=[(0,1,3),(0,3,2),(0,2,4),(0,4,1),(1,2,3),(1,4,2)]
+            m.faces(vs,outward(vs,fs),WOOD)
+    m.vertex_tint=lambda p:(.88+.10*math.sin(p[0]*1.7+p[1]*.6)**2,.90+.10*math.sin(p[2]+p[1])**2,.80+.16*math.cos(p[0]-p[2])**2)
     return m
 
 def library():

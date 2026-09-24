@@ -42,8 +42,10 @@ static func visual(g: Dictionary) -> Node3D:
 		var tool := SurfaceTool.new()
 		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
 		for face: Array in part.faces:
-			for i in [0, 2, 1]: tool.add_vertex(vertices[face[i]])
-		tool.generate_normals()
+			# Convex faces are outward counterclockwise in map coordinates.
+			# point() reflects Z, already producing Godot's clockwise front face.
+			tool.set_normal((vertices[face[2]]-vertices[face[0]]).cross(vertices[face[1]]-vertices[face[0]]).normalized())
+			for i in [0, 1, 2]: tool.add_vertex(vertices[face[i]])
 		var mesh := MeshInstance3D.new()
 		mesh.mesh = tool.commit()
 		mesh.material_override = material

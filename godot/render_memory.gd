@@ -42,7 +42,7 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 			var normals := PackedVector3Array()
 			var uv := PackedVector2Array()
 			vertices.resize(count); normals.resize(count); uv.resize(count)
-			var source_uv: PackedVector2Array = chunk.wall_uv if key.begins_with("asset:") else chunk.ground_uv
+			var source_uv: PackedVector2Array = chunk.wall_uv
 			for index in count:
 				var source := int(indices[first + index / 3]) * 3 + index % 3
 				vertices[index] = chunk.scene_vertices[source]

@@ -43,7 +43,7 @@ def box(center, size):
             (x-w,h+t,y-d),(x+w,h+t,y-d),(x+w,h+t,y+d),(x-w,h+t,y+d)]
 
 
-def glb(solids, indexed=False, generator=None):
+def glb(solids, indexed=False, generator=None, vertex_tint=None):
     """Small static flat-shaded meshes, in glTF metres, with embedded materials."""
     binary, views, accessors, primitives, materials = bytearray(), [], [], [], []
     for solid in solids:
@@ -79,6 +79,13 @@ def glb(solids, indexed=False, generator=None):
         pbr = color if isinstance(color, dict) else dict(baseColorFactor=color, metallicFactor=0, roughnessFactor=0.85)
         materials.append(dict(pbrMetallicRoughness=pbr))
         primitive = dict(attributes=dict(POSITION=indices[0], NORMAL=indices[1]), material=len(materials)-1, mode=4)
+        if vertex_tint is not None:
+            colors=[vertex_tint(p) for p in positions]
+            offset=len(binary)
+            binary.extend(b''.join(struct.pack('<fff',*v) for v in colors))
+            views.append(dict(buffer=0,byteOffset=offset,byteLength=len(binary)-offset,target=34962))
+            accessors.append(dict(bufferView=len(views)-1,componentType=5126,count=len(colors),type='VEC3'))
+            primitive['attributes']['COLOR_0']=len(accessors)-1
         if indexed:
             offset = len(binary)
             binary.extend(b"".join(struct.pack("<H", i) for i in element_indices))
@@ -113,6 +120,7 @@ class Model:
 
     def export(self):
         return glb([(vs,dict(baseColorFactor=color,metallicFactor=.15 if color==GLASS else 0,
-            roughnessFactor=.28 if color==GLASS else .85),fs) for color,(vs,fs) in self.groups.items()],indexed=True)
+            roughnessFactor=.28 if color==GLASS else .85),fs) for color,(vs,fs) in self.groups.items()],indexed=True,
+            vertex_tint=getattr(self,'vertex_tint',None))
 
 GLASS = (.16,.34,.39,1)

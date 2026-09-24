@@ -99,7 +99,7 @@ static func _advance(job: Dictionary) -> bool:
 			arrays.resize(Mesh.ARRAY_MAX)
 			arrays[Mesh.ARRAY_VERTEX] = chunk.scene_vertices.slice(first * 3, offset * 3)
 			arrays[Mesh.ARRAY_NORMAL] = chunk.scene_normals.slice(first * 3, offset * 3)
-			arrays[Mesh.ARRAY_TEX_UV] = (chunk.wall_uv if key.begins_with("asset:") else chunk.ground_uv).slice(first * 3, offset * 3)
+			arrays[Mesh.ARRAY_TEX_UV] = chunk.wall_uv.slice(first * 3, offset * 3)
 			var prepared := ArrayMesh.new()
 			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 			mesh.mesh = prepared
@@ -111,7 +111,7 @@ static func _advance(job: Dictionary) -> bool:
 				for index in [0, 2, 1]:
 					var point := DATA.scene_vertex(chunk, triangle, index)
 					var uv := Vector2(point.x, point.z)
-					if key.begins_with("asset:") and normal.y < maxf(normal.x, normal.z):
+					if normal.y < maxf(normal.x, normal.z):
 						uv = Vector2(point.z, point.y) if normal.x > normal.z else Vector2(point.x, point.y)
 					surface.set_uv(uv)
 					surface.add_vertex(point)

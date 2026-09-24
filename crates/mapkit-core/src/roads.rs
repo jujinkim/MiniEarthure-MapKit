@@ -961,8 +961,8 @@ fn sidewalk_boundary_walls(
                     let middle = [(first[0] + last[0]) / 2, (first[2] + last[2]) / 2];
                     let dx = (last[0] - first[0]).signum();
                     let dz = (last[2] - first[2]).signum();
-                    if sidewalk_contains(tops, &top_index, [middle[0] - dz, middle[1] + dx], work)?
-                        && sidewalk_contains(
+                    let inside_left = sidewalk_contains(tops, &top_index, [middle[0] - dz, middle[1] + dx], work)?;
+                    if inside_left && sidewalk_contains(
                             tops,
                             &top_index,
                             [middle[0] + dz, middle[1] - dx],
@@ -972,6 +972,10 @@ fn sidewalk_boundary_walls(
                         at = hi;
                         continue;
                     }
+                    // Generated triangles use the map's downward top winding.
+                    // Keep the sidewalk on the left, so the reflected Godot
+                    // clockwise face and normal point out of the exposed wall.
+                    let (first, last) = if inside_left { (first, last) } else { (last, first) };
                     b.quad(
                         [
                             first,

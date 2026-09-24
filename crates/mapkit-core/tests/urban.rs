@@ -172,6 +172,11 @@ fn sidewalk_walls_only_follow_exposed_edges_not_fragment_or_cell_seams() {
                     || sample(&c, "road:sidewalk", right).is_err(),
                 "internal sidewalk wall along {a:?}..{b:?}"
             );
+            let [a, b, d] = wall.vertices;
+            let u = [b[0]-a[0],b[1]-a[1],b[2]-a[2]];
+            let v = [d[0]-a[0],d[1]-a[1],d[2]-a[2]];
+            let inward = [(u[1]*v[2]-u[2]*v[1]).signum(),(u[0]*v[1]-u[1]*v[0]).signum()];
+            assert!(sample(&c,"road:sidewalk",[middle[0]+inward[0],middle[1]+inward[1]]).is_ok(), "wall normal points into sidewalk after reflection");
             exterior_walls += 1;
         }
     }
