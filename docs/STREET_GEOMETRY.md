@@ -17,3 +17,7 @@ Validation: core urban 6, roads 9, cost 6; Python test_street_geometry 2;
 Godot surface_geometry_validator (11 structure kinds, clockwise normals/material)
 and fixed-view render passed on Godot 4.7.2/macOS. New map adoption is performed
 by the Editor's miniature-streets authoring step. Detailed appearance is user review.
+
+Junction terrain failures identify the road and offending map coordinate so
+smaller authored bridge/portal aprons can be corrected without weakening the
+1 cm terrain match check. The roads regression set (9) passes.

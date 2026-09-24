@@ -424,11 +424,11 @@ fn ground_tile(
         for t in terrain {
             if patch.terrain_join {
                 let (inside, _) = partition(&t, &patch.v, work)?;
-                if inside
+                if let Some(point) = inside
                     .iter()
-                    .any(|p| (on_plane(&patch.v, *p)[1] - on_plane(&t, *p)[1]).abs() > 1)
+                    .find(|p| (on_plane(&patch.v, **p)[1] - on_plane(&t, **p)[1]).abs() > 1)
                 {
-                    return Err(error("E_GEOMETRY", "ground/structure junction apron must match terrain; author a level approach"));
+                    return Err(error("E_GEOMETRY", format!("ground/structure junction apron at {} {:?} must match terrain; author a level approach", patch.road.id, point)));
                 }
             }
             if patch.road.kind == RoadKind::Tunnel {
