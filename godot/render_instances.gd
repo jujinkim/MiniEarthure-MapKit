@@ -27,6 +27,8 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 		multi.transform_format = MultiMesh.TRANSFORM_3D
 		multi.mesh = piece.mesh
 		multi.use_custom_data = true
+		# Explicit white preserves mesh vertex tint in the compatibility renderer.
+		multi.use_colors = true
 		multi.instance_count = count
 		multi.visible_instance_count = 0
 		var node := MultiMeshInstance3D.new()
@@ -44,6 +46,7 @@ static func append(group: Dictionary, transform: Transform3D, object_id: String,
 	var index := int(group.next)
 	for part: Dictionary in group.groups:
 		part.multi.set_instance_transform(index, transform * part.transform)
+		part.multi.set_instance_color(index,Color.WHITE)
 		part.multi.set_instance_custom_data(index,Color(float((map_id+"/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0,0,0,1))
 		part.multi.visible_instance_count = index + 1
 	group.ids.append(object_id)

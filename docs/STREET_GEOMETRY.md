@@ -21,3 +21,10 @@ by the Editor's miniature-streets authoring step. Detailed appearance is user re
 Junction terrain failures identify the road and offending map coordinate so
 smaller authored bridge/portal aprons can be corrected without weakening the
 1 cm terrain match check. The roads regression set (9) passes.
+
+The new foliage exposed a compatibility-renderer MultiMesh color default: mesh
+vertex colors were multiplied by black on instances. Explicit white instance
+colors preserve the shared mesh tint (16 bytes/instance within existing object
+reservations). The rendered street_tree_validator compares green coverage on
+the original tree and both instances; all three pass. No triangle/material or
+cell/memory cap changes.
