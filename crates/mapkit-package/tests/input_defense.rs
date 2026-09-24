@@ -440,10 +440,11 @@ fn bounded_asset_prefix_planning_retains_decode_and_malformed_input_gates() {
         )
         .unwrap();
         let cost = inspect_read_cost(&package).unwrap();
-        // Prepared placement/repetition and spatial indices now retain a bounded
-        // 32 MiB allowance in addition to source-proportional metadata. Decoder
-        // prefix savings remain required; this does not relax input validation.
-        assert!(cost.validation_peak_bytes < ceiling + 32 * 1024 * 1024);
+        // Prepared placement/repetition and spatial indices retain 32 MiB plus
+        // the bounded per-cell preparation cache. Decoder prefix savings remain
+        // required; these allowances do not relax malformed-input validation.
+        let prepared_allowance = 32 * 1024 * 1024 + 16_384 * (256 + 4096);
+        assert!(cost.validation_peak_bytes < ceiling + prepared_allowance);
         assert!(read_bytes_with_budget(&package, cost.validation_peak_bytes).is_ok());
         assert_eq!(
             read_bytes_with_budget(&package, cost.validation_peak_bytes - 1)

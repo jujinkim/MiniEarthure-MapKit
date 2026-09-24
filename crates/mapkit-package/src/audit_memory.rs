@@ -108,6 +108,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         buildings,
         zones,
         assets,
+        gimmicks,
         placements,
         repetitions,
         attributions,
@@ -293,6 +294,35 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             if let Some(texture) = albedo_texture {
                 retained.string(texture)?;
             }
+        }
+    }
+    retained.vector(gimmicks)?;
+    for mapkit_core::gimmick::Gimmick {
+        id,
+        position: _,
+        rotation_mdeg: _,
+        scale_per_mille: _,
+        parts,
+        surface: _,
+        color: _,
+        motion: mapkit_core::gimmick::Motion {
+            kind: _,
+            delta_cm: _,
+            axis: _,
+            period_ms: _,
+            phase_ms: _,
+            impulse_cmps: _,
+            cooldown_ms: _,
+        },
+        safety_min_cm: _,
+        safety_max_cm: _,
+    } in gimmicks
+    {
+        retained.string(id)?;
+        retained.vector(parts)?;
+        for CollisionConvex { vertices, faces } in parts {
+            retained.vector(vertices)?;
+            retained.vector(faces)?;
         }
     }
     retained.vector(placements)?;
@@ -730,6 +760,7 @@ mod tests {
             "buildings",
             "zones",
             "assets",
+            "gimmicks",
             "placements",
             "repetitions",
             "attributions",

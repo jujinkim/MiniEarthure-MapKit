@@ -42,7 +42,8 @@ pub struct FileRecord {
 pub struct PackageManifest {
     #[schemars(regex(pattern = "^memap$"))]
     pub format: String,
-    #[schemars(range(min = 1, max = 1))]
+    /// Required MapKit reader contract. A current reader accepts only this value.
+    #[schemars(range(min = 2, max = 2))]
     pub format_version: u32,
     #[schemars(range(min = 1, max = 1))]
     pub recipe_version: u32,
@@ -568,8 +569,16 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
         files.insert(name, data);
     }
     let manifest: PackageManifest = json(&files.remove("manifest.json").unwrap())?;
+    if manifest.format_version != PACKAGE_VERSION {
+        return Err(error(
+            "E_VERSION",
+            format!(
+                "map requires MapKit reader contract {}, this build supports {}",
+                manifest.format_version, PACKAGE_VERSION
+            ),
+        ));
+    }
     if manifest.format != "memap"
-        || manifest.format_version != PACKAGE_VERSION
         || manifest.recipe_version != RECIPE_VERSION
         || manifest.generated_version != GENERATED_VERSION
     {

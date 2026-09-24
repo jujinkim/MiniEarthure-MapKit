@@ -140,7 +140,7 @@ fn normalized_current_export_has_stable_bytes_and_hashes() {
     let bytes = package();
     assert_eq!(
         sha256(&bytes),
-        "ac46a208bd4be869ee650f9d93eb6e0d6e7cbe99730b28a5d82ae38a3f334da9"
+        "28e02ce50b92760d2509d9a8c03ab923788636274072e447b286a61a915140e5"
     );
     assert_eq!(
         read_bytes(&bytes).unwrap().inspection.world_content_hash,

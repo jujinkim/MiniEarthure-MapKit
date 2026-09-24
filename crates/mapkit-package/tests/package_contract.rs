@@ -33,6 +33,24 @@ fn rejected(bytes: &[u8], code: &str) {
     assert_eq!(read_bytes(bytes).err().unwrap().code, code);
 }
 #[test]
+fn memap_declares_the_required_mapkit_reader_before_document_decode() {
+    let bytes = package(document());
+    let current = read_bytes(&bytes).unwrap();
+    assert_eq!(current.manifest.format_version, mapkit_core::PACKAGE_VERSION);
+    let outdated = rewrite(&bytes, |entries| {
+        let (_, manifest) = entries.iter_mut().find(|(name, _)| name == "manifest.json").unwrap();
+        let mut value: serde_json::Value = serde_json::from_slice(manifest).unwrap();
+        value["format_version"] = 1.into();
+        *manifest = canonical(&value).unwrap();
+        let (_, document) = entries.iter_mut().find(|(name, _)| name == "document.json").unwrap();
+        document.clear();
+        document.extend_from_slice(b"not JSON");
+    });
+    let error = read_bytes(&outdated).err().unwrap();
+    assert_eq!(error.code, "E_VERSION");
+    assert!(error.message.contains("requires MapKit reader contract 1"));
+}
+#[test]
 fn reproducible_third_party_roundtrip() {
     let first = package(document());
     let p = read_bytes(&first).unwrap();

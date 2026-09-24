@@ -13,7 +13,9 @@ mod metadata;
 
 pub const BUILD_FINGERPRINT: &str = env!("MAPKIT_BUILD_FINGERPRINT");
 
-pub const PACKAGE_VERSION: u32 = 1;
+// The .memap format version is also its required MapKit reader contract.
+// Bump it when a package needs a newer reader, not when map content changes.
+pub const PACKAGE_VERSION: u32 = 2;
 pub const RECIPE_VERSION: u32 = 1;
 pub const GENERATED_VERSION: u32 = 1;
 pub const SCENE_UNITS_VERSION: u32 = 1;

@@ -1,9 +1,15 @@
-# Current v1 contract
+# Current map contract
 
-The 2026-09-20 replacement removes versioned implementations. Package, recipe,
-generated geometry, scene units, regional index and generated archive use v1.
-Changing implementation updates this contract in place; version increments need
-explicit user approval. Existing data is neither searched for conversion nor deleted.
+The 2026-09-24 reader-compatibility decision replaces the package-v1 portion of
+the 2026-09-20 single-v1 decision. `.memap` `manifest.json.format_version` is the
+required MapKit reader contract and is now 2. A reader accepts exactly its current
+value and reports `E_VERSION` before parsing `document.json` when it differs.
+The existing field makes pre-change DLLs reject new packages at their version gate
+without encountering an unknown manifest field. This value changes only when a
+package requires a newer MapKit reader, never for ordinary map content edits.
+Recipe, generated geometry, scene units, regional index and generated archive remain
+v1. Earlier packages and user files are preserved, without an old reader or an
+automatic converter; they require explicit re-export under the current contract.
 
 Generation always uses integer road arrangement, connected sidewalks, courtyard
 buildings, indexed placement validation, authored tree assets and environment

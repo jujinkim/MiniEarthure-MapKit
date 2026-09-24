@@ -121,7 +121,7 @@ conservative policy inputs, not allocator/RSS measurements. Validation retains o
 four edges per decoded heightmap instead of every full grid. Payload reads are capped
 at the declared uncompressed size plus one byte, rejecting mismatches. Full payload
 hash checks still run. The separate opt-in indexed source path below provides
-bounded file-backed region reads; the `.memap` v1 behavior is unchanged.
+bounded file-backed region reads; the current `.memap` read behavior is unchanged.
 
 ## Compact map overview
 
