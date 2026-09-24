@@ -35,7 +35,9 @@ func run() -> void:
 		check(renderer.lights.filter(func(light): return light.shadow_enabled).size() <= 1, "one dynamic shadow")
 		renderer.update_dynamic_lights(Vector3.ZERO,[group(0,2,1)])
 		check(renderer.lights[0].visible and renderer.lights[1].visible and not renderer.lights[2].visible, "reentry reuses pool")
+		for _frame in 3: await process_frame
 		renderer.free(); sun.free()
 	world.free()
+	for _frame in 5: await process_frame
 	print("light_group_validator: ", "FAIL" if failed else "PASS")
 	quit(1 if failed else 0)

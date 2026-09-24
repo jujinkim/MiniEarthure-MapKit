@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_disabled;
+#include "wet_surface.gdshaderinc"
 uniform vec4 base_color : source_color = vec4(0.19,0.20,0.23,1.0);
 uniform bool environment_enabled = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
@@ -16,7 +17,8 @@ uniform bool crosswalk_end = false;
 uniform float start_gap = 0.0;
 uniform float end_gap = 0.0;
 varying vec3 world_position;
-void vertex() { world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; }
+varying vec3 world_normal;
+void vertex() { world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL); }
 float band(float distance,float width) {
     float aa=max(fwidth(distance),0.003);
     return 1.0-smoothstep(width-aa,width+aa,abs(distance));
@@ -67,4 +69,9 @@ void fragment() {
     color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
     ALBEDO=color;
     ROUGHNESS=mix(mix(0.9,0.27,weather.x),0.95,weather.y);
+    float puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y);
+    ALBEDO*=1.0-puddle*0.10;
+    ROUGHNESS=mix(ROUGHNESS,0.18,puddle);
+    SPECULAR=mix(0.35,0.55,puddle);
+    NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
 }

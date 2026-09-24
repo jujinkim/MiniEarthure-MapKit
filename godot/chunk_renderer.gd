@@ -119,7 +119,7 @@ static func _advance(job: Dictionary) -> bool:
 			mesh.mesh = surface.commit()
 		if not job.materials.has(key):
 			if presentation.get("urban_surfaces", false) and not job.has("urban_shader"):
-				job.urban_shader = job.resources.urban_shader() if job.get("resources") != null else URBAN_SURFACE.duplicate()
+				job.urban_shader = job.resources.urban_shader() if job.get("resources") != null else wet_urban_shader()
 				if job.urban_shader == null:
 					mesh.free()
 					return fail(job, "E_MEMORY_BUDGET", "Shared surface shader exceeds memory allowance")
@@ -221,7 +221,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 		var presentation: Dictionary = job.chunk.get("presentation", {})
 		var sources: Dictionary = presentation.get("assets", {})
 		if presentation.get("urban_surfaces", false) and not job.has("urban_shader"):
-			job.urban_shader = job.resources.urban_shader() if job.get("resources") != null else URBAN_SURFACE.duplicate()
+			job.urban_shader = job.resources.urban_shader() if job.get("resources") != null else wet_urban_shader()
 			if job.urban_shader == null:
 				mesh.free()
 				return fail(job, "E_MEMORY_BUDGET", "Shared surface shader exceeds memory allowance")
@@ -378,3 +378,8 @@ static func _environment_surface(job: Dictionary, material: Material) -> Materia
 		material.set_shader_parameter("environment_data",context.texture)
 		return material
 	return context.surface_material(material,0)
+
+static func wet_urban_shader() -> Shader:
+	var result := Shader.new()
+	result.code = URBAN_SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
+	return result

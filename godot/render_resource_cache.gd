@@ -113,7 +113,7 @@ func urban_shader() -> Shader:
 		if bytes() + 65536 > limit_bytes: return null
 		_shader_lease = reserve.call(65536) if reserve.is_valid() else null
 		if reserve.is_valid() and _shader_lease == null: return null
-		_shader = URBAN.duplicate()
+		_shader = wet_urban_shader()
 		if _shader_lease != null: _shader_lease.track(_shader)
 	return _shader
 
@@ -184,3 +184,8 @@ func environment_context() -> RefCounted:
 		_environment = preload("./environment_materials.gd").new()
 		_environment.track(_environment_lease)
 	return _environment
+
+static func wet_urban_shader() -> Shader:
+	var result := Shader.new()
+	result.code = URBAN.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
+	return result

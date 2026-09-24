@@ -2,6 +2,15 @@ extends Node3D
 ## Public visual consumer. Receives resolved state; never advances a simulation.
 const SKY_SHADER := preload("./atmosphere_sky.gdshader")
 const PROFILE := preload("./environment_profile.gd")
+const SPLASH_SHADER := preload("./rain_splash.gdshader")
+var splashes: MultiMeshInstance3D
+var splash_material: ShaderMaterial
+var _splash_age := PackedFloat32Array()
+var _splash_positions := PackedVector3Array()
+var _splash_cursor := 0
+var _surface_cursor := 0
+var surface_ray_count := 0
+var _sheltered := false
 var settings: Environment
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
@@ -34,7 +43,7 @@ func _apply_distance_fog() -> void:
 	settings.fog_mode = Environment.FOG_MODE_DEPTH if enabled else Environment.FOG_MODE_EXPONENTIAL
 	settings.fog_density = 1.0 if enabled else _weather_fog_density
 	settings.fog_aerial_perspective = 1.0 if enabled else 0.0
-	settings.fog_sky_affect = 0.0 if enabled else 1.0
+	settings.fog_sky_affect = 0.0 # The procedural sky owns horizon haze and cloud occlusion.
 	settings.fog_light_energy = 1.0 if enabled else _weather_fog_energy
 	if enabled:
 		settings.fog_depth_begin = display_distance * 0.60
@@ -77,7 +86,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	precipitation.emitting = false
 	particle_material = ParticleProcessMaterial.new()
 	particle_material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	particle_material.emission_box_extents = Vector3(12,1,12)
+	particle_material.emission_box_extents = Vector3(9,1,9)
 	particle_material.direction = Vector3(0,-1,0)
 	particle_material.spread = 6.0
 	particle_material.gravity = Vector3(0,-2,0)
@@ -85,15 +94,33 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	particle_material.initial_velocity_max = 14
 	precipitation.process_material = particle_material
 	var mesh := QuadMesh.new()
-	mesh.size = Vector2(0.025,0.25)
+	mesh.size = Vector2(0.025,0.52)
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.56,0.65,0.70,0.4)
+	material.albedo_color = Color(0.72,0.82,0.90,0.65)
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mesh.material = material
 	precipitation.draw_pass_1 = mesh
 	add_child(precipitation)
+	# One shared mesh/material and a fixed pool inside the existing atmosphere
+	# reservation. No per-drop collisions, nodes, resources or growing queues.
+	splashes = MultiMeshInstance3D.new()
+	var splash_mesh := QuadMesh.new()
+	splash_mesh.size = Vector2(.24,.24)
+	splash_material = ShaderMaterial.new()
+	splash_material.shader = SPLASH_SHADER
+	splash_mesh.material = splash_material
+	splashes.multimesh = MultiMesh.new()
+	splashes.multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	splashes.multimesh.use_custom_data = true
+	splashes.multimesh.mesh = splash_mesh
+	splashes.multimesh.instance_count = 24 if low else 64
+	splashes.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(splashes)
+	_splash_age.resize(splashes.multimesh.instance_count)
+	_splash_positions.resize(splashes.multimesh.instance_count)
+	_clear_splashes()
 
 func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: Array, resources: RefCounted = null, immediate := false) -> void:
 	if state == null or state.config.is_empty(): return
@@ -112,12 +139,12 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	_orient(sun,celestial.sun_direction)
 	_orient(moon,celestial.moon_direction)
 	sun.light_color = Color(1.0,0.68,0.43).lerp(Color(1.0,0.94,0.84),day)
-	sun.light_energy = maxf(0.0,sin(float(celestial.altitude)))*1.05*(1.0-_clouds*0.55)
+	sun.light_energy = maxf(0.0,sin(float(celestial.altitude)))*1.05*(1.0-_clouds*0.82)
 	moon.light_energy = maxf(0.0,sin(float(celestial.moon_altitude)))*float(celestial.moon_phase)*0.12*(1.0-_clouds*0.85)
 	sun.shadow_enabled = float(celestial.altitude) > 0.0
 	moon.shadow_enabled = not sun.shadow_enabled and moon.light_energy > 0.01
 	settings.ambient_light_color = Color(0.23,0.32,0.48).lerp(Color(0.62,0.69,0.72),day)
-	settings.ambient_light_energy = lerpf(night_ambient,0.24,day)*(1.0-_clouds*0.35)
+	settings.ambient_light_energy = lerpf(night_ambient,0.24,day)*(1.0-_clouds*0.58)
 	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.36,0.42,0.46),day)
 	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
 	_weather_fog_energy = lerpf(0.04,0.6,day)
@@ -153,13 +180,59 @@ func _update_precipitation(state: RefCounted, camera_position: Vector3) -> void:
 	var query := PhysicsRayQueryParameters3D.create(camera_position,camera_position+Vector3.UP*1000.0)
 	query.hit_back_faces = true
 	var sheltered := not get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+	_sheltered = sheltered
 	precipitation.emitting = strength > 0.01 and not sheltered
+	precipitation.visible = not sheltered and strength > 0.01
 	precipitation.amount_ratio = maxf(0.01,strength)
 	var snowing: bool = (state.previous_weather if state.blend()<0.5 else state.weather) == "snow"
 	particle_material.initial_velocity_min = 1.0 if snowing else 10.0
 	particle_material.initial_velocity_max = 2.5 if snowing else 14.0
 	particle_material.gravity = Vector3(0,-0.5 if snowing else -2.0,0)
-	precipitation.draw_pass_1.size = Vector2(0.09,0.09) if snowing else Vector2(0.025,0.25)
+	precipitation.draw_pass_1.size = Vector2(0.09,0.09) if snowing else Vector2(0.025,0.52)
+	if sheltered or snowing or strength <= .01:
+		_clear_splashes()
+	else:
+		_sample_splash_surface(camera_position,strength)
+
+func _clear_splashes() -> void:
+	if not is_instance_valid(splashes): return
+	for index in _splash_age.size():
+		_splash_age[index] = 1.0
+		splashes.multimesh.set_instance_transform(index,Transform3D(Basis.from_scale(Vector3.ZERO),Vector3.ZERO))
+
+func _sample_splash_surface(camera_position: Vector3, strength: float) -> void:
+	# At most one surface and one shelter ray per environment update (10Hz).
+	# Deterministic low-discrepancy sample, independent of particle count.
+	var phase := float(_surface_cursor)*2.39996323
+	var radius := 1.0+fmod(float(_surface_cursor)*1.618,6.0)
+	_surface_cursor += 1
+	var center := camera_position+Vector3(cos(phase)*radius,0,sin(phase)*radius)
+	var query := PhysicsRayQueryParameters3D.create(center+Vector3.UP*3,center-Vector3.UP*18,1)
+	query.hit_back_faces = false
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	surface_ray_count += 1
+	if hit.is_empty() or (hit.normal as Vector3).y<.85: return
+	var point: Vector3 = hit.position+hit.normal*.012
+	query = PhysicsRayQueryParameters3D.create(point,point+Vector3.UP*1000,1)
+	query.hit_back_faces = true
+	surface_ray_count += 1
+	if not get_world_3d().direct_space_state.intersect_ray(query).is_empty(): return
+	var count := maxi(1,roundi(strength*(2 if low else 4)))
+	for _index in count:
+		var slot := _splash_cursor % _splash_age.size()
+		_splash_cursor += 1
+		_splash_age[slot] = -float(_index)*.06
+		_splash_positions[slot] = point
+
+func _process(delta: float) -> void:
+	if not is_instance_valid(splashes): return
+	for index in _splash_age.size():
+		if _splash_age[index]>=1.0: continue
+		_splash_age[index] = minf(1.0,_splash_age[index]+delta*2.8)
+		var age := _splash_age[index]
+		var basis := Basis(Vector3.RIGHT,-PI*.5).scaled(Vector3.ONE*(0.0 if age<0 or age>=1 else 1.0))
+		splashes.multimesh.set_instance_transform(index,Transform3D(basis,_splash_positions[index]))
+		splashes.multimesh.set_instance_custom_data(index,Color(maxf(0,age),0,0,0))
 
 func _update_static_lights(state: RefCounted, camera_position: Vector3) -> void:
 	_night_lights = float(state.celestial().altitude) < 0.0

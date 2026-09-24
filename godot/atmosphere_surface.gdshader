@@ -1,5 +1,6 @@
 shader_type spatial;
 render_mode cull_disabled;
+#include "wet_surface.gdshaderinc"
 uniform vec4 base_color : source_color = vec4(0.6,0.6,0.6,1.0);
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool textured = false;
@@ -9,6 +10,7 @@ uniform float metallic = 0.0;
 uniform int lighting_role = 0; // 1 windows, 2 street lamps
 uniform bool instanced = false;
 uniform bool distant = false;
+uniform bool vertex_tinted = false;
 instance uniform float building_seed = 0.5;
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -22,6 +24,7 @@ void fragment() {
     vec4 weather = texelFetch(environment_data,ivec2(0,0),0);
     vec4 clock = texelFetch(environment_data,ivec2(1,0),0);
     vec3 color = distant ? COLOR.rgb : base_color.rgb;
+    if(vertex_tinted && !distant) color *= COLOR.rgb;
     if(textured) color *= texture(albedo_texture,UV).rgb;
     // Large, restrained variation remains stable when the camera moves.
     float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
@@ -33,6 +36,11 @@ void fragment() {
     ALBEDO = color;
     ROUGHNESS = mix(roughness,0.28,weather.x*facing_up);
     ROUGHNESS = mix(ROUGHNESS,0.92,snow_cover);
+    float puddle = distant ? 0.0 : puddle_mask(world_position,world_normal.y,weather.x,weather.y);
+    ALBEDO *= 1.0-puddle*0.10;
+    ROUGHNESS = mix(ROUGHNESS,0.18,puddle);
+    SPECULAR = mix(0.35,0.55,puddle);
+    NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
     METALLIC = metallic;
     bool enabled = clock.z < 0.0;
     int role = distant ? int(round(UV.y)) : lighting_role;

@@ -11,7 +11,8 @@ func _init() -> void:
 	pixels.set_pixel(0,0,Color(0,0,0,0))
 	pixels.set_pixel(1,0,Color(43200,0,1,64800))
 	texture = ImageTexture.create_from_image(pixels)
-	shader = SURFACE.duplicate()
+	shader = Shader.new()
+	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
 
 func update(seconds: float, wet: float, snow: float, sun_altitude: float, sunset_minutes: int) -> void:
 	pixels.set_pixel(0,0,Color(wet,snow,0,0))
@@ -32,6 +33,7 @@ func surface_material(source: Material, role: int, use_instances := false) -> Ma
 	result.set_shader_parameter("base_color",source.albedo_color)
 	result.set_shader_parameter("roughness",source.roughness)
 	result.set_shader_parameter("metallic",source.metallic)
+	result.set_shader_parameter("vertex_tinted",source.vertex_color_use_as_albedo)
 	result.set_shader_parameter("lighting_role",role)
 	result.set_shader_parameter("instanced",use_instances)
 	if source.albedo_texture != null:
