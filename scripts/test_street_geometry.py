@@ -3,7 +3,8 @@ import json
 import math
 import struct
 import unittest
-from driving_structures import definition, fit_to_surface, ramp
+from pathlib import Path
+from driving_structures import authoring_templates, definition, fit_to_surface, ramp
 from world_assets import tree, street_tree
 
 class StreetGeometry(unittest.TestCase):
@@ -24,6 +25,17 @@ class StreetGeometry(unittest.TestCase):
                         a,b,d=[p['vertices'][i] for i in f];u=[b[i]-a[i] for i in range(3)];v=[d[i]-a[i] for i in range(3)]
                         n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
                         self.assertGreater(sum(n[i]*(a[i]-center[i]) for i in range(3)),0)
+
+    def test_current_authoring_templates(self):
+        saved=json.loads((Path(__file__).resolve().parents[1]/'godot/driving_templates.json').read_text())
+        self.assertEqual(saved,authoring_templates())
+        self.assertEqual(len(saved),11)
+        for kind in ['ramp','jump','humps']:
+            for part in saved[kind]['parts']:
+                z_values=[v[2] for v in part['vertices']]
+                ends=[max(v[1] for v in part['vertices'] if v[2]==z) for z in [min(z_values),max(z_values)]]
+                self.assertEqual(min(ends),0)
+                self.assertEqual(min(v[1] for v in part['vertices']),-5)
 
     def test_tree_cost_and_ground_attachment(self):
         for kind in ['canopy','palm']:

@@ -116,3 +116,17 @@ def convex_hull(vertices):
         facets.extend((chain[0],chain[i],chain[i+1]) for i in range(1,len(chain)-1))
     vertices=sorted(set(p for f in facets for p in f))
     return dict(vertices=[list(p) for p in vertices],faces=[[vertices.index(p) for p in f] for f in facets])
+
+
+def authoring_templates():
+    """Current templates for newly authored objects; historical artifacts stay intact."""
+    kinds = ('ramp', 'jump', 'humps', 'pipe', 'log', 'halfpipe',
+             'rotate', 'barrier', 'platform', 'boost', 'launch')
+    return {kind: definition(kind, kind, [3200, 0, 3200]) for kind in kinds}
+
+
+if __name__ == '__main__':
+    import json
+    from pathlib import Path
+    destination = Path(__file__).resolve().parents[1] / 'godot/driving_templates.json'
+    destination.write_text(json.dumps(authoring_templates(), indent=2) + '\n')

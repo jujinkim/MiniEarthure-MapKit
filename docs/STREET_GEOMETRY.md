@@ -13,7 +13,7 @@ New authoring uses `street_tree`: tapered trunk, attached roots and overlapping
 crowns with vertex tint. Canopy 78/84 and palm 44/44 triangles, two materials.
 Existing library/source artifacts and their reproducibility remain unchanged.
 
-Validation: core urban 6, roads 9, cost 6; Python test_street_geometry 2;
+Validation: core urban 6, roads 9, cost 6; Python test_street_geometry 3;
 Godot surface_geometry_validator (11 structure kinds, clockwise normals/material)
 and fixed-view render passed on Godot 4.7.2/macOS. New map adoption is performed
 by the Editor's miniature-streets authoring step. Detailed appearance is user review.
@@ -28,3 +28,9 @@ colors preserve the shared mesh tint (16 bytes/instance within existing object
 reservations). The rendered street_tree_validator compares green coverage on
 the original tree and both instances; all three pass. No triangle/material or
 cell/memory cap changes.
+
+Editor new-object templates come from `godot/driving_templates.json`, regenerated
+by `python3 scripts/driving_structures.py`. This current library uses zero-height
+ramp entries; the old `examples/driving-library` and saved user objects remain
+unchanged. Sloped miniature-streets ramps bake both surface edges through the
+shared `fit_to_surface` authoring helper.
