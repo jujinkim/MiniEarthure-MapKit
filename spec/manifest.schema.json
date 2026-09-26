@@ -62,8 +62,8 @@
       "description": "Required MapKit reader contract. A current reader accepts only this value.",
       "type": "integer",
       "format": "uint32",
-      "maximum": 2.0,
-      "minimum": 2.0
+      "maximum": 1.0,
+      "minimum": 1.0
     },
     "generated_version": {
       "type": "integer",

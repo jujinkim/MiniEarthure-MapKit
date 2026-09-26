@@ -1,15 +1,11 @@
 # Current map contract
 
-The 2026-09-24 reader-compatibility decision replaces the package-v1 portion of
-the 2026-09-20 single-v1 decision. `.memap` `manifest.json.format_version` is the
-required MapKit reader contract and is now 2. A reader accepts exactly its current
-value and reports `E_VERSION` before parsing `document.json` when it differs.
-The existing field makes pre-change DLLs reject new packages at their version gate
-without encountering an unknown manifest field. This value changes only when a
-package requires a newer MapKit reader, never for ordinary map content edits.
-Recipe, generated geometry, scene units, regional index and generated archive remain
-v1. Earlier packages and user files are preserved, without an old reader or an
-automatic converter; they require explicit re-export under the current contract.
+The user-approved 2026-09-26 arcade/water decision replaces the earlier reader-v2
+policy. All current own formats and protocols, including `.memap`, are version 1.
+Readers accept exactly 1, with no historical loader or automatic converter.
+Original files and completion evidence remain preserved; active packages are
+exported anew from authored source. Build fingerprints invalidate disposable
+geometry caches and world hashes separate changed content.
 
 Generation always uses integer road arrangement, connected sidewalks, courtyard
 buildings, indexed placement validation, authored tree assets and environment
@@ -20,7 +16,7 @@ mandatory and verified against payload bytes. Size, cancellation, allocation,
 content hash and audit checks remain binding.
 
 Generated caches have one MKCELL01 layout: fixed header, triangle/object arrays,
-prism count and records, convex count and records, then a required u32 byte length and canonical gimmick JSON,
+prism count and records, convex count and records, then a required u32 byte length and canonical gimmick JSON, then a required u32 byte length and canonical water-cell JSON,
 including empty arrays/counts. Their key
 includes BUILD_FINGERPRINT, generated version, world identity and cell. Cargo derives
 the fingerprint from sorted relative source/schema/dependency paths and UTF-8 contents
@@ -124,3 +120,14 @@ old disposable caches. There is no fallback decoder or original-package conversi
 The consumer supplies authority time, generation, reset and activation policy.
 MapKit never starts a simulation clock. Geometry is transformed once into scene
 coordinates; scale is baked into physics shapes by the physics consumer.
+
+## Non-solid water (2026-09-26)
+
+`water_bodies` declares bounded polygon volumes with dry islands, surface/bottom
+heights and horizontal flow. Shared queries exclude submerged ground from spawn
+and recovery admission, retaining dry islands and bridges. Each generated cell
+owns clipped display triangles and a complete volume record. Water never enters
+solid collision triangles. Cost, archive audit, regional closure and content hash
+include water; memory and cell caps are unchanged. Godot queries deduplicate IDs
+across atomic cell records. Rendering uses the same outlines/heights and the
+existing compatibility renderer, with depth tint, ripples and shoreline foam.

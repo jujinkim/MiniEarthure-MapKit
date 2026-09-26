@@ -43,7 +43,7 @@ pub struct PackageManifest {
     #[schemars(regex(pattern = "^memap$"))]
     pub format: String,
     /// Required MapKit reader contract. A current reader accepts only this value.
-    #[schemars(range(min = 2, max = 2))]
+    #[schemars(range(min = 1, max = 1))]
     pub format_version: u32,
     #[schemars(range(min = 1, max = 1))]
     pub recipe_version: u32,

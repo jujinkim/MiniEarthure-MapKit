@@ -5,6 +5,7 @@ use super::*;
 /// representation-specific byte allowances. Estimates do not affect world hashes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GenerationCost {
+    pub water_bytes: u64,
     pub gimmick_bytes: u64,
     pub triangles: u64,
     /// Bounded road road planning/subdivision workspace, separate from output.
@@ -63,6 +64,7 @@ pub(crate) fn estimate_validated(
     let spacing = descriptor.map_or(d.cell_size_cm, |h| h.spacing_cm) as i64;
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
+        water_bytes: crate::water::candidates(d, &area)?.iter().map(|&i| d.water_bodies[i].memory_bytes()).sum(),
         gimmick_bytes: d.gimmicks.iter().filter(|g| g.intersects(&area)).map(|g| g.memory_bytes()).sum(),
         triangles: 0,
         generation_scratch_bytes: (if !d.roads.is_empty() || !d.surface_areas.is_empty() {

@@ -266,6 +266,7 @@ fn generate_validated(
     let bounds = d.cell_bounds(input.cell)?;
     let mut b = Builder {
         chunk: GeneratedChunk {
+            water_bodies: crate::water::generate(d, &bounds)?,
             gimmicks: d.gimmicks.iter().filter(|g| g.intersects(&bounds)).cloned().collect(),
             asset_convexes: vec![],
             building_prisms: vec![],
@@ -312,4 +313,11 @@ fn generate_validated(
         chunk: b.chunk,
         solids: b.occupancy.map_or_else(Vec::new, |v| v.solids),
     });
+}
+
+/// Reuse exactly the integer cell clipping used for terrain, without collision.
+pub(crate) fn water_surface(bounds: &Bounds, height: i64, faces: &[[Point; 3]]) -> Result<Vec<[Vertex; 3]>> {
+    let mut builder = Builder { chunk: GeneratedChunk { water_bodies: vec![], gimmicks: vec![], asset_convexes: vec![], building_prisms: vec![], format_version: GENERATED_VERSION, cell: Cell{x:0,y:0}, triangles: vec![], objects: vec![] }, bounds: bounds.clone(), max: 4096, occupancy: None };
+    for face in faces { builder.triangle(face.map(|p| [p[0],height,p[1]]), Surface::Concrete, "water", false)?; }
+    Ok(builder.chunk.triangles.into_iter().map(|t|t.vertices).collect())
 }

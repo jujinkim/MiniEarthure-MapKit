@@ -38,7 +38,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 	if lease != null: lease.track(root)
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	var job := {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
+	var job := {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "water": 0, "water_face": 0, "water_records": preload("./water_query.gd").records(view), "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
 	if resources != null:
 		resources.environment_profile = preload("./environment_profile.gd").defaults()
 		var environment_json := str(view.get("presentation",{}).get("environment_json",""))
@@ -146,6 +146,15 @@ static func _advance(job: Dictionary) -> bool:
 		track_resources(job, mesh)
 		job.root.add_child(mesh)
 		job.triangle = offset
+	elif int(job.water) < job.water_records.size():
+		var record: Dictionary = job.water_records[job.water]
+		var count := mini(TRIANGLES_PER_BATCH, record.surface.size()-int(job.water_face))
+		if count > 0:
+			var mesh := preload("./water_renderer.gd").mesh(record, int(job.water_face), count)
+			track_resources(job, mesh)
+			job.root.add_child(mesh)
+		job.water_face += count
+		if int(job.water_face) >= record.surface.size(): job.water += 1; job.water_face = 0
 	elif int(job.object) < chunk.objects.size():
 		var finish := mini(int(job.object) + 1, chunk.objects.size())
 		while int(job.object) < finish:
@@ -323,6 +332,9 @@ static func ground_color(key: String, presentation: Dictionary) -> Color:
 	if key != "grass": return material_color(key)
 	var profile: Variant = JSON.parse_string(str(presentation.get("environment_json", "{}")))
 	if not profile is Dictionary: return material_color(key)
+	if profile.has("ground_color"):
+		var tint: Array=profile.ground_color
+		return Color(float(tint[0])/255.0,float(tint[1])/255.0,float(tint[2])/255.0)
 	return {"polar":Color("d9e4e8"),"arid":Color("b89a6a"),"tropical":Color("526b40")}.get(str(profile.get("climate", "")),material_color(key))
 
 static func cancel(job: Dictionary) -> void:

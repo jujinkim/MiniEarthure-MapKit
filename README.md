@@ -6,6 +6,9 @@ Independent MIT map document, deterministic generation and `.memap` package tool
 No private MiniEarthure repository is required. Development foundation; current
 scope and outstanding gameplay requirements are explicit in [LIMITATIONS.md](LIMITATIONS.md).
 
+[Current water and arcade presentation](docs/WATER.md) defines non-solid volumes,
+shared queries/rendering, authored time/colors and original MIT scenery.
+
 ## Build and use
 
 Rust stable and Cargo are required. CLI/core need no Godot installation.
@@ -327,14 +330,10 @@ reject stale candidates at commit, and keep current collision until replacement
 is admitted. `audit` provides complete file/index/world identity and a bounded
 overview; consumer installation must require this full audit.
 
-New exports use index **v2** with local road/zone dependencies and verified decoder
-planning declarations. Existing index v1 files retain their original derivation
-and remain readable; older readers reject v2. See the L01-C decision and scoped
-evidence in [REGIONAL_SOURCE](spec/REGIONAL_SOURCE.md). The `regional_parity` CLI
-example compares generated geometry and occupied solids between fixed artifacts:
-`rtk cargo run --release -p mapkit-cli --example regional_parity -- OLD NEW '[[0,0],[1,0]]'`.
-Use `all` for all cells of a bounded comparison fixture. The old partial source is
-a migration oracle, never an installation approval or full-artifact audit.
+New exports use current **v1** with local road/zone/water dependencies and verified
+decoder planning declarations. The 2026-09-26 user decision also resets `.memap`
+to v1. Earlier artifacts remain preserved, with no old reader or automatic
+converter. See [current contract](spec/CURRENT_V1.md).
 
 `regional_benchmark` separates complete audit, regional source validation,
 generation estimates, occupied generation and generated hash costs on an existing

@@ -30,6 +30,7 @@ fn source(kind: RoadKind, points: Vec<Vertex>) -> MapDocument {
         clearance_cm: matches!(kind, RoadKind::Tunnel | RoadKind::Underpass).then_some(300),
         sidewalk_cm: Some(80),
         markings: Some(RoadMarkings {
+            color: None,
             lanes: 4,
             center_line: true,
             edge_lines: true,

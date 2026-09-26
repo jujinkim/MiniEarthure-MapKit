@@ -40,7 +40,7 @@ fn memap_declares_the_required_mapkit_reader_before_document_decode() {
     let outdated = rewrite(&bytes, |entries| {
         let (_, manifest) = entries.iter_mut().find(|(name, _)| name == "manifest.json").unwrap();
         let mut value: serde_json::Value = serde_json::from_slice(manifest).unwrap();
-        value["format_version"] = 1.into();
+        value["format_version"] = 2.into();
         *manifest = canonical(&value).unwrap();
         let (_, document) = entries.iter_mut().find(|(name, _)| name == "document.json").unwrap();
         document.clear();
@@ -48,7 +48,7 @@ fn memap_declares_the_required_mapkit_reader_before_document_decode() {
     });
     let error = read_bytes(&outdated).err().unwrap();
     assert_eq!(error.code, "E_VERSION");
-    assert!(error.message.contains("requires MapKit reader contract 1"));
+    assert!(error.message.contains("requires MapKit reader contract 2"));
 }
 #[test]
 fn reproducible_third_party_roundtrip() {

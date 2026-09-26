@@ -37,7 +37,7 @@ Cost is 16 KiB per definition + 32 KiB per ordinary convex part + 4 KiB per
 track tile. Spatial selection, regional dependencies, occupied bounds and the
 pre-entry driving window include the authored safety rectangle. No ordinary
 32-part, memory or cell limit is raised; oversized placements are rejected.
-`.memap` remains 2; all other format numbers remain 1. Build fingerprints
+The 2026-09-26 arcade decision sets every own format, including `.memap`, to 1. Build fingerprints
 invalidate generated caches after these changes.
 
 Focused validation (2026-09-26): special-track shape/range/cost/archive/order,

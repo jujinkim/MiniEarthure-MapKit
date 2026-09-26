@@ -140,6 +140,12 @@
       "type": "string",
       "pattern": "^(default|urban|rural)$"
     },
+    "water_bodies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/WaterBody"
+      }
+    },
     "zones": {
       "type": "array",
       "items": {
@@ -629,6 +635,19 @@
         "concept": {
           "type": "string"
         },
+        "ground_color": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
         "latitude_mdeg": {
           "type": "integer",
           "format": "int32"
@@ -651,6 +670,15 @@
         },
         "settlement": {
           "type": "string"
+        },
+        "start_minutes": {
+          "description": "Authored starting time; authority preferences can override it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "minimum": 0.0
         },
         "sunrise_minutes": {
           "type": "integer",
@@ -1218,6 +1246,19 @@
         "center_line": {
           "type": "boolean"
         },
+        "color": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
         "crosswalk_end": {
           "type": "boolean"
         },
@@ -1371,6 +1412,68 @@
         },
         "world_content_hash": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "WaterBody": {
+      "type": "object",
+      "required": [
+        "bottom_cm",
+        "flow_cm_s",
+        "id",
+        "polygon",
+        "surface_cm"
+      ],
+      "properties": {
+        "bottom_cm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "flow_cm_s": {
+          "description": "Map x / map y velocity, centimetres per second.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "id": {
+          "type": "string"
+        },
+        "islands": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
+        },
+        "polygon": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "surface_cm": {
+          "type": "integer",
+          "format": "int64"
         }
       },
       "additionalProperties": false

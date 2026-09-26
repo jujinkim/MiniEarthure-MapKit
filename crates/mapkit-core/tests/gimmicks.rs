@@ -15,7 +15,7 @@ fn declarative_motion_bounds_proxies_cost_and_archive() {
     let mut duplicate=d.clone();duplicate.gimmicks.push(d.gimmicks[0].clone());assert!(gimmick::validate(&duplicate).is_err());
     let cell=Cell{x:0,y:0};
     let all=d.gimmicks.clone();
-    let chunk=GeneratedChunk{gimmicks:all,asset_convexes:vec![],building_prisms:vec![],format_version:1,cell,triangles:vec![],objects:vec![]};
+    let chunk=GeneratedChunk{water_bodies: vec![], gimmicks:all,asset_convexes:vec![],building_prisms:vec![],format_version:1,cell,triangles:vec![],objects:vec![]};
     assert_eq!(chunk.hash().unwrap(),sha256(&canonical(&chunk).unwrap()));
     let mut cost=estimate_generation(&d,cell,500_000).unwrap();
     cost.gimmick_bytes=chunk.gimmicks.iter().map(|g|g.memory_bytes()).sum();

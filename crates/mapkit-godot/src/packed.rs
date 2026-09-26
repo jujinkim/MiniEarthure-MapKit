@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 #[class(base=RefCounted, no_init)]
 pub struct MapKitPackedGeometry {
     base: Base<RefCounted>,
+    water_bodies: Vec<mapkit_core::water::WaterCell>,
     vertices: PackedInt64Array,
     surfaces: PackedByteArray,
     indices: PackedInt32Array,
@@ -55,6 +56,7 @@ impl MapKitPackedGeometry {
                 }
                 // Material does not participate in core surface selection/normal.
                 let chunk = GeneratedChunk {
+                    water_bodies: self.water_bodies.clone(),
                     gimmicks: vec![],
                     format_version: 1,
                     cell: mapkit_core::Cell { x: 0, y: 0 },
@@ -206,6 +208,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         convex_ids.push(&GString::from(c.object_id.as_str()));
     }
     let geometry = Gd::from_init_fn(|base| MapKitPackedGeometry {
+        water_bodies: chunk.water_bodies.clone(),
         base,
         convex_vertices: PackedInt64Array::from(convex_vertices.as_slice()),
         convex_offsets: PackedInt32Array::from(convex_offsets.as_slice()),
@@ -225,6 +228,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         usages: PackedStringArray::from(usages.as_slice()),
     });
     let data = vdict! {
+        "water_bodies_json" => serde_json::to_string(&chunk.water_bodies).unwrap().as_str(),
         "gimmicks_json" => serde_json::to_string(&chunk.gimmicks.iter().map(|g|g.resolved_json()).collect::<Vec<_>>()).unwrap().as_str(),
         "packed_version" => 1i64,
         "format_version" => chunk.format_version as i64,

@@ -130,6 +130,7 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
         let cost = estimate_generation(&d, Cell { x: 0, y: 0 }, 200_000).unwrap();
         assert!(c.triangles.len() as u64 <= cost.triangles);
         d.roads[0].markings = Some(RoadMarkings {
+            color: None,
             lanes: 2,
             center_line: true,
             edge_lines: true,

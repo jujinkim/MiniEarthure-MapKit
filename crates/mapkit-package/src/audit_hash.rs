@@ -25,13 +25,14 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
         document.assets.len(),
         document.placements.len(),
         document.repetitions.len(),
+        document.water_bodies.len(),document.gimmicks.len(),
     ]
     .into_iter()
     .max()
     .unwrap_or(0);
     (max_records as u64)
         .saturating_mul(std::mem::size_of::<usize>() as u64)
-        .saturating_add(4096)
+        .saturating_add(if document.gimmicks.is_empty(){4096}else{4*1024*1024})
 }
 
 pub(crate) fn content_hash(
@@ -121,7 +122,7 @@ by_id!(
     Zone,
     Asset,
     Placement,
-    Repetition
+    Repetition, mapkit_core::water::WaterBody, mapkit_core::gimmick::Gimmick
 );
 impl NormalizeOrder for Heightmap {
     fn compare(&self, other: &Self) -> Ordering {
@@ -202,6 +203,7 @@ impl Serialize for Document<'_> {
         if let Some(environment) = &d.environment {
             m.serialize_entry("environment", &Canonical(environment))?;
         }
+        if !d.gimmicks.is_empty() {m.serialize_entry("gimmicks", &Normalized(&d.gimmicks,self.1))?;}
         m.serialize_entry("heightmaps", &Normalized(&d.heightmaps, self.1))?;
         fields!(m, d, map_id);
         m.serialize_entry("nodes", &Normalized(&d.nodes, self.1))?;
@@ -217,6 +219,7 @@ impl Serialize for Document<'_> {
             m.serialize_entry("surface_areas", &Normalized(&d.surface_areas, self.1))?;
         }
         fields!(m, d, terrain_base_cm, theme);
+        if !d.water_bodies.is_empty() {m.serialize_entry("water_bodies", &Normalized(&d.water_bodies,self.1))?;}
         m.serialize_entry("zones", &Normalized(&d.zones, self.1))?;
         m.end()
     }
@@ -238,10 +241,11 @@ record!(Road, d, m, {
     fields!(m, d, points, sidewalk_cm, surfaces, to, widths_cm);
 });
 record!(RoadMarkings, d, m, {
+    fields!(m,d,center_line);
+    if d.color.is_some() {fields!(m,d,color);}
     fields!(
         m,
         d,
-        center_line,
         crosswalk_end,
         crosswalk_start,
         edge_lines,
@@ -412,6 +416,7 @@ mod tests {
         d.seed = 9_007_199_254_740_991;
         d.terrain_base_cm = -123456;
         d.roads[0].markings = Some(RoadMarkings {
+            color: None,
             lanes: 3,
             center_line: true,
             edge_lines: false,
@@ -577,13 +582,16 @@ record!(mapkit_core::environment::EnvironmentProfile, d, m, {
     if !d.climate.is_empty() {
         fields!(m, d, climate);
     }
-    fields!(m, d, concept, latitude_mdeg);
+    fields!(m,d,concept);
+    if d.ground_color.is_some() {fields!(m,d,ground_color);}
+    fields!(m,d,latitude_mdeg);
     m.serialize_entry("lights", &Canonical(&d.lights))?;
     fields!(m, d, longitude_mdeg);
     m.serialize_entry("regions", &Canonical(&d.regions))?;
     if !d.settlement.is_empty() {
         fields!(m, d, settlement);
     }
+    if d.start_minutes.is_some() { fields!(m,d,start_minutes); }
     fields!(
         m,
         d,
@@ -631,5 +639,13 @@ where
             seq.serialize_element(&Canonical(item))?;
         }
         seq.end()
+    }
+}
+
+record!(mapkit_core::water::WaterBody,d,m,{fields!(m,d,bottom_cm,flow_cm_s,id,islands,polygon,surface_cm);});
+impl Serialize for Canonical<'_,mapkit_core::gimmick::Gimmick> {
+    fn serialize<S:serde::Serializer>(&self,serializer:S)->std::result::Result<S::Ok,S::Error> {
+        // One bounded (32-part) record at a time; charged by scratch_bound.
+        serde_json::to_value(self.0).map_err(serde::ser::Error::custom)?.serialize(serializer)
     }
 }

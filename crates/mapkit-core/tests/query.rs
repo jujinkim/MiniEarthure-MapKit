@@ -77,7 +77,7 @@ fn query_collects_protruding_trunk_from_neighbor_owner() {
                     heightgrid: None,
                     max_triangles: 500_000,
                 },
-                100,
+                estimate_generation(&d, cell, 500_000).unwrap().occupied_solids as usize,
             )
             .unwrap()
             .solids

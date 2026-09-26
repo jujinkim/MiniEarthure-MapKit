@@ -134,11 +134,14 @@ pub fn decorate(
                 paths.resize(128);
                 metrics.resize(128);
                 borders.resize(128);
-                styles.set(key.as_str(),&vdict!{
+                let tint = m.color.map(|c|Color::from_rgba(c[0] as f32/255.,c[1] as f32/255.,c[2] as f32/255.,1.));
+                let mut style=vdict!{
                     "road_paths"=>&paths,"road_metrics"=>&metrics,"road_borders"=>&borders,
                     "path_count"=>path_count as i64,"edge_count"=>edge_count as i64,
                     "lanes"=>m.lanes as i64,"center_line"=>m.center_line,
-                    "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64});
+                    "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64};
+                if let Some(tint)=tint { style.set("base_color",tint); }
+                styles.set(key.as_str(),&style);
             }
         }
         keys.push(&GString::from(key.as_str()));

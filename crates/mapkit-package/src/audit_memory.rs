@@ -160,6 +160,11 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             retained.vector(&light.bulb_materials)?;
         }
     }
+    retained.vector(&document.water_bodies)?;
+    for body in &document.water_bodies {
+        retained.string(&body.id)?;retained.vector(&body.polygon)?;retained.vector(&body.islands)?;
+        for island in &body.islands {retained.vector(island)?;}
+    }
     retained.vector(heightmaps)?;
     for Heightmap {
         cell: Cell { x: _, y: _ },
@@ -202,6 +207,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         retained.vector(widths_cm)?;
         retained.vector(surfaces)?;
         if let Some(RoadMarkings {
+            color: _,
             lanes: _,
             center_line: _,
             edge_lines: _,
@@ -601,6 +607,7 @@ mod tests {
                 clearance_cm: Some(0),
                 sidewalk_cm: Some(0),
                 markings: Some(RoadMarkings {
+                    color: None,
                     lanes: 0,
                     center_line: false,
                     edge_lines: false,
@@ -763,6 +770,7 @@ mod tests {
             "zones",
             "assets",
             "gimmicks",
+            "water_bodies",
             "placements",
             "repetitions",
             "attributions",

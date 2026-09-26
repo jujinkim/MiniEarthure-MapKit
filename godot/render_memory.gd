@@ -12,7 +12,7 @@ static func shared_bytes(chunk: Dictionary) -> int:
 
 ## Admission bound before generation. A material can change on every triangle.
 static func upper_bound(cost: Dictionary) -> int:
-	return 131072 + int(cost.triangles) * (512 + 8192) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
+	return 131072 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (512 + 8192) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
 
 ## Worker-only opaque surface grouping. Native source/collision order is untouched.
 ## 96 bytes per visible triangle fits the existing 128-byte presentation allowance.
@@ -74,7 +74,9 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	# overhead, built-in SphereMesh and custom instance anchors. Asset allowance
 	# comes from the validated native package, never compressed byte length.
 	if chunk.has("render_batches"): batches = chunk.render_batches.size()
-	return 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 512 + batches * 8192 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	var water_bytes := 0
+	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
+	return water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 512 + batches * 8192 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:

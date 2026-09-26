@@ -1,4 +1,5 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
+pub mod water;
 pub mod gimmick;
 pub mod special_track;
 pub mod cancellation;
@@ -15,8 +16,8 @@ mod metadata;
 pub const BUILD_FINGERPRINT: &str = env!("MAPKIT_BUILD_FINGERPRINT");
 
 // The .memap format version is also its required MapKit reader contract.
-// Bump it when a package needs a newer reader, not when map content changes.
-pub const PACKAGE_VERSION: u32 = 2;
+// Current user-approved contract: every own format is v1; source fingerprints identify builds.
+pub const PACKAGE_VERSION: u32 = 1;
 pub const RECIPE_VERSION: u32 = 1;
 pub const GENERATED_VERSION: u32 = 1;
 pub const SCENE_UNITS_VERSION: u32 = 1;
@@ -136,6 +137,8 @@ pub struct Road {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RoadMarkings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<[u8;3]>,
     pub lanes: u8,
     pub center_line: bool,
     pub edge_lines: bool,
@@ -252,6 +255,8 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub water_bodies: Vec<water::WaterBody>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gimmicks: Vec<gimmick::Gimmick>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -397,6 +402,7 @@ mod courtyard;
 
 impl MapDocument {
     pub fn normalize(&mut self) {
+        self.water_bodies.sort_by(|a,b| a.id.cmp(&b.id));
         self.gimmicks.sort_by(|a, b| a.id.cmp(&b.id));
         self.courses.sort_by(|a, b| a.course_id.cmp(&b.course_id));
         self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
@@ -477,7 +483,7 @@ impl MapDocument {
         if !source_topology && self.cell_count()? > 16_384 {
             return Err(error("E_LIMIT", "too many map cells"));
         }
-        let count = self.surface_areas.len()
+        let count = self.water_bodies.len() + self.surface_areas.len()
             + self.nodes.len()
             + self.roads.len()
             + self.buildings.len()
@@ -488,7 +494,7 @@ impl MapDocument {
         if count > 200_000 {
             return Err(error("E_LIMIT", "too many objects"));
         }
-        let vertices = self
+        let vertices = self.water_bodies.iter().map(|b| b.vertices()).sum::<usize>() + self
             .surface_areas
             .iter()
             .map(|a| a.polygon.len())
@@ -524,6 +530,7 @@ impl MapDocument {
             .iter()
             .map(|x| &x.id)
             .chain(self.roads.iter().map(|x| &x.id))
+            .chain(self.water_bodies.iter().map(|x| &x.id))
             .chain(self.surface_areas.iter().map(|x| &x.id))
             .chain(self.buildings.iter().map(|x| &x.id))
             .chain(self.zones.iter().map(|x| &x.id))
@@ -713,6 +720,7 @@ impl MapDocument {
                 return fail("invalid placement");
             }
         }
+        water::validate(self)?;
         gimmick::validate(self)?;
         placement::validate(self)?;
         Ok(())
@@ -773,6 +781,8 @@ pub struct GeneratedObject {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct GeneratedChunk {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub water_bodies: Vec<water::WaterCell>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gimmicks: Vec<gimmick::Gimmick>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub asset_convexes: Vec<GeneratedConvex>,
@@ -832,7 +842,12 @@ impl GeneratedChunk {
             }
             hash.update(canonical(triangle)?);
         }
-        hash.update(b"]}");
+        hash.update(b"]");
+        if !self.water_bodies.is_empty() {
+            hash.update(b",\"water_bodies\":");
+            hash.update(canonical(&self.water_bodies)?);
+        }
+        hash.update(b"}");
         Ok(format!("{:x}", hash.finalize()))
     }
     /// Bounded selection only: no map/recipe/hash change. Scan borrowed triangles,
@@ -846,7 +861,7 @@ impl GeneratedChunk {
             let Some(position_cm) = triangle_position(triangle, point) else {
                 continue;
             };
-            if self.gimmicks.iter().any(|g|g.excludes_spawn(position_cm)) {continue;}
+            if self.water_bodies.iter().any(|w| w.body.contains(position_cm)) || self.gimmicks.iter().any(|g|g.excludes_spawn(position_cm)) {continue;}
             if found.len() == MAX_SURFACE_OPTIONS || triangle.object_id.len() > MAX_SURFACE_ID_BYTES
             {
                 return Err(error(
@@ -892,7 +907,7 @@ impl GeneratedChunk {
                 continue;
             }
             if let Some(position) = triangle_position(t, request.position_cm) {
-                if self.gimmicks.iter().any(|g|g.excludes_spawn(position)) {continue;}
+                if self.water_bodies.iter().any(|w| w.body.contains(position)) || self.gimmicks.iter().any(|g|g.excludes_spawn(position)) {continue;}
                 return Ok((t, position));
             }
         }
