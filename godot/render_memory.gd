@@ -74,7 +74,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	# overhead, built-in SphereMesh and custom instance anchors. Asset allowance
 	# comes from the validated native package, never compressed byte length.
 	if chunk.has("render_batches"): batches = chunk.render_batches.size()
-	return 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 512 + batches * 8192 + chunk.objects.size() * 65536 + asset_bytes
+	return 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 512 + batches * 8192 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:

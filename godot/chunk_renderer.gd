@@ -342,6 +342,12 @@ static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 	return job.root
 
 static func surface_material(key: String, presentation: Dictionary, shader: Shader) -> Material:
+	if key == "safety:metal":
+		var metal := StandardMaterial3D.new()
+		metal.albedo_color = Color(0.58, 0.63, 0.68)
+		metal.metallic = 0.8
+		metal.roughness = 0.3
+		return metal
 	if not presentation.get("urban_surfaces", false) or not (key.begins_with("road:") or key in ["asphalt", "concrete"]): return StandardMaterial3D.new()
 	var material := ShaderMaterial.new()
 	material.shader = shader

@@ -291,9 +291,11 @@ fn heightmap_boundary_checks_and_decode() {
     )
     .unwrap();
     let p = read_bytes(&b).unwrap();
-    let occupied = p.generate_with_occupancy(Cell { x: 0, y: 0 }, 500_000, 2).unwrap();
+    let cost = p.document.estimate(Cell { x: 0, y: 0 }, 500_000).unwrap();
+    let occupied = p.generate_with_occupancy(Cell { x: 0, y: 0 }, 500_000, cost.occupied_solids as usize).unwrap();
     assert_eq!(occupied.chunk, p.generate(Cell { x: 0, y: 0 }, 500_000).unwrap());
-    assert_eq!(occupied.solids.len(), 2);
+    assert_eq!(occupied.solids.iter().filter(|s| !s.object_id.contains(":safety:")).count(), 2);
+    assert!(occupied.solids.iter().any(|s| s.object_id.contains(":safety:")));
     assert_eq!(p.generate_with_occupancy(Cell { x: 0, y: 0 }, 500_000, 1).unwrap_err().code, "E_BUDGET");
     assert_eq!(p.generate_with_occupancy(Cell { x: 0, y: 0 }, 500_000, MAX_OCCUPIED_SOLIDS + 1).unwrap_err().code, "E_BUDGET");
     assert!(

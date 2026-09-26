@@ -84,7 +84,7 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
                 .roads
                 .iter()
                 .filter(|r| r.markings.is_some())
-                .map(|r| (r.points.len() - 1) as u64 * 4096)
+                .map(|r| (r.points.len() - 1) as u64 * 16384)
                 .sum::<u64>()
     };
     Ok(environment_cost(&p.document)
@@ -125,7 +125,7 @@ pub fn decorate(p: &Package, data: VarDictionary, cache: &mut Cache) -> Result<V
             .unwrap()
             .to::<VarDictionary>()
             .len() as u64
-            * 4096;
+            * 16384;
     for asset in &p.document.assets {
         mapkit_core::cancellation::checkpoint()?;
         if !assets.contains_key(asset.id.as_str()) {
@@ -302,7 +302,7 @@ fn decorate_inner(
     }
     let mut presentation =
         vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};
-    crate::road_style::decorate(document, &chunk, &mut presentation);
+    crate::road_style::decorate(document, &chunk, &mut presentation)?;
     if let Some(environment) = &document.environment {
         presentation.set(
             "environment_json",

@@ -3,7 +3,11 @@ use godot::prelude::*;
 use mapkit_core::MapDocument;
 use std::collections::BTreeMap;
 
-pub fn decorate(d: &MapDocument, chunk: &VarDictionary, presentation: &mut VarDictionary) {
+pub fn decorate(
+    d: &MapDocument,
+    chunk: &VarDictionary,
+    presentation: &mut VarDictionary,
+) -> mapkit_core::Result<()> {
     let roads: BTreeMap<_, _> = d
         .roads
         .iter()
@@ -57,48 +61,84 @@ pub fn decorate(d: &MapDocument, chunk: &VarDictionary, presentation: &mut VarDi
     }
     let mut keys = PackedStringArray::new();
     let mut styles = VarDictionary::new();
-    let mut gaps = BTreeMap::<&str, f32>::new();
-    for road in &d.roads {
-        for (node, width) in [
-            (&road.from, road.widths_cm[0]),
-            (&road.to, *road.widths_cm.last().unwrap()),
-        ] {
-            let gap = gaps.entry(node).or_default();
-            *gap = gap.max(width as f32 / 200.0);
-        }
-    }
-    for (id, p, spawn, surface) in faces {
-        let mut key = String::new();
+    let cell = chunk.get("cell").unwrap().to::<VarDictionary>();
+    let bounds = d.cell_bounds(mapkit_core::Cell {
+        x: cell.get("x").unwrap().to::<i32>(),
+        y: cell.get("y").unwrap().to::<i32>(),
+    })?;
+    let paint = d.road_paint(&bounds)?;
+    for (id, _p, spawn, surface) in faces {
+        let mut key = if id.ends_with(":safety:metal") {
+            "safety:metal".into()
+        } else {
+            String::new()
+        };
         if let Some(r) = roads.get(id.as_str()).filter(|_| spawn && surface <= 1) {
-            let point =
-                |v: &mapkit_core::Vertex| Vector2::new(v[0] as f32 / 100.0, -v[2] as f32 / 100.0);
-            let segment = r
-                .points
-                .windows(2)
-                .enumerate()
-                .min_by(|(_, a), (_, b)| {
-                    let dist = |s: &[mapkit_core::Vertex]| {
-                        let a = point(&s[0]);
-                        let v = point(&s[1]) - a;
-                        let t = (p - a).dot(v) / v.length_squared();
-                        (p - a - v * t.clamp(0.0, 1.0)).length_squared()
-                    };
-                    dist(a).total_cmp(&dist(b))
-                })
-                .unwrap()
-                .0;
-            key = format!("road:{}:{}:{}", r.id, segment, surface);
+            key = format!(
+                "road:{}:{}:{}:{}",
+                r.id, bounds.min[0], bounds.min[1], surface
+            );
             if !styles.contains_key(key.as_str()) {
                 let m = r.markings.as_ref().unwrap();
-                let start = segment == 0;
-                let end = segment + 2 == r.points.len();
+                let mut paths = PackedVector4Array::new();
+                let mut metrics = PackedVector4Array::new();
+                let mut borders = PackedVector4Array::new();
+                let segment = |a: mapkit_core::Vertex, b: mapkit_core::Vertex| {
+                    Vector4::new(
+                        a[0] as f32 / 100.0,
+                        -a[2] as f32 / 100.0,
+                        b[0] as f32 / 100.0,
+                        -b[2] as f32 / 100.0,
+                    )
+                };
+                let mut connected = vec![r.id.as_str()];
+                for node in [&r.from, &r.to] {
+                    let arms: Vec<_> = d
+                        .roads
+                        .iter()
+                        .filter(|other| &other.from == node || &other.to == node)
+                        .collect();
+                    if arms.len() == 2 {
+                        for other in arms {
+                            if !connected.contains(&other.id.as_str()) {
+                                connected.push(&other.id);
+                            }
+                        }
+                    }
+                }
+                for id in connected {
+                    if let Some(path) = paint.paths.get(id) {
+                        for s in path {
+                            paths.push(segment(s.a, s.b));
+                            metrics.push(Vector4::new(
+                                s.width_cm as f32 / 100.0,
+                                s.station_cm as f32 / 100.0,
+                                s.period_cm as f32 / 100.0,
+                                s.total_cm as f32 / 100.0,
+                            ));
+                        }
+                    }
+                }
+                if paths.len() > 128 {
+                    return Err(mapkit_core::Error {
+                        code: "E_BUDGET".into(),
+                        message: format!("road {} paint exceeds 128 joined segments", r.id),
+                    });
+                }
+                if let Some(edges) = paint.edges.get(&r.id) {
+                    for e in edges {
+                        borders.push(segment(e[0], e[1]));
+                    }
+                }
+                let (path_count, edge_count) = (paths.len(), borders.len());
+                paths.resize(128);
+                metrics.resize(128);
+                borders.resize(128);
                 styles.set(key.as_str(),&vdict!{
-                    "road_start"=>point(&r.points[segment]),"road_end"=>point(&r.points[segment+1]),
-                    "road_width"=>r.widths_cm[segment] as f64/100.0,"lanes"=>m.lanes as i64,
-                    "center_line"=>m.center_line,"edge_lines"=>m.edge_lines,
-                    "crosswalk_start"=>start && m.crosswalk_start,"crosswalk_end"=>end && m.crosswalk_end,
-                    "start_gap"=>if start {gaps[r.from.as_str()]} else {0.0},
-                    "end_gap"=>if end {gaps[r.to.as_str()]} else {0.0},"surface"=>surface as i64});
+                    "road_paths"=>&paths,"road_metrics"=>&metrics,"road_borders"=>&borders,
+                    "path_count"=>path_count as i64,"edge_count"=>edge_count as i64,
+                    "lanes"=>m.lanes as i64,"center_line"=>m.center_line,
+                    "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64});
             }
         }
         keys.push(&GString::from(key.as_str()));
@@ -106,4 +146,5 @@ pub fn decorate(d: &MapDocument, chunk: &VarDictionary, presentation: &mut VarDi
     presentation.set("road_materials", &keys);
     presentation.set("road_styles", &styles);
     presentation.set("urban_surfaces", true);
+    Ok(())
 }

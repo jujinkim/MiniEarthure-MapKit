@@ -71,3 +71,17 @@ Reference maps still need continuous rendered/collision traversal across seams,
 rotated/partial structures, cancel/retry and cache cold/warm on supported hardware.
 These small exact tests do not prove universal absence of cracks, physics-engine
 trajectory determinism, renderer pixel identity or sustained frame/memory targets.
+
+## Current road geometry replacement — 2026-09-26
+
+The approved [road safety and rounding decision](../docs/ROAD_SAFETY.md) changes
+generated surfaces/convexes/occupancy and their archives while retaining source
+IDs and all format numbers. The seven fixture input and instance hashes remain
+unchanged. The golden geometry is regenerated for this semantic replacement;
+source/cell permutations, exact geometry checks and cache round trips remain
+independent regressions. Existing build fingerprints invalidate old disposable
+caches. Historical completion proofs do not establish completion on these roads.
+
+The archived vectors also lagged the already implemented `0cb0062` gimmick
+trailer. Cells with unchanged geometry gain exactly six archive bytes (u32 length
+and empty `[]`). This synchronization does not change the archive encoder.

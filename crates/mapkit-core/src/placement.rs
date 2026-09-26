@@ -191,6 +191,27 @@ fn road_overlap(poly: &[Point], r: &Road, extra: i64, work: &mut usize) -> Resul
     }
     Ok(false)
 }
+/// Exact current carriageways and their exterior safety strip share the same
+/// plan as generation. The capsule remains a cheap conservative broad phase.
+fn planned_overlap(d: &MapDocument, poly: &[Point], r: &Road, work: &mut usize) -> Result<bool> {
+    if !road_overlap(poly,r,224,work)? { return Ok(false); }
+    let area=aabb(poly);
+    let (patches,edges)=crate::road_plan::plan(d,&area)?;
+    for patch in patches.iter().filter(|p|p.road.id==r.id) {
+        if polygons_overlap(poly,&patch.v.map(xy),work)? { return Ok(true); }
+    }
+    if matches!(r.kind,RoadKind::Bridge|RoadKind::Elevated) {
+        for edge in edges.iter().filter(|e|e.road.id==r.id) {
+            let len=crate::road_plan::length(edge.a,edge.b);
+            if len<1.0 {continue;}
+            let offset=[libm::round((edge.b[2]-edge.a[2]) as f64*20.0/len) as i64,
+                -libm::round((edge.b[0]-edge.a[0]) as f64*20.0/len) as i64];
+            let (a,b)=(xy(edge.a),xy(edge.b));
+            if polygons_overlap(poly,&[a,b,[b[0]+offset[0],b[1]+offset[1]],[a[0]+offset[0],a[1]+offset[1]]],work)? {return Ok(true);}
+        }
+    }
+    Ok(false)
+}
 pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
     let proxy = |center, size_cm| CollisionBox { center, size_cm };
     match id {
@@ -417,6 +438,8 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
             || id
                 .strip_suffix(":sidewalk")
                 .is_some_and(|id| road_ids.contains(id))
+            || [":safety:metal",":safety:base"].iter().any(|suffix|
+                id.strip_suffix(suffix).is_some_and(|road|road_ids.contains(road)))
             || id
                 .rsplit_once(":repeat:")
                 .is_some_and(|(id, _)| repetition_ids.contains(id))
@@ -454,7 +477,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
     for road in &d.roads {
         tick(&mut work, road.points.len())?;
         let mut area = aabb(&road.points.iter().copied().map(xy).collect::<Vec<_>>());
-        let radius = i64::from(road.widths_cm.iter().copied().max().unwrap().div_ceil(2));
+        let radius = crate::road_plan::width_influence_margin(road.widths_cm.iter().copied().max().unwrap());
         for axis in 0..2 {
             area.min[axis] -= radius;
             area.max[axis] += radius;
@@ -858,7 +881,7 @@ impl PreparedPlacements {
         }).collect();
         let road_bounds: Vec<_> = d.roads.iter().map(|r| {
             let mut b=aabb(&r.points.iter().copied().map(xy).collect::<Vec<_>>());
-            let radius=i64::from(r.widths_cm.iter().copied().max().unwrap_or(0).div_ceil(2));
+            let radius=crate::road_plan::width_influence_margin(r.widths_cm.iter().copied().max().unwrap_or(0));
             for a in 0..2 { b.min[a]-=radius; b.max[a]+=radius; } b
         }).collect();
         let building_bounds: Vec<_> = d.buildings.iter().map(|b| {
@@ -945,11 +968,11 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
         for index in roads.query(&area, work)? {
             let road = &d.roads[index];
             let hit = if b.holes.is_empty() {
-                road_overlap(&b.footprint, road, 0, work)?
+                planned_overlap(d, &b.footprint, road, work)?
             } else {
                 let mut hit = false;
                 for triangle in crate::courtyard::triangulate(b, work)? {
-                    hit |= road_overlap(&triangle, road, 0, work)?;
+                    hit |= planned_overlap(d, &triangle, road, work)?;
                 }
                 hit
             };
@@ -1008,7 +1031,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
             }
         }
         for j in roads.query(area, work)? {
-            if road_overlap(poly, &d.roads[j], 0, work)? && !below_deck(d, p, poly, &d.roads[j], work)? {
+            if planned_overlap(d, poly, &d.roads[j], work)? && !below_deck(d, p, poly, &d.roads[j], work)? {
                 return Err(error(
                     "E_GEOMETRY",
                     format!("placement {} intersects road {}", p.id, d.roads[j].id),

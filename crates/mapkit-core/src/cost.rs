@@ -108,7 +108,7 @@ pub(crate) fn estimate_validated(
                         + 2) as u64
                 };
                 let touched = span(0).saturating_mul(span(1));
-                add(touched.saturating_mul(128).saturating_add(256), r.id.len());
+                add(touched.saturating_mul(192).saturating_add(512), r.id.len());
 
                 let width = crate::placement::sidewalk_width(d, r) as i64;
                 if width > 0 {
@@ -124,6 +124,20 @@ pub(crate) fn estimate_validated(
                     );
                 }
             }
+        }
+    }
+    // The shared exterior plan gives bounded safety counts, including arcs and
+    // posts whose centers lie outside this cell. No memory/cell caps change.
+    let (_, edges) = crate::road_plan::plan(d, &area)?;
+    for edge in edges {
+        if matches!(edge.road.kind, RoadKind::Elevated | RoadKind::Bridge)
+            && crate::road_plan::hit(&[edge.a, edge.b], &area, crate::road_safety::OUTSET_CM) {
+            let posts=crate::road_safety::post_range(&edge,&area).map_or(0,|(a,b)|
+                if a>b {0} else {libm::floor((b-a)/200.0) as u64+1});
+            let n = 3 + posts;
+            cost.asset_convexes = cost.asset_convexes.saturating_add(n);
+            cost.occupied_solids = cost.occupied_solids.saturating_add(n);
+            add(n.saturating_mul(60), edge.road.id.len() + 13);
         }
     }
     for building in &d.buildings {

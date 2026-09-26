@@ -1,0 +1,221 @@
+{
+  "map_id": "synthetic-roads-v2",
+  "revision": 1,
+  "bounds": {
+    "min": [
+      0,
+      0
+    ],
+    "max": [
+      10000,
+      5000
+    ]
+  },
+  "cell_size_cm": 5000,
+  "seed": 42,
+  "recipe_version": 1,
+  "theme": "default",
+  "terrain_base_cm": 0,
+  "heightmaps": [],
+  "nodes": [
+    {
+      "id": "curvea",
+      "position": [
+        1000,
+        400,
+        1200
+      ],
+      "level": 0
+    },
+    {
+      "id": "curveb",
+      "position": [
+        9000,
+        700,
+        3600
+      ],
+      "level": 0
+    },
+    {
+      "id": "streeta",
+      "position": [
+        1000,
+        0,
+        3800
+      ],
+      "level": 0
+    },
+    {
+      "id": "streetb",
+      "position": [
+        6000,
+        0,
+        2400
+      ],
+      "level": 0
+    },
+    {
+      "id": "bridgea",
+      "position": [
+        1000,
+        350,
+        4200
+      ],
+      "level": 0
+    },
+    {
+      "id": "bridgeb",
+      "position": [
+        4500,
+        350,
+        4200
+      ],
+      "level": 0
+    }
+  ],
+  "roads": [
+    {
+      "id": "curve",
+      "from": "curvea",
+      "to": "curveb",
+      "points": [
+        [
+          1000,
+          400,
+          1200
+        ],
+        [
+          3800,
+          500,
+          1200
+        ],
+        [
+          6500,
+          650,
+          3600
+        ],
+        [
+          9000,
+          700,
+          3600
+        ]
+      ],
+      "kind": "elevated",
+      "widths_cm": [
+        400,
+        400,
+        400
+      ],
+      "surfaces": [
+        "asphalt",
+        "asphalt",
+        "asphalt"
+      ],
+      "sidewalk_cm": 0,
+      "markings": {
+        "lanes": 4,
+        "center_line": true,
+        "edge_lines": true,
+        "crosswalk_start": false,
+        "crosswalk_end": false
+      }
+    },
+    {
+      "id": "street",
+      "from": "streeta",
+      "to": "streetb",
+      "points": [
+        [
+          1000,
+          0,
+          3800
+        ],
+        [
+          3500,
+          0,
+          3800
+        ],
+        [
+          3500,
+          0,
+          2400
+        ],
+        [
+          6000,
+          0,
+          2400
+        ]
+      ],
+      "kind": "ground",
+      "widths_cm": [
+        400,
+        400,
+        400
+      ],
+      "surfaces": [
+        "asphalt",
+        "asphalt",
+        "asphalt"
+      ],
+      "sidewalk_cm": 80,
+      "markings": {
+        "lanes": 4,
+        "center_line": true,
+        "edge_lines": true,
+        "crosswalk_start": false,
+        "crosswalk_end": false
+      }
+    },
+    {
+      "id": "bridge",
+      "from": "bridgea",
+      "to": "bridgeb",
+      "points": [
+        [
+          1000,
+          350,
+          4200
+        ],
+        [
+          4500,
+          350,
+          4200
+        ]
+      ],
+      "kind": "bridge",
+      "widths_cm": [
+        400
+      ],
+      "surfaces": [
+        "asphalt"
+      ],
+      "sidewalk_cm": 0,
+      "markings": {
+        "lanes": 4,
+        "center_line": true,
+        "edge_lines": true,
+        "crosswalk_start": false,
+        "crosswalk_end": false
+      }
+    }
+  ],
+  "buildings": [],
+  "zones": [],
+  "assets": [],
+  "placements": [],
+  "attributions": [
+    {
+      "source": "Synthetic fixture",
+      "license": "MIT",
+      "notice": "No external map or asset data"
+    }
+  ],
+  "provenance": {
+    "tool_id": "third-party-example",
+    "version": "1",
+    "build_id": "example",
+    "fingerprint": "untrusted-and-accepted",
+    "first_created": "2026-09-07T00:00:00Z",
+    "last_edited": "2026-09-07T00:00:00Z"
+  }
+}

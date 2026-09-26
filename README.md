@@ -390,3 +390,5 @@ cell boundaries, including height-grid crossfall. Existing recipes retain their
 previous generation paths. See [implementation and verification status](docs/INGAME_BUGFIX.md)
 and [new dependency notices](THIRD_PARTY.md). Consumer integration and actual
 whole-map driving acceptance remain in progress.
+
+Current street geometry: [rounded corners and automatic deck safety](docs/ROAD_SAFETY.md).

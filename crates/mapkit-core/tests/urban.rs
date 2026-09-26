@@ -117,7 +117,10 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
         let c = generate_cell(&d, 0);
         assert!(c.objects.iter().any(|o| o.id == "lamp"));
         // Exterior bend corner used to be absent because entire endpoint pieces were suppressed.
-        for p in [[401, 551], [1051, 1201], [850, 750]] {
+        // The full-width outer carriageway now covers the old diagonal-hull
+        // corner [850,750]; its sidewalk moves to the true outer boundary.
+        assert_eq!(sample(&c, "road", [850, 750]).unwrap()[1], 0);
+        for p in [[401, 551], [1051, 1201], [1020, 570]] {
             assert_eq!(
                 sample(&c, "road:sidewalk", p).unwrap_or_else(|e| panic!("{p:?}: {e}"))[1],
                 12,

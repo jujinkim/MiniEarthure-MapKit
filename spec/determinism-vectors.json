@@ -3,18 +3,18 @@
     {
       "cells": [
         {
-          "archive_bytes": 6099,
-          "archive_sha256": "d9841c87afc96a31706226f0f92347ddfaada7bfb4412a44629c8efd00ff2f04",
-          "asset_convexes": 0,
+          "archive_bytes": 777981,
+          "archive_sha256": "dd6b71b7b8354999e8cbb7ccfe0bcd39176e0060bd184d3fd924a0a57497a2a6",
+          "asset_convexes": 519,
           "building_prisms": 2,
           "cell": {
             "x": 0,
             "y": 0
           },
-          "generated_sha256": "2af2d7ec91e53a618aa1d7c53abfbdc700f7e5a76e12f3e17a82abd8bd0ddd78",
+          "generated_sha256": "351b444503d15d6129608258dfdb6bb8af0c367774332b9a7db66e18fc77756d",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "2e6e28b806ae7b49dfe4c584201cfa0f47ec970389138d30d951c77bc28f6f5a",
+          "occupancy_sha256": "d2cc75dfe965ca13da7c8ed99a9e647cec4ac8d73a5e88407f15243fd10f943e",
           "surface_probes": [
             {
               "normal_q": [
@@ -36,11 +36,11 @@
                 0
               ],
               "position_cm": [
-                25300,
+                25900,
                 0,
-                26000
+                25200
               ],
-              "surface_id": "ground-road"
+              "surface_id": "terrain"
             },
             {
               "normal_q": [
@@ -49,26 +49,26 @@
                 0
               ],
               "position_cm": [
-                25900,
+                50800,
                 0,
-                25200
+                26000
               ],
               "surface_id": "ground-road"
             }
           ],
-          "triangles": 65,
-          "triangles_sha256": "066a8523663b38b56349fd985d34c993382e96f070d33a20a71693611d5607b1"
+          "triangles": 6288,
+          "triangles_sha256": "31669f4dbb52efc39a936a8a908b9e4f378e44cc2ca2b8631a28125799b0467c"
         },
         {
-          "archive_bytes": 1645,
-          "archive_sha256": "137230bcc6fb11cf626853715672c3cf19a275f6d38fca8d5ea6637a6bb687e1",
+          "archive_bytes": 1821,
+          "archive_sha256": "584ac5206964287f5af34e741b28ff87e3703ce7b11d79a3508226fe23ee0686",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
             "x": 1,
             "y": 0
           },
-          "generated_sha256": "8afa560be16c8573651b745929bcfd8ccee14b1fb3163a78d41127f87818eb97",
+          "generated_sha256": "6e8f2028b4871c91213d88f1f210f82fd8c273bee923eb0b854af2b3c505bf68",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -85,24 +85,37 @@
                 0
               ],
               "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                102400,
+                0,
+                25200
+              ],
+              "surface_id": "ground-road"
             }
           ],
-          "triangles": 17,
-          "triangles_sha256": "8e4dac27486221c63c58b267f70ab932ed2fefa77e0855d20fb56638b0391a9d"
+          "triangles": 19,
+          "triangles_sha256": "de223320250e3f6a9ff43d4b1992b3bdf1df9dcb78df24992284ebb6aad7e77f"
         },
         {
-          "archive_bytes": 1536,
-          "archive_sha256": "a2b2e2fd8c63a7c9a3fc7773e20394140b00df422d09a3db5c677bc522887d0f",
-          "asset_convexes": 0,
+          "archive_bytes": 774138,
+          "archive_sha256": "7b0efc2765a2d12374a6ce9a7ea98621c983bcf4f4802668690c5c89893b9e3c",
+          "asset_convexes": 519,
           "building_prisms": 0,
           "cell": {
             "x": 0,
             "y": 1
           },
-          "generated_sha256": "4fd8e5a92d5d3f9c4f12dfa0d09130f298c7a5a8a5b5120918ab0c3b751e7714",
+          "generated_sha256": "a2f47171110792b39ca2654ffb70de799e2489912c192f2f632686cd33a271f1",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "57f75ba2a0e2110c7071a2a92cb20b19ef053a804fb99e40375819a86841e675",
           "surface_probes": [
             {
               "normal_q": [
@@ -118,12 +131,12 @@
               "surface_id": "terrain"
             }
           ],
-          "triangles": 16,
-          "triangles_sha256": "20a29b4e583987b1ae5a2b67f6ed202614257ff734366b054b215de0c33db443"
+          "triangles": 6247,
+          "triangles_sha256": "dbbfd0fa5b2319c54cd04f4f5fc83748d1ac6b2b25a9b2fa6e536e84fd1a095a"
         },
         {
-          "archive_bytes": 95590,
-          "archive_sha256": "42fa64d91d3bd12a1b0b066a3668c255065b707f27b8691491f16af7fb852c68",
+          "archive_bytes": 95596,
+          "archive_sha256": "67edbe079d2a62adcc97c5e6cbe363e23606f2e56e7ebe12f2819ede1fccb388",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -159,18 +172,18 @@
     {
       "cells": [
         {
-          "archive_bytes": 7773,
-          "archive_sha256": "4c7a5b2917a94ddcd9aa60872dbf489648d399368f2c9c08f674406f94e33e99",
-          "asset_convexes": 0,
+          "archive_bytes": 79398,
+          "archive_sha256": "19fcd67b3f7e809d424334093087b9d27294f740156a4b334924fb0d8d52b9f1",
+          "asset_convexes": 49,
           "building_prisms": 0,
           "cell": {
             "x": 0,
             "y": 0
           },
-          "generated_sha256": "ff6de71f364247d18efced9a6dbdd076f576ea4c477ee70fe27d0deafd43dac9",
+          "generated_sha256": "ce9eb67dc21d6458ce009716568591335662ffaef2972914ede3b602bdf580e4",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "bcfbd399143343fddc0726c8b576d95f4f6d6cab0e243b64f4b2e59d886a5606",
           "surface_probes": [
             {
               "normal_q": [
@@ -192,11 +205,11 @@
                 0
               ],
               "position_cm": [
-                2250,
+                2750,
                 0,
-                700
+                3500
               ],
-              "surface_id": "ground-west"
+              "surface_id": "terrain"
             },
             {
               "normal_q": [
@@ -205,11 +218,11 @@
                 0
               ],
               "position_cm": [
-                2435,
+                4509,
                 0,
-                1300
+                698
               ],
-              "surface_id": "ground-west"
+              "surface_id": "terrain"
             },
             {
               "normal_q": [
@@ -218,42 +231,55 @@
                 0
               ],
               "position_cm": [
-                4500,
+                2750,
                 0,
-                700
+                2750
               ],
-              "surface_id": "ground-west"
+              "surface_id": "terrain"
             },
             {
               "normal_q": [
-                162221,
-                973329,
-                162221
+                0,
+                1000000,
+                0
               ],
               "position_cm": [
-                2500,
-                -500,
+                5000,
+                0,
+                1000
+              ],
+              "surface_id": "branch"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                1000,
+                0,
                 5000
               ],
               "surface_id": "underpass"
             }
           ],
-          "triangles": 88,
-          "triangles_sha256": "9a3bcfb1ab3d32777490133070b999294cd69465fa430b6b06e16ac55cc1b867"
+          "triangles": 700,
+          "triangles_sha256": "555f9e4c5fba339ecfa75500f5b6afdd8e6ffb87a27a51aa7b7a22034b147015"
         },
         {
-          "archive_bytes": 7608,
-          "archive_sha256": "de688fe68e5bd2435cd31dca6db0230d9ad8a3f151cc26f20d1d04b0e7924f80",
-          "asset_convexes": 0,
+          "archive_bytes": 75558,
+          "archive_sha256": "17d32f5ae8d74c71f7a4b09e7a2e6a782c3321f9069daecdb0494a53860f48a1",
+          "asset_convexes": 45,
           "building_prisms": 0,
           "cell": {
             "x": 1,
             "y": 0
           },
-          "generated_sha256": "ed519cfabf8afb2c2e7f00ae31f735fa2bee6f9bf26794f7130e6869e18dafb1",
+          "generated_sha256": "b472d14b6c2951d8c1d2c287b86d8b1f6f3a403e96274bd5c0a0a1888c024556",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "611ac765ede69cdd7813fec0adaaeaf6432046e0a256624384ee52325f6ab848",
           "surface_probes": [
             {
               "normal_q": [
@@ -265,6 +291,32 @@
                 5000,
                 0,
                 0
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5000,
+                0,
+                3000
+              ],
+              "surface_id": "branch"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5200,
+                0,
+                3000
               ],
               "surface_id": "terrain"
             },
@@ -288,52 +340,39 @@
                 0
               ],
               "position_cm": [
-                7321,
+                10000,
                 0,
-                500
+                0
               ],
-              "surface_id": "ground-east"
+              "surface_id": "terrain"
             },
             {
               "normal_q": [
-                0,
-                1000000,
-                0
+                -317649,
+                948207,
+                1580
               ],
               "position_cm": [
-                7750,
-                0,
-                1500
-              ],
-              "surface_id": "ground-east"
-            },
-            {
-              "normal_q": [
-                0,
-                1000000,
-                0
-              ],
-              "position_cm": [
-                9650,
+                9000,
                 0,
                 5000
               ],
               "surface_id": "underpass"
             }
           ],
-          "triangles": 86,
-          "triangles_sha256": "a326686c2f414969730405234791450061a27f9b3cbabb836838d4c7804efb8f"
+          "triangles": 658,
+          "triangles_sha256": "f618ed051647fd90f858afb92e1827055cb1b56e1d5b0fd153bf7cb60bb02f97"
         },
         {
-          "archive_bytes": 11813,
-          "archive_sha256": "0c87e9c471096a9eb721ff0738dd27bb2e8f3567b7c2a91b36caef7a858cec89",
+          "archive_bytes": 16401,
+          "archive_sha256": "1a6faa1f0c8a93dc46b4b6acbbe82c676279a58e2b35899827338aca477123cd",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
             "x": 0,
             "y": 1
           },
-          "generated_sha256": "8c26f1a5a706258eefbba48738b846883bbf7f7d500e13c087d3efda67d3b2e3",
+          "generated_sha256": "bfa6e116285a0ec84f8766360d37cd3c9bd1017a670c394de95eb7dedf660b91",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -358,9 +397,22 @@
                 0
               ],
               "position_cm": [
-                1300,
+                1750,
                 0,
-                8300
+                6750
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                1750,
+                0,
+                7250
               ],
               "surface_id": "terrain"
             },
@@ -384,17 +436,17 @@
                 0
               ],
               "position_cm": [
-                2800,
+                0,
                 0,
                 8300
               ],
-              "surface_id": "terrain"
+              "surface_id": "tunnel"
             },
             {
               "normal_q": [
-                192450,
-                962250,
-                192450
+                371391,
+                928477,
+                0
               ],
               "position_cm": [
                 2500,
@@ -405,31 +457,31 @@
             },
             {
               "normal_q": [
-                0,
-                1000000,
+                316797,
+                948493,
                 0
               ],
               "position_cm": [
-                2800,
+                2500,
                 -500,
-                5300
+                5000
               ],
               "surface_id": "underpass"
             }
           ],
-          "triangles": 137,
-          "triangles_sha256": "a2ddac708950108a46c8fa6adfbcec34f7c6401b91a1b8d835676ef7251d2300"
+          "triangles": 191,
+          "triangles_sha256": "4f1f3d1d465a69d550cec05b063fbda06351ae516e745249d65dd507f29a23c0"
         },
         {
-          "archive_bytes": 11643,
-          "archive_sha256": "661ef796a6a950d83bc1abcf22e0c9bd858c829160783bef7b778293186f93e9",
+          "archive_bytes": 16231,
+          "archive_sha256": "3025832d988d89e4dff24523ec920fc98399c2fa492544d4a91d8ce98631c772",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
             "x": 1,
             "y": 1
           },
-          "generated_sha256": "9152804ca12df4745a1ddd90ddb12235405f934e15a3a2664b8131496ff3c460",
+          "generated_sha256": "dacd959342338d496468491d1e25866ae650d74ba52f155142bf65d0187917d4",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
           "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
@@ -454,33 +506,7 @@
                 0
               ],
               "position_cm": [
-                7800,
-                0,
-                5300
-              ],
-              "surface_id": "terrain"
-            },
-            {
-              "normal_q": [
-                0,
-                1000000,
-                0
-              ],
-              "position_cm": [
-                7800,
-                0,
-                8300
-              ],
-              "surface_id": "terrain"
-            },
-            {
-              "normal_q": [
-                0,
-                1000000,
-                0
-              ],
-              "position_cm": [
-                10000,
+                7000,
                 0,
                 10000
               ],
@@ -493,15 +519,67 @@
                 0
               ],
               "position_cm": [
-                9300,
+                8250,
                 0,
-                8300
+                8250
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                8250,
+                0,
+                8750
+              ],
+              "surface_id": "terrain"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                7500,
+                -600,
+                8000
               ],
               "surface_id": "tunnel"
+            },
+            {
+              "normal_q": [
+                -371391,
+                928477,
+                0
+              ],
+              "position_cm": [
+                9000,
+                0,
+                8000
+              ],
+              "surface_id": "tunnel"
+            },
+            {
+              "normal_q": [
+                -316797,
+                948493,
+                0
+              ],
+              "position_cm": [
+                9000,
+                0,
+                5000
+              ],
+              "surface_id": "underpass"
             }
           ],
-          "triangles": 135,
-          "triangles_sha256": "6222987182bb637cd18efebee9e962529df260c6555e38bc887eb882a96cc300"
+          "triangles": 189,
+          "triangles_sha256": "f12ab752779fd0c5744a99b0fb8f5eae32555a45318fba4d7aa74bced9c78c01"
         }
       ],
       "input_sha256": "cd422f7485cc83d8e8c1337cce573a31db0c15ca0986359b039efc53fb9af688",
@@ -510,15 +588,15 @@
     {
       "cells": [
         {
-          "archive_bytes": 52603,
-          "archive_sha256": "554559a8534e9516ddbb68ed4a1f47f9dd45834c8e84572d605dcf73b555c660",
+          "archive_bytes": 42220,
+          "archive_sha256": "2212bd2f1c3e74c1b54de82af3bfdb92f20ce628c7152933f832bbe32aeb03df",
           "asset_convexes": 0,
           "building_prisms": 9,
           "cell": {
             "x": 0,
             "y": 0
           },
-          "generated_sha256": "3aabf3134ea43aafd352c88ffcbaa67f4397b95f47b2192e3c5501245da9ed8c",
+          "generated_sha256": "da166b181cfd9c7850e178c6cc69e8db71a557b91f5c89a518e643599cb0e40f",
           "objects": 5,
           "objects_sha256": "d73f2523acc0814cc3f65e06ac2fc6dbd1d9bc2bc3968dff85352b3bec9aed29",
           "occupancy_sha256": "87eebc335c15e780963e0cc0af47556b72a7632330dc33043091db21faaa1892",
@@ -543,9 +621,9 @@
                 0
               ],
               "position_cm": [
-                5450,
+                5553,
                 12,
-                5450
+                5553
               ],
               "surface_id": "street:sidewalk"
             },
@@ -556,9 +634,9 @@
                 0
               ],
               "position_cm": [
-                131,
+                435,
                 12,
-                6302
+                6477
               ],
               "surface_id": "street:sidewalk"
             },
@@ -569,9 +647,9 @@
                 0
               ],
               "position_cm": [
-                480,
+                925,
                 12,
-                6541
+                6300
               ],
               "surface_id": "street:sidewalk"
             },
@@ -582,26 +660,65 @@
                 0
               ],
               "position_cm": [
-                12800,
+                484,
                 12,
-                5573
+                6474
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                1010,
+                12,
+                6472
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                474,
+                12,
+                6539
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                5537,
+                12,
+                5537
               ],
               "surface_id": "street:sidewalk"
             }
           ],
-          "triangles": 558,
-          "triangles_sha256": "441c265c8005d4380a24b48639935942a97352a52a3eb4bb70e14a2fc9ae8716"
+          "triangles": 446,
+          "triangles_sha256": "4768873f0ad9063ce28e82eac21dd6f116c699b3a1af8aaaeb06937541fea3bd"
         },
         {
-          "archive_bytes": 61638,
-          "archive_sha256": "2cc2f11796f436cf46e151bb0888f577e02ac710613be0f134bd7933ef53da13",
+          "archive_bytes": 32469,
+          "archive_sha256": "7d51fc9de9a5435b32a675e107e790264739cd2f6b79ae4997a51c3458ac277c",
           "asset_convexes": 0,
           "building_prisms": 5,
           "cell": {
             "x": 1,
             "y": 0
           },
-          "generated_sha256": "7ce28cfec465bc051231b451374f94a4915d53f8f212a1b2fe56b24e77da4dba",
+          "generated_sha256": "63c627585d90ab0a822a7f64cee84c5865ab3531d64c26d41ffd61efd926bc8f",
           "objects": 7,
           "objects_sha256": "c11662b7f9a6695e7896b40a7c185c3abd76c235b02073a9bb4aa4968a7282b4",
           "occupancy_sha256": "0caa394d271a06b7906b79fea4e3873fcf87c9766d545c75044a314c713fe39a",
@@ -626,9 +743,9 @@
                 0
               ],
               "position_cm": [
-                18317,
+                18439,
                 12,
-                5517
+                5639
               ],
               "surface_id": "street:sidewalk"
             },
@@ -639,9 +756,9 @@
                 0
               ],
               "position_cm": [
-                25072,
+                19232,
                 12,
-                5523
+                6432
               ],
               "surface_id": "street:sidewalk"
             },
@@ -652,9 +769,9 @@
                 0
               ],
               "position_cm": [
-                25144,
+                25022,
                 12,
-                5951
+                6050
               ],
               "surface_id": "street:sidewalk"
             },
@@ -665,9 +782,9 @@
                 0
               ],
               "position_cm": [
-                25077,
+                25053,
                 12,
-                5481
+                5701
               ],
               "surface_id": "street:sidewalk"
             },
@@ -678,19 +795,19 @@
                 0
               ],
               "position_cm": [
-                25016,
+                12800,
                 12,
-                5524
+                6301
               ],
               "surface_id": "street:sidewalk"
             }
           ],
-          "triangles": 657,
-          "triangles_sha256": "7453d40728f6cd16cc673bb9c6ccc83b564c00cc74774e114091abd0b2cec9ab"
+          "triangles": 343,
+          "triangles_sha256": "f75c937cecf0bd583520f7bfff21544192f39286d8596fd43f60182ef46d2c80"
         },
         {
-          "archive_bytes": 119766,
-          "archive_sha256": "ad7bc64feb85c18d584bcc838d4c8de14ad24e334616404c9929ee2c28ab27b0",
+          "archive_bytes": 119772,
+          "archive_sha256": "a96f42a72a1fc4edf09b7251b50385505f37e9ab5f8af49bb44c4e8586e568a9",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -720,8 +837,8 @@
           "triangles_sha256": "0217de0061e6ec00e90a283028df8d7874515ed71d8cee7935bb588e46d4160b"
         },
         {
-          "archive_bytes": 45814,
-          "archive_sha256": "a835cccc423d5fdfb453fff32673222d3fd98a0627c018661a1a09edb07247fe",
+          "archive_bytes": 45820,
+          "archive_sha256": "af0ffc3f3868bc31cd8c464ee07ea41061feb3cac728f0b34173f3cda0f2c250",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -757,8 +874,8 @@
     {
       "cells": [
         {
-          "archive_bytes": 6836,
-          "archive_sha256": "6f410eda75ebde2b2ebe32fee43e708fe340f70f028d660a3d26a5d3c980d055",
+          "archive_bytes": 6842,
+          "archive_sha256": "da1dfb4f85aec8d85c49c4fe6cca1c565c297ffdb2699c9ec3b064250049d8e9",
           "asset_convexes": 2,
           "building_prisms": 0,
           "cell": {
@@ -788,8 +905,8 @@
           "triangles_sha256": "3a95abed34ffdb27e132ecd5a1ba1bd160fb7e80b350c8b84071be7d2414a7ce"
         },
         {
-          "archive_bytes": 716,
-          "archive_sha256": "ed96c6eb6584bc9fcbf18cb6d501a939f7675817c8c7996b2b0b4a075c6e675f",
+          "archive_bytes": 722,
+          "archive_sha256": "30eeed130e92c6476490e375648fea6b24d2aafe24d095716fdc1f66e7830836",
           "asset_convexes": 1,
           "building_prisms": 0,
           "cell": {
@@ -819,8 +936,8 @@
           "triangles_sha256": "0f91a3ef7902d56677e0489444686b57a947484b9593fa1350b62fb90d205bf9"
         },
         {
-          "archive_bytes": 334,
-          "archive_sha256": "398661257a90c08116922a3d1617fcfac6dd1742bc67b930662d0f2bbd55c9a2",
+          "archive_bytes": 340,
+          "archive_sha256": "9efe6f0ceacbc9455154374be94e5d0801e9100f52c236e968ba9a290e23f51a",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -850,8 +967,8 @@
           "triangles_sha256": "4b4325c8b11d1c82c9632b354f1062e64870bc0e005f882f9a754a9b0289558a"
         },
         {
-          "archive_bytes": 334,
-          "archive_sha256": "e06ecec4fe8156e299394d3e3cb48d7244696bca91ebd0d9d95da5f410008814",
+          "archive_bytes": 340,
+          "archive_sha256": "6e9f5b350862a48061f44d37cc6bb6b8e01958f73248d92d07480380755fbd9a",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -887,15 +1004,15 @@
     {
       "cells": [
         {
-          "archive_bytes": 61903,
-          "archive_sha256": "a2281d298d3aee592ec27d9e8f30af69ab0b6b3b30b3d5d5460263b25ea51a08",
+          "archive_bytes": 41569,
+          "archive_sha256": "16b1bc2059feb8f8de2da90913d9ba0a8bf3920efc9e4cead34992a6722d7a38",
           "asset_convexes": 0,
           "building_prisms": 9,
           "cell": {
             "x": 0,
             "y": 0
           },
-          "generated_sha256": "0fb9d63d607e448f29a31dce0a3afda92061fde355a6e07c299fb124581f2eab",
+          "generated_sha256": "67d089a7c2a317625ad5ea42bf3e0894e8d5706611dc14904f49fe7fe06b7e4a",
           "objects": 5,
           "objects_sha256": "c12c5d8c1d3e721e85ed0e9fe4e7a3ad9c4991f492301dbbab36ee9f07c31e6f",
           "occupancy_sha256": "5505df02ed52cccbd713619515b5e84bf6d143d43d3f769e06c71fe57921709c",
@@ -920,9 +1037,9 @@
                 0
               ],
               "position_cm": [
-                -11687,
+                -11636,
                 12,
-                -7569
+                -7518
               ],
               "surface_id": "street:sidewalk"
             },
@@ -933,9 +1050,9 @@
                 0
               ],
               "position_cm": [
-                -16884,
+                -16657,
                 12,
-                -7318
+                -7560
               ],
               "surface_id": "street:sidewalk"
             },
@@ -946,9 +1063,9 @@
                 0
               ],
               "position_cm": [
-                -16887,
+                -16690,
                 12,
-                -7316
+                -6544
               ],
               "surface_id": "street:sidewalk"
             },
@@ -959,9 +1076,9 @@
                 0
               ],
               "position_cm": [
-                -16684,
+                -16650,
                 12,
-                -6629
+                -6544
               ],
               "surface_id": "street:sidewalk"
             },
@@ -972,26 +1089,52 @@
                 0
               ],
               "position_cm": [
-                -11437,
+                -16650,
                 12,
-                -7319
+                -6543
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -13537,
+                12,
+                -6469
+              ],
+              "surface_id": "street:sidewalk"
+            },
+            {
+              "normal_q": [
+                0,
+                1000000,
+                0
+              ],
+              "position_cm": [
+                -10660,
+                12,
+                -6542
               ],
               "surface_id": "street:sidewalk"
             }
           ],
-          "triangles": 658,
-          "triangles_sha256": "99b09141b7cd3a1f6be6e916fd77ac5471a2a536e570dd6a8e0c667095122332"
+          "triangles": 439,
+          "triangles_sha256": "f20b9782197a65303edf463a4bad6493df03216d04779059e15277d4d92d151b"
         },
         {
-          "archive_bytes": 58104,
-          "archive_sha256": "c832992908bef5035d395fa63ca7fe185c42a934f0c75c5d706cb71cc9f4ca14",
+          "archive_bytes": 31539,
+          "archive_sha256": "e415b0b1192b464796d23a6147d847042d56fcc40f1d22cb91afc5744bc2c345",
           "asset_convexes": 0,
           "building_prisms": 5,
           "cell": {
             "x": 1,
             "y": 0
           },
-          "generated_sha256": "e59c4a060b49d87fe1789fdcd2bb9b466c24b4ada36aab48de0a2950df2a92da",
+          "generated_sha256": "d5fb737f428789424afb35f81337b70da9ace09d562a9d4e77f4f608d3cae1f4",
           "objects": 7,
           "objects_sha256": "965c6091b6c82d273a533c62f7913667de2082919259d337ad5d5f82cc26a701",
           "occupancy_sha256": "4326efa9e722343b958ef930334e103ad960a3bbd28e63ab98a852754c57b8f8",
@@ -1016,9 +1159,9 @@
                 0
               ],
               "position_cm": [
-                1180,
+                1302,
                 12,
-                -7501
+                -7379
               ],
               "surface_id": "street:sidewalk"
             },
@@ -1029,9 +1172,9 @@
                 0
               ],
               "position_cm": [
-                7919,
+                7918,
                 12,
-                -7319
+                -7317
               ],
               "surface_id": "street:sidewalk"
             },
@@ -1042,9 +1185,9 @@
                 0
               ],
               "position_cm": [
-                8007,
+                7904,
                 12,
-                -7067
+                -7172
               ],
               "surface_id": "street:sidewalk"
             },
@@ -1055,9 +1198,9 @@
                 0
               ],
               "position_cm": [
-                7936,
+                7887,
                 12,
-                -7495
+                -7558
               ],
               "surface_id": "street:sidewalk"
             },
@@ -1068,19 +1211,19 @@
                 0
               ],
               "position_cm": [
-                -4337,
+                2152,
                 12,
-                -6629
+                -6526
               ],
               "surface_id": "street:sidewalk"
             }
           ],
-          "triangles": 619,
-          "triangles_sha256": "35a8c750d97a2a969545f324eb3ae8ece2ec55e0f77437130dce31d928eb196f"
+          "triangles": 333,
+          "triangles_sha256": "0dd9dff7e999e7f5d845b267346b8e5b3c795911494207f34c975a94c4d87b71"
         },
         {
-          "archive_bytes": 120494,
-          "archive_sha256": "fd73e0ac3c91989c089c378ccbe315cf451b8bad322757492fff546e9c0a1548",
+          "archive_bytes": 120500,
+          "archive_sha256": "0591730e54ce2e5f4142d47bd084fe3b2b7646ff3761b510c9bc08f2a82e66b6",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -1110,8 +1253,8 @@
           "triangles_sha256": "11a88008094767587a1d6ed201523a5779daadf56176ddd6c2132f6c19d1bfb2"
         },
         {
-          "archive_bytes": 49634,
-          "archive_sha256": "fefd40b1a96142671feebb7bb7d306b03372741d6da5b062a20c6aa5ae3c9559",
+          "archive_bytes": 49640,
+          "archive_sha256": "b8fc6ace38f4689a8442b9f0496b8a6f0f6479fb1aac90ac7af2e1f9fa2f7d44",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -1147,8 +1290,8 @@
     {
       "cells": [
         {
-          "archive_bytes": 2884,
-          "archive_sha256": "01969d85230bc27a041ca327454f55242f34739cdb5e0762609b61e4088b4d20",
+          "archive_bytes": 2890,
+          "archive_sha256": "5df397c240fe24b3ce1e1dc777c5df4fb413fa7bb7ebbbdef2b818d36a5298e0",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -1191,8 +1334,8 @@
           "triangles_sha256": "1bc70945fd61dd2df2a494638afae2b6114d41f7b91f621c1412fbfbed73a08f"
         },
         {
-          "archive_bytes": 2544,
-          "archive_sha256": "7230ee4d1b8f517278251c0397715e999413faa8efb2026db0c7e687cc0425aa",
+          "archive_bytes": 2550,
+          "archive_sha256": "085daa962d9359934b99794ab449acceaabaffcd139a8528e01a9a062fe0c81d",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -1235,8 +1378,8 @@
           "triangles_sha256": "f23b47555d20cc8b0264eea53210e9015ba33d4c1b8aec6e0e03d438cce13e06"
         },
         {
-          "archive_bytes": 1864,
-          "archive_sha256": "cf586ce1c939479c0f840a7246e069e910beb50b757a36e61ecb745ca77d7224",
+          "archive_bytes": 1870,
+          "archive_sha256": "94f7c5cf308c3ef194243f4a8de7605d975cb2561168b831130e7d9855311671",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -1279,8 +1422,8 @@
           "triangles_sha256": "95e0525aed5d39190a1233ec7d33cb00c6b2ff7064ae360ef41a9c0e0031b411"
         },
         {
-          "archive_bytes": 1524,
-          "archive_sha256": "b884805492e2b90c492b1579132d6ca3c5d809d33632db7800f8ee80364f0245",
+          "archive_bytes": 1530,
+          "archive_sha256": "51955e58e77cfde231933deb509f70fe92064ef5c28c76e108dc4f800174dce0",
           "asset_convexes": 0,
           "building_prisms": 0,
           "cell": {
@@ -1316,18 +1459,18 @@
     {
       "cells": [
         {
-          "archive_bytes": 1609,
-          "archive_sha256": "66ece175afb3dd6fa131055455cff7a33460032915e24993bd818a315ee57e48",
-          "asset_convexes": 0,
+          "archive_bytes": 262409,
+          "archive_sha256": "ce230b16c4960d95cad153af25d07765b16a666c94472b84e345f09c6cb26037",
+          "asset_convexes": 181,
           "building_prisms": 0,
           "cell": {
             "x": 0,
             "y": 0
           },
-          "generated_sha256": "bf64d8453ac0ce7df8e26eb37ae21bf5c1e88783349bd173fc918f3c7e320d81",
+          "generated_sha256": "0b81abd51811ca2d00856936d4a2f82e8c5ed175bfdab3560e292b6c44bb5037",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "c429dbdf61e54edb637e2d3d1a03ea7b916aa77b23f77bb40aca50cbf8b04753",
           "surface_probes": [
             {
               "normal_q": [
@@ -1343,22 +1486,22 @@
               "surface_id": "terrain"
             }
           ],
-          "triangles": 17,
-          "triangles_sha256": "07f218a17acb12a2744b99293f9567e9942939b16ef77e8fd0f28f0adf1a33e6"
+          "triangles": 2198,
+          "triangles_sha256": "6a544b2b17b487bc152186076c85c6f553a29a8841fa00a843d86173ce6f99ca"
         },
         {
-          "archive_bytes": 929,
-          "archive_sha256": "f3ad3843e105c61e5a1b967f7d2f495a6cf6c04c49a597e3162e8a67148a21b5",
-          "asset_convexes": 0,
+          "archive_bytes": 12755,
+          "archive_sha256": "70cb474caae9c9a74c75e8ce30a81769d551411e6e5adeacd60334454aa87e1e",
+          "asset_convexes": 10,
           "building_prisms": 0,
           "cell": {
             "x": 1,
             "y": 0
           },
-          "generated_sha256": "e4a6b68a9b6512e6cf6f134a1ac8a6bd29f331251e18660da6ffacedce7d4f62",
+          "generated_sha256": "c17554dad67c0ff920a0367d2c8a471c17eee3376da424281db034c0de3c5969",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "ac06dce78f9aacb23416ac526017fe3808cf878568f0fa2b8e1bfadef53d13a4",
           "surface_probes": [
             {
               "normal_q": [
@@ -1374,22 +1517,22 @@
               "surface_id": "terrain"
             }
           ],
-          "triangles": 9,
-          "triangles_sha256": "6c2f6f09cc9f516015811ae1383edc4dc3a615629e28681564031d3651b162a7"
+          "triangles": 103,
+          "triangles_sha256": "750f61e96c3c5e0a07e91b458608996ae4ff63f070192b8a813accab77817733"
         },
         {
-          "archive_bytes": 589,
-          "archive_sha256": "29d934bb678715e7efe6125d3056fcc6e5c1330593638459e4ac8cc68b1ad506",
-          "asset_convexes": 0,
+          "archive_bytes": 11149,
+          "archive_sha256": "5041f33e56ed9af2673a625274660a4592952e8f11adb5d5254ef4acc94cdb10",
+          "asset_convexes": 9,
           "building_prisms": 0,
           "cell": {
             "x": 0,
             "y": 1
           },
-          "generated_sha256": "542d37508c14548434a504d4f97c6cdd9822d9fabf03069e13dd5ba7f57204d2",
+          "generated_sha256": "1e41750dc5393d1a49430a656759c14b1c94f9b12015c4c201c1582a4b2fec72",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "9598ea71c4799330a7d137a82c187206ed8d757d5e4d766fb78d320f90e3dca0",
           "surface_probes": [
             {
               "normal_q": [
@@ -1405,22 +1548,22 @@
               "surface_id": "terrain"
             }
           ],
-          "triangles": 5,
-          "triangles_sha256": "09121b5828c5fb00cd592982ebd407da603b1eeeee62dd32a5b7633552884033"
+          "triangles": 89,
+          "triangles_sha256": "c9bf27f1cf548a618f19aa74644403e84de7a7da91634193f0725a37256c690e"
         },
         {
-          "archive_bytes": 1439,
-          "archive_sha256": "788d0a2b3d243004fbf927adc50d0a3488b7b469371f5d54d0796ae89471cbb5",
-          "asset_convexes": 0,
+          "archive_bytes": 263845,
+          "archive_sha256": "fceb8c64296401fcdecab95538e7ede4846df8b0fa489c4ca01624592bd579f6",
+          "asset_convexes": 182,
           "building_prisms": 0,
           "cell": {
             "x": 1,
             "y": 1
           },
-          "generated_sha256": "b8158411467340c99443c87f13b560c008cfb4cd08be8d517f07050ea5f30c8e",
+          "generated_sha256": "c7a4f34a822ab00417dadb39585b32d57f63545590b5e28446a396bb947acffd",
           "objects": 0,
           "objects_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-          "occupancy_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "occupancy_sha256": "bc24db4bd6bbb7021d72d8ed4329e7debec334289c14f41ca7b42fb138f0022c",
           "surface_probes": [
             {
               "normal_q": [
@@ -1436,8 +1579,8 @@
               "surface_id": "terrain"
             }
           ],
-          "triangles": 15,
-          "triangles_sha256": "33930d6eee09d0a77a4de084742589d52be6ee4e5f775ae1e6cbffa2cf9734f5"
+          "triangles": 2210,
+          "triangles_sha256": "f476e15938e38c911334779da5f15bf77e2917ff06d729f55709587839ec8325"
         }
       ],
       "input_sha256": "270e4690bd687b9b49622d0eaa2759c13311aa6dcf899d929df1c2abf9aad44c",

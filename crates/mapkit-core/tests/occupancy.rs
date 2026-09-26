@@ -1,7 +1,11 @@
 use mapkit_core::*;
 
 fn document() -> MapDocument {
-    serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap()
+    let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+    // These fixtures budget buildings/assets/trees independently of automatic
+    // deck facilities, covered by road_safety's occupied-volume regressions.
+    d.roads.clear(); d.nodes.clear();
+    d
 }
 fn input(d: &MapDocument, cell: Cell) -> GenerationInput<'_> {
     GenerationInput {

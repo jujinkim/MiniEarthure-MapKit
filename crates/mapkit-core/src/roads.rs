@@ -4,68 +4,11 @@ use crate::generation::Builder;
 use crate::*;
 
 pub(crate) const SCRATCH_BYTES: u64 = 16 * 1024 * 1024;
-const MAX_LOCAL_PATCHES: usize = 16_384;
 const MAX_FRAGMENTS: usize = 16_384;
 const MAX_WORK: usize = 8_000_000;
 type Poly = Vec<Vertex>;
-#[derive(Clone)]
-struct Patch<'a> {
-    v: [Vertex; 3],
-    road: &'a Road,
-    surface: Surface,
-    terrain_join: bool,
-}
-struct Wall<'a> {
-    a: Vertex,
-    b: Vertex,
-    road: &'a Road,
-}
-#[derive(Clone)]
-struct Arm<'a> {
-    road: &'a Road,
-    segment: usize,
-    end: usize,
-    point: Vertex,
-    other: Vertex,
-}
-type Key = (bool, String, usize);
-/// A junction mouth moves at most half the widest road along its arm, then
-/// half a width sideways. Two rounded coordinates add at most two centimetres.
-pub(crate) fn influence_margin(d: &MapDocument) -> i64 {
-    width_influence_margin(
-        d.roads
-            .iter()
-            .flat_map(|r| &r.widths_cm)
-            .copied()
-            .max()
-            .unwrap_or(0),
-    )
-}
-pub(crate) fn width_influence_margin(maximum_width: u32) -> i64 {
-    i64::from(maximum_width) + 2
-}
-fn key(r: &Road, i: usize) -> Key {
-    if i == 0 {
-        (false, r.from.clone(), 0)
-    } else if i + 1 == r.points.len() {
-        (false, r.to.clone(), 0)
-    } else {
-        (true, r.id.clone(), i)
-    }
-}
-fn xy(p: Vertex) -> Point {
-    [p[0], p[2]]
-}
-fn orient(a: Vertex, b: Vertex, c: Vertex) -> i128 {
-    cross(xy(a), xy(b), xy(c))
-}
-fn hit(v: &[Vertex], b: &Bounds, margin: i64) -> bool {
-    (0..2).all(|a| {
-        v.iter().map(|p| p[a * 2]).min().unwrap() - margin <= b.max[a]
-            && v.iter().map(|p| p[a * 2]).max().unwrap() + margin >= b.min[a]
-    })
-}
-
+use crate::road_plan::{plan, hit, xy, orient, Patch};
+pub(crate) use crate::road_plan::{influence_margin, width_influence_margin};
 /// Adjacency uses authored endpoint IDs (and consequently their exact level).
 /// A geometric crossing never creates an edge or joins distinct graph nodes.
 impl MapDocument {
@@ -87,12 +30,32 @@ impl MapDocument {
 }
 pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
     let mut degree = BTreeMap::new();
+    let mut work=0;
     for r in &d.roads {
         for id in [&r.from, &r.to] {
             let n = degree.entry(id).or_insert(0usize);
             *n += 1;
             if *n > 32 {
                 return Err(error("E_LIMIT", "road junction exceeds 32 arms"));
+            }
+        }
+        let areas:Vec<_>=r.points.windows(2).map(|s|crate::bounds_index::bounds(&[xy(s[0]),xy(s[1])])).collect();
+        let index=crate::bounds_index::BoundsIndex::new(&areas);
+        for (i,s) in r.points.windows(2).enumerate() {
+            for j in index.query(&areas[i],&mut work)?.into_iter().filter(|&j|j>i+1) {
+                tick(&mut work,1)?;
+                if r.from==r.to && i==0 && j+2==r.points.len() {continue;}
+                let (a,b,c,e)=(s[0],s[1],r.points[j],r.points[j+1]);
+                if !intersects(xy(a),xy(b),xy(c),xy(e)) {continue;}
+                let den=(b[0]-a[0]) as i128*(e[2]-c[2]) as i128-(b[2]-a[2]) as i128*(e[0]-c[0]) as i128;
+                if den==0 {return Err(error("E_GEOMETRY",format!("{} segments {i}/{j} at {:?}: overlapping path",r.id,a)));}
+                let t=((c[0]-a[0]) as i128*(e[2]-c[2]) as i128-(c[2]-a[2]) as i128*(e[0]-c[0]) as i128) as f64/den as f64;
+                let u=((c[0]-a[0]) as i128*(b[2]-a[2]) as i128-(c[2]-a[2]) as i128*(b[0]-a[0]) as i128) as f64/den as f64;
+                let p:Vertex=std::array::from_fn(|k|a[k]+libm::round((b[k]-a[k]) as f64*t) as i64);
+                let other=c[1] as f64+(e[1]-c[1]) as f64*u;
+                if r.kind==RoadKind::Ground || (p[1] as f64-other).abs()<=1.0 {
+                    return Err(error("E_GEOMETRY",format!("{} segments {i}/{j} at {:?}: path self-intersects",r.id,p)));
+                }
             }
         }
         if r.from == r.to && r.points.len() == 2 {
@@ -102,6 +65,7 @@ pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
     Ok(())
 }
 pub(crate) fn tick(work: &mut usize, n: usize) -> Result<()> {
+    crate::cancellation::checkpoint()?;
     *work = work.saturating_add(n);
     if *work > MAX_WORK {
         Err(error("E_BUDGET", "road subdivision work exceeded"))
@@ -223,174 +187,6 @@ pub(crate) fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
     out.pop();
     out
 }
-fn plan<'a>(d: &'a MapDocument, bounds: &Bounds) -> Result<(Vec<Patch<'a>>, Vec<Wall<'a>>)> {
-    let mut groups: BTreeMap<Key, Vec<Arm>> = BTreeMap::new();
-    // Include complete endpoint junctions when a corridor touches this cell.
-    let mut relevant = BTreeSet::new();
-    let mut local_segments = 0;
-    let margin = influence_margin(d);
-    let width = |r: &Road, i: usize| r.widths_cm[i] as f64;
-    for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
-            if hit(s, bounds, margin) {
-                local_segments += 1;
-                if local_segments > MAX_LOCAL_PATCHES / 8 {
-                    return Err(error("E_BUDGET", "road local segment limit"));
-                }
-                relevant.insert(key(r, i));
-                relevant.insert(key(r, i + 1));
-            }
-        }
-    }
-    let mut arm_count = 0;
-    for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
-            for end in 0..2 {
-                let k = key(r, i + end);
-                if relevant.contains(&k) {
-                    arm_count += 1;
-                    if arm_count > MAX_LOCAL_PATCHES {
-                        return Err(error("E_BUDGET", "road local arm limit"));
-                    }
-                    groups.entry(k).or_default().push(Arm {
-                        road: r,
-                        segment: i,
-                        end,
-                        point: s[end],
-                        other: s[1 - end],
-                    });
-                }
-            }
-        }
-    }
-    let mut mouths: BTreeMap<(&str, usize, usize), [Vertex; 2]> = BTreeMap::new();
-    let mut patches = vec![];
-    let mut walls = vec![];
-    for arms in groups.values() {
-        let radius = arms
-            .iter()
-            .map(|a| width(a.road, a.segment) / 2.0)
-            .fold(0.0, f64::max);
-        let mut ring = vec![];
-        for arm in arms {
-            let dx = (arm.other[0] - arm.point[0]) as f64;
-            let dy = (arm.other[2] - arm.point[2]) as f64;
-            let len = libm::sqrt(dx * dx + dy * dy);
-            let t = if arms.len() > 1 {
-                radius.min(len * 0.45) / len
-            } else {
-                0.0
-            };
-            let center: Vertex = std::array::from_fn(|i| {
-                arm.point[i] + libm::round((arm.other[i] - arm.point[i]) as f64 * t) as i64
-            });
-            let half = width(arm.road, arm.segment) / 2.0;
-            let offset = [
-                libm::round(-dy / len * half) as i64,
-                libm::round(dx / len * half) as i64,
-            ];
-            let mouth = [
-                [center[0] + offset[0], center[1], center[2] + offset[1]],
-                [center[0] - offset[0], center[1], center[2] - offset[1]],
-            ];
-            mouths.insert((&arm.road.id, arm.segment, arm.end), mouth);
-            ring.extend(mouth);
-        }
-        if arms.len() > 1 {
-            let ring = hull(ring);
-            let structural = arms.iter().any(|a| a.road.kind != RoadKind::Ground);
-            let terrain_join = structural && arms.iter().any(|a| a.road.kind == RoadKind::Ground);
-            if structural {
-                for arm in arms {
-                    let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
-                    if !ring
-                        .iter()
-                        .enumerate()
-                        .any(|(i, a)| m.contains(a) && m.contains(&ring[(i + 1) % ring.len()]))
-                    {
-                        return Err(error(
-                            "E_GEOMETRY",
-                            format!("overlapping structural junction mouths at {} segment {}; author separated approaches", arm.road.id, arm.segment),
-                        ));
-                    }
-                }
-                let ceilings: BTreeSet<_> = arms
-                    .iter()
-                    .filter(|a| a.road.kind == RoadKind::Tunnel)
-                    .map(|a| a.road.clearance_cm)
-                    .collect();
-                if ceilings.len() > 1 {
-                    return Err(error("E_GEOMETRY", "joined tunnel clearances must agree"));
-                }
-            }
-            for i in 0..ring.len() {
-                let a = ring[i];
-                let c = ring[(i + 1) % ring.len()];
-                let owner = arms
-                    .iter()
-                    .find(|arm| mouths[&(arm.road.id.as_str(), arm.segment, arm.end)].contains(&a))
-                    .unwrap();
-                patches.push(Patch {
-                    v: [arms[0].point, a, c],
-                    road: owner.road,
-                    surface: owner.road.surfaces[owner.segment],
-                    terrain_join,
-                });
-                let is_mouth = arms.iter().any(|arm| {
-                    let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
-                    m.contains(&a) && m.contains(&c)
-                });
-                if !is_mouth && matches!(owner.road.kind, RoadKind::Tunnel | RoadKind::Underpass) {
-                    walls.push(Wall {
-                        a,
-                        b: c,
-                        road: owner.road,
-                    });
-                }
-            }
-        }
-        if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
-            return Err(error("E_BUDGET", "road local junction limit"));
-        }
-    }
-    for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
-            if !hit(s, bounds, margin) {
-                continue;
-            }
-            let a = mouths[&(r.id.as_str(), i, 0)];
-            let c = mouths[&(r.id.as_str(), i, 1)];
-            let v = [a[0], c[1], c[0], a[1]];
-            for t in [[v[0], v[1], v[2]], [v[0], v[2], v[3]]] {
-                patches.push(Patch {
-                    v: t,
-                    road: r,
-                    surface: r.surfaces[i],
-                    terrain_join: false,
-                });
-            }
-            if matches!(r.kind, RoadKind::Tunnel | RoadKind::Underpass) {
-                for (a, b) in [(v[0], v[1]), (v[2], v[3])] {
-                    walls.push(Wall { a, b, road: r });
-                }
-            }
-            if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
-                return Err(error("E_BUDGET", "road local corridor limit"));
-            }
-        }
-    }
-    patches.retain(|p| hit(&p.v, bounds, 0) && orient(p.v[0], p.v[1], p.v[2]) != 0);
-    let order = |p: &Patch| {
-        if matches!(p.road.kind, RoadKind::Tunnel | RoadKind::Underpass) {
-            0
-        } else {
-            1
-        }
-    };
-    patches.sort_by(|a, b| (order(a), &a.road.id, a.v).cmp(&(order(b), &b.road.id, b.v)));
-    Ok((patches, walls))
-}
-
 // The current arrangement cuts each terrain tile once, before assigning surface identities.
 fn ground_tile(
     d: &MapDocument,
@@ -417,10 +213,22 @@ fn ground_tile(
     let terrain = [[v[0], v[1], v[2]], [v[0], v[2], v[3]]];
     let nearby: Vec<_> = patches.iter().filter(|p| hit(&p.v, &bounds, 2)).collect();
     let mut lines = vec![(xy(v[0]), xy(v[2]))];
+    let mut shared = BTreeMap::<(&str,u8,Point,Point), Vec<&Patch>>::new();
     for patch in &nearby {
         for i in 0..3 {
-            lines.push((xy(patch.v[i]), xy(patch.v[(i + 1) % 3])));
+            let (a,b)=(xy(patch.v[i]),xy(patch.v[(i+1)%3]));
+            let (a,b)=if a<b {(a,b)} else {(b,a)};
+            shared.entry((&patch.road.id,patch.surface as u8,a,b)).or_default().push(patch);
         }
+    }
+    for ((_,_,a,b),owners) in shared {
+        // Ground follows the terrain, and bridge/underpass footprints do not
+        // need their internal fan diagonals to partition that terrain again.
+        let redundant=owners.len()==2 && (owners[0].road.kind!=RoadKind::Tunnel
+            || owners[1].v.iter().all(|p|floor_plane(&owners[0].v,*p)==0));
+        if !redundant { lines.push((a,b)); }
+    }
+    for patch in &nearby {
         for t in terrain {
             if patch.terrain_join {
                 let (inside, _) = partition(&t, &patch.v, work)?;
@@ -602,7 +410,8 @@ pub(crate) fn generate(
             )?;
         }
     }
-    for wall in walls {
+    crate::road_safety::generate(d, &walls, b)?;
+    for wall in walls.into_iter().filter(|w| matches!(w.road.kind, RoadKind::Tunnel | RoadKind::Underpass)) {
         if !hit(&[wall.a, wall.b], bounds, 0) {
             continue;
         }
@@ -690,36 +499,34 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
         min: b.bounds.min.map(|v| v - 1000),
         max: b.bounds.max.map(|v| v + 1000),
     };
-    let (original, _) = plan(d, &expanded)?;
+    let (_, boundary) = plan(d, &expanded)?;
     let mut patches = vec![];
-    for patch in original {
-        let width = crate::placement::sidewalk_width(d, patch.road) as i64;
-        if width == 0 {
-            continue;
-        }
+    let mut buffers = BTreeMap::<&str, (&Road, Vec<Vec<Point>>)>::new();
+    for edge in boundary {
+        let width = crate::placement::sidewalk_width(d, edge.road) as i64;
+        if width == 0 || !hit(&[edge.a,edge.b],&expanded,width) { continue; }
         let diagonal = libm::round(width as f64 / libm::sqrt(2.0)) as i64;
-        let offsets = [
-            [width, 0],
-            [diagonal, diagonal],
-            [0, width],
-            [-diagonal, diagonal],
-            [-width, 0],
-            [-diagonal, -diagonal],
-            [0, -width],
-            [diagonal, -diagonal],
-        ];
-        let ring = hull(
-            patch
-                .v
-                .iter()
-                .flat_map(|p| offsets.map(|o| [p[0] + o[0], p[1], p[2] + o[1]]))
-                .collect(),
-        );
-        for i in 1..ring.len().saturating_sub(1) {
-            patches.push(Patch {
-                v: [ring[0], ring[i], ring[i + 1]],
-                ..patch.clone()
-            });
+        let offsets = [[width,0],[diagonal,diagonal],[0,width],[-diagonal,diagonal],
+            [-width,0],[-diagonal,-diagonal],[0,-width],[diagonal,-diagonal]];
+        let ring=hull([edge.a,edge.b].iter().flat_map(|p|
+            offsets.map(|o|[p[0]+o[0],0,p[2]+o[1]])).collect());
+        buffers.entry(&edge.road.id).or_insert((edge.road,Vec::new())).1.push(ring.into_iter().map(xy).collect());
+    }
+    // Dilate the shared exterior, then union before subdividing terrain. An
+    // internal triangle fan must not multiply identical sidewalk work.
+    use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType},overlay_rule::OverlayRule},i_float::int::point::IntPoint};
+    let mut buffer_work=0;
+    for (_, (road,rings)) in buffers {
+        let mut overlay=Overlay::<i64>::new(rings.iter().map(Vec::len).sum());
+        for ring in rings {
+            tick(&mut buffer_work,ring.len())?;
+            overlay.add_contour(&ring.into_iter().map(|p|IntPoint::new(p[0],p[1])).collect::<Vec<_>>(),ShapeType::Subject);
+        }
+        for shape in overlay.overlay(OverlayRule::Subject,FillRule::NonZero) {
+            let rings:Vec<Vec<Point>>=shape.into_iter().map(|r|r.into_iter().map(|p|[p.x,p.y]).collect()).collect();
+            for v in crate::road_arrangement::triangulate(&rings,&mut buffer_work)? {
+                patches.push(Patch{v:v.map(|p|[p[0],0,p[1]]),road,surface:Surface::Concrete,terrain_join:false});
+            }
         }
     }
     if patches.is_empty() {
