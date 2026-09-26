@@ -270,3 +270,5 @@ func update_dynamic_lights(camera_position: Vector3, groups: Array) -> void:
 		light.light_energy = candidate.energy
 		light.spot_range = candidate.range
 		light.spot_angle = float(candidate.get("angle", 48.0))
+		light.spot_attenuation = float(candidate.get("attenuation", 1.0))
+		light.spot_angle_attenuation = float(candidate.get("angle_attenuation", 1.0))

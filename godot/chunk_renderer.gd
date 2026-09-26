@@ -8,6 +8,9 @@ const URBAN_SURFACE := preload("./urban_surface.gdshader")
 const PLAN := preload("./render_memory.gd")
 const INSTANCES := preload("./render_instances.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
+# Triple the lit ground width at the same mounting height (tan of the cone angle).
+const STREETLIGHT_SPREAD := 3.0
+const STREETLIGHT_ANGLE := rad_to_deg(atan(tan(deg_to_rad(48.0)) * STREETLIGHT_SPREAD))
 static var _advance_usec := 0
 static var _release_usec := 0
 static var _steps := 0
@@ -388,7 +391,9 @@ static func _environment_lamp(job: Dictionary, id: String, object: Dictionary, p
 		var position: Vector3 = scene_position(object.position)+rotation*Vector3(point[0],point[1],-point[2])*0.01
 		var rgb: Array = binding.color
 		lamps.append({"position":position,"basis":Basis.looking_at(Vector3.DOWN,Vector3.FORWARD),
-			"range":float(binding.range_cm)*0.01,"energy":2.0,"color":Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0)})
+			"range":float(binding.range_cm)*0.01*STREETLIGHT_SPREAD,"angle":STREETLIGHT_ANGLE,
+			"energy":2.0,"attenuation":0.0,"angle_attenuation":0.25,
+			"color":Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0)})
 		job.root.set_meta("environment_lamps",lamps)
 		job.root.add_to_group("mapkit_environment_cells")
 
