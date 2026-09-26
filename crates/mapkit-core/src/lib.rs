@@ -1,5 +1,6 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod gimmick;
+pub mod special_track;
 pub mod cancellation;
 mod convex;
 pub mod course;
@@ -845,6 +846,7 @@ impl GeneratedChunk {
             let Some(position_cm) = triangle_position(triangle, point) else {
                 continue;
             };
+            if self.gimmicks.iter().any(|g|g.excludes_spawn(position_cm)) {continue;}
             if found.len() == MAX_SURFACE_OPTIONS || triangle.object_id.len() > MAX_SURFACE_ID_BYTES
             {
                 return Err(error(
@@ -890,6 +892,7 @@ impl GeneratedChunk {
                 continue;
             }
             if let Some(position) = triangle_position(t, request.position_cm) {
+                if self.gimmicks.iter().any(|g|g.excludes_spawn(position)) {continue;}
                 return Ok((t, position));
             }
         }

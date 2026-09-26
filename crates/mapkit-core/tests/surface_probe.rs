@@ -74,3 +74,20 @@ fn options_bound_escaped_identity_and_keep_first_intersection() {
     c.triangles.push(higher);
     assert_eq!(c.spawn_options([200,200]).unwrap()[0].position_cm[1], 0);
 }
+
+#[test]
+fn track_interior_excludes_underlying_road_from_spawn_and_recovery() {
+    let templates: std::collections::BTreeMap<String, mapkit_core::gimmick::Gimmick> =
+        serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
+    for id in ["loop", "cylinder"] {
+        let mut c = chunk();
+        let mut track = templates[id].clone();
+        track.position = [200, 0, 200];
+        c.gimmicks.push(track);
+        let request = SpawnRequest { position_cm: [200, 200], surface_id: "ground".into() };
+        assert!(c.spawn(&request).is_err(), "{id}: road below track is not a recovery point");
+        assert!(c.surface_probe(&request).is_err());
+        assert!(!c.spawn_options([200, 200]).unwrap().iter().any(|v| v.surface_id == "ground"));
+        assert!(c.spawn(&SpawnRequest { position_cm: [900, 50], ..request }).is_ok(), "outside track remains available");
+    }
+}

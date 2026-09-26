@@ -41,6 +41,9 @@ fn response(result: mapkit_core::Result<serde_json::Value>) -> GString {
     GString::from(serde_json::to_string(&value).unwrap().as_str())
 }
 fn engine_document(text: &str) -> mapkit_core::Result<mapkit_core::MapDocument> {
+    serde_json::from_value(engine_value(text)?).map_err(|e|mapkit_core::error("E_JSON",e.to_string()))
+}
+fn engine_value(text: &str) -> mapkit_core::Result<serde_json::Value> {
     let mut value = mapkit_package::parse_resource_json(text.as_bytes())?;
     fn integers(v: &mut serde_json::Value) -> mapkit_core::Result<()> {
         match v {
@@ -69,10 +72,19 @@ fn engine_document(text: &str) -> mapkit_core::Result<mapkit_core::MapDocument> 
         Ok(())
     }
     integers(&mut value)?;
-    serde_json::from_value(value).map_err(|e| mapkit_core::error("E_JSON", e.to_string()))
+    Ok(value)
 }
 #[godot_api]
 impl MapKitBridge {
+    #[func]
+    fn resolve_gimmick(&self, text: GString) -> GString {
+        response((|| {
+            let g: mapkit_core::gimmick::Gimmick = serde_json::from_value(engine_value(&text.to_string())?).map_err(|e|mapkit_core::error("E_GIMMICK",e.to_string()))?;
+            if !g.valid() {return Err(mapkit_core::error("E_GIMMICK","invalid track/effect/bounds"));}
+            Ok(g.resolved_json())
+        })())
+    }
+
     #[func]
     fn open_package(&mut self, path: GString) -> GString {
         self.package = None;

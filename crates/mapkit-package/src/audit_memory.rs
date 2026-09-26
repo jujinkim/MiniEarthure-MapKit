@@ -303,6 +303,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         rotation_mdeg: _,
         scale_per_mille: _,
         parts,
+        track: _,
+        effect: _,
         surface: _,
         color: _,
         motion: mapkit_core::gimmick::Motion {

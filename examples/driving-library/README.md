@@ -6,6 +6,11 @@ crosses, moving platforms, boost pads and launch pads. No game data or executabl
 scripts are embedded. Pipe inner radius is 100 cm; halfpipe inner radius is 190 cm.
 Their compound parts leave the passage open. Surface/color are editable.
 
+The library also supplies directional `target_speed`, calibrated `jump_height`,
+`air_ring`, and parametric `loop`/`cylinder` presets. These are separate from the
+original fixed impulses and pipe props. See [special driving](../../docs/SPECIAL_DRIVING.md)
+for field ranges, shared geometry and inner-surface roles.
+
 `library.json` is the template input for an authoring UI. The Python constructors
 in `scripts/driving_structures.py` also support authored positions and rotations.
 A map owner supplies placements, destinations and route design. Translation and

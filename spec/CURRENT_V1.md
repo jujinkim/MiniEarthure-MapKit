@@ -99,6 +99,12 @@ continuous `rotate`, `boost` or `launch`. Motion stores period/phase millisecond
 world-space displacement/impulse, rotation axis and per-vehicle cooldown. No
 executable user scripts are accepted. See [the reusable library](../examples/driving-library/README.md).
 
+The 2026-09-26 extension adds target speed, launch height and directional air-ring
+effects, plus parametric loop/cylinder tracks with separate inner/shell roles.
+Tracks replace ordinary convex parts with a bounded shared mesh; all other
+definitions retain the 32-part cap. See [special driving](../docs/SPECIAL_DRIVING.md)
+for dimensions, deterministic quantization, cost and spawn exclusions.
+
 Required safety bounds enclose the full transformed motion and authored landing
 area. Validation uses a conservative integer L1 radius, bounded displacement,
 period, scale, impulse and total extent; bounds must remain inside the map.

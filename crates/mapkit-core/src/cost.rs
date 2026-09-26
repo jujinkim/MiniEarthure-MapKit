@@ -71,7 +71,7 @@ pub(crate) fn estimate_validated(
             0
         }) + { crate::placement::SCRATCH_BYTES },
         objects: 0,
-        occupied_solids: d.gimmicks.iter().filter(|g| g.intersects(&area)).map(|g| g.parts.len() as u64).sum(),
+        occupied_solids: d.gimmicks.iter().filter(|g| g.intersects(&area)).map(|g| g.occupied_count()).sum(),
         building_prisms: 0,
         asset_convexes: 0,
         height_samples: if descriptor.is_some() { side * side } else { 0 },

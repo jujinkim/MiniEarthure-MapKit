@@ -579,6 +579,33 @@
       },
       "additionalProperties": false
     },
+    "Effect": {
+      "type": "object",
+      "required": [
+        "jump_height_cm",
+        "ring_radius_cm",
+        "strength_percent"
+      ],
+      "properties": {
+        "jump_height_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "ring_radius_cm": {
+          "description": "Ring aperture lies in local XY, centred at the record origin; +Z passes.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "strength_percent": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "EnvironmentProfile": {
       "type": "object",
       "required": [
@@ -710,6 +737,16 @@
           "maxItems": 4,
           "minItems": 4
         },
+        "effect": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Effect"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "id": {
           "type": "string"
         },
@@ -771,6 +808,16 @@
         },
         "surface": {
           "$ref": "#/definitions/Surface"
+        },
+        "track": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SpecialTrack"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -943,7 +990,10 @@
         "translate",
         "rotate",
         "boost",
-        "launch"
+        "launch",
+        "target_speed",
+        "jump_height",
+        "air_ring"
       ]
     },
     "Placement": {
@@ -1212,6 +1262,36 @@
       },
       "additionalProperties": false
     },
+    "SpecialTrack": {
+      "type": "object",
+      "required": [
+        "kind",
+        "length_cm",
+        "radius_cm",
+        "width_cm"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/TrackKind"
+        },
+        "length_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "radius_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "StartMode": {
       "type": "string",
       "enum": [
@@ -1257,6 +1337,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "TrackKind": {
+      "type": "string",
+      "enum": [
+        "loop",
+        "cylinder"
+      ]
     },
     "ValidationReference": {
       "type": "object",

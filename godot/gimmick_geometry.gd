@@ -29,14 +29,44 @@ static func points(part: Dictionary) -> PackedVector3Array:
 	for v: Array in part.vertices: result.append(point(v))
 	return result
 
+static func resolved(g: Dictionary) -> Dictionary:
+	if not g.has("track") or g.has("track_mesh"): return g
+	var bridge = ClassDB.instantiate("MapKitBridge")
+	var result: Dictionary = JSON.parse_string(bridge.resolve_gimmick(JSON.stringify(g)))
+	return result.data if result.get("ok",false) else {}
+
+static func track_point(v: Array) -> Vector3:
+	return Vector3(v[0],v[1],-v[2])*0.0001
+
+static func triangles(faces: Array) -> PackedVector3Array:
+	var result := PackedVector3Array()
+	for face: Array in faces:
+		for v: Array in face: result.append(track_point(v))
+	return result
+
 static func visual(g: Dictionary) -> Node3D:
+	g = resolved(g)
 	var root := Node3D.new()
+	if g.is_empty(): return root
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color8(g.color[0], g.color[1], g.color[2], g.color[3])
 	material.roughness = 0.72
-	if g.motion.kind in ["boost", "launch"]:
+	if g.motion.kind in ["boost", "launch", "target_speed", "jump_height", "air_ring"]:
 		material.emission_enabled = true
 		material.emission = material.albedo_color * 0.35
+	if g.has("track_mesh"):
+		for role: String in ["inner","shell"]:
+			var tool := SurfaceTool.new()
+			tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var vertices := triangles(g.track_mesh[role])
+			for i in range(0,vertices.size(),3):
+				tool.set_normal((vertices[i+2]-vertices[i]).cross(vertices[i+1]-vertices[i]).normalized())
+				for j in 3: tool.add_vertex(vertices[i+j])
+			var mesh := MeshInstance3D.new()
+			mesh.mesh = tool.commit()
+			mesh.material_override = material
+			mesh.set_meta("curved_driving_surface",role == "inner")
+			root.add_child(mesh)
 	for part: Dictionary in g.parts:
 		var vertices := points(part)
 		var tool := SurfaceTool.new()
@@ -50,4 +80,23 @@ static func visual(g: Dictionary) -> Node3D:
 		mesh.mesh = tool.commit()
 		mesh.material_override = material
 		root.add_child(mesh)
+	if g.motion.kind in ["target_speed","jump_height","air_ring"]:
+		# Local +Z is the declared direction; +Y is the launch normal.
+		var arrow := MeshInstance3D.new()
+		var top := 0.0
+		for part: Dictionary in g.parts:
+			for v: Array in part.vertices: top = maxf(top,float(v[1])*0.01)
+		var tool := SurfaceTool.new()
+		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+		tool.set_normal(Vector3.UP)
+		for point_value: Vector3 in [Vector3(-0.35,0,0.25),Vector3(0,0,-0.55),Vector3(0.35,0,0.25)]: tool.add_vertex(point_value)
+		arrow.mesh = tool.commit()
+		arrow.position = Vector3(0,top+0.012,0)
+		var white := StandardMaterial3D.new()
+		white.albedo_color = Color.WHITE
+		white.emission_enabled = true
+		white.emission = Color(0.4,0.4,0.4)
+		arrow.material_override = white
+		if g.motion.kind == "air_ring": arrow.position.y = float(g.effect.ring_radius_cm)*0.01+0.15
+		root.add_child(arrow)
 	return root
