@@ -2,6 +2,8 @@ extends RefCounted
 ## Session-owned immutable resources. Policy/admission is supplied by the caller.
 const ASSETS := preload("./asset_library.gd")
 const URBAN := preload("./urban_surface.gdshader")
+const ENVIRONMENT := preload("./environment_materials.gd")
+const CONTEXT_BYTES := ENVIRONMENT.MEMORY_BYTES
 var reserve: Callable
 var limit_bytes := 128 * 1024 * 1024 # Textured templates; still charged to consumer admission.
 var entries: Dictionary = {}
@@ -24,7 +26,9 @@ func bytes() -> int:
 	retiring = retiring.filter(func(lease: RefCounted): return not lease.retired())
 	var total := 0
 	if _shader_lease != null: total += int(_shader_lease.bytes)
+	elif _shader != null: total += 65536
 	if _environment_lease != null: total += int(_environment_lease.bytes)
+	elif _environment != null: total += CONTEXT_BYTES
 	for item: Dictionary in entries.values(): total += int(item.bytes)
 	for lease: RefCounted in retiring: total += int(lease.bytes)
 	return total
@@ -93,6 +97,11 @@ func template(key: String, id: String, sources: Dictionary) -> Node3D:
 					var node: Node3D = pending.pop_back()
 					if node is MeshInstance3D:
 						node.mesh = context.style_mesh(node.mesh,binding)
+						var water: bool = node.mesh.get_surface_count() > 0
+						for index in node.mesh.get_surface_count():
+							var material: Material = node.mesh.surface_get_material(index)
+							water = water and material != null and material.get_meta("mapkit_water",false)
+						if water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 						if node.material_override != null:
 							node.material_override = context.surface_material(node.material_override,0)
 					pending.append_array(node.get_children())
@@ -165,8 +174,9 @@ static func _track_material(lease: RefCounted, material: Material) -> void:
 	lease.track(material)
 	if material is ShaderMaterial:
 		# Context owns the shared shader/state texture; this lease owns the source bitmap.
-		var albedo: Variant = material.get_shader_parameter("albedo_texture")
-		if albedo is Texture2D: lease.track(albedo)
+		for slot: String in ["albedo_texture","normal_texture","ao_texture","roughness_texture","metallic_texture"]:
+			var bitmap: Variant = material.get_shader_parameter(slot)
+			if bitmap is Texture2D: lease.track(bitmap)
 	if material is BaseMaterial3D:
 		for slot in BaseMaterial3D.TEXTURE_MAX:
 			var texture: Texture2D = material.get_texture(slot)
@@ -178,14 +188,23 @@ func diagnostics() -> Dictionary:
 func environment_context() -> RefCounted:
 	if closed or environment_profile.is_empty(): return null
 	if _environment == null:
-		if bytes() + 1048576 > limit_bytes: return null
-		_environment_lease = reserve.call(1048576) if reserve.is_valid() else null
+		if bytes() + CONTEXT_BYTES > limit_bytes: trim()
+		if bytes() + CONTEXT_BYTES > limit_bytes: return null
+		_environment_lease = reserve.call(CONTEXT_BYTES) if reserve.is_valid() else null
 		if reserve.is_valid() and _environment_lease == null: return null
-		_environment = preload("./environment_materials.gd").new()
+		_environment = ENVIRONMENT.new()
 		_environment.track(_environment_lease)
+		if _environment.tiles.size() != ENVIRONMENT.TILE_KINDS.size():
+			_environment = null
+			if _environment_lease != null:
+				_environment_lease.seal()
+				retiring.append(_environment_lease)
+				_environment_lease = null
+			return null
 	return _environment
 
 static func wet_urban_shader() -> Shader:
 	var result := Shader.new()
 	result.code = URBAN.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
+	result.code = result.code.replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
 	return result

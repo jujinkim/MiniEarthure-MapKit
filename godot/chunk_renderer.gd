@@ -52,6 +52,9 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 				fail(job, "E_MEMORY_BUDGET", "Shared display resources exceed memory allowance: %s (%d bytes cached)" % [id,resources.bytes()])
 				return job
 			job.claims[id] = key
+		if resources.environment_context() == null:
+			fail(job, "E_MEMORY_BUDGET", "Shared material tiles exceed memory allowance")
+			return job
 		for object: Dictionary in view.objects:
 			var id := str(object.asset_id)
 			job.counts[id] = int(job.counts.get(id, 0)) + 1
@@ -136,6 +139,7 @@ static func _advance(job: Dictionary) -> bool:
 				material.albedo_color = ground_color(key, presentation)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
+				material.resource_name = "mk_"+{"dirt":"earth","gravel":"stone"}.get(key,key)
 			material = _environment_surface(job, material)
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
@@ -236,6 +240,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 				material.albedo_color = ground_color(key, presentation)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
+				material.resource_name = "mk_"+{"dirt":"earth","gravel":"stone"}.get(key,key)
 		if material == null:
 			mesh.free()
 			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
@@ -382,10 +387,12 @@ static func _environment_surface(job: Dictionary, material: Material) -> Materia
 	if material is ShaderMaterial and material.shader == job.get("urban_shader"):
 		material.set_shader_parameter("environment_enabled",true)
 		material.set_shader_parameter("environment_data",context.texture)
+		context.bind_detail(material,"concrete" if material.get_shader_parameter("paving") else "asphalt")
 		return material
 	return context.surface_material(material,0)
 
 static func wet_urban_shader() -> Shader:
 	var result := Shader.new()
 	result.code = URBAN_SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
+	result.code = result.code.replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
 	return result

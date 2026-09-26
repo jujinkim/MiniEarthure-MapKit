@@ -1,6 +1,7 @@
 shader_type spatial;
 render_mode cull_disabled;
 #include "wet_surface.gdshaderinc"
+#include "material_detail.gdshaderinc"
 uniform vec4 base_color : source_color = vec4(0.19,0.20,0.23,1.0);
 uniform bool environment_enabled = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
@@ -29,6 +30,13 @@ void fragment() {
     vec2 p=world_position.xz;
     float noise=fract(sin(dot(floor(p*150.0),vec2(12.9898,78.233)))*43758.5453);
     vec3 color=base_color.rgb*(0.96+0.08*noise);
+    float tile_roughness=0.9;
+    if(detail_enabled) {
+        vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
+        color*=detail.r;tile_roughness=detail.g;
+        NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
+        AO=detail.a;
+    }
     if (paving) {
         vec2 q=abs(fract(p/0.7)-0.5);
         float seams=max(smoothstep(0.475,0.5,q.x),smoothstep(0.475,0.5,q.y));
@@ -98,7 +106,7 @@ void fragment() {
     color *= 1.0-weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
     ALBEDO=color;
-    ROUGHNESS=mix(mix(0.9,0.27,weather.x),0.95,weather.y);
+    ROUGHNESS=mix(mix(tile_roughness,0.27,weather.x),0.95,weather.y);
     float puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y);
     ALBEDO*=1.0-puddle*0.10;
     ROUGHNESS=mix(ROUGHNESS,0.18,puddle);

@@ -72,3 +72,11 @@ caller supplies a session cache. They cannot claim shared immutable templates.
 This preserves old validated custom image/model packages without inventing hashes
 or subtracting unproven shared memory. New recipes retain independent shared leases
 and last-borrower retirement. Generation and serialized package hashes are unchanged.
+
+## Shared miniature material tiles (2026-09-26)
+
+The current cache remains 128 MiB / 256 entries. The admitted weather context
+reserves 13 MiB for eight 256px packed tiles, mipmaps and import/CPU/GPU overlap.
+Its bytes are also included in diagnostics without an admission callback.
+Normal, AO, roughness and metallic shader bindings join albedo in asset-lease
+tracking. See [material implementation and verification](docs/RICHER_MATERIALS.md).
