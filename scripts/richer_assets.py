@@ -141,6 +141,8 @@ def water_mesh(triangles,origin,flowing,depth,elevation=lambda x,z:0.0):
         inner=list(inset.exterior.coords)[:-1]
         if len(inner)!=3:continue
         vs=[cm((x-cx,elevation(x,z),z-cz)) for x,z in inner];vs += [[p[0],p[1]-2,p[2]] for p in vs]
+        a,b,c=vs[:3]
+        if (b[0]-a[0])*(c[2]-a[2])-(b[2]-a[2])*(c[0]-a[0])==0:continue
         fs=outward(vs,[(0,1,2),(3,5,4),(0,3,4),(0,4,1),(1,4,5),(1,5,2),(2,5,3),(2,3,0)])
         if len(set(tuple(p) for p in vs))==6:m.convex.append(dict(vertices=vs,faces=fs))
     def tint(p):
