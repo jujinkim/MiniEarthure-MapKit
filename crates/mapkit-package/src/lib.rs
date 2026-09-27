@@ -1,4 +1,5 @@
 //! Bounded package I/O adapter. The core never opens files or reads a clock.
+pub mod assembled_track;
 use mapkit_core::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

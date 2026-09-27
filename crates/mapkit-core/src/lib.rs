@@ -1,5 +1,6 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod water;
+pub mod assembled_track;
 pub mod gimmick;
 pub mod special_track;
 pub mod cancellation;
@@ -262,6 +263,8 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assembled_track: Option<assembled_track::Assembly>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub water_bodies: Vec<water::WaterBody>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -730,6 +733,7 @@ impl MapDocument {
         }
         water::validate(self)?;
         gimmick::validate(self)?;
+        if let Some(track) = &self.assembled_track { track.validate()?; }
         placement::validate(self)?;
         Ok(())
     }

@@ -7,7 +7,7 @@ Original files and completion evidence remain preserved; active packages are
 exported anew from authored source. Build fingerprints invalidate disposable
 geometry caches and world hashes separate changed content.
 
-Generation always uses integer road arrangement, connected sidewalks, courtyard
+Ordinary map generation uses integer road arrangement, connected sidewalks, courtyard
 buildings, indexed placement validation, authored tree assets and environment
 profiles. The latest road partition and three-dimensional seam rules remain.
 Regional source uses the local dependency closure, retaining complete context only
@@ -133,3 +133,11 @@ across atomic cell records. Rendering uses the same outlines/heights and the
 existing compatibility renderer, with depth tint, ripples and shoreline foam.
 
 Road snow retention and generated face traits follow [ROAD_CONTACT](../docs/ROAD_CONTACT.md).
+
+## Seeded assembly (2026-09-27)
+
+Optional `assembled_track` metadata selects the dedicated, terrain-free modular
+track generator. Catalogue, generation, exact current-source verification,
+package/Godot/CLI interfaces and cancellation follow
+[ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). This extends the current v1 schema;
+it introduces no old reader, automatic conversion or synthetic completion proof.

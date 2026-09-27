@@ -3,13 +3,24 @@ use mapkit_package::*;
 use std::path::Path;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let help="usage: mapkit inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
+    let help="usage: mapkit track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
     let arg = |i: usize| {
         args.get(i)
             .map(String::as_str)
             .ok_or_else(|| error("E_USAGE", help))
     };
     match arg(0)? {
+        "track-catalogue" if args.len() == 1 => println!("{}",mapkit_core::assembled_track::catalogue()),
+        "generate-track" if args.len() == 3 => {
+            let settings = serde_json::from_slice(&std::fs::read(arg(1)?).map_err(|e|error("E_IO",e.to_string()))?).map_err(|e|error("E_TRACK_SETTINGS",format!("{e}")))?;
+            println!("{}",mapkit_package::assembled_track::save(&settings,Path::new(arg(2)?))?);
+        }
+        "verify-track" if args.len() == 2 => {
+            let p=read(Path::new(arg(1)?))?;
+            let c=p.document.courses.first().ok_or_else(||error("E_TRACK_COURSE","course missing"))?;
+            mapkit_package::assembled_track::verify(&p.document,&p.inspection.world_content_hash,c)?;
+            println!("{}",serde_json::json!({"ok":true,"assembly":p.document.assembled_track}));
+        }
         "unpack-regions" if args.len() == 4 => {
             let budget = arg(3)?.parse::<u64>().map_err(|_| error("E_USAGE", "memory budget must be bytes"))?;
             let mut reader = indexed::IndexedReader::open_path(Path::new(arg(1)?), budget, None)?;

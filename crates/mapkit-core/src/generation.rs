@@ -300,7 +300,14 @@ fn generate_validated(
             ));
         }
     }
-    crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
+    if let Some(track) = &d.assembled_track {
+        crate::assembled_track::generate(track, &mut b)?;
+        for face in &mut b.chunk.triangles {
+            if face.object_id.starts_with("assembled-road-") { face.contact_class = 3; }
+        }
+    } else {
+        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
+    }
 
     // Classify generated faces while only terrain/road geometry exists. Authored
     // placements are appended afterwards and always retain obstacle classification.

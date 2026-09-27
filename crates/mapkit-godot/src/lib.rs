@@ -77,6 +77,32 @@ fn engine_value(text: &str) -> mapkit_core::Result<serde_json::Value> {
 #[godot_api]
 impl MapKitBridge {
     #[func]
+    fn track_catalogue(&self) -> GString {
+        response(Ok(mapkit_core::assembled_track::catalogue()))
+    }
+    #[func]
+    fn generate_track(&self, settings: GString, destination: GString) -> GString {
+        response((|| {
+            let settings=serde_json::from_value(engine_value(&settings.to_string())?)
+                .map_err(|e|mapkit_core::error("E_TRACK_SETTINGS",e.to_string()))?;
+            mapkit_package::assembled_track::save(&settings,std::path::Path::new(&destination.to_string()))
+        })())
+    }
+    #[func]
+    fn verify_track(&self, course: GString) -> GString {
+        response((|| {
+            let p=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
+            let c=mapkit_core::course::decode(course.to_string().as_bytes())?;
+            mapkit_package::assembled_track::verify(&p.document,&p.inspection.world_content_hash,&c)?;
+            Ok(serde_json::json!({"assembly":p.document.assembled_track,"course":c}))
+        })())
+    }
+    #[func]
+    fn track_json(&self) -> GString {
+        response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
+            .map(|p|serde_json::json!({"assembly":p.document.assembled_track})))
+    }
+    #[func]
     fn resolve_gimmick(&self, text: GString) -> GString {
         response((|| {
             let g: mapkit_core::gimmick::Gimmick = serde_json::from_value(engine_value(&text.to_string())?).map_err(|e|mapkit_core::error("E_GIMMICK",e.to_string()))?;
@@ -595,7 +621,7 @@ impl MapKitBridge {
         let id = surface.to_string();
         self.package
             .as_ref()
-            .is_some_and(|p| p.document.roads.iter().any(|road| road.id == id))
+            .is_some_and(|p| p.document.roads.iter().any(|road| road.id == id) || (p.document.assembled_track.is_some() && id.starts_with("assembled-road-")))
     }
     /// Exact local bounds without serializing the full editing document.
     #[func]

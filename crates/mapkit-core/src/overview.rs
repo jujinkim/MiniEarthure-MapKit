@@ -3,13 +3,13 @@ use super::*;
 
 #[derive(Debug, Serialize)]
 pub struct OverviewRoad<'a> {
-    pub id: &'a str,
+    pub id: std::borrow::Cow<'a,str>,
     pub kind: &'a RoadKind,
     /// Authored connectivity; spatial crossings do not imply a junction.
     pub from: &'a str,
     pub to: &'a str,
     pub widths_cm: &'a [u32],
-    pub points: &'a [Vertex],
+    pub points: std::borrow::Cow<'a,[Vertex]>,
 }
 #[derive(Debug, Serialize)]
 pub struct OverviewBuilding<'a> {
@@ -115,12 +115,12 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
         .roads
         .iter()
         .map(|r| OverviewRoad {
-            id: &r.id,
+            id: std::borrow::Cow::Borrowed(&r.id),
             kind: &r.kind,
             from: &r.from,
             to: &r.to,
             widths_cm: &r.widths_cm,
-            points: &r.points,
+            points: std::borrow::Cow::Borrowed(&r.points),
         })
         .collect();
     let mut buildings: Vec<_> = d
@@ -140,7 +140,12 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
             license: &a.license,
         })
         .collect();
-    roads.sort_by_key(|r| r.id);
+    if let Some(track)=&d.assembled_track {
+        for (index,p) in track.pieces.iter().enumerate() {
+            roads.push(OverviewRoad{id:format!("assembled-road-{index}").into(),kind:&RoadKind::Elevated,from:"",to:"",widths_cm:&[600],points:p.path.iter().map(|s|s.position_cm).collect::<Vec<_>>().into()});
+        }
+    }
+    roads.sort_by(|a,b| a.id.cmp(&b.id));
     buildings.sort_by_key(|b| b.id);
     attributions.sort_by_key(|a| (a.source, a.license));
     Ok(MapOverview {

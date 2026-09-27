@@ -79,6 +79,12 @@ pub(crate) fn estimate_validated(
         height_samples: if descriptor.is_some() { side * side } else { 0 },
         max_object_id_bytes: d.gimmicks.iter().map(|g| g.id.len() as u64).max().unwrap_or(7).max(7),
     };
+    if let Some(track) = &d.assembled_track {
+        let (triangles, solids) = crate::assembled_track::cost(track, &area);
+        cost.triangles += triangles;
+        cost.occupied_solids += solids;
+        cost.max_object_id_bytes = cost.max_object_id_bytes.max(32);
+    }
     let mut add = |count: u64, id_bytes: usize| {
         cost.triangles = cost.triangles.saturating_add(count);
         cost.max_object_id_bytes = cost.max_object_id_bytes.max(id_bytes as u64);
@@ -89,7 +95,7 @@ pub(crate) fn estimate_validated(
     let ny = ((area.max[1] - area.min[1]) / spacing + 1).min(side as i64 - 1) as u64;
     let partial = (area.max[0] - area.min[0]) < d.cell_size_cm as i64
         || (area.max[1] - area.min[1]) < d.cell_size_cm as i64;
-    add(nx * ny * 2 * if partial { 5 } else { 1 }, 7);
+    if d.assembled_track.is_none() { add(nx * ny * 2 * if partial { 5 } else { 1 }, 7); }
     for paint in &d.surface_areas {
         let shape = bounds(paint.polygon.iter().copied(), 0);
         if clip_factor(&shape, &area) != 0 {

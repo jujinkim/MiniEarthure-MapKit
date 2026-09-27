@@ -22,6 +22,16 @@
     "zones"
   ],
   "properties": {
+    "assembled_track": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Assembly"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "assets": {
       "type": "array",
       "items": {
@@ -155,6 +165,45 @@
   },
   "additionalProperties": false,
   "definitions": {
+    "Assembly": {
+      "type": "object",
+      "required": [
+        "catalogue_fingerprint",
+        "estimated_msec",
+        "generator_fingerprint",
+        "length_cm",
+        "pieces",
+        "settings"
+      ],
+      "properties": {
+        "catalogue_fingerprint": {
+          "type": "string"
+        },
+        "estimated_msec": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "generator_fingerprint": {
+          "type": "string"
+        },
+        "length_cm": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "pieces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Piece"
+          }
+        },
+        "settings": {
+          "$ref": "#/definitions/Settings"
+        }
+      },
+      "additionalProperties": false
+    },
     "Asset": {
       "type": "object",
       "required": [
@@ -1024,6 +1073,90 @@
         "air_ring"
       ]
     },
+    "Piece": {
+      "type": "object",
+      "required": [
+        "connection_width_cm",
+        "cube_span",
+        "entry_speed_cmps",
+        "id",
+        "origin_cm",
+        "path",
+        "quarter_turns",
+        "reference_msec",
+        "reserved_max_cm",
+        "reserved_min_cm"
+      ],
+      "properties": {
+        "connection_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "cube_span": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "entry_speed_cmps": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0.0
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "id": {
+          "type": "string"
+        },
+        "origin_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Sample"
+          }
+        },
+        "quarter_turns": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "reference_msec": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "reserved_max_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "reserved_min_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
     "Placement": {
       "type": "object",
       "required": [
@@ -1306,6 +1439,124 @@
           },
           "maxItems": 3,
           "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "Sample": {
+      "type": "object",
+      "required": [
+        "above_cm",
+        "below_cm",
+        "forward",
+        "lateral_cm",
+        "min_speed_cmps",
+        "mode",
+        "normal",
+        "position_cm",
+        "safe",
+        "tube_radius_cm"
+      ],
+      "properties": {
+        "above_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "below_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "lateral_cm": {
+          "description": "Half-width and normal clearance of the allowed drive/flight corridor.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "min_speed_cmps": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "mode": {
+          "type": "string"
+        },
+        "normal": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "safe": {
+          "type": "boolean"
+        },
+        "tube_radius_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Settings": {
+      "type": "object",
+      "required": [
+        "circuit",
+        "difficulty",
+        "gimmicks",
+        "minutes",
+        "seed",
+        "time_minutes"
+      ],
+      "properties": {
+        "circuit": {
+          "type": "boolean"
+        },
+        "difficulty": {
+          "type": "string"
+        },
+        "gimmicks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "minutes": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "seed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "time_minutes": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
         }
       },
       "additionalProperties": false
