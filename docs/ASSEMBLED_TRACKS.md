@@ -8,7 +8,7 @@ reimplement the generator. All formats remain v1.
 Settings contain an exactly representable nonnegative JSON integer `seed`,
 `circuit`, `minutes` (1/3/5), `difficulty` (easy/normal/hard), candidate `gimmicks`
 and `time_minutes` (0–1439). Defaults are circuit, three minutes, normal and noon.
-Basic straight/slope/zigzag/curve connectors remain available independently of
+Basic straight/slope/zigzag/left- and right-curve connectors remain available independently of
 the optional special pieces. A selected special is a candidate, not a promise
 that it appears; helices have a complementary return connector.
 
@@ -21,8 +21,13 @@ to its existing hollow mesh. Open jump ports have no blocking end wall.
 Basic hills stay below 23% grade; helical climbs use an 800 cm radius. Jump
 and loop approaches include speed panels; launch panels sit flush with the road.
 
-A bounded rectangular circuit skeleton closes first, or a sprint skeleton runs
-from start to finish. Seeded slots choose presets with stable approach sections;
+A circuit skeleton follows the rounded boundary of a seeded connected set of
+64 m planning cells, starting with an L and trying at most 32 finite growth steps.
+It rejects holes, point contacts, rectangle-filling additions and edges longer
+than two cells. Both turn directions are presets; the straight heading between
+corners is at most 96 m. The planning grid groups the same 8 m cubes and does not
+change their size. Seed changes the outline as well as the contents. A sprint
+skeleton runs from start to finish. Seeded slots choose presets with stable approach sections;
 difficulty changes special-piece spacing. Consecutive runs are capped at four,
 including the circuit seam. Finite candidate lengths are compared by summed
 reference traversal time (900 cm/s baseline); the closest is selected without
@@ -64,3 +69,10 @@ package may remain as an unselected artifact.
 
 Tests: `cargo test -p mapkit-package --test assembled_track --test courses
 --test package_contract`. Consumer vehicle/race acceptance remains separate.
+
+The 2026-09-28 outline regression adds 32 seeds with both turn directions, bounded
+straight runs, unique outlines, determinism and exact position/tangent/normal
+closure. Seven assembly tests pass, including the existing duration, geometry,
+roundtrip, cancellation and source-mutation checks. This replaces the original
+four-sided circuit skeleton within v1; old generated files are preserved, but
+current-generator verification requires regenerating them with their settings.

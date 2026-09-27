@@ -62,7 +62,7 @@ fn durations_closure_and_no_five_repeats() {
 fn every_piece_geometry_and_background() {
     for id in catalogue_ids()
         .iter()
-        .filter(|v| !["straight", "curve"].contains(v))
+        .filter(|v| !["straight", "curve", "curve_left"].contains(v))
     {
         let settings = Settings {
             gimmicks: vec![(*id).into()],
@@ -123,6 +123,8 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
             p.path.last().unwrap().forward,
             if p.id == "curve" {
                 [1_000_000, 0, 0]
+            } else if p.id == "curve_left" {
+                [-1_000_000, 0, 0]
             } else {
                 [0, 0, 1_000_000]
             }
@@ -185,6 +187,49 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
             "aperture stays open"
         );
     }
+}
+
+#[test]
+fn circuits_have_seeded_bays_both_turns_and_bounded_straights() {
+    let mut outlines = std::collections::BTreeSet::new();
+    for seed in 0..32 {
+        let a = assemble(&Settings {
+            seed,
+            gimmicks: vec![],
+            ..Settings::default()
+        })
+        .unwrap();
+        let mut corners = vec![];
+        let mut run_start = a.pieces[0].origin_cm;
+        let mut left = 0;
+        for p in &a.pieces {
+            if p.id == "curve" || p.id == "curve_left" {
+                left += usize::from(p.id == "curve_left");
+                let run =
+                    (p.origin_cm[0] - run_start[0]).abs() + (p.origin_cm[2] - run_start[2]).abs();
+                assert!(run <= 9600, "seed {seed}: long unbroken heading {run}");
+                corners.push((p.origin_cm, p.quarter_turns, p.id.clone()));
+                run_start = p.path.last().unwrap().position_cm;
+            }
+        }
+        assert!(
+            left >= 2 && corners.len() >= 12,
+            "seed {seed}: rectangular outline"
+        );
+        outlines.insert(corners);
+        // Ports meet in position, tangent and normal, including the circuit seam.
+        let start = &a.pieces[0].path[0];
+        let end = a.pieces.last().unwrap().path.last().unwrap();
+        assert_eq!(
+            (start.position_cm, start.forward, start.normal),
+            (end.position_cm, end.forward, end.normal)
+        );
+        assert_eq!(a, assemble(&a.settings).unwrap());
+    }
+    assert!(
+        outlines.len() >= 28,
+        "seeds must change the course outline, not just its contents"
+    );
 }
 
 #[test]

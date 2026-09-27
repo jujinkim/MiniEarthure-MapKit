@@ -35,7 +35,7 @@ impl Default for Settings {
             difficulty: "normal".into(),
             gimmicks: catalogue_ids()
                 .iter()
-                .filter(|v| !["straight", "curve", "slope", "zigzag"].contains(v))
+                .filter(|v| !["straight", "curve", "curve_left", "slope", "zigzag"].contains(v))
                 .map(|v| (*v).into())
                 .collect(),
             time_minutes: 720,
@@ -108,6 +108,7 @@ pub fn catalogue_ids() -> &'static [&'static str] {
     &[
         "straight",
         "curve",
+        "curve_left",
         "slope",
         "zigzag",
         "cylinder",
@@ -224,12 +225,13 @@ fn build_local_piece(id: &str) -> Piece {
     let mut p: Vec<(Vertex, Vertex, String)> = vec![];
     let mut minimum = 0;
     match id {
-        "curve" => {
+        "curve" | "curve_left" => {
             for i in 0..=32 {
                 let t = i as f64 / 32.0 * std::f64::consts::FRAC_PI_2;
                 p.push((
                     [
-                        round(TURN as f64 * (1.0 - libm::cos(t))),
+                        round(TURN as f64 * (1.0 - libm::cos(t)))
+                            * if id == "curve_left" { -1 } else { 1 },
                         0,
                         round(TURN as f64 * libm::sin(t)),
                     ],
@@ -377,6 +379,8 @@ fn build_local_piece(id: &str) -> Piece {
             } else if i + 1 == p.len() {
                 if id == "curve" {
                     [1_000_000, 0, 0]
+                } else if id == "curve_left" {
+                    [-1_000_000, 0, 0]
                 } else {
                     [0, 0, 1_000_000]
                 }
@@ -464,10 +468,92 @@ fn next(rng: &mut u64) -> u64 {
     z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
     z ^ (z >> 31)
 }
-fn skeleton(settings: &Settings, count: usize) -> Assembly {
+// Grow a connected set of 64 m cells, then round its single outer boundary.
+// Frontier choices are finite and seeded. Reject holes, point contacts and long
+// collinear edges before adding a cell; closure never depends on a random walk.
+type GridPoint = [i64; 2];
+fn boundary(cells: &std::collections::BTreeSet<GridPoint>) -> Option<Vec<GridPoint>> {
+    let mut edges = std::collections::BTreeMap::new();
+    for &[x, z] in cells {
+        for (neighbour, a, b) in [
+            ([x - 1, z], [x, z], [x, z + 1]),
+            ([x, z + 1], [x, z + 1], [x + 1, z + 1]),
+            ([x + 1, z], [x + 1, z + 1], [x + 1, z]),
+            ([x, z - 1], [x + 1, z], [x, z]),
+        ] {
+            if !cells.contains(&neighbour) && edges.insert(a, b).is_some() {
+                return None; // Two edges at one vertex would pinch the track.
+            }
+        }
+    }
+    let start = *edges.keys().next()?;
+    let mut points = vec![];
+    let mut cursor = start;
+    for _ in 0..edges.len() {
+        points.push(cursor);
+        cursor = *edges.get(&cursor)?;
+        if cursor == start {
+            break;
+        }
+    }
+    if cursor != start || points.len() != edges.len() {
+        return None;
+    }
+    let direction = |a: GridPoint, b: GridPoint| [b[0] - a[0], b[1] - a[1]];
+    let corners: Vec<_> = (0..points.len())
+        .filter_map(|i| {
+            let previous = points[(i + points.len() - 1) % points.len()];
+            let current = points[i];
+            let next = points[(i + 1) % points.len()];
+            (direction(previous, current) != direction(current, next)).then_some(current)
+        })
+        .collect();
+    // At most 96 m between turns (128 m cell edge minus the two turn radii).
+    if (0..corners.len()).any(|i| {
+        let a = corners[i];
+        let b = corners[(i + 1) % corners.len()];
+        (a[0] - b[0]).abs() + (a[1] - b[1]).abs() > 2
+    }) {
+        return None;
+    }
+    Some(corners)
+}
+fn circuit_runs(cells: &std::collections::BTreeSet<GridPoint>) -> Vec<(usize, i8)> {
+    let corners = boundary(cells).expect("accepted simple boundary");
+    let directions: Vec<_> = (0..corners.len())
+        .map(|i| {
+            let a = corners[i];
+            let b = corners[(i + 1) % corners.len()];
+            let delta = [b[0] - a[0], b[1] - a[1]];
+            let q = match [delta[0].signum(), delta[1].signum()] {
+                [0, 1] => 0,
+                [1, 0] => 1,
+                [0, -1] => 2,
+                [-1, 0] => 3,
+                _ => unreachable!(),
+            };
+            (delta[0].abs() + delta[1].abs(), q)
+        })
+        .collect();
+    directions
+        .iter()
+        .enumerate()
+        .map(|(i, &(length, q))| {
+            let next_q = directions[(i + 1) % directions.len()].1;
+            (
+                (length * 2 - 1) as usize,
+                if (next_q + 4 - q) % 4 == 1 { 1 } else { -1 },
+            )
+        })
+        .collect()
+}
+fn skeleton(settings: &Settings, runs: &[(usize, i8)]) -> Assembly {
     let mut rng = settings.seed;
     let mut pieces = vec![];
     let mut origin = [0; 3];
+    let mut heading = 0;
+    let mut slot_index = 0;
+    let slots: usize = runs.iter().map(|r| r.0).sum();
     let mut return_spiral = "";
     let mut return_at = usize::MAX;
     let spacing = match settings.difficulty.as_str() {
@@ -478,14 +564,14 @@ fn skeleton(settings: &Settings, count: usize) -> Assembly {
     let candidates = settings
         .gimmicks
         .iter()
-        .filter(|s| s.as_str() != "curve" && s.as_str() != "straight")
+        .filter(|s| !["curve", "curve_left", "straight"].contains(&s.as_str()))
         .collect::<Vec<_>>();
-    for side in 0..if settings.circuit { 4 } else { 1 } {
-        for index in 0..count {
+    for &(count, turn) in runs {
+        for _ in 0..count {
             // A complete stable slot separates difficult pieces, including the grid.
-            let mut id = if index % spacing == 1 && !candidates.is_empty() {
+            let mut id = if slot_index % spacing == 1 && !candidates.is_empty() {
                 candidates[next(&mut rng) as usize % candidates.len()].as_str()
-            } else if (side * count + index) % 4 == 3 {
+            } else if slot_index % 4 == 3 {
                 if next(&mut rng) % 2 == 0 {
                     "slope"
                 } else {
@@ -494,11 +580,11 @@ fn skeleton(settings: &Settings, count: usize) -> Assembly {
             } else {
                 "straight"
             };
-            if !return_spiral.is_empty() && index == return_at {
+            if !return_spiral.is_empty() && slot_index == return_at {
                 id = return_spiral;
                 return_spiral = "";
             } else if id.starts_with("spiral") {
-                if index + 2 >= count {
+                if slot_index + 2 >= slots {
                     id = "zigzag";
                 } else {
                     return_spiral = if id == "spiral_up" {
@@ -506,7 +592,7 @@ fn skeleton(settings: &Settings, count: usize) -> Assembly {
                     } else {
                         "spiral_up"
                     };
-                    return_at = index + 2;
+                    return_at = slot_index + 2;
                 }
             }
             if pieces.iter().rev().take(4).count() == 4
@@ -537,15 +623,21 @@ fn skeleton(settings: &Settings, count: usize) -> Assembly {
                         "zigzag"
                     };
                 }
-                let p = placed(selected, origin, side as u8);
+                let p = placed(selected, origin, heading);
                 origin = p.path.last().unwrap().position_cm;
                 pieces.push(p);
             }
+            slot_index += 1;
         }
-        if settings.circuit {
-            let p = placed("curve", origin, side as u8);
+        if turn != 0 {
+            let p = placed(
+                if turn > 0 { "curve" } else { "curve_left" },
+                origin,
+                heading,
+            );
             origin = p.path.last().unwrap().position_cm;
             pieces.push(p);
+            heading = (i16::from(heading) + i16::from(turn)).rem_euclid(4) as u8;
         }
     }
     let length_cm = pieces
@@ -566,16 +658,64 @@ fn skeleton(settings: &Settings, count: usize) -> Assembly {
 pub fn assemble(settings: &Settings) -> Result<Assembly> {
     let s = settings.normalized()?;
     let target = u32::from(s.minutes) * 60_000;
-    let max = if s.circuit { 28 } else { 110 };
     let mut best: Option<Assembly> = None;
-    for n in 1..=max {
-        cancellation::checkpoint()?;
-        let a = skeleton(&s, n);
+    let mut consider = |runs: &[(usize, i8)]| {
+        let a = skeleton(&s, runs);
         if best
             .as_ref()
             .is_none_or(|b| a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target))
         {
             best = Some(a);
+        }
+    };
+    if s.circuit {
+        // Begin with an L, so even a one-minute course has both turn directions.
+        let mut cells = std::collections::BTreeSet::from([[0, 0], [0, 1], [1, 0]]);
+        let mut rng = s.seed;
+        for _ in 0..32 {
+            cancellation::checkpoint()?;
+            consider(&circuit_runs(&cells));
+            let mut frontier = std::collections::BTreeSet::new();
+            for &[x, z] in &cells {
+                for p in [[x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1]] {
+                    if !cells.contains(&p) {
+                        frontier.insert(p);
+                    }
+                }
+            }
+            let mut choices: Vec<_> = frontier.into_iter().collect();
+            // Fisher-Yates has a bounded number of steps and stable input order.
+            for i in (1..choices.len()).rev() {
+                let j = next(&mut rng) as usize % (i + 1);
+                choices.swap(i, j);
+            }
+            let mut added = false;
+            for p in choices {
+                let [x, z] = p;
+                // Tree-like growth keeps bays instead of filling a rectangle.
+                if [[x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1]]
+                    .iter()
+                    .filter(|q| cells.contains(*q))
+                    .count()
+                    != 1
+                {
+                    continue;
+                }
+                cells.insert(p);
+                if boundary(&cells).is_some() {
+                    added = true;
+                    break;
+                }
+                cells.remove(&p);
+            }
+            if !added {
+                break;
+            }
+        }
+    } else {
+        for n in 1..=110 {
+            cancellation::checkpoint()?;
+            consider(&[(n, 0)]);
         }
     }
     let a = best.unwrap();
@@ -654,9 +794,13 @@ impl Assembly {
         }
         if length != self.length_cm
             || time != self.estimated_msec
-            || (self.settings.circuit
-                && self.pieces[0].path[0].position_cm
-                    != self.pieces.last().unwrap().path.last().unwrap().position_cm)
+            || (self.settings.circuit && {
+                let start = &self.pieces[0].path[0];
+                let end = self.pieces.last().unwrap().path.last().unwrap();
+                start.position_cm != end.position_cm
+                    || start.forward != end.forward
+                    || start.normal != end.normal
+            })
         {
             return Err(fail());
         }
