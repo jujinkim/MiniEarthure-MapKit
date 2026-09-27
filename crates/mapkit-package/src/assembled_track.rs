@@ -41,7 +41,12 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
     Course::from_definition(
         CourseBody {
             map_id: document.map_id.clone(),
-            display_name: format!("Seed {} · {} min", a.settings.seed, a.settings.minutes),
+            display_name: format!(
+                "Seed {} · {} s{}",
+                a.settings.seed,
+                a.settings.duration_seconds,
+                if a.settings.circuit { "/lap" } else { "" }
+            ),
             world_content_hash: world.into(),
             mode: if a.settings.circuit {
                 Mode::Circuit

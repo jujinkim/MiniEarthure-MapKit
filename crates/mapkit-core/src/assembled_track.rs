@@ -4,12 +4,12 @@ use crate::gimmick::{Effect, Gimmick, Motion, MotionKind};
 use crate::special_track::{SpecialTrack, TrackKind};
 use crate::*;
 
-pub const WIDTH: i64 = 600;
+pub const WIDTH: i64 = 400;
 pub const WALL: i64 = 120;
 pub const TILE_CM: i64 = 800;
 const SLOT: i64 = TILE_CM * 4;
-const TURN: i64 = TILE_CM * 2;
-const LOOP_RADIUS: u32 = 250;
+const TURN: i64 = TILE_CM;
+const LOOP_RADIUS: u32 = 350;
 const LOOP_WIDTH: u32 = 220;
 const LOOP_OFFSET: i64 = 143;
 const SPEED: i64 = 900;
@@ -21,7 +21,7 @@ const MAX_SAMPLES: usize = 32_000;
 pub struct Settings {
     pub seed: u64,
     pub circuit: bool,
-    pub minutes: u8,
+    pub duration_seconds: u16,
     pub difficulty: String,
     pub gimmicks: Vec<String>,
     pub time_minutes: u16,
@@ -31,11 +31,11 @@ impl Default for Settings {
         Self {
             seed: 1,
             circuit: true,
-            minutes: 3,
+            duration_seconds: 60,
             difficulty: "normal".into(),
             gimmicks: catalogue_ids()
                 .iter()
-                .filter(|v| !["straight", "curve", "curve_left", "slope", "zigzag"].contains(v))
+                .filter(|v| !basic_ids().contains(v))
                 .map(|v| (*v).into())
                 .collect(),
             time_minutes: 720,
@@ -45,7 +45,9 @@ impl Default for Settings {
 impl Settings {
     pub fn normalized(&self) -> Result<Self> {
         if self.seed > 9_007_199_254_740_991
-            || ![1, 3, 5].contains(&self.minutes)
+            || !duration_options(self.circuit)
+                .iter()
+                .any(|v| v.0 == self.duration_seconds)
             || !["easy", "normal", "hard"].contains(&self.difficulty.as_str())
             || self.time_minutes >= 1440
             || self.gimmicks.len() > catalogue_ids().len()
@@ -64,6 +66,42 @@ impl Settings {
         s.gimmicks.dedup();
         Ok(s)
     }
+    pub fn max_laps(&self) -> u8 {
+        duration_options(self.circuit)
+            .iter()
+            .find(|v| v.0 == self.duration_seconds)
+            .map_or(1, |v| v.1)
+    }
+}
+pub fn duration_options(circuit: bool) -> &'static [(u16, u8)] {
+    if circuit {
+        &[(30, 3), (60, 3), (120, 2)]
+    } else {
+        &[(60, 1), (120, 1), (180, 1)]
+    }
+}
+fn basic_ids() -> &'static [&'static str] {
+    &[
+        "straight",
+        "curve",
+        "curve_left",
+        "sharp_curve",
+        "sharp_curve_left",
+        "hairpin",
+        "hairpin_left",
+        "slope",
+        "zigzag",
+    ]
+}
+fn short_piece(id: &str) -> bool {
+    [
+        "fixed_obstacle",
+        "moving_obstacle",
+        "rotating_obstacle",
+        "acceleration_panel",
+        "boost_chain",
+    ]
+    .contains(&id)
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -109,6 +147,10 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "straight",
         "curve",
         "curve_left",
+        "sharp_curve",
+        "sharp_curve_left",
+        "hairpin",
+        "hairpin_left",
         "slope",
         "zigzag",
         "cylinder",
@@ -136,6 +178,9 @@ pub fn fingerprint() -> String {
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
+        "basic_piece_ids":basic_ids(),
+        "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
+            "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
         "catalogue_fingerprint":catalogue_fingerprint(),
         "pieces":catalogue_ids().iter().map(|id| local_piece(id)).collect::<Vec<_>>()})
 }
@@ -221,28 +266,71 @@ fn local_piece(id: &str) -> Piece {
         .unwrap()
         .clone()
 }
+// Ease the helix grade in/out over one eighth turn; peak grade remains below 23%.
+fn spiral_pitch(t: f64) -> f64 {
+    let edge = t.min(1.0 - t);
+    (if edge < 0.125 {
+        (1.0 - libm::cos(edge / 0.125 * std::f64::consts::PI)) / 2.0
+    } else {
+        1.0
+    }) / 0.875
+}
+fn spiral_rise(t: f64) -> f64 {
+    if t > 0.5 {
+        return 1.0 - spiral_rise(1.0 - t);
+    }
+    (if t < 0.125 {
+        t / 2.0 - 0.125 * libm::sin(t / 0.125 * std::f64::consts::PI) / (2.0 * std::f64::consts::PI)
+    } else {
+        t - 0.0625
+    }) / 0.875
+}
 fn build_local_piece(id: &str) -> Piece {
     let mut p: Vec<(Vertex, Vertex, String)> = vec![];
     let mut minimum = 0;
     match id {
-        "curve" | "curve_left" => {
-            for i in 0..=32 {
-                let t = i as f64 / 32.0 * std::f64::consts::FRAC_PI_2;
+        "curve" | "curve_left" | "sharp_curve" | "sharp_curve_left" | "hairpin"
+        | "hairpin_left" => {
+            let hairpin = id.starts_with("hairpin");
+            let radius = if id.starts_with("curve") || hairpin {
+                TURN * 2
+            } else {
+                TURN
+            };
+            let count = if hairpin { 128 } else { 64 };
+            for i in 0..=count {
+                let t = i as f64 / count as f64
+                    * if hairpin {
+                        std::f64::consts::PI
+                    } else {
+                        std::f64::consts::FRAC_PI_2
+                    };
                 p.push((
                     [
-                        round(TURN as f64 * (1.0 - libm::cos(t)))
-                            * if id == "curve_left" { -1 } else { 1 },
+                        round(radius as f64 * (1.0 - libm::cos(t)))
+                            * if id.ends_with("_left") { -1 } else { 1 },
                         0,
-                        round(TURN as f64 * libm::sin(t)),
+                        round(if hairpin { TURN as f64 } else { radius as f64 } * libm::sin(t)),
                     ],
                     [0, 1_000_000, 0],
-                    "drive".into(),
+                    if id.starts_with("curve") {
+                        "drive"
+                    } else {
+                        "drift"
+                    }
+                    .into(),
                 ));
             }
         }
         "loop" => {
             minimum = 1500;
-            connector(&mut p, [0, 0, 0], [-LOOP_OFFSET, 0, 1000], "boost");
+            connector(&mut p, [0, 0, 0], [-LOOP_OFFSET, 0, 600], "boost");
+            line(
+                &mut p,
+                [-LOOP_OFFSET, 0, 600],
+                [-LOOP_OFFSET, 0, 1000],
+                "boost",
+            );
             p.last_mut().unwrap().2 = "loop".into();
             let mesh = SpecialTrack {
                 kind: TrackKind::Loop,
@@ -275,19 +363,21 @@ fn build_local_piece(id: &str) -> Piece {
         "spiral_up" | "spiral_down" => {
             let down = id == "spiral_down";
             connector(&mut p, [0, 0, 0], [-800, 0, 1600], "drive");
-            for i in 1..=128 {
-                let t = i as f64 / 128.0 * std::f64::consts::TAU;
+            for i in 1..=192 {
+                let fraction = i as f64 / 192.0;
+                let t = fraction * std::f64::consts::TAU;
+                let direction = if down { -1.0 } else { 1.0 };
+                let height = spiral_rise(fraction) * TILE_CM as f64 * direction;
+                let pitch = spiral_pitch(fraction) * TILE_CM as f64
+                    / (800.0 * std::f64::consts::TAU)
+                    * direction;
                 p.push((
                     [
                         -round(800.0 * libm::cos(t)),
-                        if down {
-                            -i * TILE_CM / 128
-                        } else {
-                            i * TILE_CM / 128
-                        },
+                        round(height),
                         1600 + round(800.0 * libm::sin(t)),
                     ],
-                    [0, 1_000_000, 0],
+                    unit([-libm::sin(t) * pitch, 1.0, -libm::cos(t) * pitch]),
                     "spiral".into(),
                 ));
             }
@@ -311,7 +401,7 @@ fn build_local_piece(id: &str) -> Piece {
                 p.push((
                     [
                         round(
-                            250.0
+                            450.0
                                 * libm::sin(t * std::f64::consts::TAU)
                                 * libm::sin(t * std::f64::consts::PI).powi(2),
                         ),
@@ -319,7 +409,7 @@ fn build_local_piece(id: &str) -> Piece {
                         round(t * SLOT as f64),
                     ],
                     [0, 1_000_000, 0],
-                    "drive".into(),
+                    "drift".into(),
                 ));
             }
         }
@@ -343,12 +433,16 @@ fn build_local_piece(id: &str) -> Piece {
         }
         _ => line(&mut p, [0, 0, 0], [0, 0, SLOT], "drive"),
     }
-    let small = ["straight", "slope", "zigzag"].contains(&id);
+    let small = ["straight", "slope"].contains(&id);
     if small {
         for (v, _, _) in &mut p {
             v[2] /= 4;
             v[0] /= 4;
             v[1] /= 4;
+        }
+    } else if short_piece(id) {
+        for (v, _, _) in &mut p {
+            v[2] /= 2;
         }
     }
     let len = p.windows(2).map(|v| distance(v[0].0, v[1].0)).sum::<u64>();
@@ -358,7 +452,7 @@ fn build_local_piece(id: &str) -> Piece {
         .map(|(i, (pos, normal, mode))| {
             let a = p[i.saturating_sub(1)].0;
             let b = p[(i + 1).min(p.len() - 1)].0;
-            let normal = if mode == "loop" {
+            let normal = if mode == "loop" || mode == "spiral" {
                 *normal
             } else {
                 let f: [f64; 3] = std::array::from_fn(|j| (b[j] - a[j]) as f64);
@@ -368,7 +462,7 @@ fn build_local_piece(id: &str) -> Piece {
             if id == "cylinder" && (800..=2400).contains(&pos[2]) {
                 mode = "cylinder".into();
             }
-            if id.contains("obstacle") && (900..=2200).contains(&pos[2]) {
+            if id.contains("obstacle") && (450..=1100).contains(&pos[2]) {
                 mode = "avoid".into();
             }
             if ["boost_chain", "acceleration_panel"].contains(&id) {
@@ -377,9 +471,11 @@ fn build_local_piece(id: &str) -> Piece {
             let forward = if i == 0 {
                 [0, 0, 1_000_000]
             } else if i + 1 == p.len() {
-                if id == "curve" {
+                if id.starts_with("hairpin") {
+                    [0, 0, -1_000_000]
+                } else if id == "curve" || id == "sharp_curve" {
                     [1_000_000, 0, 0]
-                } else if id == "curve_left" {
+                } else if id == "curve_left" || id == "sharp_curve_left" {
                     [-1_000_000, 0, 0]
                 } else {
                     [0, 0, 1_000_000]
@@ -394,9 +490,16 @@ fn build_local_piece(id: &str) -> Piece {
                 safe: mode == "drive"
                     && !["loop", "jump", "air_ring", "spiral_up", "spiral_down"].contains(&id),
                 min_speed_cmps: minimum,
-                tube_radius_cm: if mode == "cylinder" { 600 } else { 0 },
+                tube_radius_cm: if mode == "cylinder" { 200 } else { 0 },
                 lateral_cm: if mode == "cylinder" {
-                    700
+                    250
+                } else if id == "cylinder" {
+                    let taper = if pos[2] < 800 {
+                        1.0 - pos[2] as f64 / 800.0
+                    } else {
+                        (pos[2] - 2400) as f64 / 800.0
+                    };
+                    80 + round((WIDTH as f64 / 2.0 - 80.0) * taper.clamp(0.0, 1.0)) as u32
                 } else if id == "loop" {
                     if mode == "loop" {
                         LOOP_WIDTH / 2
@@ -413,11 +516,11 @@ fn build_local_piece(id: &str) -> Piece {
                             ) as u32
                     }
                 } else {
-                    300
+                    WIDTH as u32 / 2
                 },
                 below_cm: if mode == "cylinder" { 50 } else { 150 },
                 above_cm: if mode == "cylinder" {
-                    1350
+                    450
                 } else if mode == "flight" {
                     700
                 } else {
@@ -435,7 +538,13 @@ fn build_local_piece(id: &str) -> Piece {
     });
     Piece {
         id: id.into(),
-        cube_span: if small { 1 } else { 4 },
+        cube_span: if small {
+            1
+        } else if short_piece(id) {
+            2
+        } else {
+            4
+        },
         entry_speed_cmps: [minimum, 3000],
         connection_width_cm: WIDTH as u32,
         origin_cm: [0; 3],
@@ -468,7 +577,7 @@ fn next(rng: &mut u64) -> u64 {
     z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
     z ^ (z >> 31)
 }
-// Grow a connected set of 64 m cells, then round its single outer boundary.
+// Grow a connected set of 32 m cells, then round its single outer boundary.
 // Frontier choices are finite and seeded. Reject holes, point contacts and long
 // collinear edges before adding a cell; closure never depends on a random walk.
 type GridPoint = [i64; 2];
@@ -508,7 +617,7 @@ fn boundary(cells: &std::collections::BTreeSet<GridPoint>) -> Option<Vec<GridPoi
             (direction(previous, current) != direction(current, next)).then_some(current)
         })
         .collect();
-    // At most 96 m between turns (128 m cell edge minus the two turn radii).
+    // At most 48 m between turns (64 m cell edge minus the two turn radii).
     if (0..corners.len()).any(|i| {
         let a = corners[i];
         let b = corners[(i + 1) % corners.len()];
@@ -541,7 +650,7 @@ fn circuit_runs(cells: &std::collections::BTreeSet<GridPoint>) -> Vec<(usize, i8
         .map(|(i, &(length, q))| {
             let next_q = directions[(i + 1) % directions.len()].1;
             (
-                (length * 2 - 1) as usize,
+                (length * 4 - 2) as usize,
                 if (next_q + 4 - q) % 4 == 1 { 1 } else { -1 },
             )
         })
@@ -549,92 +658,154 @@ fn circuit_runs(cells: &std::collections::BTreeSet<GridPoint>) -> Vec<(usize, i8
 }
 fn skeleton(settings: &Settings, runs: &[(usize, i8)]) -> Assembly {
     let mut rng = settings.seed;
-    let mut pieces = vec![];
+    let mut runs = runs.to_vec();
+    let first = runs.iter().enumerate().max_by_key(|(_, r)| r.0).unwrap().0;
+    runs.rotate_left(first);
+    if !settings.circuit {
+        runs.truncate((runs.len() * 3 / 4).max(3));
+        runs.last_mut().unwrap().1 = 0;
+    }
+    // Replace the two corners around a narrow tip with one continuous hairpin.
+    let mut shaped = vec![];
+    let mut i = 0;
+    while i < runs.len() {
+        let (tiles, turn) = runs[i];
+        if i + 1 < runs.len()
+            && runs[i + 1] == (2, turn)
+            && turn != 0
+            && (settings.difficulty != "easy" || next(&mut rng) % 2 == 0)
+        {
+            shaped.push((tiles, turn * 2));
+            i += 2;
+        } else {
+            shaped.push((tiles, turn));
+            i += 1;
+        }
+    }
+    let mut pieces: Vec<Piece> = vec![];
     let mut origin = [0; 3];
     let mut heading = 0;
-    let mut slot_index = 0;
-    let slots: usize = runs.iter().map(|r| r.0).sum();
-    let mut return_spiral = "";
-    let mut return_at = usize::MAX;
-    let spacing = match settings.difficulty.as_str() {
-        "easy" => 6,
-        "hard" => 2,
-        _ => 4,
-    };
-    let candidates = settings
+    let mut pending_spiral = "";
+    let mut bag = Vec::new();
+    let candidates: Vec<_> = settings
         .gimmicks
         .iter()
-        .filter(|s| !["curve", "curve_left", "straight"].contains(&s.as_str()))
-        .collect::<Vec<_>>();
-    for &(count, turn) in runs {
-        for _ in 0..count {
-            // A complete stable slot separates difficult pieces, including the grid.
-            let mut id = if slot_index % spacing == 1 && !candidates.is_empty() {
-                candidates[next(&mut rng) as usize % candidates.len()].as_str()
-            } else if slot_index % 4 == 3 {
-                if next(&mut rng) % 2 == 0 {
-                    "slope"
-                } else {
-                    "zigzag"
+        .filter(|s| !basic_ids().contains(&s.as_str()) && !short_piece(s))
+        .map(String::as_str)
+        .collect();
+    let opportunities = shaped.iter().skip(1).filter(|r| r.0 >= 6).count();
+    let mut used = 0;
+    let short_candidates: Vec<_> = settings
+        .gimmicks
+        .iter()
+        .filter(|s| short_piece(s))
+        .map(String::as_str)
+        .collect();
+    let mut short_bag = Vec::new();
+    for (run, &(tiles, turn)) in shaped.iter().enumerate() {
+        // Keep a flat cube on each side of a large feature: entry alignment
+        // and landing recovery both precede the next tight corner.
+        let trailing_stable = if run > 0 && tiles >= 6 { 1 } else { 0 };
+        let stable = if run == 0 {
+            tiles
+        } else {
+            tiles.min(2) - trailing_stable
+        };
+        let short_chance = match settings.difficulty.as_str() {
+            "easy" => 1,
+            "hard" => 3,
+            _ => 2,
+        };
+        let use_short = run > 0
+            && stable >= 2
+            && run % 2 == 1
+            && !short_candidates.is_empty()
+            && next(&mut rng) % 3 < short_chance;
+        if use_short {
+            if short_bag.is_empty() {
+                short_bag = short_candidates.clone();
+                for j in (1..short_bag.len()).rev() {
+                    let k = next(&mut rng) as usize % (j + 1);
+                    short_bag.swap(j, k);
                 }
+            }
+            let p = placed(short_bag.pop().unwrap(), origin, heading);
+            origin = p.path.last().unwrap().position_cm;
+            pieces.push(p);
+        }
+        for _ in 0..if use_short { stable - 2 } else { stable } {
+            let id = if pieces.iter().rev().take(3).all(|p| p.id == "straight") && pieces.len() >= 3
+            {
+                "slope"
             } else {
                 "straight"
             };
-            if !return_spiral.is_empty() && slot_index == return_at {
-                id = return_spiral;
-                return_spiral = "";
+            let p = placed(id, origin, heading);
+            origin = p.path.last().unwrap().position_cm;
+            pieces.push(p);
+        }
+        let mut remaining = tiles - stable - trailing_stable;
+        if remaining >= 4 {
+            used += 1;
+            let density = match settings.difficulty.as_str() {
+                "easy" => 2,
+                "hard" => 4,
+                _ => 3,
+            };
+            let mut id = "zigzag";
+            if !candidates.is_empty()
+                && used % 5 != 0
+                && (used == 1 || next(&mut rng) % 4 < density)
+            {
+                if bag.is_empty() {
+                    bag = candidates
+                        .iter()
+                        .copied()
+                        .filter(|id| used < opportunities || !id.starts_with("spiral"))
+                        .collect();
+                    for j in (1..bag.len()).rev() {
+                        let k = next(&mut rng) as usize % (j + 1);
+                        bag.swap(j, k);
+                    }
+                }
+                id = bag.pop().unwrap_or("zigzag");
+            }
+            if !pending_spiral.is_empty() {
+                id = pending_spiral;
+                pending_spiral = "";
             } else if id.starts_with("spiral") {
-                if slot_index + 2 >= slots {
-                    id = "zigzag";
+                if used >= opportunities {
+                    id = candidates
+                        .iter()
+                        .copied()
+                        .find(|id| !id.starts_with("spiral"))
+                        .unwrap_or("zigzag");
                 } else {
-                    return_spiral = if id == "spiral_up" {
+                    pending_spiral = if id == "spiral_up" {
                         "spiral_down"
                     } else {
                         "spiral_up"
                     };
-                    return_at = slot_index + 2;
                 }
             }
-            if pieces.iter().rev().take(4).count() == 4
-                && pieces.iter().rev().take(4).all(|p: &Piece| p.id == id)
-            {
-                id = if id == "zigzag" { "slope" } else { "zigzag" };
-            }
-            let small = ["straight", "slope", "zigzag"].contains(&id);
-            for tile in 0..if small { 4 } else { 1 } {
-                let mut selected = id;
-                if small && tile == 3 {
-                    selected = if next(&mut rng) % 2 == 0 {
-                        "slope"
-                    } else {
-                        "zigzag"
-                    };
-                }
-                if pieces.iter().rev().take(4).count() == 4
-                    && pieces
-                        .iter()
-                        .rev()
-                        .take(4)
-                        .all(|p: &Piece| p.id == selected)
-                {
-                    selected = if selected == "zigzag" {
-                        "slope"
-                    } else {
-                        "zigzag"
-                    };
-                }
-                let p = placed(selected, origin, heading);
-                origin = p.path.last().unwrap().position_cm;
-                pieces.push(p);
-            }
-            slot_index += 1;
+            let p = placed(id, origin, heading);
+            origin = p.path.last().unwrap().position_cm;
+            pieces.push(p);
+            remaining -= 4;
+        }
+        for _ in 0..remaining + trailing_stable {
+            let p = placed("straight", origin, heading);
+            origin = p.path.last().unwrap().position_cm;
+            pieces.push(p);
         }
         if turn != 0 {
-            let p = placed(
-                if turn > 0 { "curve" } else { "curve_left" },
-                origin,
-                heading,
-            );
+            let id = match turn {
+                2 => "hairpin",
+                -2 => "hairpin_left",
+                1 => "sharp_curve",
+                _ => "sharp_curve_left",
+            };
+            let p = placed(id, origin, heading);
             origin = p.path.last().unwrap().position_cm;
             pieces.push(p);
             heading = (i16::from(heading) + i16::from(turn)).rem_euclid(4) as u8;
@@ -657,7 +828,7 @@ fn skeleton(settings: &Settings, runs: &[(usize, i8)]) -> Assembly {
 }
 pub fn assemble(settings: &Settings) -> Result<Assembly> {
     let s = settings.normalized()?;
-    let target = u32::from(s.minutes) * 60_000;
+    let target = u32::from(s.duration_seconds) * 1000;
     let mut best: Option<Assembly> = None;
     let mut consider = |runs: &[(usize, i8)]| {
         let a = skeleton(&s, runs);
@@ -668,7 +839,7 @@ pub fn assemble(settings: &Settings) -> Result<Assembly> {
             best = Some(a);
         }
     };
-    if s.circuit {
+    {
         // Begin with an L, so even a one-minute course has both turn directions.
         let mut cells = std::collections::BTreeSet::from([[0, 0], [0, 1], [1, 0]]);
         let mut rng = s.seed;
@@ -711,11 +882,6 @@ pub fn assemble(settings: &Settings) -> Result<Assembly> {
             if !added {
                 break;
             }
-        }
-    } else {
-        for n in 1..=110 {
-            cancellation::checkpoint()?;
-            consider(&[(n, 0)]);
         }
     }
     let a = best.unwrap();
@@ -864,7 +1030,13 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
         for (n, (id, z)) in specs.iter().enumerate() {
             let mut g = Gimmick {
                 id: format!("track-{index}-{n}"),
-                position: add(p.origin_cm, rotate([0, 0, *z], p.quarter_turns)),
+                position: add(
+                    p.origin_cm,
+                    rotate(
+                        [0, 0, if short_piece(&p.id) { *z / 2 } else { *z }],
+                        p.quarter_turns,
+                    ),
+                ),
                 rotation_mdeg: [0, i32::from(p.quarter_turns) * 90_000, 0],
                 scale_per_mille: [1000; 3],
                 parts: vec![],
@@ -892,18 +1064,22 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                         } else {
                             TrackKind::Cylinder
                         },
-                        radius_cm: if *id == "loop" { LOOP_RADIUS } else { 600 },
-                        width_cm: if *id == "loop" { LOOP_WIDTH } else { 600 },
+                        radius_cm: if *id == "loop" { LOOP_RADIUS } else { 200 },
+                        width_cm: if *id == "loop" {
+                            LOOP_WIDTH
+                        } else {
+                            WIDTH as u32
+                        },
                         length_cm: 1600,
                     })
                 }
                 "fixed_obstacle" | "moving_obstacle" | "rotating_obstacle" => {
-                    // Occupy one lane, leaving at least four metres for avoidance.
-                    g.position = add(g.position, rotate([200, 0, 0], p.quarter_turns));
-                    g.parts.push(box_part([0, 50, 0], [100, 100, 150]));
+                    // Keep an open avoidance lane on the narrower track.
+                    g.position = add(g.position, rotate([120, 0, 0], p.quarter_turns));
+                    g.parts.push(box_part([0, 50, 0], [60, 100, 150]));
                     if *id == "moving_obstacle" {
                         g.motion.kind = MotionKind::Translate;
-                        g.motion.delta_cm = rotate([-100, 0, 0], p.quarter_turns);
+                        g.motion.delta_cm = rotate([-60, 0, 0], p.quarter_turns);
                     }
                     if *id == "rotating_obstacle" {
                         g.motion.kind = MotionKind::Rotate;
@@ -923,7 +1099,7 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                     });
                 }
                 _ => {
-                    g.parts.push(box_part([0, -2, 0], [550, 4, 200]));
+                    g.parts.push(box_part([0, -2, 0], [WIDTH - 50, 4, 200]));
                     g.motion.kind = if *id == "jump" {
                         MotionKind::JumpHeight
                     } else {
@@ -1042,7 +1218,14 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
             let edges = |s: &Sample| {
                 let n = s.normal.map(|v| v as f64 / 1e6);
                 let f = s.forward.map(|v| v as f64 / 1e6);
-                let right = if s.mode == "loop" {
+                let right = if s.mode == "spiral" {
+                    let center = add(p.origin_cm, rotate([0, 0, 1600], p.quarter_turns));
+                    unit([
+                        (center[0] - s.position_cm[0]) as f64,
+                        0.0,
+                        (center[2] - s.position_cm[2]) as f64,
+                    ])
+                } else if s.mode == "loop" {
                     rotate([1_000_000, 0, 0], p.quarter_turns)
                 } else {
                     unit([
@@ -1063,7 +1246,25 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
             let [bl, br] = edges(&w[1]);
             let id = format!("assembled-road-{index}");
             if !special {
-                b.quad([al, bl, br, ar], Surface::Asphalt, &id, true)?;
+                // A wide twisted helix quad creates a diagonal ridge. Subdivide
+                // across the lane so wheel contacts follow the swept surface.
+                let strips = if p.id.starts_with("spiral") { 8 } else { 1 };
+                let mix = |a: Vertex, b: Vertex, n: i64| {
+                    std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
+                };
+                for strip in 0..strips {
+                    b.quad(
+                        [
+                            mix(al, ar, strip),
+                            mix(bl, br, strip),
+                            mix(bl, br, strip + 1),
+                            mix(al, ar, strip + 1),
+                        ],
+                        Surface::Asphalt,
+                        &id,
+                        true,
+                    )?;
+                }
                 let min = std::array::from_fn(|j| {
                     [al, ar, bl, br].iter().map(|v| v[j]).min().unwrap()
                         - if j == 1 { 10 } else { 0 }
@@ -1119,5 +1320,5 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
         })
         .map(|p| p.path.len() as u64 - 1)
         .sum::<u64>();
-    (segments * 50, segments * 3)
+    (segments * 100, segments * 3)
 }

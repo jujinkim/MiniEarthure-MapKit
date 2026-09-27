@@ -1525,8 +1525,8 @@
       "required": [
         "circuit",
         "difficulty",
+        "duration_seconds",
         "gimmicks",
-        "minutes",
         "seed",
         "time_minutes"
       ],
@@ -1537,16 +1537,16 @@
         "difficulty": {
           "type": "string"
         },
+        "duration_seconds": {
+          "type": "integer",
+          "format": "uint16",
+          "minimum": 0.0
+        },
         "gimmicks": {
           "type": "array",
           "items": {
             "type": "string"
           }
-        },
-        "minutes": {
-          "type": "integer",
-          "format": "uint8",
-          "minimum": 0.0
         },
         "seed": {
           "type": "integer",

@@ -29,13 +29,13 @@ fn reproducible_roundtrip_and_modified_source_rejected() {
 }
 #[test]
 fn durations_closure_and_no_five_repeats() {
-    for minutes in [1, 3, 5] {
-        for circuit in [false, true] {
+    for circuit in [false, true] {
+        for &(duration_seconds, _) in duration_options(circuit) {
             for seed in [0, 1, 42, 9007199254740991] {
                 for gimmicks in [vec![], vec!["loop".into()], Settings::default().gimmicks] {
                     let settings = Settings {
                         seed,
-                        minutes,
+                        duration_seconds,
                         circuit,
                         gimmicks,
                         ..Settings::default()
@@ -48,7 +48,7 @@ fn durations_closure_and_no_five_repeats() {
                             "cube-grid origin"
                         );
                     }
-                    let target = u32::from(minutes) * 60000;
+                    let target = u32::from(duration_seconds) * 1000;
                     assert!(a.estimated_msec.abs_diff(target) < 45000);
                     for w in a.pieces.windows(5) {
                         assert!(w.iter().any(|p| p.id != w[0].id));
@@ -95,7 +95,7 @@ fn cancellation_and_invalid_requests() {
         "E_CANCELLED"
     );
     let mut s = Settings::default();
-    s.minutes = 2;
+    s.duration_seconds = 300;
     assert!(assemble(&s).is_err());
     let mut a = assemble(&Settings::default()).unwrap();
     a.pieces[0].path[1].position_cm[1] += 1;
@@ -107,7 +107,7 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
     for difficulty in ["easy", "normal", "hard"] {
         for id in catalogue_ids() {
             document(&Settings {
-                minutes: 5,
+                duration_seconds: 120,
                 difficulty: difficulty.into(),
                 gimmicks: vec![(*id).into()],
                 ..Settings::default()
@@ -121,9 +121,11 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
         assert_eq!(p.path[0].forward, [0, 0, 1_000_000]);
         assert_eq!(
             p.path.last().unwrap().forward,
-            if p.id == "curve" {
+            if p.id.starts_with("hairpin") {
+                [0, 0, -1_000_000]
+            } else if p.id == "curve" || p.id == "sharp_curve" {
                 [1_000_000, 0, 0]
-            } else if p.id == "curve_left" {
+            } else if p.id == "curve_left" || p.id == "sharp_curve_left" {
                 [-1_000_000, 0, 0]
             } else {
                 [0, 0, 1_000_000]
@@ -155,22 +157,27 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
         gimmicks: vec!["cylinder".into()],
         ..Settings::default()
     };
-    let easy = assemble(&Settings {
-        difficulty: "easy".into(),
-        ..s.clone()
-    })
-    .unwrap();
-    let hard = assemble(&Settings {
-        difficulty: "hard".into(),
-        ..s
-    })
-    .unwrap();
-    assert!(
-        hard.pieces.iter().filter(|p| p.id == "cylinder").count()
-            > easy.pieces.iter().filter(|p| p.id == "cylinder").count()
-    );
+    let density = |difficulty: &str| {
+        (0..16)
+            .map(|seed| {
+                assemble(&Settings {
+                    seed,
+                    difficulty: difficulty.into(),
+                    duration_seconds: 120,
+                    ..s.clone()
+                })
+                .unwrap()
+                .pieces
+                .iter()
+                .filter(|p| p.id == "cylinder")
+                .count()
+            })
+            .sum::<usize>()
+    };
+    assert!(density("hard") > density("easy"));
     let doc = document(&Settings {
         gimmicks: vec!["air_ring".into()],
+        duration_seconds: 120,
         ..Settings::default()
     })
     .unwrap();
@@ -195,6 +202,7 @@ fn circuits_have_seeded_bays_both_turns_and_bounded_straights() {
     for seed in 0..32 {
         let a = assemble(&Settings {
             seed,
+            duration_seconds: 120,
             gimmicks: vec![],
             ..Settings::default()
         })
@@ -203,17 +211,17 @@ fn circuits_have_seeded_bays_both_turns_and_bounded_straights() {
         let mut run_start = a.pieces[0].origin_cm;
         let mut left = 0;
         for p in &a.pieces {
-            if p.id == "curve" || p.id == "curve_left" {
-                left += usize::from(p.id == "curve_left");
+            if p.id.contains("curve") || p.id.starts_with("hairpin") {
+                left += usize::from(p.id.ends_with("_left"));
                 let run =
                     (p.origin_cm[0] - run_start[0]).abs() + (p.origin_cm[2] - run_start[2]).abs();
-                assert!(run <= 9600, "seed {seed}: long unbroken heading {run}");
+                assert!(run <= 4800, "seed {seed}: long unbroken heading {run}");
                 corners.push((p.origin_cm, p.quarter_turns, p.id.clone()));
                 run_start = p.path.last().unwrap().position_cm;
             }
         }
         assert!(
-            left >= 2 && corners.len() >= 12,
+            left >= 1 && corners.len() >= 6,
             "seed {seed}: rectangular outline"
         );
         outlines.insert(corners);
@@ -248,4 +256,58 @@ fn save_failure_never_replaces_original() {
     let mut a = assemble(&Settings::default()).unwrap();
     a.pieces.extend(a.pieces.clone());
     assert!(a.validate().is_err());
+}
+
+#[test]
+fn short_lap_rules_tight_geometry_and_smooth_spiral() {
+    assert_eq!(duration_options(true), &[(30, 3), (60, 3), (120, 2)]);
+    assert_eq!(duration_options(false), &[(60, 1), (120, 1), (180, 1)]);
+    for circuit in [false, true] {
+        for &(duration_seconds, laps) in duration_options(circuit) {
+            let s = Settings {
+                circuit,
+                duration_seconds,
+                ..Settings::default()
+            };
+            assert_eq!(s.max_laps(), laps);
+            let a = assemble(&s).unwrap();
+            assert!(
+                a.estimated_msec
+                    .abs_diff(u32::from(duration_seconds) * 1000)
+                    < 20000
+            );
+            assert!(a
+                .pieces
+                .iter()
+                .any(|p| p.id.starts_with("sharp_curve") || p.id.starts_with("hairpin")));
+        }
+    }
+    let c = catalogue();
+    let pieces: Vec<Piece> = serde_json::from_value(c["pieces"].clone()).unwrap();
+    let zig = pieces.iter().find(|p| p.id == "zigzag").unwrap();
+    let swing = zig.path.iter().map(|p| p.position_cm[0]).max().unwrap()
+        - zig.path.iter().map(|p| p.position_cm[0]).min().unwrap();
+    assert!(
+        swing > WIDTH,
+        "a straight line must not fit through the chicane"
+    );
+    let tube = pieces.iter().find(|p| p.id == "cylinder").unwrap();
+    assert!(tube
+        .path
+        .iter()
+        .filter(|p| p.mode == "cylinder")
+        .all(|p| p.tube_radius_cm == 200));
+    for id in ["spiral_up", "spiral_down"] {
+        let p = pieces.iter().find(|p| p.id == id).unwrap();
+        let arc: Vec<_> = p.path.iter().filter(|s| s.mode == "spiral").collect();
+        assert_eq!(arc.len(), 192);
+        assert!(
+            (arc[1].position_cm[1] - arc[0].position_cm[1]).abs() <= 1,
+            "smooth grade entry"
+        );
+        assert!(
+            (arc[191].position_cm[1] - arc[190].position_cm[1]).abs() <= 1,
+            "smooth grade exit"
+        );
+    }
 }

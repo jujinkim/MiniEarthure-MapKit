@@ -100,7 +100,8 @@ impl MapKitBridge {
     #[func]
     fn track_json(&self) -> GString {
         response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
-            .map(|p|serde_json::json!({"assembly":p.document.assembled_track})))
+            .map(|p|serde_json::json!({"assembly":p.document.assembled_track,
+                "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|a.settings.max_laps())})))
     }
     #[func]
     fn resolve_gimmick(&self, text: GString) -> GString {

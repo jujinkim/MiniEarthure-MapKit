@@ -6,33 +6,43 @@ adds a matching public course and package save/verification. Consumers do not
 reimplement the generator. All formats remain v1.
 
 Settings contain an exactly representable nonnegative JSON integer `seed`,
-`circuit`, `minutes` (1/3/5), `difficulty` (easy/normal/hard), candidate `gimmicks`
-and `time_minutes` (0–1439). Defaults are circuit, three minutes, normal and noon.
+`circuit`, `duration_seconds`, `difficulty` (easy/normal/hard), candidate `gimmicks`
+and `time_minutes` (0–1439). Defaults are circuit, 60 seconds, normal and noon.
+Circuit choices are 30/60/120 seconds per lap, with maximum 3/3/2 laps; sprint
+choices are 60/120/180 seconds and one lap. The catalogue owns these options.
+`track_json.max_laps` exposes the authoritative limit to Runtime and Client.
 Basic straight/slope/zigzag/left- and right-curve connectors remain available independently of
 the optional special pieces. A selected special is a candidate, not a promise
 that it appears; helices have a complementary return connector.
 
-The base cube is 800 cm. Straight, gentle hill and zigzag presets occupy one
-tile; turns and large structures reserve a four-tile cube. Origins stay on the
-800 cm lattice, including helical changes of elevation. The ordinary road is
-600 cm wide with 120 cm walls. Loop access tapers to the existing 220 cm ribbon
-with radius 250 cm; its walls follow the ribbon normal. Cylinder walls belong
-to its existing hollow mesh. Open jump ports have no blocking end wall.
-Basic hills stay below 23% grade; helical climbs use an 800 cm radius. Jump
-and loop approaches include speed panels; launch panels sit flush with the road.
+The base cube is 800 cm and the ordinary road is 400 cm wide with 120 cm walls.
+Straight/gentle-hill presets occupy one cube. Zigzag uses a full 32 m length and
+about 5.8 m lateral excursion; compact obstacles and panels occupy 16 m. Sharp
+left/right corners have an 8 m radius. Hairpins follow a continuous half ellipse
+with 16 m and 8 m radii, joining two 8 m corners around a narrow tip. Sharp turns,
+hairpins and zigzags declare the drift action. Large structures reserve a 32 m
+cube. Loop access still tapers to its 220 cm ribbon, with radius 350 cm for fleet clearance at the crown. Cylinder radius
+is 200 cm (one third of the previous diameter), with a tapered road entrance.
+Loop access completes its lateral alignment before a final 4 m straight climb
+approach. Open jump ports have no blocking end wall; launch panels are flush with
+the road.
 
-A circuit skeleton follows the rounded boundary of a seeded connected set of
-64 m planning cells, starting with an L and trying at most 32 finite growth steps.
-It rejects holes, point contacts, rectangle-filling additions and edges longer
-than two cells. Both turn directions are presets; the straight heading between
-corners is at most 96 m. The planning grid groups the same 8 m cubes and does not
-change their size. Seed changes the outline as well as the contents. A sprint
-skeleton runs from start to finish. Seeded slots choose presets with stable approach sections;
-difficulty changes special-piece spacing. Consecutive runs are capped at four,
-including the circuit seam. Finite candidate lengths are compared by summed
-reference traversal time (900 cm/s baseline); the closest is selected without
-a hard tolerance or a clock-dependent cutoff. This is an estimate, not a lap
-time guarantee. No whole-course physical simulation runs during generation.
+Spirals retain the 800 cm radius and 800 cm rise/fall. Their 192 arc samples use
+analytic surface normals and eased entry/exit grade, with eight strips across
+the road to reduce twisted-quad ridges. Centerline grades remain below 23%.
+
+A circuit follows the rounded boundary of a seeded connected set of 32 m planning
+cells, with bounded growth and checks for holes, point contacts, rectangles and
+long edges. Corners bound straight headings to 48 m. Sprint uses an open portion
+of the same winding outline. Seeded shuffled special-piece bags, compact pieces
+and difficulty-dependent spacing increase variety; selected pieces remain
+candidates, not guarantees. Full-size pieces receive an 8 m flat approach and an 8 m stable exit,
+including jump landings. Complementary spirals restore
+elevation before closure. Identical pieces are capped at four, including the
+circuit seam. Finite lengths are compared by summed reference traversal time
+(900 cm/s baseline); the closest is selected without a hard tolerance or a
+clock-dependent cutoff. This is an estimate, not a vehicle lap-time guarantee.
+No whole-course physical simulation runs during generation.
 
 `assembled_track` source metadata stores normalized settings, generator and
 catalogue fingerprints, resolved pieces, reference length and time. Each piece
@@ -72,7 +82,7 @@ Tests: `cargo test -p mapkit-package --test assembled_track --test courses
 
 The 2026-09-28 outline regression adds 32 seeds with both turn directions, bounded
 straight runs, unique outlines, determinism and exact position/tangent/normal
-closure. Seven assembly tests pass, including the existing duration, geometry,
+closure. Eight assembly tests pass, including the existing duration, geometry,
 roundtrip, cancellation and source-mutation checks. This replaces the original
 four-sided circuit skeleton within v1; old generated files are preserved, but
 current-generator verification requires regenerating them with their settings.
