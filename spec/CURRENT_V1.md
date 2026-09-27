@@ -141,3 +141,8 @@ track generator. Catalogue, generation, exact current-source verification,
 package/Godot/CLI interfaces and cancellation follow
 [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). This extends the current v1 schema;
 it introduces no old reader, automatic conversion or synthetic completion proof.
+
+The current v1 special-track contract also accepts `swept_cylinder` with 2–512
+`centerline` floor/normal/forward frames. See [assembled tracks](../docs/ASSEMBLED_TRACKS.md).
+The canonical schema and source fingerprints identify this definition; no
+version increment or migration is introduced.

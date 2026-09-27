@@ -99,6 +99,7 @@ impl Gimmick {
         let (x,y)=(libm::cos(rz)*x+libm::sin(rz)*y,-libm::sin(rz)*x+libm::cos(rz)*y);
         let r=f64::from(t.radius_cm); let w=f64::from(t.width_cm);
         match t.kind {
+            special_track::TrackKind::SweptCylinder => t.contains_swept([x,y,z],50.0),
             special_track::TrackKind::Loop => x.abs()<=1.5*w+50.0 && z>=-2.0*r-50.0 && z<=4.0*r+50.0 && y>=-50.0 && y<=2.0*r+50.0,
             special_track::TrackKind::Cylinder => z.abs()<=f64::from(t.length_cm)/2.0+50.0 && x*x+(y-r)*(y-r)<=(1.12*r+50.0).powi(2),
         }

@@ -137,6 +137,18 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             }
         }
     }
+    if let Some(a)=&document.assembled_track {
+        retained.string(&a.settings.difficulty)?;
+        retained.vector(&a.settings.gimmicks)?;
+        for id in &a.settings.gimmicks {retained.string(id)?;}
+        retained.string(&a.generator_fingerprint)?;
+        retained.string(&a.catalogue_fingerprint)?;
+        retained.vector(&a.pieces)?;
+        for p in &a.pieces {
+            retained.string(&p.id)?;retained.vector(&p.path)?;
+            for sample in &p.path {retained.string(&sample.mode)?;}
+        }
+    }
     retained.string(map_id)?;
     retained.string(theme)?;
     if let Some(environment) = &document.environment {
@@ -310,7 +322,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         rotation_mdeg: _,
         scale_per_mille: _,
         parts,
-        track: _,
+        track,
         effect: _,
         surface: _,
         color: _,
@@ -328,6 +340,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     } in gimmicks
     {
         retained.string(id)?;
+        if let Some(t)=track {retained.vector(&t.centerline)?;}
         retained.vector(parts)?;
         for CollisionConvex { vertices, faces } in parts {
             retained.vector(vertices)?;
@@ -744,6 +757,21 @@ mod tests {
     }
 
     #[test]
+    fn swept_centerline_and_assembled_paths_charge_retained_capacity() {
+        let mut d=mapkit_core::assembled_track::document(&mapkit_core::assembled_track::Settings::default()).unwrap();
+        let before=document_retained_bytes(&d).unwrap();
+        let t=d.gimmicks.iter_mut().find_map(|g|g.track.as_mut().filter(|t|!t.centerline.is_empty())).unwrap();
+        let old=t.centerline.capacity();t.centerline.reserve(2048);
+        let extra=allocation(t.centerline.capacity(),size_of::<mapkit_core::special_track::TubeFrame>())-allocation(old,size_of::<mapkit_core::special_track::TubeFrame>());
+        assert_eq!(document_retained_bytes(&d).unwrap(),before+extra);
+        let before=document_retained_bytes(&d).unwrap();
+        let path=&mut d.assembled_track.as_mut().unwrap().pieces[0].path;
+        let old=path.capacity();path.reserve(2048);
+        let extra=allocation(path.capacity(),size_of::<mapkit_core::assembled_track::Sample>())-allocation(old,size_of::<mapkit_core::assembled_track::Sample>());
+        assert_eq!(document_retained_bytes(&d).unwrap(),before+extra);
+    }
+
+    #[test]
     fn public_document_schema_requires_an_explicit_ownership_decision() {
         let schema = schemars::schema_for!(MapDocument);
         let actual: BTreeSet<_> = schema
@@ -772,6 +800,7 @@ mod tests {
             "zones",
             "assets",
             "gimmicks",
+            "assembled_track",
             "water_bodies",
             "placements",
             "repetitions",

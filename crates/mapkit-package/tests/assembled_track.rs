@@ -121,11 +121,14 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
         assert_eq!(p.path[0].forward, [0, 0, 1_000_000]);
         assert_eq!(
             p.path.last().unwrap().forward,
-            if p.id.starts_with("hairpin") {
+            if p.id.starts_with("hairpin") || p.id.contains("uturn") {
                 [0, 0, -1_000_000]
-            } else if p.id == "curve" || p.id == "sharp_curve" {
+            } else if p.id == "curve" || p.id == "sharp_curve" || p.id == "cylinder_curve" {
                 [1_000_000, 0, 0]
-            } else if p.id == "curve_left" || p.id == "sharp_curve_left" {
+            } else if p.id == "curve_left"
+                || p.id == "sharp_curve_left"
+                || p.id == "cylinder_curve_left"
+            {
                 [-1_000_000, 0, 0]
             } else {
                 [0, 0, 1_000_000]
@@ -169,7 +172,7 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
                 .unwrap()
                 .pieces
                 .iter()
-                .filter(|p| p.id == "cylinder")
+                .filter(|p| p.id.starts_with("cylinder"))
                 .count()
             })
             .sum::<usize>()
@@ -296,7 +299,7 @@ fn short_lap_rules_tight_geometry_and_smooth_spiral() {
         .path
         .iter()
         .filter(|p| p.mode == "cylinder")
-        .all(|p| p.tube_radius_cm == 200));
+        .all(|p| (100..=112).contains(&p.tube_radius_cm)));
     for id in ["spiral_up", "spiral_down"] {
         let p = pieces.iter().find(|p| p.id == id).unwrap();
         let arc: Vec<_> = p.path.iter().filter(|s| s.mode == "spiral").collect();
@@ -309,5 +312,124 @@ fn short_lap_rules_tight_geometry_and_smooth_spiral() {
             (arc[191].position_cm[1] - arc[190].position_cm[1]).abs() <= 1,
             "smooth grade exit"
         );
+    }
+}
+
+#[test]
+fn vehicle_scale_corners_and_seeded_layout_metrics() {
+    let pieces: Vec<Piece> = serde_json::from_value(catalogue()["pieces"].clone()).unwrap();
+    assert_eq!(WIDTH, 240);
+    for id in ["sharp_curve", "sharp_curve_left", "hairpin", "hairpin_left"] {
+        let p = pieces.iter().find(|p| p.id == id).unwrap();
+        let sign = if id.ends_with("left") { -1.0 } else { 1.0 };
+        let hairpin = id.starts_with("hairpin");
+        let radius = if hairpin { 400.0 } else { 300.0 };
+        let center = [sign * radius, if hairpin { 0.0 } else { 500.0 }];
+        let curved: Vec<_> = p
+            .path
+            .iter()
+            .filter(|s| hairpin || (s.position_cm[2] >= 500 && s.position_cm[0].abs() <= 300))
+            .collect();
+        for s in curved {
+            let r = ((s.position_cm[0] as f64 - center[0]).powi(2)
+                + (s.position_cm[2] as f64 - center[1]).powi(2))
+            .sqrt();
+            assert!((r - radius).abs() < 1.0, "{id} {r}");
+        }
+        let end = p.path.last().unwrap();
+        assert_eq!(
+            end.position_cm,
+            if hairpin {
+                [sign as i64 * 800, 0, 0]
+            } else {
+                [sign as i64 * 800, 0, 800]
+            }
+        );
+    }
+    for selection in [
+        vec![],
+        vec!["cylinder".into()],
+        Settings::default().gimmicks,
+    ] {
+        for seed in 0..32 {
+            for difficulty in ["easy", "normal", "hard"] {
+                for circuit in [true, false] {
+                    let a = assemble(&Settings {
+                        seed,
+                        difficulty: difficulty.into(),
+                        circuit,
+                        gimmicks: selection.clone(),
+                        ..Settings::default()
+                    })
+                    .unwrap();
+                    assert!(a.pieces.iter().any(|p| p.id == "sharp_curve"));
+                    assert!(a.pieces.iter().any(|p| p.id == "sharp_curve_left"));
+                    assert!(a
+                        .pieces
+                        .iter()
+                        .any(|p| p.id.starts_with("hairpin") || p.id.contains("uturn")));
+                    if selection.iter().any(|id| id == "cylinder") {
+                        assert!(a.pieces.iter().any(|p| p.id.starts_with("cylinder")));
+                    }
+                    let mut straight = 0.0f64;
+                    let mut direction = [0.0; 2];
+                    let mut ordinary = 0.0;
+                    let mut turns = 0;
+                    let mut accumulated = 0.0f64;
+                    for (index, p) in a.pieces.iter().enumerate() {
+                        // Explicit approach/landing exception applies only to a physical gimmick.
+                        if index < 3
+                            || p.id.starts_with("cylinder")
+                            || ["loop", "jump", "air_ring", "spiral_up", "spiral_down"]
+                                .contains(&p.id.as_str())
+                        {
+                            straight = 0.0;
+                            direction = [0.0; 2];
+                            accumulated = 0.0;
+                            continue;
+                        }
+                        for w in p.path.windows(2) {
+                            let delta = [
+                                (w[1].position_cm[0] - w[0].position_cm[0]) as f64,
+                                (w[1].position_cm[2] - w[0].position_cm[2]) as f64,
+                            ];
+                            let length = (delta[0] * delta[0] + delta[1] * delta[1]).sqrt();
+                            if length == 0.0 {
+                                continue;
+                            }
+                            let next = [delta[0] / length, delta[1] / length];
+                            let angle = (direction[0] * next[1] - direction[1] * next[0])
+                                .atan2(direction[0] * next[0] + direction[1] * next[1]);
+                            if angle.abs() < 0.005 {
+                                straight += length;
+                            } else {
+                                straight = length;
+                            }
+                            assert!(
+                                straight <= 1601.0,
+                                "seed {seed} {difficulty} {} straight={straight}",
+                                p.id
+                            );
+                            if accumulated.signum() != angle.signum() && angle.abs() > 0.005 {
+                                accumulated = 0.0;
+                            }
+                            accumulated += angle;
+                            if accumulated.abs() > 1.4 {
+                                turns += 1;
+                                accumulated = 0.0;
+                            }
+                            ordinary += length;
+                            direction = next;
+                        }
+                    }
+                    if difficulty != "easy" {
+                        assert!(
+                            turns as f64 / ordinary * 10000.0 >= 4.0,
+                            "seed {seed} turns={turns} ordinary={ordinary}"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

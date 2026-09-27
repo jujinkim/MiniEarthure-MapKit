@@ -104,6 +104,16 @@ impl MapKitBridge {
                 "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|a.settings.max_laps())})))
     }
     #[func]
+    fn special_track_bounds(&self, text: GString) -> GString {
+        response((|| {
+            let track: mapkit_core::special_track::SpecialTrack = serde_json::from_value(engine_value(&text.to_string())?)
+                .map_err(|e|mapkit_core::error("E_GIMMICK",e.to_string()))?;
+            if !track.valid() {return Err(mapkit_core::error("E_GIMMICK","invalid special track"));}
+            Ok(serde_json::json!({"radius_cm":track.bound_radius()}))
+        })())
+    }
+
+    #[func]
     fn resolve_gimmick(&self, text: GString) -> GString {
         response((|| {
             let g: mapkit_core::gimmick::Gimmick = serde_json::from_value(engine_value(&text.to_string())?).map_err(|e|mapkit_core::error("E_GIMMICK",e.to_string()))?;

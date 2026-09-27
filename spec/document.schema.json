@@ -1570,6 +1570,13 @@
         "width_cm"
       ],
       "properties": {
+        "centerline": {
+          "description": "Current v1 optional geometry; populated only for a swept cylinder.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/TubeFrame"
+          }
+        },
         "kind": {
           "$ref": "#/definitions/TrackKind"
         },
@@ -1641,8 +1648,47 @@
       "type": "string",
       "enum": [
         "loop",
-        "cylinder"
+        "cylinder",
+        "swept_cylinder"
       ]
+    },
+    "TubeFrame": {
+      "type": "object",
+      "required": [
+        "floor_cm",
+        "forward",
+        "normal"
+      ],
+      "properties": {
+        "floor_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "normal": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
     },
     "ValidationReference": {
       "type": "object",
