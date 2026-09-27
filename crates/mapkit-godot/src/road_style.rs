@@ -11,7 +11,6 @@ pub fn decorate(
     let roads: BTreeMap<_, _> = d
         .roads
         .iter()
-        .filter(|r| r.markings.is_some())
         .map(|r| (r.id.as_str(), r))
         .collect();
     let mut faces = Vec::new();
@@ -49,12 +48,8 @@ pub fn decorate(
                 t.get("object_id").unwrap().to::<GString>().to_string(),
                 p,
                 t.get("spawnable").unwrap().to::<bool>(),
-                if surface == "asphalt" {
-                    0
-                } else if surface == "concrete" {
-                    1
-                } else {
-                    4
+                match surface.as_str() {
+                    "asphalt" => 0, "concrete" => 1, "dirt" => 2, "gravel" => 3, _ => 4,
                 },
             ));
         }
@@ -73,13 +68,14 @@ pub fn decorate(
         } else {
             String::new()
         };
-        if let Some(r) = roads.get(id.as_str()).filter(|_| spawn && surface <= 1) {
+        if let Some(r) = roads.get(id.as_str()).filter(|_| spawn) {
             key = format!(
                 "road:{}:{}:{}:{}",
                 r.id, bounds.min[0], bounds.min[1], surface
             );
             if !styles.contains_key(key.as_str()) {
-                let m = r.markings.as_ref().unwrap();
+                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false };
+                let m = r.markings.as_ref().unwrap_or(&unmarked);
                 let mut paths = PackedVector4Array::new();
                 let mut metrics = PackedVector4Array::new();
                 let mut borders = PackedVector4Array::new();
@@ -136,6 +132,8 @@ pub fn decorate(
                 borders.resize(128);
                 let tint = m.color.map(|c|Color::from_rgba(c[0] as f32/255.,c[1] as f32/255.,c[2] as f32/255.,1.));
                 let mut style=vdict!{
+                    "snow_retention_percent"=>r.snow_retention_percent as f64,
+                    "marked"=>r.markings.is_some() && surface <= 1,
                     "road_paths"=>&paths,"road_metrics"=>&metrics,"road_borders"=>&borders,
                     "path_count"=>path_count as i64,"edge_count"=>edge_count as i64,
                     "lanes"=>m.lanes as i64,"center_line"=>m.center_line,

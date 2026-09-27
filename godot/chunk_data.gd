@@ -21,6 +21,12 @@ static func spawnable(chunk: Dictionary, triangle: int) -> bool:
 static func object_id(chunk: Dictionary, triangle: int) -> String:
 	return str(chunk.object_ids[chunk.object_indices[triangle]]) if chunk.has("packed_version") else str(chunk.triangles[triangle].object_id)
 
+static func contact_class(chunk: Dictionary, triangle: int) -> int:
+	return int(chunk.contact_classes[triangle]) if chunk.has("packed_version") else int(chunk.triangles[triangle].get("contact_class", 0))
+
+static func snow_retention(chunk: Dictionary, triangle: int) -> int:
+	return int(chunk.snow_retention_percent[triangle]) if chunk.has("packed_version") else int(chunk.triangles[triangle].get("snow_retention_percent", 100))
+
 static func material_key(chunk: Dictionary, triangle: int) -> String:
 	if chunk.has("packed_version") and chunk.has("building_materials"):
 		var index := int(chunk.object_indices[triangle])

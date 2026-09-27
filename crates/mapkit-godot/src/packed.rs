@@ -1,4 +1,4 @@
-//! Godot-specific packed view of the unchanged generated v6 contract.
+//! Godot-specific packed view of the current generated v1 contract.
 use godot::prelude::*;
 use mapkit_core::{GeneratedChunk, Surface};
 use std::collections::BTreeMap;
@@ -11,6 +11,8 @@ pub struct MapKitPackedGeometry {
     water_bodies: Vec<mapkit_core::water::WaterCell>,
     vertices: PackedInt64Array,
     surfaces: PackedByteArray,
+    contact_classes: PackedByteArray,
+    snow_retention: PackedByteArray,
     indices: PackedInt32Array,
     spawnable: PackedByteArray,
     ids: PackedStringArray,
@@ -61,6 +63,7 @@ impl MapKitPackedGeometry {
                     format_version: 1,
                     cell: mapkit_core::Cell { x: 0, y: 0 },
                     triangles: vec![mapkit_core::Triangle {
+                        contact_class: 0, snow_retention_percent: 100,
                         vertices,
                         surface: Surface::Asphalt,
                         object_id: request.surface_id.clone(),
@@ -88,6 +91,8 @@ impl MapKitPackedGeometry {
         vdict! {
             "vertices_cm" => &self.vertices,
             "surface_indices" => &self.surfaces,
+            "contact_classes" => &self.contact_classes,
+            "snow_retention_percent" => &self.snow_retention,
             "object_indices" => &self.indices,
             "spawnable" => &self.spawnable,
             "object_ids" => &self.ids,
@@ -120,6 +125,8 @@ pub(super) fn respond(result: mapkit_core::Result<VarDictionary>) -> VarDictiona
 pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
     let hash = chunk.hash()?;
     let mut vertices = Vec::with_capacity(chunk.triangles.len() * 9);
+    let mut contact_classes = Vec::with_capacity(chunk.triangles.len());
+    let mut snow_retention = Vec::with_capacity(chunk.triangles.len());
     let mut surfaces = Vec::with_capacity(chunk.triangles.len());
     let mut object_indices = Vec::with_capacity(chunk.triangles.len());
     let mut spawnable = Vec::with_capacity(chunk.triangles.len());
@@ -174,6 +181,8 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         });
         object_indices.push(id);
         spawnable.push(u8::from(triangle.spawnable));
+        contact_classes.push(triangle.contact_class);
+        snow_retention.push(triangle.snow_retention_percent);
     }
     let mut objects = Array::<VarDictionary>::new();
     for object in &chunk.objects {
@@ -215,6 +224,8 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         convex_ids,
         vertices: PackedInt64Array::from(vertices.as_slice()),
         surfaces: PackedByteArray::from(surfaces.as_slice()),
+        contact_classes: PackedByteArray::from(contact_classes.as_slice()),
+        snow_retention: PackedByteArray::from(snow_retention.as_slice()),
         indices: PackedInt32Array::from(object_indices.as_slice()),
         spawnable: PackedByteArray::from(spawnable.as_slice()),
         ids,

@@ -84,6 +84,7 @@ impl Builder {
                 return Err(error("E_BUDGET", "chunk triangle budget exceeded"));
             }
             self.chunk.triangles.push(Triangle {
+                contact_class: 0, snow_retention_percent: 100,
                 vertices,
                 surface,
                 object_id: id.into(),
@@ -301,6 +302,19 @@ fn generate_validated(
     }
     crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
 
+    // Classify generated faces while only terrain/road geometry exists. Authored
+    // placements are appended afterwards and always retain obstacle classification.
+    let roads: BTreeMap<_, _> = d.roads.iter().map(|r| (r.id.as_str(), r)).collect();
+    let areas: BTreeSet<_> = d.surface_areas.iter().map(|a| a.id.as_str()).collect();
+    for face in &mut b.chunk.triangles {
+        if !face.spawnable { continue; }
+        if let Some(road) = roads.get(face.object_id.as_str()) {
+            face.contact_class = if road.kind == RoadKind::Ground { 2 } else { 3 };
+            face.snow_retention_percent = road.snow_retention_percent;
+        } else if face.object_id == "terrain" || areas.contains(face.object_id.as_str()) {
+            face.contact_class = 1;
+        }
+    }
     crate::placement::generate(d, input.cell, &mut b, placements)?;
     if let Some(occupied) = &mut b.occupancy {
         for g in &b.chunk.gimmicks {

@@ -20,6 +20,7 @@ fn source(kind: RoadKind, points: Vec<Vertex>) -> MapDocument {
     }
     let n = points.len() - 1;
     d.roads[0] = Road {
+        snow_retention_percent: 100,
         id: "road".into(),
         from: "a".into(),
         to: "b".into(),

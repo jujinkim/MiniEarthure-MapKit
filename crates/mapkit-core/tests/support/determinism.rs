@@ -164,6 +164,7 @@ pub fn fixtures() -> Vec<Fixture> {
             },
         ];
         d.roads = vec![Road {
+            snow_retention_percent: 100,
             id: "oblique".into(),
             from: "a".into(),
             to: "b".into(),

@@ -1202,6 +1202,13 @@
           "format": "uint32",
           "minimum": 0.0
         },
+        "snow_retention_percent": {
+          "description": "Percentage of weather snow retained on this road, including its paint.",
+          "type": "integer",
+          "format": "uint8",
+          "maximum": 100.0,
+          "minimum": 0.0
+        },
         "surfaces": {
           "type": "array",
           "items": {

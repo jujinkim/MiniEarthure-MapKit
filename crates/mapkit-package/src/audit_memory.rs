@@ -188,6 +188,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     retained.vector(roads)?;
     for Road {
+        snow_retention_percent: _,
         id,
         from,
         to,
@@ -597,6 +598,7 @@ mod tests {
         d.roads = vector(
             5,
             Road {
+                snow_retention_percent: 100,
                 id: string(107),
                 from: string(109),
                 to: string(113),

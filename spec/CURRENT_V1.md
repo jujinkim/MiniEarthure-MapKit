@@ -131,3 +131,5 @@ solid collision triangles. Cost, archive audit, regional closure and content has
 include water; memory and cell caps are unchanged. Godot queries deduplicate IDs
 across atomic cell records. Rendering uses the same outlines/heights and the
 existing compatibility renderer, with depth tint, ripples and shoreline foam.
+
+Road snow retention and generated face traits follow [ROAD_CONTACT](../docs/ROAD_CONTACT.md).

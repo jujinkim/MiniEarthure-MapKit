@@ -373,9 +373,9 @@ static func surface_material(key: String, presentation: Dictionary, shader: Shad
 	material.shader = shader
 	var style: Dictionary = presentation.get("road_styles", {}).get(key, {})
 	var concrete := key == "concrete" or int(style.get("surface", 0)) == 1
-	material.set_shader_parameter("base_color", COLORS["concrete" if concrete else "asphalt"])
+	material.set_shader_parameter("base_color", COLORS[DATA.SURFACES[int(style.get("surface", 1 if concrete else 0))]])
 	material.set_shader_parameter("paving", concrete)
-	material.set_shader_parameter("marked", not style.is_empty())
+	material.set_shader_parameter("marked", bool(style.get("marked", false)))
 	for name: String in style:
 		if name != "surface": material.set_shader_parameter(name, style[name])
 	return material

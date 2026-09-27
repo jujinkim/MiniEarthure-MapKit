@@ -23,6 +23,9 @@ pub const GENERATED_VERSION: u32 = 1;
 pub const SCENE_UNITS_VERSION: u32 = 1;
 pub const WORLD_SCALE: f64 = 1.0;
 pub const DEFAULT_CELL_CM: i64 = 51_200;
+pub fn full_snow_retention() -> u8 { 100 }
+fn is_full_snow_retention(value: &u8) -> bool { *value == 100 }
+
 pub type Point = [i64; 2];
 pub type Vertex = [i64; 3]; // x, height, local y, centimetres
 pub type Result<T> = std::result::Result<T, Error>;
@@ -120,6 +123,10 @@ pub struct RoadNode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Road {
+    /// Percentage of weather snow retained on this road, including its paint.
+    #[serde(default = "full_snow_retention", skip_serializing_if = "is_full_snow_retention")]
+    #[schemars(range(max = 100))]
+    pub snow_retention_percent: u8,
     pub id: String,
     pub from: String,
     pub to: String,
@@ -574,6 +581,7 @@ impl MapDocument {
             }
         }
         for r in &self.roads {
+            if r.snow_retention_percent > 100 { return Err(error("E_ROAD", "snow retention must be 0..100 percent")); }
             if r.points.len() < 2
                 || r.points.len() > 65536
                 || r.widths_cm.len() != r.points.len() - 1
@@ -766,6 +774,10 @@ impl GameReleaseIdentity {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct Triangle {
+    /// 0: authored obstacle, 1: natural terrain/painted ground,
+    /// 2: terrain-following road, 3: structural road. Assigned by generation.
+    pub contact_class: u8,
+    pub snow_retention_percent: u8,
     pub vertices: [Vertex; 3],
     pub surface: Surface,
     pub object_id: String,

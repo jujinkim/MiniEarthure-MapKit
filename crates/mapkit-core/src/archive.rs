@@ -19,7 +19,7 @@ pub fn archive_limit(cost: &GenerationCost) -> u64 {
         .saturating_add(cost.water_bytes)
         .saturating_add(cost.gimmick_bytes)
         .saturating_add(cost.asset_convexes.saturating_mul(960 + id))
-        .saturating_add(cost.triangles.saturating_mul(78 + id))
+        .saturating_add(cost.triangles.saturating_mul(80 + id))
         .saturating_add(cost.objects.saturating_mul(33 + 2 * id))
         .saturating_add(cost.building_prisms.saturating_mul(92 + 3 * id))
 }
@@ -57,7 +57,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
         + chunk
             .triangles
             .iter()
-            .map(|t| 78 + t.object_id.len())
+            .map(|t| 80 + t.object_id.len())
             .sum::<usize>()
         + chunk
             .objects
@@ -97,6 +97,8 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
             Surface::Grass => 4,
         });
         out.push(u8::from(t.spawnable));
+        out.push(t.contact_class);
+        out.push(t.snow_retention_percent);
         string(&mut out, &t.object_id);
     }
     for o in &chunk.objects {
@@ -196,7 +198,7 @@ pub fn decode_archive(
     // before allocating. A tiny corrupt file cannot request a huge vector.
     if triangles as u64 > cost.triangles
         || objects as u64 > cost.objects
-        || triangles as u64 * 79 + objects as u64 * 35 > (bytes.len() - HEADER) as u64
+        || triangles as u64 * 81 + objects as u64 * 35 > (bytes.len() - HEADER) as u64
     {
         return Err(invalid());
     }
@@ -227,7 +229,11 @@ pub fn decode_archive(
             1 => true,
             _ => return Err(invalid()),
         };
+        let contact_class = r.take(1)?[0];
+        let snow_retention_percent = r.take(1)?[0];
+        if contact_class > 3 || snow_retention_percent > 100 { return Err(invalid()); }
         chunk.triangles.push(Triangle {
+            contact_class, snow_retention_percent,
             vertices,
             surface,
             spawnable,
@@ -345,6 +351,7 @@ mod tests {
             format_version: GENERATED_VERSION,
             cell: Cell { x: -2, y: 3 },
             triangles: vec![Triangle {
+                contact_class: 0, snow_retention_percent: 100,
                 vertices: [[-1, 0, 0], [1, 0, 0], [0, 1, 1]],
                 surface: Surface::Gravel,
                 object_id: "도로".into(),

@@ -3,6 +3,7 @@ render_mode cull_disabled;
 #include "wet_surface.gdshaderinc"
 #include "material_detail.gdshaderinc"
 uniform vec4 base_color : source_color = vec4(0.19,0.20,0.23,1.0);
+uniform float snow_retention_percent : hint_range(0.0,100.0) = 100.0;
 uniform bool environment_enabled = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform bool paving = false;
@@ -103,6 +104,7 @@ void fragment() {
         color=mix(color,vec3(0.93,0.65,0.12),yellow);
     }
     vec2 weather = environment_enabled ? texelFetch(environment_data,ivec2(0,0),0).xy : vec2(0.0);
+    weather.y *= snow_retention_percent * 0.01;
     color *= 1.0-weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
     ALBEDO=color;
