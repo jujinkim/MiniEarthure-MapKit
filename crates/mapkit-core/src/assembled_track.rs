@@ -4,8 +4,8 @@ use crate::gimmick::{Effect, Gimmick, Motion, MotionKind};
 use crate::special_track::{SpecialTrack, TrackKind, TubeFrame};
 use crate::*;
 
-pub const WIDTH: i64 = 240;
-pub const WALL: i64 = 120;
+pub const WIDTH: i64 = 400;
+pub const WALL: i64 = 60;
 pub const TILE_CM: i64 = 800;
 const SLOT: i64 = TILE_CM * 4;
 const LOOP_RADIUS: u32 = 350;
@@ -93,6 +93,9 @@ fn basic_ids() -> &'static [&'static str] {
         "slope",
         "zigzag",
         "chicane",
+        "straight_narrow",
+        "chicane_narrow",
+        "zigzag_narrow",
     ]
 }
 fn short_piece(id: &str) -> bool {
@@ -130,6 +133,8 @@ pub struct Piece {
     pub connection_width_cm: u32,
     pub quarter_turns: u8,
     pub path: Vec<Sample>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternate_path: Vec<Sample>,
     pub reserved_min_cm: Vertex,
     pub reserved_max_cm: Vertex,
     pub reference_msec: u32,
@@ -156,12 +161,29 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "slope",
         "zigzag",
         "chicane",
+        "straight_narrow",
+        "chicane_narrow",
+        "zigzag_narrow",
         "cylinder",
         "cylinder_curve",
         "cylinder_curve_left",
         "cylinder_uturn",
         "cylinder_uturn_left",
         "cylinder_s_rise",
+        "cylinder_wide",
+        "cylinder_wide_curve",
+        "cylinder_wide_curve_left",
+        "cylinder_wide_uturn",
+        "cylinder_wide_uturn_left",
+        "cylinder_wide_s_rise",
+        "banked_chicane",
+        "jump_barrier",
+        "overpass",
+        "roller_waves",
+        "offset_jump",
+        "slalom_gates",
+        "swing_gates",
+        "piston_gates",
         "loop",
         "spiral_up",
         "spiral_down",
@@ -187,7 +209,7 @@ pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
         "basic_piece_ids":basic_ids(),
-        "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise"]},
+        "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
         "catalogue_fingerprint":catalogue_fingerprint(),
@@ -353,7 +375,14 @@ fn spiral_rise(t: f64) -> f64 {
         t - 0.0625
     }) / 0.875
 }
-fn build_local_piece(id: &str) -> Piece {
+fn build_local_piece(original_id: &str) -> Piece {
+    let narrow = original_id.ends_with("_narrow");
+    let id = original_id.trim_end_matches("_narrow");
+    let tube_radius = if id.starts_with("cylinder_wide") || id == "banked_chicane" {
+        200
+    } else {
+        100
+    };
     let mut p: Vec<(Vertex, Vertex, String)> = vec![];
     let mut minimum = 0;
     match id {
@@ -382,7 +411,7 @@ fn build_local_piece(id: &str) -> Piece {
                 bend(&mut p, 300, 100, 1, sign, "drift");
             }
         }
-        id if id.starts_with("cylinder") => {
+        id if id.starts_with("cylinder") || id == "banked_chicane" => {
             let sign = if id.ends_with("_left") { -1 } else { 1 };
             let uturn = id.contains("uturn");
             let curve = id.contains("curve");
@@ -412,11 +441,27 @@ fn build_local_piece(id: &str) -> Piece {
                     p[i].2 = "drive".into();
                 }
             }
-            if id == "cylinder_s_rise" {
+            let mut station = 0.0;
+            let mut stations = vec![0.0];
+            for w in p.windows(2) {
+                station += distance(w[0].0, w[1].0) as f64;
+                stations.push(station);
+            }
+            for (sample, travel) in p.iter_mut().zip(stations) {
+                let edge = travel.min(station - travel);
+                if edge < 800.0 {
+                    sample.0[1] -=
+                        round(12.0 * libm::sin(std::f64::consts::PI * edge / 800.0).powi(2));
+                }
+                if id == "banked_chicane" && sample.2 == "cylinder" {
+                    sample.2 = "halfpipe".into();
+                }
+            }
+            if id.ends_with("_s_rise") {
                 // Smooth 0.8 m hill, with level entry/exit. Tangents define its frame.
                 for v in &mut p {
                     let t = v.0[2] as f64 / SLOT as f64;
-                    v.0[1] = round(80.0 * libm::sin(std::f64::consts::PI * t).powi(2));
+                    v.0[1] += round(80.0 * libm::sin(std::f64::consts::PI * t).powi(2));
                 }
             }
         }
@@ -490,24 +535,64 @@ fn build_local_piece(id: &str) -> Piece {
             line(&mut p, [0, 0, 2800], [0, 0, SLOT], "drive");
         }
         "zigzag" => {
-            for i in 0..=96 {
-                let t = i as f64 / 96.0;
+            // Two mirrored chicanes: eight compact 90-degree turns across a
+            // 16 m lateral span. A wider lane must not turn this into a slalom
+            // that can be driven straight through.
+            for sign in [-1, 1, 1, -1, 1, -1, -1, 1] {
+                bend(&mut p, 300, 100, 1, sign, "drift");
+            }
+        }
+        "overpass" => {
+            line(&mut p, [0, 0, 0], [0, 0, 400], "drift");
+            for sign in [-1, 1, 1, -1, 1, -1, -1, 1] {
+                bend(&mut p, 300, 0, 1, sign, "drift");
+            }
+            line(&mut p, [0, 0, 2800], [0, 0, SLOT], "drift");
+        }
+        "roller_waves" => {
+            for i in 0..=128 {
+                let t = i as f64 / 128.0;
+                p.push((
+                    [
+                        0,
+                        round(80.0 * libm::sin(t * std::f64::consts::PI * 4.0).powi(2)),
+                        round(t * SLOT as f64),
+                    ],
+                    [0, 1_000_000, 0],
+                    "roller".into(),
+                ));
+            }
+        }
+        "slalom_gates" | "swing_gates" | "piston_gates" => {
+            for i in 0..=128 {
+                let t = i as f64 / 128.0;
                 p.push((
                     [
                         round(
-                            450.0
-                                * libm::sin(t * std::f64::consts::TAU)
+                            -105.0
+                                * libm::sin(
+                                    t * std::f64::consts::PI * 4.0 - std::f64::consts::FRAC_PI_2,
+                                )
                                 * libm::sin(t * std::f64::consts::PI).powi(2),
                         ),
                         0,
                         round(t * SLOT as f64),
                     ],
                     [0, 1_000_000, 0],
-                    "drift".into(),
+                    "drive".into(),
                 ));
             }
         }
-        "jump" | "air_ring" => {
+        "jump_barrier" => {
+            for i in 0..=64 {
+                p.push((
+                    [0, 0, i * 50],
+                    [0, 1_000_000, 0],
+                    if i == 23 { "jump_trigger" } else { "hurdle" }.into(),
+                ));
+            }
+        }
+        "jump" | "air_ring" | "offset_jump" => {
             minimum = 1500;
             line(&mut p, [0, 0, 0], [0, 0, 1000], "drive");
             // Jump-height pad supplies the vertical impulse; a real open gap follows.
@@ -526,6 +611,18 @@ fn build_local_piece(id: &str) -> Piece {
             line(&mut p, [0, 0, 2200], [0, 0, SLOT], "drive");
         }
         _ => line(&mut p, [0, 0, 0], [0, 0, SLOT], "drive"),
+    }
+    if id == "offset_jump" {
+        for sample in &mut p {
+            let z = sample.0[2] as f64;
+            let t = if z < 2200.0 {
+                (z - 900.0) / 1300.0
+            } else {
+                (3200.0 - z) / 1000.0
+            };
+            let t = t.clamp(0.0, 1.0);
+            sample.0[0] = -round(150.0 * t * t * (3.0 - 2.0 * t));
+        }
     }
     let small = ["straight", "slope"].contains(&id);
     if small {
@@ -567,11 +664,14 @@ fn build_local_piece(id: &str) -> Piece {
             } else if i + 1 == p.len() {
                 if id.starts_with("hairpin") || id.contains("uturn") {
                     [0, 0, -1_000_000]
-                } else if id == "curve" || id == "sharp_curve" || id == "cylinder_curve" {
+                } else if id == "curve"
+                    || id == "sharp_curve"
+                    || (id.contains("curve") && !id.ends_with("_left"))
+                {
                     [1_000_000, 0, 0]
                 } else if id == "curve_left"
                     || id == "sharp_curve_left"
-                    || id == "cylinder_curve_left"
+                    || (id.contains("curve") && id.ends_with("_left"))
                 {
                     [-1_000_000, 0, 0]
                 } else {
@@ -586,11 +686,25 @@ fn build_local_piece(id: &str) -> Piece {
                 forward,
                 safe: mode == "drive"
                     && !id.starts_with("cylinder")
+                    && ![
+                        "banked_chicane",
+                        "overpass",
+                        "jump_barrier",
+                        "roller_waves",
+                        "offset_jump",
+                        "swing_gates",
+                        "piston_gates",
+                    ]
+                    .contains(&id)
                     && !["loop", "jump", "air_ring", "spiral_up", "spiral_down"].contains(&id),
                 min_speed_cmps: minimum,
-                tube_radius_cm: if mode == "cylinder" { 100 } else { 0 },
-                lateral_cm: if mode == "cylinder" {
-                    100
+                tube_radius_cm: if ["cylinder", "halfpipe"].contains(&mode.as_str()) {
+                    tube_radius
+                } else {
+                    0
+                },
+                lateral_cm: if ["cylinder", "halfpipe"].contains(&mode.as_str()) {
+                    tube_radius
                 } else if id == "loop" {
                     if mode == "loop" {
                         LOOP_WIDTH / 2
@@ -621,16 +735,20 @@ fn build_local_piece(id: &str) -> Piece {
             }
         })
         .collect::<Vec<_>>();
-    if id.starts_with("cylinder") {
+    if id.starts_with("cylinder") || id == "banked_chicane" {
         let indices: Vec<_> = path
             .iter()
             .enumerate()
-            .filter(|(_, s)| s.mode == "cylinder")
+            .filter(|(_, s)| ["cylinder", "halfpipe"].contains(&s.mode.as_str()))
             .map(|(i, _)| i)
             .collect();
         let track = SpecialTrack {
-            kind: TrackKind::SweptCylinder,
-            radius_cm: 100,
+            kind: if id == "banked_chicane" {
+                TrackKind::SweptHalfPipe
+            } else {
+                TrackKind::SweptCylinder
+            },
+            radius_cm: tube_radius,
             width_cm: WIDTH as u32,
             length_cm: 1600,
             centerline: indices
@@ -645,15 +763,100 @@ fn build_local_piece(id: &str) -> Piece {
         for (j, &i) in indices.iter().enumerate() {
             path[i].tube_radius_cm = round(track.swept_radius(j)) as u32;
         }
+        // Low funnel rails follow the same 4m approach/exit surface as admission.
+        // The floor is flush and the ring lip dips 12cm instead of forming a sill.
+        if let (Some(&first), Some(&last)) = (indices.first(), indices.last()) {
+            for i in 0..path.len() {
+                if path[i].mode != "drive" {
+                    continue;
+                }
+                let mouth = if i < first { first } else { last };
+                let edge = distance(path[i].position_cm, path[mouth].position_cm) as f64;
+                let t = (edge / 400.0).clamp(0.0, 1.0);
+                let t = t * t * (3.0 - 2.0 * t);
+                path[i].lateral_cm =
+                    round(f64::from(tube_radius) * 0.92 * (1.0 - t) + WIDTH as f64 / 2.0 * t)
+                        as u32;
+            }
+        }
     }
+    if narrow {
+        let total = path
+            .windows(2)
+            .map(|w| distance(w[0].position_cm, w[1].position_cm))
+            .sum::<u64>() as f64;
+        let mut station = 0.0;
+        for i in 0..path.len() {
+            if i > 0 {
+                station += distance(path[i - 1].position_cm, path[i].position_cm) as f64;
+            }
+            let t = (station.min(total - station) / 300.0).clamp(0.0, 1.0);
+            path[i].lateral_cm = 200 - round(100.0 * t * t * (3.0 - 2.0 * t)) as u32;
+        }
+    }
+    let alternate_path = if id == "overpass" {
+        (0..=64)
+            .map(|i| {
+                let z = i * 50;
+                let edge = z.min(3200 - z) as f64;
+                let direction = if z < 1600 { 1.0 } else { -1.0 };
+                let t = ((edge - 400.0) / 600.0).clamp(0.0, 1.0);
+                let lateral = (edge / 400.0).clamp(0.0, 1.0);
+                // Separated ramps lead to a straight diagonal deck, crossing the
+                // ground chicane at its centre with 2m vertical clearance.
+                let (x, dx) = if (800..=2400).contains(&z) {
+                    let u = (z - 800) as f64 / 1600.0;
+                    (320.0 - 640.0 * spiral_rise(u), -0.4 * spiral_pitch(u))
+                } else {
+                    (
+                        320.0 * lateral * lateral * (3.0 - 2.0 * lateral) * direction,
+                        if lateral < 1.0 {
+                            320.0 * 6.0 * lateral * (1.0 - lateral) / 400.0
+                        } else {
+                            0.0
+                        },
+                    )
+                };
+                let dy = if t > 0.0 && t < 1.0 {
+                    200.0 * 6.0 * t * (1.0 - t) / 600.0 * direction
+                } else {
+                    0.0
+                };
+                Sample {
+                    position_cm: [round(x), round(200.0 * t * t * (3.0 - 2.0 * t)), z],
+                    normal: unit([-dx * dy, dx * dx + 1.0, -dy]),
+                    forward: unit([dx, dy, 1.0]),
+                    mode: "bridge".into(),
+                    safe: false,
+                    min_speed_cmps: 0,
+                    lateral_cm: 100,
+                    tube_radius_cm: 0,
+                    below_cm: 35,
+                    above_cm: 300,
+                }
+            })
+            .collect()
+    } else {
+        vec![]
+    };
     let lo = std::array::from_fn(|a| {
-        path.iter().map(|s| s.position_cm[a]).min().unwrap() - if a == 1 { 200 } else { 320 }
+        path.iter()
+            .chain(&alternate_path)
+            .map(|s| s.position_cm[a])
+            .min()
+            .unwrap()
+            - if a == 1 { 200 } else { 320 }
     });
     let hi = std::array::from_fn(|a| {
-        path.iter().map(|s| s.position_cm[a]).max().unwrap() + if a == 1 { 1600 } else { 320 }
+        path.iter()
+            .chain(&alternate_path)
+            .map(|s| s.position_cm[a])
+            .max()
+            .unwrap()
+            + if a == 1 { 1600 } else { 320 }
     });
     Piece {
-        id: id.into(),
+        id: original_id.into(),
         cube_span: if id == "chicane" {
             2
         } else if small {
@@ -667,7 +870,10 @@ fn build_local_piece(id: &str) -> Piece {
             minimum,
             if id.starts_with("cylinder") {
                 1200
-            } else if id.contains("curve") || id.starts_with("hairpin") || id == "chicane" {
+            } else if id.contains("curve")
+                || id.starts_with("hairpin")
+                || ["chicane", "zigzag", "overpass"].contains(&id)
+            {
                 650
             } else {
                 3000
@@ -677,6 +883,7 @@ fn build_local_piece(id: &str) -> Piece {
         origin_cm: [0; 3],
         quarter_turns: 0,
         path,
+        alternate_path,
         reserved_min_cm: lo,
         reserved_max_cm: hi,
         reference_msec: (len * 1000 / SPEED as u64) as u32,
@@ -686,7 +893,7 @@ fn placed(id: &str, origin: Vertex, q: u8) -> Piece {
     let mut p = local_piece(id);
     p.origin_cm = origin;
     p.quarter_turns = q;
-    for s in &mut p.path {
+    for s in p.path.iter_mut().chain(&mut p.alternate_path) {
         s.position_cm = add(rotate(s.position_cm, q), origin);
         s.normal = rotate(s.normal, q);
         s.forward = rotate(s.forward, q);
@@ -816,6 +1023,44 @@ fn skeleton(settings: &Settings, runs: &[(usize, i8)]) -> Assembly {
         .count();
     let mut used = 0;
     let push = |id: &str, pieces: &mut Vec<Piece>, origin: &mut Vertex, heading: u8| {
+        let index = pieces.len();
+        let id = if index >= 3
+            && ((index as u64 + settings.seed) % 4 == 0
+                || !pieces.iter().any(|p| p.id.ends_with("_narrow")))
+        {
+            match id {
+                "straight" => "straight_narrow",
+                "chicane" => "chicane_narrow",
+                "zigzag" => "zigzag_narrow",
+                _ => id,
+            }
+        } else {
+            id
+        };
+        let wide = settings
+            .gimmicks
+            .iter()
+            .any(|s| s.starts_with("cylinder_wide"))
+            || (pieces
+                .iter()
+                .filter(|p| p.id.starts_with("cylinder"))
+                .count() as u64
+                + settings.seed)
+                % 2
+                == 0;
+        let id = if wide {
+            match id {
+                "cylinder" => "cylinder_wide",
+                "cylinder_curve" => "cylinder_wide_curve",
+                "cylinder_curve_left" => "cylinder_wide_curve_left",
+                "cylinder_uturn" => "cylinder_wide_uturn",
+                "cylinder_uturn_left" => "cylinder_wide_uturn_left",
+                "cylinder_s_rise" => "cylinder_wide_s_rise",
+                _ => id,
+            }
+        } else {
+            id
+        };
         let p = placed(id, *origin, heading);
         *origin = p.path.last().unwrap().position_cm;
         pieces.push(p);
@@ -914,8 +1159,13 @@ fn skeleton(settings: &Settings, runs: &[(usize, i8)]) -> Assembly {
             }
         }
         while remaining >= 2 {
-            push("chicane", &mut pieces, &mut origin, heading);
-            remaining -= 2;
+            if remaining >= 4 && settings.difficulty != "easy" && next(&mut rng) % 2 == 0 {
+                push("zigzag", &mut pieces, &mut origin, heading);
+                remaining -= 4;
+            } else {
+                push("chicane", &mut pieces, &mut origin, heading);
+                remaining -= 2;
+            }
         }
         if remaining == 1 {
             push("straight", &mut pieces, &mut origin, heading);
@@ -1027,7 +1277,12 @@ impl Assembly {
         if self.settings.normalized()? != self.settings
             || self.pieces.is_empty()
             || self.pieces.len() > MAX_PIECES
-            || self.pieces.iter().map(|p| p.path.len()).sum::<usize>() > MAX_SAMPLES
+            || self
+                .pieces
+                .iter()
+                .map(|p| p.path.len() + p.alternate_path.len())
+                .sum::<usize>()
+                > MAX_SAMPLES
             || self.generator_fingerprint != fingerprint()
             || self.catalogue_fingerprint != catalogue_fingerprint()
         {
@@ -1094,14 +1349,14 @@ impl Assembly {
                     p.reserved_min_cm[a] < other.reserved_max_cm[a]
                         && other.reserved_min_cm[a] < p.reserved_max_cm[a]
                 }) {
-                    // Samples are <=50cm apart; the 3m exclusion includes lane,
+                    // The width-dependent exclusion includes lane,
                     // shell and discretization margin without filling a curved bay.
-                    if p.path.iter().any(|s| {
-                        other.path.iter().any(|t| {
+                    if p.path.iter().chain(&p.alternate_path).any(|s| {
+                        other.path.iter().chain(&other.alternate_path).any(|t| {
                             (s.position_cm[1] - t.position_cm[1]).abs() < 250
                                 && (s.position_cm[0] - t.position_cm[0]).pow(2)
                                     + (s.position_cm[2] - t.position_cm[2]).pow(2)
-                                    < 300i64.pow(2)
+                                    < (WIDTH + 60).pow(2)
                         })
                     }) {
                         return Err(fail());
@@ -1162,7 +1417,14 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
         let specs: Vec<(&str, i64)> = match p.id.as_str() {
             "loop" => vec![("acceleration_panel", 350), ("loop", 1000)],
             id if id.starts_with("cylinder") => vec![("cylinder", 0)],
-            "jump" => vec![("acceleration_panel", 350), ("jump", 950)],
+            "banked_chicane" => vec![("halfpipe", 0)],
+            "jump_barrier" => vec![("barrier", 1400)],
+            "jump" | "offset_jump" => vec![("acceleration_panel", 350), ("jump", 950)],
+            "slalom_gates" | "swing_gates" | "piston_gates" => vec![
+                (p.id.as_str(), 800),
+                (p.id.as_str(), 1600),
+                (p.id.as_str(), 2400),
+            ],
             "air_ring" => vec![
                 ("acceleration_panel", 350),
                 ("jump", 950),
@@ -1208,14 +1470,22 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                 safety_max_cm: [0; 3],
             };
             match *id {
-                "loop" | "cylinder" => {
+                "loop" | "cylinder" | "halfpipe" => {
                     g.track = Some(SpecialTrack {
                         kind: if *id == "loop" {
                             TrackKind::Loop
+                        } else if *id == "halfpipe" {
+                            TrackKind::SweptHalfPipe
                         } else {
                             TrackKind::SweptCylinder
                         },
-                        radius_cm: if *id == "loop" { LOOP_RADIUS } else { 100 },
+                        radius_cm: if *id == "loop" {
+                            LOOP_RADIUS
+                        } else if p.id.starts_with("cylinder_wide") || *id == "halfpipe" {
+                            200
+                        } else {
+                            100
+                        },
                         width_cm: if *id == "loop" {
                             LOOP_WIDTH
                         } else {
@@ -1228,7 +1498,7 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                             local_piece(&p.id)
                                 .path
                                 .iter()
-                                .filter(|s| s.mode == "cylinder")
+                                .filter(|s| ["cylinder", "halfpipe"].contains(&s.mode.as_str()))
                                 .map(|s| TubeFrame {
                                     floor_cm: s.position_cm,
                                     normal: s.normal,
@@ -1237,6 +1507,31 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                                 .collect()
                         },
                     })
+                }
+                "slalom_gates" | "swing_gates" | "piston_gates" => {
+                    let side = if n % 2 == 0 { 1 } else { -1 };
+                    g.position = add(g.position, rotate([side * 110, 0, 0], p.quarter_turns));
+                    g.parts.push(box_part([0, 30, 0], [140, 60, 35]));
+                    g.color = if *id == "piston_gates" {
+                        [160, 85, 235, 255]
+                    } else {
+                        [245, 168, 35, 255]
+                    };
+                    if *id == "swing_gates" {
+                        g.motion.kind = MotionKind::Rotate;
+                        g.motion.period_ms = 3000;
+                        g.motion.phase_ms = n as u32 * 700;
+                    }
+                    if *id == "piston_gates" {
+                        g.motion.kind = MotionKind::Translate;
+                        g.motion.delta_cm = [0, 180, 0];
+                        g.motion.period_ms = 2400;
+                        g.motion.phase_ms = n as u32 * 700;
+                    }
+                }
+                "barrier" => {
+                    g.parts.push(box_part([0, 18, 0], [WIDTH, 36, 25]));
+                    g.color = [245, 168, 35, 255];
                 }
                 "fixed_obstacle" | "moving_obstacle" | "rotating_obstacle" => {
                     // Keep an open avoidance lane on the narrower track.
@@ -1375,99 +1670,123 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
 /// Faces and occupancy share this geometry; background never enters this path.
 pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Result<()> {
     for (index, p) in a.pieces.iter().enumerate() {
-        for w in p.path.windows(2) {
-            cancellation::checkpoint()?;
-            let special = w.iter().any(|s| s.mode == "flight")
-                || w.iter()
-                    .all(|s| ["loop", "cylinder"].contains(&s.mode.as_str()));
-            let edges = |s: &Sample| {
-                let n = s.normal.map(|v| v as f64 / 1e6);
-                let f = s.forward.map(|v| v as f64 / 1e6);
-                let right = if s.mode == "spiral" {
-                    let center = add(p.origin_cm, rotate([0, 0, 1600], p.quarter_turns));
-                    unit([
-                        (center[0] - s.position_cm[0]) as f64,
-                        0.0,
-                        (center[2] - s.position_cm[2]) as f64,
-                    ])
-                } else if s.mode == "loop" {
-                    rotate([1_000_000, 0, 0], p.quarter_turns)
-                } else {
-                    unit([
-                        n[1] * f[2] - n[2] * f[1],
-                        n[2] * f[0] - n[0] * f[2],
-                        n[0] * f[1] - n[1] * f[0],
-                    ])
-                };
-                [-1, 1].map(|side| {
-                    std::array::from_fn(|j| {
-                        s.position_cm[j]
-                            + right[j] * i64::from(s.lateral_cm.min(WIDTH as u32 / 2)) * side
-                                / 1_000_000
+        for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
+            for w in path.windows(2) {
+                cancellation::checkpoint()?;
+                let special = w.iter().any(|s| s.mode == "flight")
+                    || w.iter()
+                        .all(|s| ["loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()));
+                let edges = |s: &Sample| {
+                    let n = s.normal.map(|v| v as f64 / 1e6);
+                    let f = s.forward.map(|v| v as f64 / 1e6);
+                    let right = if s.mode == "spiral" {
+                        let center = add(p.origin_cm, rotate([0, 0, 1600], p.quarter_turns));
+                        unit([
+                            (center[0] - s.position_cm[0]) as f64,
+                            0.0,
+                            (center[2] - s.position_cm[2]) as f64,
+                        ])
+                    } else if s.mode == "loop" {
+                        rotate([1_000_000, 0, 0], p.quarter_turns)
+                    } else {
+                        unit([
+                            n[1] * f[2] - n[2] * f[1],
+                            n[2] * f[0] - n[0] * f[2],
+                            n[0] * f[1] - n[1] * f[0],
+                        ])
+                    };
+                    [-1, 1].map(|side| {
+                        std::array::from_fn(|j| {
+                            s.position_cm[j]
+                                + right[j] * i64::from(s.lateral_cm.min(WIDTH as u32 / 2)) * side
+                                    / 1_000_000
+                        })
                     })
-                })
-            };
-            let [al, ar] = edges(&w[0]);
-            let [bl, br] = edges(&w[1]);
-            let id = format!("assembled-road-{index}");
-            if !special {
-                // A wide twisted helix quad creates a diagonal ridge. Subdivide
-                // across the lane so wheel contacts follow the swept surface.
-                let strips = if p.id.starts_with("spiral") { 8 } else { 1 };
-                let mix = |a: Vertex, b: Vertex, n: i64| {
-                    std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
                 };
-                for strip in 0..strips {
+                let [al, ar] = edges(&w[0]);
+                let [bl, br] = edges(&w[1]);
+                let id = format!(
+                    "assembled-road-{index}{}",
+                    if branch { "-bridge" } else { "" }
+                );
+                if !special {
+                    // A wide twisted helix quad creates a diagonal ridge. Subdivide
+                    // across the lane so wheel contacts follow the swept surface.
+                    let strips = if p.id.starts_with("spiral") { 8 } else { 1 };
+                    let mix = |a: Vertex, b: Vertex, n: i64| {
+                        std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
+                    };
+                    for strip in 0..strips {
+                        b.quad(
+                            [
+                                mix(al, ar, strip),
+                                mix(bl, br, strip),
+                                mix(bl, br, strip + 1),
+                                mix(al, ar, strip + 1),
+                            ],
+                            Surface::Asphalt,
+                            &id,
+                            true,
+                        )?;
+                    }
+                    let min = std::array::from_fn(|j| {
+                        [al, ar, bl, br].iter().map(|v| v[j]).min().unwrap()
+                            - if j == 1 { 10 } else { 0 }
+                    });
+                    let max = std::array::from_fn(|j| {
+                        [al, ar, bl, br].iter().map(|v| v[j]).max().unwrap()
+                    });
+                    b.solid(&id, SolidShape::Box { min, max })?;
+                }
+                if w.iter()
+                    .any(|s| ["cylinder", "halfpipe", "flight"].contains(&s.mode.as_str()))
+                {
+                    continue;
+                }
+                let station = |s: &Sample| {
+                    let f = rotate([0, 0, 1], p.quarter_turns);
+                    (0..3)
+                        .map(|j| (s.position_cm[j] - p.origin_cm[j]) * f[j])
+                        .sum::<i64>()
+                };
+                if p.id == "overpass" && (station(&w[0]) < 400 || station(&w[1]) > 2800) {
+                    continue;
+                }
+                let wall = if branch {
+                    30
+                } else if p.id.starts_with("cylinder") || p.id == "banked_chicane" {
+                    25 + 30 * station(&w[0]).clamp(0, 400) / 400
+                } else if w[0].mode == "loop" {
+                    120
+                } else {
+                    WALL
+                };
+                for (a0, b0) in [(al, bl), (ar, br)] {
+                    let a1 = std::array::from_fn(|j| a0[j] + w[0].normal[j] * wall / 1_000_000);
+                    let b1 = std::array::from_fn(|j| b0[j] + w[1].normal[j] * wall / 1_000_000);
                     b.quad(
-                        [
-                            mix(al, ar, strip),
-                            mix(bl, br, strip),
-                            mix(bl, br, strip + 1),
-                            mix(al, ar, strip + 1),
-                        ],
-                        Surface::Asphalt,
-                        &id,
-                        true,
+                        [a0, a1, b1, b0],
+                        Surface::Concrete,
+                        &format!("assembled-wall-{index}"),
+                        false,
+                    )?;
+                    b.quad(
+                        [b0, b1, a1, a0],
+                        Surface::Concrete,
+                        &format!("assembled-wall-{index}"),
+                        false,
+                    )?;
+                    let min = std::array::from_fn(|j| {
+                        [a0, b0, a1, b1].iter().map(|v| v[j]).min().unwrap() - 2
+                    });
+                    let max = std::array::from_fn(|j| {
+                        [a0, b0, a1, b1].iter().map(|v| v[j]).max().unwrap() + 2
+                    });
+                    b.solid(
+                        &format!("assembled-wall-{index}"),
+                        SolidShape::Box { min, max },
                     )?;
                 }
-                let min = std::array::from_fn(|j| {
-                    [al, ar, bl, br].iter().map(|v| v[j]).min().unwrap()
-                        - if j == 1 { 10 } else { 0 }
-                });
-                let max =
-                    std::array::from_fn(|j| [al, ar, bl, br].iter().map(|v| v[j]).max().unwrap());
-                b.solid(&id, SolidShape::Box { min, max })?;
-            }
-            if w.iter()
-                .any(|s| ["cylinder", "flight"].contains(&s.mode.as_str()))
-            {
-                continue;
-            }
-            for (a0, b0) in [(al, bl), (ar, br)] {
-                let a1 = std::array::from_fn(|j| a0[j] + w[0].normal[j] * WALL / 1_000_000);
-                let b1 = std::array::from_fn(|j| b0[j] + w[1].normal[j] * WALL / 1_000_000);
-                b.quad(
-                    [a0, a1, b1, b0],
-                    Surface::Concrete,
-                    &format!("assembled-wall-{index}"),
-                    false,
-                )?;
-                b.quad(
-                    [b0, b1, a1, a0],
-                    Surface::Concrete,
-                    &format!("assembled-wall-{index}"),
-                    false,
-                )?;
-                let min = std::array::from_fn(|j| {
-                    [a0, b0, a1, b1].iter().map(|v| v[j]).min().unwrap() - 2
-                });
-                let max = std::array::from_fn(|j| {
-                    [a0, b0, a1, b1].iter().map(|v| v[j]).max().unwrap() + 2
-                });
-                b.solid(
-                    &format!("assembled-wall-{index}"),
-                    SolidShape::Box { min, max },
-                )?;
             }
         }
     }
@@ -1483,7 +1802,7 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
                     && p.reserved_max_cm[j * 2] >= bounds.min[j]
             })
         })
-        .map(|p| p.path.len() as u64 - 1)
+        .map(|p| p.path.len() as u64 - 1 + p.alternate_path.len().saturating_sub(1) as u64)
         .sum::<u64>();
     (segments * 100, segments * 3)
 }

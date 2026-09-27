@@ -137,16 +137,22 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             }
         }
     }
-    if let Some(a)=&document.assembled_track {
+    if let Some(a) = &document.assembled_track {
         retained.string(&a.settings.difficulty)?;
         retained.vector(&a.settings.gimmicks)?;
-        for id in &a.settings.gimmicks {retained.string(id)?;}
+        for id in &a.settings.gimmicks {
+            retained.string(id)?;
+        }
         retained.string(&a.generator_fingerprint)?;
         retained.string(&a.catalogue_fingerprint)?;
         retained.vector(&a.pieces)?;
         for p in &a.pieces {
-            retained.string(&p.id)?;retained.vector(&p.path)?;
-            for sample in &p.path {retained.string(&sample.mode)?;}
+            retained.string(&p.id)?;
+            retained.vector(&p.path)?;
+            retained.vector(&p.alternate_path)?;
+            for sample in p.path.iter().chain(&p.alternate_path) {
+                retained.string(&sample.mode)?;
+            }
         }
     }
     retained.string(map_id)?;
@@ -174,8 +180,12 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     retained.vector(&document.water_bodies)?;
     for body in &document.water_bodies {
-        retained.string(&body.id)?;retained.vector(&body.polygon)?;retained.vector(&body.islands)?;
-        for island in &body.islands {retained.vector(island)?;}
+        retained.string(&body.id)?;
+        retained.vector(&body.polygon)?;
+        retained.vector(&body.islands)?;
+        for island in &body.islands {
+            retained.vector(island)?;
+        }
     }
     retained.vector(heightmaps)?;
     for Heightmap {
@@ -326,21 +336,24 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         effect: _,
         surface: _,
         color: _,
-        motion: mapkit_core::gimmick::Motion {
-            kind: _,
-            delta_cm: _,
-            axis: _,
-            period_ms: _,
-            phase_ms: _,
-            impulse_cmps: _,
-            cooldown_ms: _,
-        },
+        motion:
+            mapkit_core::gimmick::Motion {
+                kind: _,
+                delta_cm: _,
+                axis: _,
+                period_ms: _,
+                phase_ms: _,
+                impulse_cmps: _,
+                cooldown_ms: _,
+            },
         safety_min_cm: _,
         safety_max_cm: _,
     } in gimmicks
     {
         retained.string(id)?;
-        if let Some(t)=track {retained.vector(&t.centerline)?;}
+        if let Some(t) = track {
+            retained.vector(&t.centerline)?;
+        }
         retained.vector(parts)?;
         for CollisionConvex { vertices, faces } in parts {
             retained.vector(vertices)?;
@@ -758,17 +771,63 @@ mod tests {
 
     #[test]
     fn swept_centerline_and_assembled_paths_charge_retained_capacity() {
-        let mut d=mapkit_core::assembled_track::document(&mapkit_core::assembled_track::Settings::default()).unwrap();
-        let before=document_retained_bytes(&d).unwrap();
-        let t=d.gimmicks.iter_mut().find_map(|g|g.track.as_mut().filter(|t|!t.centerline.is_empty())).unwrap();
-        let old=t.centerline.capacity();t.centerline.reserve(2048);
-        let extra=allocation(t.centerline.capacity(),size_of::<mapkit_core::special_track::TubeFrame>())-allocation(old,size_of::<mapkit_core::special_track::TubeFrame>());
-        assert_eq!(document_retained_bytes(&d).unwrap(),before+extra);
-        let before=document_retained_bytes(&d).unwrap();
-        let path=&mut d.assembled_track.as_mut().unwrap().pieces[0].path;
-        let old=path.capacity();path.reserve(2048);
-        let extra=allocation(path.capacity(),size_of::<mapkit_core::assembled_track::Sample>())-allocation(old,size_of::<mapkit_core::assembled_track::Sample>());
-        assert_eq!(document_retained_bytes(&d).unwrap(),before+extra);
+        let mut d = mapkit_core::assembled_track::document(
+            &mapkit_core::assembled_track::Settings::default(),
+        )
+        .unwrap();
+        let before = document_retained_bytes(&d).unwrap();
+        let t = d
+            .gimmicks
+            .iter_mut()
+            .find_map(|g| g.track.as_mut().filter(|t| !t.centerline.is_empty()))
+            .unwrap();
+        let old = t.centerline.capacity();
+        t.centerline.reserve(2048);
+        let extra = allocation(
+            t.centerline.capacity(),
+            size_of::<mapkit_core::special_track::TubeFrame>(),
+        ) - allocation(old, size_of::<mapkit_core::special_track::TubeFrame>());
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
+        let before = document_retained_bytes(&d).unwrap();
+        let path = &mut d.assembled_track.as_mut().unwrap().pieces[0].path;
+        let old = path.capacity();
+        path.reserve(2048);
+        let extra = allocation(
+            path.capacity(),
+            size_of::<mapkit_core::assembled_track::Sample>(),
+        ) - allocation(old, size_of::<mapkit_core::assembled_track::Sample>());
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
+    }
+
+    #[test]
+    fn alternate_route_retains_spare_capacity_and_sample_strings() {
+        let mut d =
+            mapkit_core::assembled_track::document(&mapkit_core::assembled_track::Settings {
+                duration_seconds: 120,
+                gimmicks: vec!["overpass".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        let before = document_retained_bytes(&d).unwrap();
+        let path = &mut d
+            .assembled_track
+            .as_mut()
+            .unwrap()
+            .pieces
+            .iter_mut()
+            .find(|p| !p.alternate_path.is_empty())
+            .unwrap()
+            .alternate_path;
+        let old = path.capacity();
+        path.reserve(2048);
+        let mut extra = allocation(
+            path.capacity(),
+            size_of::<mapkit_core::assembled_track::Sample>(),
+        ) - allocation(old, size_of::<mapkit_core::assembled_track::Sample>());
+        let old = path[0].mode.capacity();
+        path[0].mode.reserve(1000);
+        extra += allocation(path[0].mode.capacity(), 1) - allocation(old, 1);
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
     }
 
     #[test]

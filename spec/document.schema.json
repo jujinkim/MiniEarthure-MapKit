@@ -1088,6 +1088,12 @@
         "reserved_min_cm"
       ],
       "properties": {
+        "alternate_path": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Sample"
+          }
+        },
         "connection_width_cm": {
           "type": "integer",
           "format": "uint32",
@@ -1649,7 +1655,8 @@
       "enum": [
         "loop",
         "cylinder",
-        "swept_cylinder"
+        "swept_cylinder",
+        "swept_half_pipe"
       ]
     },
     "TubeFrame": {

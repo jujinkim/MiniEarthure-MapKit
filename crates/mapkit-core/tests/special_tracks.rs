@@ -181,8 +181,12 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
         let samples: Vec<_> = p.path.iter().filter(|s| s.mode == "cylinder").collect();
         let t = special_track::SpecialTrack {
             kind: special_track::TrackKind::SweptCylinder,
-            radius_cm: 100,
-            width_cm: 240,
+            radius_cm: if p.id.starts_with("cylinder_wide") {
+                200
+            } else {
+                100
+            },
+            width_cm: 400,
             length_cm: 1600,
             centerline: samples
                 .iter()
@@ -199,13 +203,29 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
             "real bend, not axial roll"
         );
         // Measure actual circular coordinates; a preset name cannot certify radius.
-        let sign=if p.id.ends_with("left") {-1.0} else {1.0};
-        let centers=if p.id.contains("curve") || p.id.contains("uturn") {vec![[sign*400.0,400.0]]} else {vec![[-400.0,800.0],[-400.0,1600.0],[-400.0,2400.0]]};
+        let sign = if p.id.ends_with("left") { -1.0 } else { 1.0 };
+        let centers = if p.id.contains("curve") || p.id.contains("uturn") {
+            vec![[sign * 400.0, 400.0]]
+        } else {
+            vec![[-400.0, 800.0], [-400.0, 1600.0], [-400.0, 2400.0]]
+        };
         for sample in &samples {
-            let z=sample.position_cm[2];
-            if !p.id.contains("curve") && !p.id.contains("uturn") && !(800..=2400).contains(&z) {continue;}
-            let radius=centers.iter().map(|c|((sample.position_cm[0] as f64-c[0]).powi(2)+(z as f64-c[1]).powi(2)).sqrt()).fold(f64::INFINITY,f64::min);
-            assert!((radius-400.0).abs()<1.0,"{} measured radius {radius}",p.id);
+            let z = sample.position_cm[2];
+            if !p.id.contains("curve") && !p.id.contains("uturn") && !(800..=2400).contains(&z) {
+                continue;
+            }
+            let radius = centers
+                .iter()
+                .map(|c| {
+                    ((sample.position_cm[0] as f64 - c[0]).powi(2) + (z as f64 - c[1]).powi(2))
+                        .sqrt()
+                })
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                (radius - 400.0).abs() < 1.0,
+                "{} measured radius {radius}",
+                p.id
+            );
         }
         let m = t.mesh();
         assert_eq!(m.inner.len(), t.tile_count() * 2);
@@ -237,7 +257,9 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
                 .iter()
                 .all(|p| p.iter().map(|v| v.abs() / 100).sum::<i64>() <= t.bound_radius()));
         }
-        let mut bad=t.clone();bad.centerline[0].floor_cm=[i64::MIN;3];assert!(!bad.valid());
+        let mut bad = t.clone();
+        bad.centerline[0].floor_cm = [i64::MIN; 3];
+        assert!(!bad.valid());
         let mut bad = t.clone();
         bad.centerline[1].floor_cm = bad.centerline[0].floor_cm;
         assert!(!bad.valid());
@@ -248,4 +270,43 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
         bad.centerline.resize(513, bad.centerline[0].clone());
         assert!(!bad.valid());
     }
+}
+
+#[test]
+fn curved_halfpipe_has_open_crown_and_real_solid_sidewalls() {
+    let d = assembled_track::document(&assembled_track::Settings {
+        duration_seconds: 120,
+        gimmicks: vec!["banked_chicane".into()],
+        ..assembled_track::Settings::default()
+    })
+    .unwrap();
+    let t = d
+        .gimmicks
+        .iter()
+        .find_map(|g| {
+            g.track
+                .as_ref()
+                .filter(|t| t.kind == special_track::TrackKind::SweptHalfPipe)
+        })
+        .unwrap();
+    assert!(t.valid());
+    let mesh = t.mesh();
+    assert_eq!(mesh.inner.len(), t.tile_count() * 2);
+    assert!(
+        mesh.inner.iter().flatten().all(|v| v[1] <= 22500),
+        "no ceiling above the 2m banks"
+    );
+    assert!(
+        mesh.inner.iter().flatten().any(|v| v[1] > 19000),
+        "real side bank, not flat ribbon"
+    );
+    let f = &t.centerline[t.centerline.len() / 2];
+    let crown = [f.floor_cm[0], f.floor_cm[1] + 400, f.floor_cm[2]];
+    assert!(
+        !mesh
+            .tiles
+            .iter()
+            .any(|(a, b)| (0..3).all(|j| crown[j] >= a[j] && crown[j] <= b[j])),
+        "open crown occupancy"
+    );
 }

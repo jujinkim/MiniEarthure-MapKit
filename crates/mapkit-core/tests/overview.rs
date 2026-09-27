@@ -101,3 +101,15 @@ fn overview_exposes_authored_levels_and_widths_for_navigation() {
         .sum();
     assert!(cost.text_bytes >= topology_bytes);
 }
+
+#[test]
+fn assembly_overview_includes_both_routes_and_actual_lane_widths() {
+    let d=assembled_track::document(&assembled_track::Settings{duration_seconds:120,gimmicks:vec!["overpass".into()],..Default::default()}).unwrap();
+    let view=overview(&d).unwrap();
+    let branch=view.roads.iter().find(|r|r.id.ends_with("-bridge")).unwrap();
+    assert!(branch.points.iter().any(|p|p[1]>=200));
+    assert!(branch.widths_cm.iter().all(|w|*w==200));
+    assert!(view.roads.iter().any(|r|r.widths_cm.contains(&200) && r.widths_cm.contains(&400)));
+    let bytes=view.to_json(u64::MAX).unwrap();
+    assert_eq!(view.cost().unwrap().json_bytes,bytes.len() as u64);
+}

@@ -362,6 +362,7 @@ static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 	return job.root
 
 static func surface_material(key: String, presentation: Dictionary, shader: Shader) -> Material:
+	if key.begins_with("rc:"): return preload("./rc_venue.gd").material(key, int(presentation.track_seed))
 	if key == "safety:metal":
 		var metal := StandardMaterial3D.new()
 		metal.albedo_color = Color(0.58, 0.63, 0.68)

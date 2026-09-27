@@ -6,6 +6,7 @@ pub enum TrackKind {
     Loop,
     Cylinder,
     SweptCylinder,
+    SweptHalfPipe,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -36,7 +37,10 @@ pub struct TrackMesh {
 const STEPS: usize = 256;
 impl SpecialTrack {
     pub fn valid(&self) -> bool {
-        if self.kind == TrackKind::SweptCylinder {
+        if matches!(
+            self.kind,
+            TrackKind::SweptCylinder | TrackKind::SweptHalfPipe
+        ) {
             return (100..=600).contains(&self.radius_cm)
                 && (140..=600).contains(&self.width_cm)
                 && (2..=512).contains(&self.centerline.len())
@@ -78,7 +82,10 @@ impl SpecialTrack {
         }
     }
     pub fn tile_count(&self) -> usize {
-        if self.kind == TrackKind::SweptCylinder {
+        if matches!(
+            self.kind,
+            TrackKind::SweptCylinder | TrackKind::SweptHalfPipe
+        ) {
             128 * self.centerline.len().saturating_sub(1)
         } else {
             STEPS * self.bands()
@@ -86,7 +93,7 @@ impl SpecialTrack {
     }
     pub fn bound_radius(&self) -> i64 {
         match self.kind {
-            TrackKind::SweptCylinder => {
+            TrackKind::SweptCylinder | TrackKind::SweptHalfPipe => {
                 self.centerline
                     .iter()
                     .map(|f| f.floor_cm.iter().map(|v| v.abs()).sum::<i64>())
@@ -102,7 +109,10 @@ impl SpecialTrack {
         }
     }
     pub fn mesh(&self) -> TrackMesh {
-        if self.kind == TrackKind::SweptCylinder {
+        if matches!(
+            self.kind,
+            TrackKind::SweptCylinder | TrackKind::SweptHalfPipe
+        ) {
             return self.swept_mesh();
         }
         let mut mesh = TrackMesh {
@@ -136,7 +146,7 @@ impl SpecialTrack {
                         r * (sn + 0.60 * (t * 0.5 + libm::sin(2.0 * t) * 0.25)) + thickness * sn,
                     ]
                 }
-                TrackKind::SweptCylinder => unreachable!(),
+                TrackKind::SweptCylinder | TrackKind::SweptHalfPipe => unreachable!(),
                 TrackKind::Cylinder => {
                     let u = j as f64 / bands as f64;
                     // Flared entrances leave the bottom tangent to the access road.
@@ -269,7 +279,11 @@ impl SpecialTrack {
                 n[2] * t[0] - n[0] * t[2],
                 n[0] * t[1] - n[1] * t[0],
             ];
-            let a = j as f64 * std::f64::consts::TAU / 128.0;
+            let a = if self.kind == TrackKind::SweptHalfPipe {
+                -std::f64::consts::FRAC_PI_2 + j as f64 * std::f64::consts::PI / 128.0
+            } else {
+                j as f64 * std::f64::consts::TAU / 128.0
+            };
             let r = radii[i];
             let shell = r + if outer { 10.0 } else { 0.0 };
             std::array::from_fn::<_, 3, _>(|k| {
@@ -303,8 +317,12 @@ impl SpecialTrack {
                     [outside[2], outside[1], outside[0]],
                     [outside[3], outside[2], outside[0]],
                 ]);
-                for edge in [1, 3] {
-                    if (edge == 3 && i == 0) || (edge == 1 && i + 2 == self.centerline.len()) {
+                for edge in 0..4 {
+                    if (edge == 3 && i == 0)
+                        || (edge == 1 && i + 2 == self.centerline.len())
+                        || (self.kind == TrackKind::SweptHalfPipe
+                            && ((edge == 0 && j == 0) || (edge == 2 && j == 127)))
+                    {
                         let k = (edge + 1) % 4;
                         mesh.shell.extend([
                             [inside[edge], outside[edge], outside[k]],

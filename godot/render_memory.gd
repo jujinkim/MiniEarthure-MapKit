@@ -81,6 +81,10 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:
 	var presentation: Dictionary = chunk.get("presentation", {})
+	if presentation.has("track_seed"):
+		var object := DATA.object_id(chunk, triangle)
+		if object.begins_with("assembled-road-"): return "rc:road:" + str(int(object.trim_prefix("assembled-road-")) % 4)
+		if object.begins_with("assembled-wall-"): return "rc:wall"
 	var road_keys: PackedStringArray = presentation.get("road_materials", PackedStringArray())
 	if triangle < road_keys.size() and not road_keys[triangle].is_empty(): return road_keys[triangle]
 	var id := str(presentation.get("proxy_materials", {}).get(DATA.object_id(chunk, triangle), ""))

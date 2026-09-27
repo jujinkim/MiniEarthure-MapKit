@@ -123,11 +123,14 @@ fn grid_ports_grades_difficulty_and_hollow_ring() {
             p.path.last().unwrap().forward,
             if p.id.starts_with("hairpin") || p.id.contains("uturn") {
                 [0, 0, -1_000_000]
-            } else if p.id == "curve" || p.id == "sharp_curve" || p.id == "cylinder_curve" {
+            } else if p.id == "curve"
+                || p.id == "sharp_curve"
+                || (p.id.contains("curve") && !p.id.ends_with("_left"))
+            {
                 [1_000_000, 0, 0]
             } else if p.id == "curve_left"
                 || p.id == "sharp_curve_left"
-                || p.id == "cylinder_curve_left"
+                || (p.id.contains("curve") && p.id.ends_with("_left"))
             {
                 [-1_000_000, 0, 0]
             } else {
@@ -291,7 +294,7 @@ fn short_lap_rules_tight_geometry_and_smooth_spiral() {
     let swing = zig.path.iter().map(|p| p.position_cm[0]).max().unwrap()
         - zig.path.iter().map(|p| p.position_cm[0]).min().unwrap();
     assert!(
-        swing > WIDTH,
+        swing >= 1600 && swing > WIDTH,
         "a straight line must not fit through the chicane"
     );
     let tube = pieces.iter().find(|p| p.id == "cylinder").unwrap();
@@ -318,7 +321,7 @@ fn short_lap_rules_tight_geometry_and_smooth_spiral() {
 #[test]
 fn vehicle_scale_corners_and_seeded_layout_metrics() {
     let pieces: Vec<Piece> = serde_json::from_value(catalogue()["pieces"].clone()).unwrap();
-    assert_eq!(WIDTH, 240);
+    assert_eq!(WIDTH, 400);
     for id in ["sharp_curve", "sharp_curve_left", "hairpin", "hairpin_left"] {
         let p = pieces.iter().find(|p| p.id == id).unwrap();
         let sign = if id.ends_with("left") { -1.0 } else { 1.0 };
@@ -380,8 +383,18 @@ fn vehicle_scale_corners_and_seeded_layout_metrics() {
                         // Explicit approach/landing exception applies only to a physical gimmick.
                         if index < 3
                             || p.id.starts_with("cylinder")
-                            || ["loop", "jump", "air_ring", "spiral_up", "spiral_down"]
-                                .contains(&p.id.as_str())
+                            || [
+                                "loop",
+                                "jump",
+                                "air_ring",
+                                "spiral_up",
+                                "spiral_down",
+                                "jump_barrier",
+                                "roller_waves",
+                                "offset_jump",
+                                "overpass",
+                            ]
+                            .contains(&p.id.as_str())
                         {
                             straight = 0.0;
                             direction = [0.0; 2];
@@ -432,4 +445,114 @@ fn vehicle_scale_corners_and_seeded_layout_metrics() {
             }
         }
     }
+}
+
+#[test]
+fn mixed_lane_widths_tube_mouths_and_real_overpass_routes() {
+    let pieces: Vec<Piece> = serde_json::from_value(catalogue()["pieces"].clone()).unwrap();
+    for p in &pieces {
+        if p.id.ends_with("_narrow") {
+            assert_eq!(p.path.first().unwrap().lateral_cm, 200);
+            assert_eq!(p.path.last().unwrap().lateral_cm, 200);
+            assert_eq!(p.path.iter().map(|s| s.lateral_cm).min(), Some(100));
+            for pair in p.path.windows(2) {
+                assert!(
+                    pair[0].lateral_cm.abs_diff(pair[1].lateral_cm) <= 55,
+                    "smooth lane taper"
+                );
+            }
+        }
+        if p.id.starts_with("cylinder") {
+            let tube: Vec<_> = p.path.iter().filter(|s| s.mode == "cylinder").collect();
+            let radius = if p.id.starts_with("cylinder_wide") {
+                200
+            } else {
+                100
+            };
+            assert_eq!(tube.iter().map(|s| s.tube_radius_cm).min(), Some(radius));
+            assert!(
+                tube.first().unwrap().position_cm[1] < 20,
+                "low entrance mouth"
+            );
+            assert_eq!(p.path[0].position_cm[1], 0);
+            assert_eq!(p.path.last().unwrap().position_cm[1], 0);
+        }
+    }
+    for seed in 0..32 {
+        let a = assemble(&Settings {
+            seed,
+            ..Settings::default()
+        })
+        .unwrap();
+        assert!(
+            a.pieces[..3]
+                .iter()
+                .all(|p| p.path.iter().all(|s| s.lateral_cm == 200)),
+            "wide race grid"
+        );
+        assert!(
+            a.pieces
+                .iter()
+                .flat_map(|p| &p.path)
+                .any(|s| s.tube_radius_cm == 0 && s.lateral_cm == 100),
+            "seed {seed} includes narrow road"
+        );
+    }
+    let fork = pieces.iter().find(|p| p.id == "overpass").unwrap();
+    assert_eq!(
+        fork.path.first().unwrap().position_cm,
+        fork.alternate_path.first().unwrap().position_cm
+    );
+    assert_eq!(
+        fork.path.last().unwrap().position_cm,
+        fork.alternate_path.last().unwrap().position_cm
+    );
+    assert!(fork.alternate_path.iter().all(|s| !s.safe));
+    assert_eq!(
+        fork.alternate_path.iter().map(|s| s.position_cm[1]).max(),
+        Some(200)
+    );
+    let length = |path: &[Sample]| {
+        path.windows(2)
+            .map(|w| {
+                (0..3)
+                    .map(|a| (w[0].position_cm[a] - w[1].position_cm[a]).pow(2) as f64)
+                    .sum::<f64>()
+                    .sqrt()
+            })
+            .sum::<f64>()
+    };
+    assert!(
+        length(&fork.alternate_path) < length(&fork.path) * 0.9,
+        "shortcut is physically shorter"
+    );
+    let crossing = fork
+        .alternate_path
+        .iter()
+        .find(|s| s.position_cm[2] == 1600)
+        .unwrap();
+    assert_eq!(crossing.position_cm, [0, 200, 1600]);
+    assert!(
+        fork.path.iter().any(|s| s.position_cm == [0, 0, 1600]),
+        "ground road runs directly beneath the deck"
+    );
+    let mut d = document(&Settings {
+        gimmicks: vec!["overpass".into()],
+        duration_seconds: 120,
+        ..Settings::default()
+    })
+    .unwrap();
+    let branch = d
+        .assembled_track
+        .as_mut()
+        .unwrap()
+        .pieces
+        .iter_mut()
+        .find(|p| !p.alternate_path.is_empty())
+        .unwrap();
+    branch.alternate_path[10].position_cm[1] += 1;
+    assert!(
+        verify_document(&d).is_err(),
+        "alternate corridor cannot be forged"
+    );
 }

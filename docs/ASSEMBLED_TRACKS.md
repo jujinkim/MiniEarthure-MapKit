@@ -15,7 +15,7 @@ Basic straight/slope/zigzag/left- and right-curve connectors remain available in
 the optional special pieces. A selected special is a candidate, not a promise
 that it appears, except the cylinder family; helices have a complementary return connector.
 
-The base cube is 800 cm; ordinary roads are 240 cm wide with 120 cm walls.
+The base cube is 800 cm; ordinary roads mix 400 cm passing lanes and 200 cm pinch sections with 60 cm walls.
 Left/right 90-degree corners have a circular 300 cm centreline radius between
 5 m straight approaches/exits, in an 8 m port span. Hairpins have a 400 cm radius
 and 800 cm separation between return lanes. A 16 m chicane joins four 3 m-radius
@@ -26,12 +26,12 @@ leave room for small vehicles. Checkpoint radii are half road width plus 30 cm.
 
 The cylinder selection is one `selection_groups.cylinder` family: right/left
 90-degree, right/left U-turn, S and (hard difficulty) a gently rising/falling S.
-The bore diameter is 200 cm, with a cosine mouth flare of at most 12 percent.
+The bore diameter alternates between 200 and 400 cm across selected tubes, with a cosine mouth flare of at most 12 percent.
 Centreline bends have a 400 cm radius. A `swept_cylinder` special track stores
 bounded floor/normal/tangent frames; those same frames define its circular
 mesh, hollow occupancy, spawn exclusion and full-section admission corridor.
 The inner surface has 128 angular divisions. Entrances/exits connect to full
-240 cm roads; no narrow exit wall traps a banked vehicle. Tube pieces cannot
+400 cm roads through eased funnels; no narrow exit wall traps a banked vehicle. Tube pieces cannot
 update safe recovery anchors. Existing standalone straight-cylinder authoring
 remains a current public primitive; generated cylinders are all curved.
 
@@ -113,3 +113,48 @@ nondegenerate faces, hollow occupancy, bounds and malformed source rejection.
 authoring consumers; they must not infer a straight-cylinder bound for a swept
 track. Retained-source accounting charges frame vectors and assembled path
 capacities, including reserved space, before indexed source admission.
+
+## RC venue and dynamic pieces (2026-09-28 replacement)
+
+This replaces the uniform 240cm road / 200cm tube decision above. The first 24m
+is 400cm wide. `straight_narrow`, `chicane_narrow`, `zigzag_narrow` taper from
+400cm ports to 200cm over 3m, with at least one narrow road per generated course.
+The ordinary zigzag has eight 90-degree, 3m-radius turns and 16m lateral swing;
+its centreline cannot be bypassed by driving straight through a wide lane.
+Curved tubes have 200cm and 400cm bores under the same cylinder selection.
+A 12cm floor dip, 4m eased width transition and low 25–55cm guide walls lead into
+the flared mouth. Rising tubes retain that eased entry under the 80cm hill.
+
+Eight optional pieces join the existing catalogue (43 resolved variants):
+
+| ID | Physical feature |
+| --- | --- |
+| `banked_chicane` | Open U-section, 2m-radius banks following four 4m-radius turns |
+| `jump_barrier` | 36cm-high full-width hurdle; jump input, no launch pad |
+| `overpass` | 2m-wide ramp and 2m-high straight shortcut over eight 3m-radius ground turns |
+| `roller_waves` | Four smooth 80cm hills in 32m |
+| `offset_jump` | Existing open gap with a landing displaced sideways 1.5m |
+| `slalom_gates` | Three alternating low walls and a weaving road |
+| `swing_gates` | Alternating rotating sweepers with staggered phases |
+| `piston_gates` | Alternating gates moving up/down 1.8m with staggered phases |
+
+`Piece.alternate_path` shares the entry/exit ports and declares the overpass
+route. Exact validation, source accounting, renderer, collision, occupancy,
+bounds, overlap checks and overview include both paths. Checkpoints stay at
+shared piece ports. A current `swept_half_pipe` primitive uses the swept tube
+frames but has an open crown, exposed edge rims and hollow occupancy.
+The overpass ramp access/departure and hurdle/roller/jump run-ups are explicit
+large-gimmick straight exceptions. The ordinary 16m rule remains unchanged.
+
+Shared `rc_venue.gd`, shader and `track_stage.gd` select seed modulo three:
+indoor blue/teal carpet, outdoor asphalt/grass, or multicolour plastic. Seed is
+attached to native presentation; chunk batching and material allocation use the
+same keys. The bounded stage adds striped perimeter, pits, banners, grandstands
+or flags/blocks, and a checkerboard start gate. It has no physics/collision.
+Authored non-assembled maps keep their existing materials.
+
+Focused regressions cover actual widths/radii/port equality, alternate-source
+mutation, shared halfpipe geometry, retained branch capacity, overview widths,
+all 43 presets, deterministic saves, cancellation and 576 layout samples.
+Godot fixtures render all three venue styles and eight pieces with a scale car;
+consumer physics and detailed driving are separately recorded by the owning app.

@@ -8,7 +8,7 @@ pub struct OverviewRoad<'a> {
     /// Authored connectivity; spatial crossings do not imply a junction.
     pub from: &'a str,
     pub to: &'a str,
-    pub widths_cm: &'a [u32],
+    pub widths_cm: std::borrow::Cow<'a,[u32]>,
     pub points: std::borrow::Cow<'a,[Vertex]>,
 }
 #[derive(Debug, Serialize)]
@@ -119,7 +119,7 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
             kind: &r.kind,
             from: &r.from,
             to: &r.to,
-            widths_cm: &r.widths_cm,
+            widths_cm: r.widths_cm.as_slice().into(),
             points: std::borrow::Cow::Borrowed(&r.points),
         })
         .collect();
@@ -142,7 +142,12 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
         .collect();
     if let Some(track)=&d.assembled_track {
         for (index,p) in track.pieces.iter().enumerate() {
-            roads.push(OverviewRoad{id:format!("assembled-road-{index}").into(),kind:&RoadKind::Elevated,from:"",to:"",widths_cm:&[600],points:p.path.iter().map(|s|s.position_cm).collect::<Vec<_>>().into()});
+            for (suffix,path) in [("",&p.path),("-bridge",&p.alternate_path)] {
+                if path.is_empty() { continue; }
+                roads.push(OverviewRoad{id:format!("assembled-road-{index}{suffix}").into(),kind:&RoadKind::Elevated,from:"",to:"",
+                    widths_cm:path.iter().map(|s|s.lateral_cm*2).collect::<Vec<_>>().into(),
+                    points:path.iter().map(|s|s.position_cm).collect::<Vec<_>>().into()});
+            }
         }
     }
     roads.sort_by(|a,b| a.id.cmp(&b.id));

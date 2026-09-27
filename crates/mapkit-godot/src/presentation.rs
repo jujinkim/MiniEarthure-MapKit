@@ -309,6 +309,9 @@ fn decorate_inner(
             serde_json::to_string(environment).unwrap().as_str(),
         );
     }
+    if let Some(track) = &document.assembled_track {
+        presentation.set("track_seed", track.settings.seed as i64);
+    }
     presentation.set("map_id", document.map_id.as_str());
     chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);
