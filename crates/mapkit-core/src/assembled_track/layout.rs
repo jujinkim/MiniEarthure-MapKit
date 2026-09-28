@@ -170,20 +170,11 @@ fn block(pieces: &mut Vec<Piece>, id: &str, rng: &mut u64) -> bool {
         id
     };
     let chain = size as u32 + 1;
-    if append(
-        pieces,
-        if tube { "tube_entry" } else { "straight" },
-        w,
-        false,
-        [0; 3],
-    ) && append(pieces, chosen, w, false, [chain, 0, 1])
-        && append(
-            pieces,
-            if tube { "tube_exit" } else { "straight" },
-            w,
-            false,
-            [0; 3],
-        )
+    // Presets contain their actual run-up/landing areas. Only pipes need
+    // separate floor-height ramps; ordinary spacing is searched on demand.
+    if (!tube || append(pieces, "tube_entry", w, false, [0; 3]))
+        && append(pieces, chosen, w, false, [chain, 0, 1])
+        && (!tube || append(pieces, "tube_exit", w, false, [0; 3]))
     {
         true
     } else {
@@ -191,6 +182,7 @@ fn block(pieces: &mut Vec<Piece>, id: &str, rng: &mut u64) -> bool {
         false
     }
 }
+
 fn ordinary(pieces: &mut Vec<Piece>, rng: &mut u64) -> bool {
     for _ in 0..12 {
         if append(
@@ -215,14 +207,14 @@ fn mandatory(
         return Ok(true);
     }
     let size = pieces.len();
-    for _ in 0..12 {
+    for attempt in 0..12 {
         cancellation::checkpoint()?;
         if *tries >= MAX_BACKTRACKS {
             break;
         }
         *tries += 1;
         pieces.truncate(size);
-        let roads = 1 + next(rng) % 4;
+        let roads = attempt / 3; // direct connection first, then minimal connectors
         if !(0..roads).all(|_| ordinary(pieces, rng)) {
             continue;
         }
@@ -341,7 +333,7 @@ fn close(pieces: &mut Vec<Piece>) -> Result<bool> {
     }
     Ok(false)
 }
-fn finish(mut pieces: Vec<Piece>, s: &Settings) -> Assembly {
+pub(super) fn finish(mut pieces: Vec<Piece>, s: &Settings) -> Assembly {
     // Ports are shared exactly; width changes occur smoothly within the road.
     for i in 0..pieces.len() {
         let previous = if i > 0 {
@@ -379,6 +371,9 @@ fn finish(mut pieces: Vec<Piece>, s: &Settings) -> Assembly {
         catalogue_fingerprint: catalogue_fingerprint(),
         finish_plaza: finish_plaza(&pieces),
         pieces,
+        obstacles: vec![],
+        obstacle_eligible_length_cm: 0,
+        obstacle_target_count: 0,
         length_cm,
         ordinary_length_cm,
         ordinary_straight_cm,
@@ -391,7 +386,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     let mut ids: Vec<String> = s
         .gimmicks
         .iter()
-        .filter(|id| !basic_ids().contains(&id.as_str()))
+        .filter(|id| id.as_str() != "obstacles")
         .map(|id| family(id).to_string())
         .collect();
     ids.sort();
@@ -492,7 +487,11 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
             return Ok(None);
         }
     }
-    let a = finish(pieces, s);
+    let mut a = finish(pieces, s);
+    let (obstacles, eligible, target) = obstacles::place(&a)?;
+    a.obstacles = obstacles;
+    a.obstacle_eligible_length_cm = eligible;
+    a.obstacle_target_count = target;
     match a.validate() {
         Ok(()) => Ok(Some(a)),
         Err(e) if e.code == "E_CANCELLED" => Err(e),
@@ -505,7 +504,11 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
     let mut best: Option<Assembly> = None;
     for attempt in 0..24 {
         cancellation::checkpoint()?;
-        if let Some(a) = candidate(&s, attempt)? {
+        let candidate = match candidate(&s, attempt) {
+            Err(e) if e.code == "E_TRACK_OBSTACLES" => None,
+            other => other?,
+        };
+        if let Some(a) = candidate {
             if best.as_ref().is_none_or(|b| {
                 a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
             }) {
@@ -513,7 +516,7 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
             }
         }
     }
-    best.ok_or_else(||error("E_TRACK_BUDGET","no connected collision-free layout fits the bounded search, piece, sample, cell and memory budgets with every required gimmick"))
+    best.ok_or_else(||error(if s.gimmicks.iter().any(|id| id == "obstacles") { "E_TRACK_OBSTACLES" } else { "E_TRACK_BUDGET" },"no connected collision-free layout fits the bounded search, piece, sample, cell and memory budgets with every required gimmick"))
 }
 
 #[cfg(test)]
@@ -631,12 +634,12 @@ mod tests {
             }
         }
         let s = Settings {
-            duration_seconds: 30,
+            duration_seconds: 60,
             ..Settings::default()
         };
         let a = assemble(&s).unwrap();
-        assert!(a.estimated_msec > 30_000);
-        for id in &s.gimmicks {
+        assert!(a.estimated_msec > 60_000);
+        for id in s.gimmicks.iter().filter(|id| id.as_str() != "obstacles") {
             assert_eq!(
                 a.pieces
                     .iter()

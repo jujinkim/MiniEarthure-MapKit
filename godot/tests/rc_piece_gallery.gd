@@ -9,7 +9,7 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
 	root.size=Vector2i(1200,900)
-	for kind in ["banked_chicane","jump_barrier","overpass","roller_waves","offset_jump","slalom_gates","swing_gates","piston_gates"]:
+	for kind in ["banked_chicane","overpass","roller_waves","offset_jump"]:
 		if OS.has_environment("RC_PIECE_KINDS") and kind not in OS.get_environment("RC_PIECE_KINDS").split(","): continue
 		var native: RefCounted = ClassDB.instantiate("MapKitBridge")
 		var settings: Dictionary = JSON.parse_string(native.track_catalogue()).data.defaults

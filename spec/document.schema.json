@@ -178,6 +178,9 @@
         "floor",
         "generator_fingerprint",
         "length_cm",
+        "obstacle_eligible_length_cm",
+        "obstacle_target_count",
+        "obstacles",
         "ordinary_length_cm",
         "ordinary_straight_cm",
         "pieces",
@@ -212,6 +215,22 @@
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
+        },
+        "obstacle_eligible_length_cm": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "obstacle_target_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "obstacles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Obstacle"
+          }
         },
         "ordinary_length_cm": {
           "type": "integer",
@@ -1172,6 +1191,102 @@
         "jump_height",
         "air_ring"
       ]
+    },
+    "Obstacle": {
+      "type": "object",
+      "required": [
+        "avoid_lateral_cm",
+        "forward",
+        "half_width_cm",
+        "kind",
+        "lateral_cm",
+        "normal",
+        "path",
+        "piece_index",
+        "position_cm",
+        "station_cm"
+      ],
+      "properties": {
+        "avoid_lateral_cm": {
+          "description": "Centre of the lane that stays clear for the complete motion cycle.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "half_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "jump_position_cm": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "jump_station_cm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "kind": {
+          "type": "string"
+        },
+        "lateral_cm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "normal": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "path": {
+          "description": "`main` or `alternate`, never an inferred nearest road on another level.",
+          "type": "string"
+        },
+        "piece_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "station_cm": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
     },
     "Piece": {
       "type": "object",

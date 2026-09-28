@@ -145,6 +145,11 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         }
         retained.string(&a.generator_fingerprint)?;
         retained.string(&a.catalogue_fingerprint)?;
+        retained.vector(&a.obstacles)?;
+        for o in &a.obstacles {
+            retained.string(&o.kind)?;
+            retained.string(&o.path)?;
+        }
         retained.vector(&a.pieces)?;
         for p in &a.pieces {
             retained.string(&p.id)?;
@@ -796,6 +801,31 @@ mod tests {
             path.capacity(),
             size_of::<mapkit_core::assembled_track::Sample>(),
         ) - allocation(old, size_of::<mapkit_core::assembled_track::Sample>());
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
+    }
+
+    #[test]
+    fn attached_obstacles_charge_capacity_and_owned_strings() {
+        let mut d =
+            mapkit_core::assembled_track::document(&mapkit_core::assembled_track::Settings {
+                gimmicks: vec!["obstacles".into()],
+                ..Default::default()
+            })
+            .unwrap();
+        let before = document_retained_bytes(&d).unwrap();
+        let obstacles = &mut d.assembled_track.as_mut().unwrap().obstacles;
+        let old = obstacles.capacity();
+        obstacles.reserve(128);
+        let extra = allocation(
+            obstacles.capacity(),
+            size_of::<mapkit_core::assembled_track::Obstacle>(),
+        ) - allocation(old, size_of::<mapkit_core::assembled_track::Obstacle>());
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
+        let before = document_retained_bytes(&d).unwrap();
+        let kind = &mut d.assembled_track.as_mut().unwrap().obstacles[0].kind;
+        let old = kind.capacity();
+        kind.reserve(128);
+        let extra = allocation(kind.capacity(), 1) - allocation(old, 1);
         assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
     }
 

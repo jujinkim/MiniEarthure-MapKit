@@ -76,13 +76,13 @@ fn required_gimmicks_seed_character_widths_and_chains() {
             let s = Settings {
                 seed,
                 circuit,
-                duration_seconds: if circuit { 30 } else { 60 },
+                duration_seconds: 60,
                 ..Settings::default()
             };
             let a = document(&s)
                 .map(|d| d.assembled_track.unwrap())
                 .unwrap_or_else(|e| panic!("seed {seed} circuit {circuit}: {e}"));
-            for id in &s.gimmicks {
+            for id in s.gimmicks.iter().filter(|id| id.as_str() != "obstacles") {
                 assert!(
                     a.pieces
                         .iter()
@@ -91,14 +91,6 @@ fn required_gimmicks_seed_character_widths_and_chains() {
                 );
             }
             for p in &a.pieces {
-                if p.ordinary {
-                    widths[match p.width_cm {
-                        600 => 0,
-                        400 => 1,
-                        200 => 2,
-                        _ => panic!(),
-                    }] += 1;
-                }
                 assert!(p.chain_count <= 2);
                 assert_eq!(p.origin_cm[0] % TILE_CM, 0);
                 assert_eq!(p.origin_cm[2] % TILE_CM, 0);
@@ -113,6 +105,18 @@ fn required_gimmicks_seed_character_widths_and_chains() {
                 ..s
             })
             .unwrap_or_else(|e| panic!("plain seed {seed} circuit {circuit}: {e}"));
+            // Required-only layouts now contain mostly the 4m closure solver.
+            // Measure width variety in the ordinary random-growth population.
+            for p in &plain.pieces {
+                if p.ordinary {
+                    widths[match p.width_cm {
+                        600 => 0,
+                        400 => 1,
+                        200 => 2,
+                        _ => panic!(),
+                    }] += 1;
+                }
+            }
             let direction_changes = plain
                 .pieces
                 .windows(2)
@@ -163,7 +167,7 @@ fn connected_bores_ramps_and_real_widths() {
                         .zip(p.path[0].position_cm)
                         .map(|(a, b)| (*a - b).abs())
                         .sum::<i64>(),
-                    3200
+                    1600
                 );
                 assert!(!d
                     .gimmicks
@@ -295,8 +299,8 @@ fn actual_chain_mesh_seams_and_wide_corner_clearance() {
             "6m inner edge remains clear"
         );
     }
-    assert_eq!(duration_options(true), &[(30, 3), (60, 3), (120, 2)]);
-    assert_eq!(duration_options(false), &[(60, 1), (120, 1), (180, 1)]);
+    assert_eq!(duration_options(true), &[(60, 3), (90, 2), (120, 2)]);
+    assert_eq!(duration_options(false), &[(60, 1), (90, 1), (120, 1)]);
     for p in pieces.iter().filter(|p| p.id.starts_with("spiral")) {
         for w in p.path.windows(2) {
             let dy = (w[1].position_cm[1] - w[0].position_cm[1]).abs() as f64;
@@ -449,4 +453,112 @@ fn free_roam_is_required_boolean() {
     assert!(serde_json::from_value::<mapkit_core::MapDocument>(value.clone()).is_err());
     value["free_roam"] = serde_json::json!(1);
     assert!(serde_json::from_value::<mapkit_core::MapDocument>(value).is_err());
+}
+
+#[test]
+fn attachments_preserve_roads_all_durations_and_reject_retired_requests() {
+    for circuit in [true, false] {
+        for (duration, laps) in duration_options(circuit) {
+            for all in [false, true] {
+                let mut s = Settings {
+                    seed: 42,
+                    circuit,
+                    duration_seconds: *duration,
+                    ..Settings::default()
+                };
+                s.gimmicks.retain(|id| all && id != "obstacles");
+                let plain = assemble(&s).unwrap();
+                assert_eq!(s.max_laps(), *laps);
+                s.gimmicks.push("obstacles".into());
+                let decorated = assemble(&s).unwrap();
+                assert_eq!(
+                    plain.pieces, decorated.pieces,
+                    "mode={circuit} duration={duration} all={all}"
+                );
+                assert_eq!(plain.length_cm, decorated.length_cm);
+                assert_eq!(plain.estimated_msec, decorated.estimated_msec);
+                assert_eq!(plain.floor, decorated.floor);
+                assert!(!decorated.obstacles.is_empty());
+                assert!(decorated.obstacles.len() <= decorated.obstacle_target_count as usize);
+                println!(
+                    "TIME_SAMPLE {}",
+                    serde_json::json!({"seed":42,"circuit":circuit,"seconds":duration,"selection":if all {"all"} else {"obstacles_only"},"estimated_msec":decorated.estimated_msec,"length_cm":decorated.length_cm,"pieces":decorated.pieces.len(),"obstacles":decorated.obstacles.len(),"target_obstacles":decorated.obstacle_target_count,"eligible_cm":decorated.obstacle_eligible_length_cm,"road_identical_when_disabled":true})
+                );
+                let mut bad = decorated.clone();
+                bad.obstacles[0].station_cm += 1;
+                assert!(bad.validate().is_err());
+                let mut bad = decorated.clone();
+                bad.obstacles[0].path = if bad.obstacles[0].path == "main" {
+                    "alternate"
+                } else {
+                    "main"
+                }
+                .into();
+                assert!(bad.validate().is_err());
+                let mut bad = decorated.clone();
+                bad.obstacles[0].avoid_lateral_cm += 1;
+                assert!(bad.validate().is_err());
+                let mut bad = decorated.clone();
+                bad.obstacle_eligible_length_cm += 1;
+                assert!(bad.validate().is_err());
+                if decorated.estimated_msec > u32::from(*duration) * 1000 {
+                    for id in s.gimmicks.iter().filter(|id| id.as_str() != "obstacles") {
+                        assert_eq!(
+                            decorated
+                                .pieces
+                                .iter()
+                                .filter(|p| p.id == *id
+                                    || id == "cylinder" && p.id.starts_with("cylinder"))
+                                .count(),
+                            1,
+                            "no optional gimmicks remain on overrun"
+                        );
+                    }
+                }
+            }
+        }
+        for retired in [30, 180, 300] {
+            assert_eq!(
+                Settings {
+                    circuit,
+                    duration_seconds: retired,
+                    ..Settings::default()
+                }
+                .normalized()
+                .unwrap_err()
+                .code,
+                "E_TRACK_SETTINGS"
+            );
+        }
+    }
+    for id in [
+        "fixed_obstacle",
+        "moving_obstacle",
+        "rotating_obstacle",
+        "jump_barrier",
+        "slalom_gates",
+        "swing_gates",
+        "piston_gates",
+        "straight",
+        "cylinder_curve",
+    ] {
+        assert!(!selection_ids().contains(&id));
+        assert!(Settings {
+            gimmicks: vec![id.into()],
+            ..Settings::default()
+        }
+        .normalized()
+        .is_err());
+    }
+    for id in [
+        "fixed_obstacle",
+        "moving_obstacle",
+        "rotating_obstacle",
+        "jump_barrier",
+        "slalom_gates",
+        "swing_gates",
+        "piston_gates",
+    ] {
+        assert!(!catalogue_ids().contains(&id));
+    }
 }

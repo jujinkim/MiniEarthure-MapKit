@@ -239,3 +239,51 @@ Focused tests: core assembly 3, package assembly 9, schema 1, special geometry 5
 overview 5, audit memory 8 and cooperative cancellation 2. The integration root
 records exact logs and synthetic physics checks in `docs/SIMPLIFIED_SEED_TRACKS.md`.
 Detailed driving, complete races and platform acceptance remain user checks.
+
+## Attached obstacles and compact connections — 2026-09-29 replacement
+
+This replaces the obstacle road presets, 32m sprint lane, old duration choices,
+mandatory 1–4 ordinary spacer pieces and unconditional straight approach/exit
+insertion above. `selection_ids` is the public selection contract, separate from
+`pieces`. It includes one `obstacles` choice. The seven old obstacle IDs are
+attachment kinds only; new generation requests reject them as selections.
+`sprint_lane` is exactly 1600cm (two tiles), with no speed effect. Both modes offer
+60/90/120 seconds; circuit lap limits are 3/2/2. Defaults remain circuit/60/normal.
+
+Each required road gimmick tries direct connection first, then bounded minimal
+ordinary connectors. Presets retain their internal run-up/landing space, and
+pipes retain their explicit floor-height ramps. Optional growth is rolled back
+when final connections exceed the target. The closest valid result among at most
+24 attempts wins; mandatory-only overruns remain visible.
+
+After closure and width materialization, a separately seeded stream attaches
+obstacles without changing any road sample, length or time statistic. Metadata
+records kind, owning piece, `main`/`alternate` path, arc station, lateral placement,
+resolved position/frame, sweep width, avoidance lane and optional jump position.
+The source validator deterministically reconstructs the attachment list and its
+eligible-distance/target-count statistics. Rendering, collision, motion and AI
+use these same records. Source retained-memory accounting charges vector capacity
+and owned strings; existing per-cell geometry/gimmick admission remains in force.
+
+Target density is one per 64/32/16m of usable surface for easy/normal/hard, rounded
+to the nearest count (minimum one when selected). Count usable road length rather
+than candidate-centre count. Bounded spatial bins distribute safe candidates;
+object budget, existing action envelopes and free space can reduce the count.
+Zero placements try other finite candidates, then fail with `E_TRACK_OBSTACLES`.
+No attachment adds road. Seven kinds are seed-mixed without a coverage quota.
+
+Grid, finish plaza, pipes/ramps, halfpipe, vertical loop, flight/landing and active
+pad/ring pieces stay clear. Ordinary roads, curves, grades, helices, hills and both
+overpass routes are candidates. Placement checks actual taper width, slope,
+footprint, avoidance room, other road levels and full movement envelopes. World-Y
+rotation is restricted to level supports; translating/static objects can follow
+slopes. Slalom is two staggered walls with a bounded lateral AI transition.
+The hurdle is still 36cm high. Dynamic objects preserve a lane throughout their
+cycle; jump run-up/landing needs a sufficiently straight, level span.
+
+All formats remain v1. The schema and source/catalogue fingerprints change; no
+historical reader, conversion or source-file overwrite is introduced. Focused
+Rust regressions cover geometry, attachment tampering, density/budgets,
+reproducibility, road identity with obstacles toggled, all durations/lap limits,
+save roundtrips, cancellation and original preservation. Consumer checks and
+actual driving acceptance are recorded by their owners.

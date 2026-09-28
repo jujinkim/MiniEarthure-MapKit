@@ -18,6 +18,8 @@ const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 mod layout;
+mod obstacles;
+pub use obstacles::Obstacle;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -36,13 +38,7 @@ impl Default for Settings {
             circuit: true,
             duration_seconds: 60,
             difficulty: "normal".into(),
-            gimmicks: catalogue_ids()
-                .iter()
-                .filter(|v| {
-                    !basic_ids().contains(v) && (!v.starts_with("cylinder_") || **v == "cylinder")
-                })
-                .map(|v| (*v).into())
-                .collect(),
+            gimmicks: selection_ids().iter().map(|v| (*v).into()).collect(),
             time_minutes: 720,
         }
     }
@@ -55,11 +51,11 @@ impl Settings {
                 .any(|v| v.0 == self.duration_seconds)
             || !["easy", "normal", "hard"].contains(&self.difficulty.as_str())
             || self.time_minutes >= 1440
-            || self.gimmicks.len() > catalogue_ids().len()
+            || self.gimmicks.len() > selection_ids().len()
             || self
                 .gimmicks
                 .iter()
-                .any(|s| !catalogue_ids().contains(&s.as_str()))
+                .any(|s| !selection_ids().contains(&s.as_str()))
         {
             return Err(error(
                 "E_TRACK_SETTINGS",
@@ -80,9 +76,9 @@ impl Settings {
 }
 pub fn duration_options(circuit: bool) -> &'static [(u16, u8)] {
     if circuit {
-        &[(30, 3), (60, 3), (120, 2)]
+        &[(60, 3), (90, 2), (120, 2)]
     } else {
-        &[(60, 1), (120, 1), (180, 1)]
+        &[(60, 1), (90, 1), (120, 1)]
     }
 }
 fn basic_ids() -> &'static [&'static str] {
@@ -113,14 +109,7 @@ fn basic_ids() -> &'static [&'static str] {
     ]
 }
 fn short_piece(id: &str) -> bool {
-    [
-        "fixed_obstacle",
-        "moving_obstacle",
-        "rotating_obstacle",
-        "acceleration_panel",
-        "boost_chain",
-    ]
-    .contains(&id)
+    ["acceleration_panel", "boost_chain"].contains(&id)
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -167,6 +156,9 @@ pub struct Assembly {
     pub generator_fingerprint: String,
     pub catalogue_fingerprint: String,
     pub pieces: Vec<Piece>,
+    pub obstacles: Vec<Obstacle>,
+    pub obstacle_eligible_length_cm: u64,
+    pub obstacle_target_count: u32,
     pub length_cm: u64,
     pub estimated_msec: u32,
     pub ordinary_length_cm: u64,
@@ -270,24 +262,36 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "cylinder_wide_uturn_left",
         "cylinder_wide_s_rise",
         "banked_chicane",
-        "jump_barrier",
         "overpass",
         "roller_waves",
         "offset_jump",
-        "slalom_gates",
-        "swing_gates",
-        "piston_gates",
         "sprint_lane",
         "loop",
         "spiral_up",
         "spiral_down",
         "jump",
-        "fixed_obstacle",
-        "moving_obstacle",
-        "rotating_obstacle",
         "acceleration_panel",
         "boost_chain",
         "air_ring",
+    ]
+}
+/// Public choices are deliberately separate from resolved road presets.
+pub fn selection_ids() -> &'static [&'static str] {
+    &[
+        "cylinder",
+        "banked_chicane",
+        "overpass",
+        "roller_waves",
+        "offset_jump",
+        "sprint_lane",
+        "loop",
+        "spiral_up",
+        "spiral_down",
+        "jump",
+        "acceleration_panel",
+        "boost_chain",
+        "air_ring",
+        "obstacles",
     ]
 }
 pub fn fingerprint() -> String {
@@ -296,6 +300,7 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track.rs").as_slice(),
             include_bytes!("special_track.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
+            include_bytes!("assembled_track/obstacles.rs").as_slice(),
         ]
         .concat(),
     )
@@ -303,7 +308,7 @@ pub fn fingerprint() -> String {
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
-        "basic_piece_ids":basic_ids(),"widths_cm":[600,400,200],"width_weights":[2,2,1],
+        "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":[600,400,200],"width_weights":[2,2,1],
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
@@ -708,35 +713,6 @@ fn build_local_piece(original_id: &str) -> Piece {
                 ));
             }
         }
-        "slalom_gates" | "swing_gates" | "piston_gates" => {
-            for i in 0..=128 {
-                let t = i as f64 / 128.0;
-                p.push((
-                    [
-                        round(
-                            -105.0
-                                * libm::sin(
-                                    t * std::f64::consts::PI * 4.0 - std::f64::consts::FRAC_PI_2,
-                                )
-                                * libm::sin(t * std::f64::consts::PI).powi(2),
-                        ),
-                        0,
-                        round(t * SLOT as f64),
-                    ],
-                    [0, 1_000_000, 0],
-                    "drive".into(),
-                ));
-            }
-        }
-        "jump_barrier" => {
-            for i in 0..=64 {
-                p.push((
-                    [0, 0, i * 50],
-                    [0, 1_000_000, 0],
-                    if i == 23 { "jump_trigger" } else { "hurdle" }.into(),
-                ));
-            }
-        }
         "jump" | "air_ring" | "offset_jump" => {
             minimum = 1500;
             line(&mut p, [0, 0, 0], [0, 0, 1000], "drive");
@@ -755,6 +731,7 @@ fn build_local_piece(original_id: &str) -> Piece {
             }
             line(&mut p, [0, 0, 2200], [0, 0, SLOT], "drive");
         }
+        "sprint_lane" => line(&mut p, [0, 0, 0], [0, 0, 1600], "drive"),
         _ => line(&mut p, [0, 0, 0], [0, 0, SLOT], "drive"),
     }
     if id == "offset_jump" {
@@ -798,9 +775,6 @@ fn build_local_piece(original_id: &str) -> Piece {
                 unit([-f[0] * f[1], f[0] * f[0] + f[2] * f[2], -f[2] * f[1]])
             };
             let mut mode = mode.clone();
-            if id.contains("obstacle") && (450..=1100).contains(&pos[2]) {
-                mode = "avoid".into();
-            }
             if ["boost_chain", "acceleration_panel"].contains(&id) {
                 mode = "boost".into();
             }
@@ -831,15 +805,7 @@ fn build_local_piece(original_id: &str) -> Piece {
                 forward,
                 safe: ["drive", "drift", "bridge"].contains(&mode.as_str())
                     && !id.starts_with("cylinder")
-                    && ![
-                        "banked_chicane",
-                        "jump_barrier",
-                        "roller_waves",
-                        "offset_jump",
-                        "swing_gates",
-                        "piston_gates",
-                    ]
-                    .contains(&id)
+                    && !["banked_chicane", "roller_waves", "offset_jump"].contains(&id)
                     && !["loop", "jump", "air_ring", "spiral_up", "spiral_down"].contains(&id),
                 min_speed_cmps: minimum,
                 tube_radius_cm: if ["cylinder", "halfpipe"].contains(&mode.as_str()) {
@@ -967,7 +933,7 @@ fn build_local_piece(original_id: &str) -> Piece {
             2
         } else if small {
             1
-        } else if short_piece(id) {
+        } else if short_piece(id) || id == "sprint_lane" {
             2
         } else {
             4
@@ -1238,7 +1204,7 @@ impl Assembly {
             .settings
             .gimmicks
             .iter()
-            .filter(|id| !basic_ids().contains(&id.as_str()))
+            .filter(|id| id.as_str() != "obstacles")
         {
             if !self.pieces.iter().any(|p| family(&p.id) == family(id)) {
                 return Err(fail());
@@ -1327,6 +1293,13 @@ impl Assembly {
         {
             return Err(fail());
         }
+        let (obstacles, eligible, target) = obstacles::place(self)?;
+        if self.obstacles != obstacles
+            || self.obstacle_eligible_length_cm != eligible
+            || self.obstacle_target_count != target
+        {
+            return Err(fail());
+        }
         Ok(())
     }
 }
@@ -1362,20 +1335,14 @@ fn box_part(center: Vertex, size: Vertex) -> CollisionConvex {
         ],
     }
 }
-fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
+fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
     let mut out = vec![];
     for (index, p) in a.pieces.iter().enumerate() {
         let specs: Vec<(&str, i64)> = match p.id.as_str() {
             "loop" => vec![("acceleration_panel", 350), ("loop", 1000)],
             id if id.starts_with("cylinder") => vec![("cylinder", 0)],
             "banked_chicane" => vec![("halfpipe", 0)],
-            "jump_barrier" => vec![("barrier", 1400)],
             "jump" | "offset_jump" => vec![("acceleration_panel", 350), ("jump", 950)],
-            "slalom_gates" | "swing_gates" | "piston_gates" => vec![
-                (p.id.as_str(), 800),
-                (p.id.as_str(), 1600),
-                (p.id.as_str(), 2400),
-            ],
             "air_ring" => vec![
                 ("acceleration_panel", 350),
                 ("jump", 950),
@@ -1386,7 +1353,7 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                 ("acceleration_panel", 1600),
                 ("acceleration_panel", 2600),
             ],
-            "fixed_obstacle" | "moving_obstacle" | "rotating_obstacle" | "acceleration_panel" => {
+            "acceleration_panel" => {
                 vec![(p.id.as_str(), 1600)]
             }
             _ => vec![],
@@ -1459,44 +1426,6 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                         },
                     })
                 }
-                "slalom_gates" | "swing_gates" | "piston_gates" => {
-                    let side = if n % 2 == 0 { 1 } else { -1 };
-                    g.position = add(g.position, rotate([side * 110, 0, 0], p.quarter_turns));
-                    g.parts.push(box_part([0, 30, 0], [140, 60, 35]));
-                    g.color = if *id == "piston_gates" {
-                        [160, 85, 235, 255]
-                    } else {
-                        [245, 168, 35, 255]
-                    };
-                    if *id == "swing_gates" {
-                        g.motion.kind = MotionKind::Rotate;
-                        g.motion.period_ms = 3000;
-                        g.motion.phase_ms = n as u32 * 700;
-                    }
-                    if *id == "piston_gates" {
-                        g.motion.kind = MotionKind::Translate;
-                        g.motion.delta_cm = [0, 180, 0];
-                        g.motion.period_ms = 2400;
-                        g.motion.phase_ms = n as u32 * 700;
-                    }
-                }
-                "barrier" => {
-                    g.parts
-                        .push(box_part([0, 18, 0], [p.width_cm as i64, 36, 25]));
-                    g.color = [245, 168, 35, 255];
-                }
-                "fixed_obstacle" | "moving_obstacle" | "rotating_obstacle" => {
-                    // Keep an open avoidance lane on the narrower track.
-                    g.position = add(g.position, rotate([5, 0, 0], p.quarter_turns));
-                    g.parts.push(box_part([0, 50, 0], [40, 80, 60]));
-                    if *id == "moving_obstacle" {
-                        g.motion.kind = MotionKind::Translate;
-                        g.motion.delta_cm = rotate([-20, 0, 0], p.quarter_turns);
-                    }
-                    if *id == "rotating_obstacle" {
-                        g.motion.kind = MotionKind::Rotate;
-                    }
-                }
                 "air_ring" => {
                     g.position[1] += 200;
                     for side in [-1, 1] {
@@ -1531,6 +1460,16 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
             out.push(g);
         }
     }
+    out
+}
+fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
+    let mut out = road_gimmicks(a);
+    out.extend(
+        a.obstacles
+            .iter()
+            .enumerate()
+            .map(|(i, o)| obstacles::gimmick(a, o, i)),
+    );
     out
 }
 pub fn document(settings: &Settings) -> Result<MapDocument> {

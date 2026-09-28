@@ -182,3 +182,12 @@ helix. Ordinary 1m grades preserve the 8m horizontal lattice; actual floor sampl
 are shared with cylinder meshes and raised entry/exit ramps. See the **Random
 extension replacement** in [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). All own
 format numbers remain 1; source/catalogue fingerprints identify fresh output.
+
+Seed assembly's current v1 contract exposes `selection_ids` separately from road
+presets. Only `obstacles` selects attachments; seven retired obstacle road IDs are
+rejected in requests. The assembly contains `obstacles`,
+`obstacle_eligible_length_cm` and `obstacle_target_count`. Resolved path identity,
+station/frame, lateral sweep and AI action positions are validated by exact
+reconstruction. Duration options are 60/90/120 seconds in both modes, with circuit
+lap limits 3/2/2. Sprint-lane geometry is 1600cm. See
+[assembled tracks](../docs/ASSEMBLED_TRACKS.md) for placement and budget rules.
