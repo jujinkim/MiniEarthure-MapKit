@@ -287,3 +287,15 @@ Rust regressions cover geometry, attachment tampering, density/budgets,
 reproducibility, road identity with obstacles toggled, all durations/lap limits,
 save roundtrips, cancellation and original preservation. Consumer checks and
 actual driving acceptance are recorded by their owners.
+
+## Point queries and starting support — 2026-09-29
+
+`MapKitBridge.cell_at(x_cm,y_cm)` and `MapKitRegionReader.cell_at` return a
+PackedInt32Array `[x,y]`, or empty when unopened/outside the map. They query the
+same authoritative cell topology as `cell_window` without JSON/window expansion.
+`MapKitBridge.track_start_surface` resolves the actual piece ID in a validated
+assembly's fixed 24m starting runway, or empty outside it. It grants no placement
+admission; consumers still verify the full car, four wheels and registered physics.
+Runway geometry, individual road IDs and current v1 format remain unchanged.
+Focused checks: `assembled_start` (all runway pieces/outside edges),
+`godot/tests/cell_query_validator.gd` (regular/regional packed lookup versus window).

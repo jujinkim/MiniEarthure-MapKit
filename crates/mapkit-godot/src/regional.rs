@@ -166,6 +166,11 @@ impl MapKitRegionReader {
     }
     // These immutable metadata queries never wait on an in-flight I/O lock.
     #[func]
+    fn cell_at(&self, x_cm: i64, y_cm: i64) -> PackedInt32Array {
+        self.world.as_ref().and_then(|d| d.cell_at([x_cm, y_cm]))
+            .map(|c| PackedInt32Array::from(&[c.x, c.y][..])).unwrap_or_default()
+    }
+    #[func]
     fn cell_window(&self, x_cm: i64, y_cm: i64) -> GString {
         response((|| {
             let d = self

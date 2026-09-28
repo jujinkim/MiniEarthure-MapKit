@@ -104,6 +104,12 @@ impl MapKitBridge {
                 "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|a.settings.max_laps())})))
     }
     #[func]
+    fn track_start_surface(&self, x_cm: i64, y_cm: i64) -> GString {
+        self.package.as_ref().and_then(|p| p.document.assembled_track.as_ref())
+            .and_then(|a| mapkit_core::assembled_track::start_surface_at(a, [x_cm,y_cm]))
+            .map(|id| GString::from(id.as_str())).unwrap_or_default()
+    }
+    #[func]
     fn special_track_bounds(&self, text: GString) -> GString {
         response((|| {
             let track: mapkit_core::special_track::SpecialTrack = serde_json::from_value(engine_value(&text.to_string())?)
@@ -202,6 +208,12 @@ impl MapKitBridge {
             self.package = Some(p);
             info
         }))
+    }
+    /// Hot position lookup: no window expansion, geometry scan or JSON allocation.
+    #[func]
+    fn cell_at(&self, x_cm: i64, y_cm: i64) -> PackedInt32Array {
+        self.package.as_ref().and_then(|p| p.document.cell_at([x_cm, y_cm]))
+            .map(|c| PackedInt32Array::from(&[c.x, c.y][..])).unwrap_or_default()
     }
     /// Map topology is owned by MapKit; callers never reimplement cell-index constants.
     #[func]

@@ -7,6 +7,7 @@ use crate::*;
 pub const WIDTH: i64 = 400;
 pub const WALL: i64 = 60;
 pub const TILE_CM: i64 = 800;
+pub const START_PIECES: usize = 3;
 pub const FINISH_ENTRY_CM: i64 = 800;
 pub const FINISH_RADIUS_CM: i64 = 800;
 pub const FINISH_WALL_CM: i64 = 120;
@@ -165,6 +166,22 @@ pub struct Assembly {
     pub ordinary_straight_cm: u64,
     pub floor: VenueFloor,
     pub finish_plaza: Option<FinishPlaza>,
+}
+
+/// The fixed flat runway has separate support identities for each piece.
+/// Resolve a grid anchor without generating a whole collision cell. Callers
+/// must still verify the full footprint, wheel support and occupied volume.
+pub fn start_surface_at(assembly: &Assembly, point: [i64; 2]) -> Option<String> {
+    assembly.pieces.iter().take(START_PIECES).enumerate().find_map(|(i, p)| {
+        let first = p.path.first()?;
+        let last = p.path.last()?;
+        let half = i64::from(p.width_cm) / 2;
+        (point[0] >= first.position_cm[0] - half
+            && point[0] <= first.position_cm[0] + half
+            && point[1] >= first.position_cm[2]
+            && point[1] <= last.position_cm[2])
+            .then(|| format!("assembled-road-{i}"))
+    })
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]

@@ -397,7 +397,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     }
     let mut pieces = vec![];
     let mut origin = [0; 3];
-    for _ in 0..3 {
+    for _ in 0..START_PIECES {
         push_piece(&mut pieces, &mut origin, 0, "straight", 400, false, [0; 3]);
     }
     if !mandatory(&mut pieces, &ids, &mut rng, &mut 0)? {
