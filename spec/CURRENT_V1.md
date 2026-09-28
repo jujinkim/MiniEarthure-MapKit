@@ -170,3 +170,5 @@ occupancy and budgets consume MapKit geometry.
 
 Focused package assembly, both containers, strict schema, audit accounting and
 course tests passed locally. Consumer driving acceptance is separate.
+
+The sprint finish checkpoint is an explicit path sample in the terminal entry, so AI routes use the same exact point as race progression. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.

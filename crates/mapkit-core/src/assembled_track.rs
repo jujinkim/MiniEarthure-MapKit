@@ -453,7 +453,10 @@ fn build_local_piece(original_id: &str) -> Piece {
     let mut p: Vec<(Vertex, Vertex, String)> = vec![];
     let mut minimum = 0;
     match id {
-        "finish_plaza" => line(&mut p, [0, 0, 0], [0, 0, FINISH_ENTRY_CM], "drive"),
+        "finish_plaza" => {
+            line(&mut p, [0, 0, 0], [0, 0, FINISH_ENTRY_CM / 2], "drive");
+            line(&mut p, [0, 0, FINISH_ENTRY_CM / 2], [0, 0, FINISH_ENTRY_CM], "drive");
+        }
         "curve" | "curve_left" | "sharp_curve" | "sharp_curve_left" => {
             bend(
                 &mut p,

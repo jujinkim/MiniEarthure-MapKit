@@ -298,6 +298,7 @@ fn finish_plaza_and_editable_free_roam_keep_exact_source_validation() {
     assert_eq!(d.courses[0].definition.checkpoints.last().unwrap().position_cm,plaza.checkpoint_cm);
     assert!(d.courses[0].definition.checkpoints.iter().all(|cp|cp.position_cm != plaza.center_cm));
     let p=&a.pieces[plaza.piece_index];
+    assert!(p.path.iter().any(|point|point.position_cm==plaza.checkpoint_cm),"finish must be an exact AI route sample");
     assert_eq!(a.pieces[plaza.piece_index-1].path.last().unwrap().position_cm,p.path[0].position_cm);
     let prior_length:u64 = a.pieces[..plaza.piece_index].iter().map(|p|p.path.windows(2).map(|w|{
         ((0..3).map(|i|((w[1].position_cm[i]-w[0].position_cm[i]) as f64).powi(2)).sum::<f64>().sqrt().round()) as u64
