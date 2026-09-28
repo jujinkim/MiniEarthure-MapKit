@@ -181,8 +181,7 @@
         "ordinary_length_cm",
         "ordinary_straight_cm",
         "pieces",
-        "settings",
-        "straight_target_percent"
+        "settings"
       ],
       "properties": {
         "catalogue_fingerprint": {
@@ -232,11 +231,6 @@
         },
         "settings": {
           "$ref": "#/definitions/Settings"
-        },
-        "straight_target_percent": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0.0
         }
       },
       "additionalProperties": false

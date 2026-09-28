@@ -1,5 +1,8 @@
 # Seeded modular tracks (current v1)
 
+Current behavior is the **Random extension replacement** below. Earlier dated
+sections preserve their implementation/test history, not current generation rules.
+
 `mapkit_core::assembled_track` owns the catalogue, dimensions, seeded selection,
 connections, corridors and collision geometry. `mapkit_package::assembled_track`
 adds a matching public course and package save/verification. Consumers do not
@@ -188,3 +191,51 @@ output. Original packages and user documents remain untouched.
 
 Focused automated evidence is linked from root `docs/SEED_TRACK_VARIETY.md`.
 Detailed driving, whole AI races, multiplayer and device acceptance remain user tests.
+
+## Random extension replacement — 2026-09-28
+
+The current v1 definition replaces the four-side scaffold, straight-share target,
+probabilistic mandatory chain lengths and automatically balanced helices. Each
+selected family requires one piece. Random ordinary pieces and optional selected
+pieces extend the route with bounded backtracking; optional pieces consume only
+the remaining time after mandatory pieces and a connection allowance. A final
+safe connection exceeding that allowance rolls optional extensions back. Required
+pieces are retained even when they alone exceed the requested duration.
+
+Circuits close their position, heading and height through ordinary straight,
+corner and grade pieces. Sprints retain the finish plaza. At most 24 valid/failed
+candidate attempts are compared using absolute estimated-time error only. There
+is no fixed outline or turn-count quota. Search bounds are 192 mandatory extension
+attempts, 32 random-growth rollbacks, 4096 nodes per closure, and 16 terminal
+rollback attempts, within the
+existing 512-piece/32000-sample and downstream cell/memory limits. Cancellation
+propagates through extension, closure, validation and packaging.
+
+Gimmick families allow at most two in succession, including across a circuit
+boundary. Mandatory approach/exit pieces do not reset this count. All cylinder
+widths and bends share one family; upward/downward helices are separate. Randomly
+chosen ordinary roads reset it. The initial 24m grid is preserved. Road/bore width
+choices retain 6/4/2m weights 2:2:1; the closure solver uses 4m ordinary ports.
+
+`slope_up/down`, `curve_up/down` and `curve_left_up/down` are ordinary pieces, not
+checkboxes. Horizontal ports remain on the 8m lattice; they change elevation by
+1m. Turning grades rise on their straight leads and stay level through the
+circular arc so the 6m road's inner edge remains below 23%. Cubic easing, flat
+quantized end segments and equal port forward/normal vectors join neighbouring
+roads. Helices retain their 8m rise/drop.
+
+Cylinder path samples now represent the actual inner floor, also used verbatim
+by `TubeFrame.floor_cm`. The floor is raised above the neighbouring roads by the
+existing diameter/3 eased ramp (maximum 12%); the exit starts at that same floor
+and descends. There is no path-to-floor offset. Rendering, mesh collision, hollow
+occupancy and AI thus describe the same 2/4/6m bore. Document bounds include the
+actual generated gimmick safety envelope, including bends near an outer edge.
+
+`straight_target_percent` is removed from the strict schema and metadata. Actual
+length, estimated time and measured ordinary-road straight share remain. Formats
+stay v1; source/catalogue fingerprints change. Existing files are preserved.
+
+Focused tests: core assembly 3, package assembly 9, schema 1, special geometry 5,
+overview 5, audit memory 8 and cooperative cancellation 2. The integration root
+records exact logs and synthetic physics checks in `docs/SIMPLIFIED_SEED_TRACKS.md`.
+Detailed driving, complete races and platform acceptance remain user checks.

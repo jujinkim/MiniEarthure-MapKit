@@ -172,3 +172,13 @@ Focused package assembly, both containers, strict schema, audit accounting and
 course tests passed locally. Consumer driving acceptance is separate.
 
 The sprint finish checkpoint is an explicit path sample in the terminal entry, so AI routes use the same exact point as race progression. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.
+
+## Random seed extension (2026-09-28 replacement)
+
+The current assembly removes `straight_target_percent`. Selected families require
+one instance, with at most two consecutive family members even across mandatory
+transitions/circuit boundaries. There is no fixed scaffold or mandatory opposite
+helix. Ordinary 1m grades preserve the 8m horizontal lattice; actual floor samples
+are shared with cylinder meshes and raised entry/exit ramps. See the **Random
+extension replacement** in [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). All own
+format numbers remain 1; source/catalogue fingerprints identify fresh output.

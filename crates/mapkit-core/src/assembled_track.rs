@@ -17,6 +17,7 @@ const LOOP_OFFSET: i64 = 143;
 const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
+mod layout;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -98,6 +99,12 @@ fn basic_ids() -> &'static [&'static str] {
         "hairpin",
         "hairpin_left",
         "slope",
+        "slope_up",
+        "slope_down",
+        "curve_up",
+        "curve_down",
+        "curve_left_up",
+        "curve_left_down",
         "zigzag",
         "chicane",
         "straight_narrow",
@@ -162,7 +169,6 @@ pub struct Assembly {
     pub pieces: Vec<Piece>,
     pub length_cm: u64,
     pub estimated_msec: u32,
-    pub straight_target_percent: u32,
     pub ordinary_length_cm: u64,
     pub ordinary_straight_cm: u64,
     pub floor: VenueFloor,
@@ -182,21 +188,43 @@ pub struct FinishPlaza {
 }
 fn plaza_center(p: &Piece) -> Vertex {
     let half = i64::from(p.width_cm) / 2;
-    add(p.origin_cm, rotate([0, 0, FINISH_ENTRY_CM + round(libm::sqrt((FINISH_RADIUS_CM.pow(2) - half.pow(2)) as f64))], p.quarter_turns))
+    add(
+        p.origin_cm,
+        rotate(
+            [
+                0,
+                0,
+                FINISH_ENTRY_CM + round(libm::sqrt((FINISH_RADIUS_CM.pow(2) - half.pow(2)) as f64)),
+            ],
+            p.quarter_turns,
+        ),
+    )
 }
 fn finish_plaza(pieces: &[Piece]) -> Option<FinishPlaza> {
     let p = pieces.last()?;
     (p.id == "finish_plaza").then(|| FinishPlaza {
-        center_cm: plaza_center(p), recovery_cm: plaza_center(p),
+        center_cm: plaza_center(p),
+        recovery_cm: plaza_center(p),
         forward: rotate([0, 0, 1_000_000], p.quarter_turns),
-        checkpoint_cm: add(p.origin_cm, rotate([0, 0, FINISH_ENTRY_CM / 2], p.quarter_turns)),
-        radius_cm: FINISH_RADIUS_CM, entry_length_cm: FINISH_ENTRY_CM,
-        wall_height_cm: FINISH_WALL_CM, piece_index: pieces.len() - 1,
+        checkpoint_cm: add(
+            p.origin_cm,
+            rotate([0, 0, FINISH_ENTRY_CM / 2], p.quarter_turns),
+        ),
+        radius_cm: FINISH_RADIUS_CM,
+        entry_length_cm: FINISH_ENTRY_CM,
+        wall_height_cm: FINISH_WALL_CM,
+        piece_index: pieces.len() - 1,
     })
 }
 fn race_length(p: &Piece) -> u64 {
-    if p.id == "finish_plaza" { (FINISH_ENTRY_CM / 2) as u64 }
-    else { p.path.windows(2).map(|w| distance(w[0].position_cm, w[1].position_cm)).sum() }
+    if p.id == "finish_plaza" {
+        (FINISH_ENTRY_CM / 2) as u64
+    } else {
+        p.path
+            .windows(2)
+            .map(|w| distance(w[0].position_cm, w[1].position_cm))
+            .sum()
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -218,6 +246,12 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "hairpin",
         "hairpin_left",
         "slope",
+        "slope_up",
+        "slope_down",
+        "curve_up",
+        "curve_down",
+        "curve_left_up",
+        "curve_left_down",
         "zigzag",
         "chicane",
         "straight_narrow",
@@ -261,6 +295,7 @@ pub fn fingerprint() -> String {
         &[
             include_bytes!("assembled_track.rs").as_slice(),
             include_bytes!("special_track.rs").as_slice(),
+            include_bytes!("assembled_track/layout.rs").as_slice(),
         ]
         .concat(),
     )
@@ -455,7 +490,12 @@ fn build_local_piece(original_id: &str) -> Piece {
     match id {
         "finish_plaza" => {
             line(&mut p, [0, 0, 0], [0, 0, FINISH_ENTRY_CM / 2], "drive");
-            line(&mut p, [0, 0, FINISH_ENTRY_CM / 2], [0, 0, FINISH_ENTRY_CM], "drive");
+            line(
+                &mut p,
+                [0, 0, FINISH_ENTRY_CM / 2],
+                [0, 0, FINISH_ENTRY_CM],
+                "drive",
+            );
         }
         "curve" | "curve_left" | "sharp_curve" | "sharp_curve_left" => {
             bend(
@@ -466,6 +506,61 @@ fn build_local_piece(original_id: &str) -> Piece {
                 if id.ends_with("_left") { -1 } else { 1 },
                 "drift",
             );
+        }
+        "slope_up" | "slope_down" | "curve_up" | "curve_down" | "curve_left_up"
+        | "curve_left_down" => {
+            let sign = if id.ends_with("_down") { -1.0 } else { 1.0 };
+            let left = id.contains("left");
+            if id.starts_with("curve") {
+                bend(&mut p, 400, 400, 1, if left { -1 } else { 1 }, "drift");
+            } else {
+                line(&mut p, [0, 0, 0], [0, 0, TILE_CM], "drive");
+            }
+            // Sample the leads every 25 cm, including their exact flat joins.
+            // Straight leads created by bend/line use 150 cm steps. Rebuild them
+            // explicitly; the circular arc already has sub-20 cm samples.
+            p.retain(|v| !id.starts_with("curve") || (v.0[2] >= 400 && v.0[0].abs() <= 400));
+            if id.starts_with("curve") {
+                let arc = p;
+                p = (0..16)
+                    .map(|i| ([0, 0, i * 25], [0, 1_000_000, 0], "drive".into()))
+                    .collect();
+                p.extend(arc);
+                for i in 1..=16 {
+                    p.push((
+                        [if left { -400 - i * 25 } else { 400 + i * 25 }, 0, 800],
+                        [0, 1_000_000, 0],
+                        "drive".into(),
+                    ));
+                }
+            } else {
+                p = (0..=32)
+                    .map(|i| ([0, 0, i * 25], [0, 1_000_000, 0], "drive".into()))
+                    .collect();
+            }
+            for v in &mut p {
+                let ease = |t: f64| t * t * (3.0 - 2.0 * t);
+                let height = if !id.starts_with("curve") {
+                    100.0 * ease(v.0[2] as f64 / 800.0)
+                } else if v.0[2] <= 400 {
+                    50.0 * ease(v.0[2] as f64 / 400.0)
+                } else if v.0[0].abs() >= 400 {
+                    50.0 + 50.0 * ease((v.0[0].abs() - 400) as f64 / 400.0)
+                } else {
+                    50.0
+                };
+                // Preserve flat end segments after centimetre quantization too.
+                // Otherwise the first 25cm chord of a turning ramp can rise 1cm
+                // despite the analytic zero endpoint derivative.
+                let height = round(height);
+                v.0[1] = (if height <= 1 {
+                    0
+                } else if height >= 99 {
+                    100
+                } else {
+                    height
+                }) * if sign < 0.0 { -1 } else { 1 };
+            }
         }
         "hairpin" | "hairpin_left" => {
             bend(
@@ -716,12 +811,12 @@ fn build_local_piece(original_id: &str) -> Piece {
                     [0, 0, -1_000_000]
                 } else if id == "curve"
                     || id == "sharp_curve"
-                    || (id.contains("curve") && !id.ends_with("_left"))
+                    || (id.contains("curve") && !id.contains("left"))
                 {
                     [1_000_000, 0, 0]
                 } else if id == "curve_left"
                     || id == "sharp_curve_left"
-                    || (id.contains("curve") && id.ends_with("_left"))
+                    || (id.contains("curve") && id.contains("left"))
                 {
                     [-1_000_000, 0, 0]
                 } else {
@@ -1060,64 +1155,6 @@ fn push_piece(
     *origin = p.path.last().unwrap().position_cm;
     pieces.push(p);
 }
-#[derive(Clone)]
-struct Block {
-    id: String,
-    count: usize,
-    width: u32,
-    balance: bool,
-}
-impl Block {
-    fn tiles(&self) -> usize {
-        let unit = if short_piece(&self.id) { 2 } else { 4 };
-        self.count * unit * (if self.balance { 2 } else { 1 })
-            + if self.id == "cylinder" {
-                2 * ramp_tiles(self.width)
-            } else {
-                2
-            }
-    }
-}
-fn required(s: &Settings) -> Result<Vec<Block>> {
-    let mut rng = s.seed ^ 0x814d229a;
-    let mut ids: Vec<_> = s
-        .gimmicks
-        .iter()
-        .filter(|id| !basic_ids().contains(&id.as_str()))
-        .map(|s| family(s).to_string())
-        .collect();
-    ids.sort();
-    ids.dedup();
-    let mut blocks = vec![];
-    for id in ids {
-        let mut count = 1;
-        while next(&mut rng) % 2 == 0 {
-            count += 1;
-            if count > MAX_PIECES {
-                return Err(error(
-                    "E_TRACK_BUDGET",
-                    "required special chain exceeds piece budget",
-                ));
-            }
-        }
-        let w = if ["loop", "banked_chicane", "overpass"].contains(&id.as_str()) {
-            400
-        } else {
-            width(&mut rng)
-        };
-        blocks.push(Block {
-            balance: id.starts_with("spiral"),
-            id,
-            count,
-            width: w,
-        });
-    }
-    for i in (1..blocks.len()).rev() {
-        let j = next(&mut rng) as usize % (i + 1);
-        blocks.swap(i, j);
-    }
-    Ok(blocks)
-}
 fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
     let (mut length, mut ordinary, mut straight, mut time) = (0, 0, 0, 0);
     let mut lo = [i64::MAX; 3];
@@ -1145,7 +1182,7 @@ fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
             }
         }
     }
-    let floor_y = lo[1] - 235; // Always below the lowest tube bottom, including 6m bores.
+    let floor_y = lo[1] - 235; // Below every road and shell; never an AI/spawn surface.
     (
         length,
         ordinary,
@@ -1157,229 +1194,8 @@ fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
         },
     )
 }
-fn candidate(
-    s: &Settings,
-    blocks: &[Block],
-    attempt: u64,
-    target_percent: u32,
-) -> Result<Assembly> {
-    let mut rng = s.seed ^ attempt.wrapping_mul(0xa0761d6478bd642f);
-    let mut sides: Vec<Vec<&Block>> = vec![vec![]; 4];
-    for block in blocks {
-        let side = next(&mut rng) as usize % 4;
-        sides[side].push(block);
-    }
-    let needs: Vec<usize> = sides
-        .iter()
-        .enumerate()
-        .map(|(i, b)| b.iter().map(|v| v.tiles()).sum::<usize>() + if i == 0 { 3 } else { 0 })
-        .collect();
-    let target_tiles = (u32::from(s.duration_seconds) * SPEED as u32 / TILE_CM as u32) as usize;
-    let extra = (target_tiles.saturating_sub(needs.iter().sum::<usize>()) / 4).max(4);
-    let stretch = (attempt as usize % 8) * extra / 4;
-    let a = needs[0].max(needs[2]).max(6) + stretch;
-    let b = needs[1].max(needs[3]).max(6) + (7 - attempt as usize % 8) * extra / 4;
-    let runs = [a, b, a, b];
-    let mut pieces = vec![];
-    let mut origin = [0; 3];
-    let mut heading = 0;
-    let mut chain = 0;
-    for side in 0..if s.circuit { 4 } else { 3 } {
-        // For a sprint, reserve every selected block on the three traversed sides.
-        let mut list = sides[side].clone();
-        if !s.circuit && side == 2 {
-            list.extend(sides[3].iter());
-        }
-        let need = list.iter().map(|b| b.tiles()).sum::<usize>() + if side == 0 { 3 } else { 0 };
-        let mut remaining = runs[side].max(need) - need;
-        if side == 0 {
-            for _ in 0..3 {
-                push_piece(
-                    &mut pieces,
-                    &mut origin,
-                    heading,
-                    "straight",
-                    400,
-                    false,
-                    [0; 3],
-                );
-            }
-        }
-        let filler =
-            |remaining: &mut usize, pieces: &mut Vec<Piece>, origin: &mut Vertex, rng: &mut u64| {
-                let chance = f64::from(target_percent) * 2512.0
-                    / (f64::from(target_percent) * 2512.0 + (100 - target_percent) as f64 * 800.0);
-                let curved = *remaining >= 2
-                    && !pieces.iter().rev().take(4).all(|p| p.id == "chicane")
-                    && next(rng) % 10000 >= (chance * 10000.0) as u64;
-                let id = if curved {
-                    "chicane"
-                } else if pieces.iter().rev().take(4).all(|p| p.id == "straight")
-                    || next(rng) % 5 == 0
-                {
-                    "slope"
-                } else {
-                    "straight"
-                };
-                push_piece(pieces, origin, heading, id, width(rng), true, [0; 3]);
-                *remaining -= if curved { 2 } else { 1 };
-            };
-        for block in list {
-            let before = if remaining == 0 {
-                0
-            } else {
-                next(&mut rng) as usize % (remaining + 1)
-            };
-            let stop = remaining - before;
-            while remaining > stop {
-                filler(&mut remaining, &mut pieces, &mut origin, &mut rng);
-            }
-            chain += 1;
-            let tube = block.id == "cylinder";
-            push_piece(
-                &mut pieces,
-                &mut origin,
-                heading,
-                if tube { "tube_entry" } else { "straight" },
-                block.width,
-                false,
-                [0; 3],
-            );
-            for i in 0..block.count {
-                push_piece(
-                    &mut pieces,
-                    &mut origin,
-                    heading,
-                    &block.id,
-                    block.width,
-                    false,
-                    [chain, i as u32, block.count as u32],
-                );
-            }
-            if block.balance {
-                chain += 1;
-                let opposite = if block.id == "spiral_up" {
-                    "spiral_down"
-                } else {
-                    "spiral_up"
-                };
-                for i in 0..block.count {
-                    push_piece(
-                        &mut pieces,
-                        &mut origin,
-                        heading,
-                        opposite,
-                        block.width,
-                        false,
-                        [chain, i as u32, block.count as u32],
-                    );
-                }
-            }
-            push_piece(
-                &mut pieces,
-                &mut origin,
-                heading,
-                if tube { "tube_exit" } else { "straight" },
-                block.width,
-                false,
-                [0; 3],
-            );
-        }
-        while remaining > 0 {
-            filler(&mut remaining, &mut pieces, &mut origin, &mut rng);
-        }
-        if s.circuit || side < 2 {
-            push_piece(
-                &mut pieces,
-                &mut origin,
-                heading,
-                "sharp_curve",
-                width(&mut rng),
-                true,
-                [0; 3],
-            );
-            heading = (heading + 1) % 4;
-        }
-        if pieces.len() > MAX_PIECES {
-            return Err(error(
-                "E_TRACK_BUDGET",
-                "mandatory pieces and connecting roads exceed budget",
-            ));
-        }
-    }
-    if !s.circuit {
-        let w = pieces.last().unwrap().width_cm;
-        push_piece(&mut pieces, &mut origin, heading, "finish_plaza", w, false, [0; 3]);
-    }
-    // Match shared cross sections, with transitions entirely inside each road.
-    for i in 0..pieces.len() {
-        let prev = if i == 0 {
-            if s.circuit {
-                pieces.len() - 1
-            } else {
-                0
-            }
-        } else {
-            i - 1
-        };
-        let next = (i + 1).min(pieces.len() - 1);
-        let next = if i + 1 == pieces.len() && s.circuit {
-            0
-        } else {
-            next
-        };
-        let joint = |a: &Piece, b: &Piece| {
-            if a.id.starts_with("cylinder") || b.id.starts_with("cylinder") {
-                a.width_cm.min(b.width_cm)
-            } else if ["loop", "banked_chicane", "overpass"].contains(&a.id.as_str())
-                || ["loop", "banked_chicane", "overpass"].contains(&b.id.as_str())
-            {
-                400
-            } else {
-                (a.width_cm + b.width_cm) / 2
-            }
-        };
-        pieces[i].entry_width_cm = joint(&pieces[prev], &pieces[i]);
-        pieces[i].exit_width_cm = joint(&pieces[i], &pieces[next]);
-    }
-    pieces = pieces.iter().map(materialize).collect();
-    let (length_cm, ordinary_length_cm, ordinary_straight_cm, estimated_msec, floor) =
-        statistics(&pieces);
-    Ok(Assembly {
-        settings: s.clone(),
-        generator_fingerprint: fingerprint(),
-        catalogue_fingerprint: catalogue_fingerprint(),
-        finish_plaza: finish_plaza(&pieces),
-        pieces,
-        length_cm,
-        estimated_msec,
-        straight_target_percent: target_percent,
-        ordinary_length_cm,
-        ordinary_straight_cm,
-        floor,
-    })
-}
 pub fn assemble(settings: &Settings) -> Result<Assembly> {
-    let s = settings.normalized()?;
-    let blocks = required(&s)?;
-    let mut rng = s.seed ^ 0x51eed;
-    let ratio = 10 + (next(&mut rng) % 81) as u32;
-    let target = u32::from(s.duration_seconds) * 1000;
-    let score = |a: &Assembly| {
-        let actual = a.ordinary_straight_cm as f64 / a.ordinary_length_cm.max(1) as f64;
-        (actual - f64::from(ratio) / 100.0).abs() * 150.0
-            + f64::from(a.estimated_msec.abs_diff(target)) / 1000.0
-    };
-    let mut best = None;
-    for attempt in 0..24 {
-        cancellation::checkpoint()?;
-        if let Ok(a) = candidate(&s, &blocks, attempt, ratio) {
-            if a.validate().is_ok() && best.as_ref().is_none_or(|b| score(&a) < score(b)) {
-                best = Some(a);
-            }
-        }
-    }
-    best.ok_or_else(||error("E_TRACK_BUDGET","no connected collision-free layout fits the search, cell and memory budgets with every required gimmick"))
+    layout::assemble(settings)
 }
 
 impl Assembly {
@@ -1406,7 +1222,13 @@ impl Assembly {
         }
 
         if self.finish_plaza != finish_plaza(&self.pieces)
-            || self.pieces.iter().filter(|p| p.id == "finish_plaza").count() != usize::from(!self.settings.circuit) {
+            || self
+                .pieces
+                .iter()
+                .filter(|p| p.id == "finish_plaza")
+                .count()
+                != usize::from(!self.settings.circuit)
+        {
             return Err(fail());
         }
         if self.estimated_msec == 0 {
@@ -1422,19 +1244,8 @@ impl Assembly {
                 return Err(fail());
             }
         }
-        // Only ordinary roads retain the repeated-piece limit.
-        for i in 0..self.pieces.len() {
-            if !self.settings.circuit && i + 4 >= self.pieces.len() {
-                break;
-            }
-            if self.pieces[i].ordinary
-                && (1..5).all(|n| {
-                    let p = &self.pieces[(i + n) % self.pieces.len()];
-                    p.ordinary && p.id == self.pieces[i].id
-                })
-            {
-                return Err(fail());
-            }
+        if !layout::valid_runs(&self.pieces, self.settings.circuit) {
+            return Err(fail());
         }
         let stats = statistics(&self.pieces);
         if (stats.0, stats.1, stats.2, stats.3, stats.4)
@@ -1495,28 +1306,12 @@ impl Assembly {
             }
             length += race_length(p);
             time += p.reference_msec;
-            // Reserved slots may touch their immediate neighbours only. Test the
-            // interior footprint so connection margins are not treated as overlap.
-            for other in self.pieces.iter().take(i.saturating_sub(1)) {
-                if i + 1 == self.pieces.len() && std::ptr::eq(other, &self.pieces[0]) {
+            for (j, other) in self.pieces.iter().take(i.saturating_sub(1)).enumerate() {
+                if self.settings.circuit && i + 1 == self.pieces.len() && j == 0 {
                     continue;
                 }
-                if (0..3).all(|a| {
-                    p.reserved_min_cm[a] < other.reserved_max_cm[a]
-                        && other.reserved_min_cm[a] < p.reserved_max_cm[a]
-                }) {
-                    // The width-dependent exclusion includes lane,
-                    // shell and discretization margin without filling a curved bay.
-                    if p.path.iter().chain(&p.alternate_path).any(|s| {
-                        other.path.iter().chain(&other.alternate_path).any(|t| {
-                            (s.position_cm[1] - t.position_cm[1]).abs() < 250
-                                && (s.position_cm[0] - t.position_cm[0]).pow(2)
-                                    + (s.position_cm[2] - t.position_cm[2]).pow(2)
-                                    < (i64::from(s.lateral_cm + t.lateral_cm) + 60).pow(2)
-                        })
-                    }) {
-                        return Err(fail());
-                    }
+                if layout::overlaps(p, other) {
+                    return Err(fail());
                 }
             }
         }
@@ -1656,14 +1451,7 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                                 .iter()
                                 .filter(|s| ["cylinder", "halfpipe"].contains(&s.mode.as_str()))
                                 .map(|s| TubeFrame {
-                                    floor_cm: if *id == "cylinder" {
-                                        add(
-                                            s.position_cm,
-                                            [0, -round(f64::from(p.width_cm) / 3.0), 0],
-                                        )
-                                    } else {
-                                        s.position_cm
-                                    },
+                                    floor_cm: s.position_cm,
                                     normal: s.normal,
                                     forward: s.forward,
                                 })
@@ -1757,11 +1545,18 @@ pub fn document(settings: &Settings) -> Result<MapDocument> {
             bounds.max[j] = bounds.max[j].max(p.reserved_max_cm[j * 2] + 4000);
         }
     }
+    let objects = gimmicks(&a);
+    for g in &objects {
+        for j in 0..2 {
+            bounds.min[j] = bounds.min[j].min(g.safety_min_cm[j * 2]);
+            bounds.max[j] = bounds.max[j].max(g.safety_max_cm[j * 2]);
+        }
+    }
     let mut d = MapDocument {
         free_roam: false,
         assembled_track: Some(a.clone()),
         water_bodies: vec![],
-        gimmicks: gimmicks(&a),
+        gimmicks: objects,
         courses: vec![],
         environment: Some(environment::EnvironmentProfile {
             version: 1,
@@ -1900,7 +1695,11 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
                 if !special {
                     // A wide twisted helix quad creates a diagonal ridge. Subdivide
                     // across the lane so wheel contacts follow the swept surface.
-                    let strips = if p.id.starts_with("spiral") { 8 } else { 1 };
+                    let strips = if p.id.starts_with("spiral") || p.id.starts_with("curve_") {
+                        8
+                    } else {
+                        1
+                    };
                     let mix = |a: Vertex, b: Vertex, n: i64| {
                         std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
                     };
@@ -1990,7 +1789,13 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
                     && p.reserved_max_cm[j * 2] >= bounds.min[j]
             })
         })
-        .map(|p| if p.id == "finish_plaza" { 128 } else { p.path.len() as u64 - 1 + p.alternate_path.len().saturating_sub(1) as u64 })
+        .map(|p| {
+            if p.id == "finish_plaza" {
+                128
+            } else {
+                p.path.len() as u64 - 1 + p.alternate_path.len().saturating_sub(1) as u64
+            }
+        })
         .sum::<u64>();
     (segments * 100 + 10, segments * 3 + 1)
 }
@@ -2001,36 +1806,99 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
     let transform = |v| add(p.origin_cm, rotate(v, p.quarter_turns));
     let road = format!("assembled-road-{index}");
     let wall = format!("assembled-wall-{index}");
-    let entry = [transform([-half, 0, 0]), transform([-half, 0, FINISH_ENTRY_CM]),
-        transform([half, 0, FINISH_ENTRY_CM]), transform([half, 0, 0])];
+    let entry = [
+        transform([-half, 0, 0]),
+        transform([-half, 0, FINISH_ENTRY_CM]),
+        transform([half, 0, FINISH_ENTRY_CM]),
+        transform([half, 0, 0]),
+    ];
     b.quad(entry, Surface::Asphalt, &road, true)?;
     let mut boundary = vec![];
     let opening = libm::asin(half as f64 / FINISH_RADIUS_CM as f64);
     for i in 0..=64 {
-        let angle = -std::f64::consts::PI + opening + (2.0 * std::f64::consts::PI - 2.0 * opening) * i as f64 / 64.0;
-        boundary.push(add(center, rotate([round(FINISH_RADIUS_CM as f64 * libm::sin(angle)), 0,
-            round(FINISH_RADIUS_CM as f64 * libm::cos(angle))], p.quarter_turns)));
+        let angle = -std::f64::consts::PI
+            + opening
+            + (2.0 * std::f64::consts::PI - 2.0 * opening) * i as f64 / 64.0;
+        boundary.push(add(
+            center,
+            rotate(
+                [
+                    round(FINISH_RADIUS_CM as f64 * libm::sin(angle)),
+                    0,
+                    round(FINISH_RADIUS_CM as f64 * libm::cos(angle)),
+                ],
+                p.quarter_turns,
+            ),
+        ));
     }
     // Exact seam endpoints prevent quantization cracks at the entrance chord.
-    boundary[0] = entry[1]; boundary[64] = entry[2];
+    boundary[0] = entry[1];
+    boundary[64] = entry[2];
     for i in 0..boundary.len() {
-        let a = boundary[i]; let c = boundary[(i + 1) % boundary.len()];
+        let a = boundary[i];
+        let c = boundary[(i + 1) % boundary.len()];
         b.triangle([center, a, c], Surface::Asphalt, &road, true)?;
-        let vertices = vec![center, a, c, add(center,[0,-10,0]), add(a,[0,-10,0]), add(c,[0,-10,0])];
-        b.solid(&road, SolidShape::Convex(CollisionConvex { vertices, faces: vec![[0,1,2],[5,4,3],[0,3,4],[0,4,1],[1,4,5],[1,5,2],[2,5,3],[2,3,0]] }))?;
+        let vertices = vec![
+            center,
+            a,
+            c,
+            add(center, [0, -10, 0]),
+            add(a, [0, -10, 0]),
+            add(c, [0, -10, 0]),
+        ];
+        b.solid(
+            &road,
+            SolidShape::Convex(CollisionConvex {
+                vertices,
+                faces: vec![
+                    [0, 1, 2],
+                    [5, 4, 3],
+                    [0, 3, 4],
+                    [0, 4, 1],
+                    [1, 4, 5],
+                    [1, 5, 2],
+                    [2, 5, 3],
+                    [2, 3, 0],
+                ],
+            }),
+        )?;
     }
-    b.solid(&road, SolidShape::Box {
-        min: std::array::from_fn(|j| entry.iter().map(|v|v[j]).min().unwrap() - if j == 1 {10} else {0}),
-        max: std::array::from_fn(|j| entry.iter().map(|v|v[j]).max().unwrap()),
-    })?;
-    for (a, c) in boundary.windows(2).map(|w|(w[0],w[1])).chain([(entry[0],entry[1]),(entry[2],entry[3])]) {
+    b.solid(
+        &road,
+        SolidShape::Box {
+            min: std::array::from_fn(|j| {
+                entry.iter().map(|v| v[j]).min().unwrap() - if j == 1 { 10 } else { 0 }
+            }),
+            max: std::array::from_fn(|j| entry.iter().map(|v| v[j]).max().unwrap()),
+        },
+    )?;
+    for (a, c) in boundary
+        .windows(2)
+        .map(|w| (w[0], w[1]))
+        .chain([(entry[0], entry[1]), (entry[2], entry[3])])
+    {
         let up = [0, FINISH_WALL_CM, 0];
-        b.quad([a, add(a,up), add(c,up), c], Surface::Concrete, &wall, false)?;
-        b.quad([c, add(c,up), add(a,up), a], Surface::Concrete, &wall, false)?;
-        b.solid(&wall, SolidShape::Box {
-            min: std::array::from_fn(|j| a[j].min(c[j])-2),
-            max: std::array::from_fn(|j| a[j].max(c[j])+if j==1 {FINISH_WALL_CM} else {2}),
-        })?;
+        b.quad(
+            [a, add(a, up), add(c, up), c],
+            Surface::Concrete,
+            &wall,
+            false,
+        )?;
+        b.quad(
+            [c, add(c, up), add(a, up), a],
+            Surface::Concrete,
+            &wall,
+            false,
+        )?;
+        b.solid(
+            &wall,
+            SolidShape::Box {
+                min: std::array::from_fn(|j| a[j].min(c[j]) - 2),
+                max: std::array::from_fn(|j| {
+                    a[j].max(c[j]) + if j == 1 { FINISH_WALL_CM } else { 2 }
+                }),
+            },
+        )?;
     }
     Ok(())
 }

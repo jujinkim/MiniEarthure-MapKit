@@ -72,6 +72,9 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	add_child(moon)
 	for index in (4 if low else 8):
 		var light := SpotLight3D.new()
+		# Callers submit world poses from this render frame, already interpolated.
+		light.top_level = true
+		light.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		light.spot_range = 24.0
 		light.spot_angle = 48.0
 		light.light_color = Color(1.0,0.84,0.61)
