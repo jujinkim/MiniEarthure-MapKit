@@ -163,8 +163,8 @@ fn dedicated(id: &str) -> bool {
 fn block(pieces: &mut Vec<Piece>, id: &str, rng: &mut u64) -> bool {
     let size = pieces.len();
     let w = if dedicated(id) { 400 } else { width(rng) };
-    let tube = family(id) == "cylinder";
-    let chosen = if tube {
+    let tube = pipe_piece(id);
+    let chosen = if family(id) == "cylinder" {
         TUBES[next(rng) as usize % TUBES.len()]
     } else {
         id

@@ -299,3 +299,27 @@ admission; consumers still verify the full car, four wheels and registered physi
 Runway geometry, individual road IDs and current v1 format remain unchanged.
 Focused checks: `assembled_start` (all runway pieces/outside edges),
 `godot/tests/cell_query_validator.gd` (regular/regional packed lookup versus window).
+
+## Pipe portal replacement — 2026-09-29
+
+The approved lowered-entry/raised-exit effect uses the user's alternative:
+entry road ends diameter/3 above the inner floor, and departure road starts
+diameter/3 below it. Both outer roads use eased ramps with at most 12% grade;
+the departure climbs back to the ordinary road level. Cylinders and the banked
+halfpipe receive this treatment. Internal tube joints keep matching open bores
+and no height step. The drop is explicit only at named entry/pipe/exit joins,
+with exact integer centimetre validation. Arbitrary gaps remain invalid.
+
+Route samples, collision, occupancy, overview and checkpoint generation use the
+same lowered pipe and departure positions. Stunt floor geometry is unchanged;
+only portal placement and the departure ramp direction change. The block returns
+to its original height, so circuits retain ordinary closure. All own formats
+stay v1; source/catalogue fingerprints change. Existing user packages and generated
+artifacts are preserved, with no converter or rewritten files.
+
+Validation: the 11 affected `mapkit-package --test assembled_track` tests passed
+(191.84 s, optimized local Rust). New cases cover both pipe types, exact entry/exit
+height differences, physical floor alignment and tamper rejection. Existing cases
+cover 2/4/6 m bores, internal mesh seams, slope limits, deterministic roundtrip,
+cancellation, original-file preservation, collision-only floor, circuit/sprint
+generation and attached obstacles. Actual entry/exit driving is a user check.

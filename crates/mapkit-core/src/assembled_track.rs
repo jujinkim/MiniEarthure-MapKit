@@ -999,6 +999,19 @@ fn family(id: &str) -> &str {
 fn ramp_tiles(width: u32) -> usize {
     ((f64::from(width) / 3.0 * 1.5 / 0.12) / TILE_CM as f64).ceil() as usize
 }
+fn pipe_piece(id: &str) -> bool {
+    id.starts_with("cylinder") || id == "banked_chicane"
+}
+/// Only authored outer portals drop. Internal tube joints remain flush.
+fn portal_drop(previous: &str, next: &str, width: u32) -> i64 {
+    if previous == "tube_entry" && pipe_piece(next)
+        || pipe_piece(previous) && next == "tube_exit"
+    {
+        round(f64::from(width) / 3.0)
+    } else {
+        0
+    }
+}
 fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
     let mut p = local_piece(id);
     p.width_cm = width;
@@ -1009,12 +1022,13 @@ fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
         let tiles = ramp_tiles(width);
         let length = tiles as i64 * TILE_CM;
         let height = round(f64::from(width) / 3.0);
-        let down = id == "tube_exit";
         p.path = (0..=tiles * 32)
             .map(|i| {
                 let t = i as f64 / (tiles * 32) as f64;
                 let mut sample = p.path[0].clone();
-                let sign = if down { -1.0 } else { 1.0 };
+                // Entry rises to the portal; departure starts below the pipe
+                // floor and rises back to ordinary road level without a lip.
+                let sign = 1.0;
                 let dy = sign * height as f64 * 6.0 * t * (1.0 - t) / length as f64;
                 sample.position_cm = [
                     0,
@@ -1127,6 +1141,9 @@ fn push_piece(
     ordinary: bool,
     chain: [u32; 3],
 ) {
+    if let Some(previous) = pieces.last() {
+        origin[1] -= portal_drop(&previous.id, id, w);
+    }
     let mut p = variant(id, w, w, w);
     p.origin_cm = *origin;
     p.quarter_turns = heading;
@@ -1279,8 +1296,11 @@ impl Assembly {
                 return Err(fail());
             }
             if i > 0 {
-                let previous = self.pieces[i - 1].path.last().unwrap();
-                if previous.position_cm != p.path[0].position_cm
+                let previous_piece = &self.pieces[i - 1];
+                let previous = previous_piece.path.last().unwrap();
+                let mut connection = previous.position_cm;
+                connection[1] -= portal_drop(&previous_piece.id, &p.id, p.width_cm);
+                if connection != p.path[0].position_cm
                     || previous.forward != p.path[0].forward
                     || previous.normal != p.path[0].normal
                 {

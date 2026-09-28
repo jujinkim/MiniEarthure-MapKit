@@ -47,6 +47,40 @@ fn cancellation_and_invalid_requests() {
 }
 
 #[test]
+fn pipe_portals_drop_from_raised_entry_and_onto_lower_departure() {
+    for kind in ["cylinder", "banked_chicane"] {
+        for seed in [7, 19] {
+            let d = package::generate(&Settings {
+                seed, circuit: false, duration_seconds: 60,
+                gimmicks: vec![kind.into()], ..Settings::default()
+            }).unwrap();
+            let a = d.assembled_track.as_ref().unwrap();
+            a.validate().unwrap();
+            let mut portals = 0;
+            for pieces in a.pieces.windows(3) {
+                let [entry, pipe, exit] = pieces else { unreachable!() };
+                if entry.id != "tube_entry" { continue; }
+                assert!(pipe.id.starts_with("cylinder") || pipe.id == "banked_chicane");
+                assert_eq!(exit.id, "tube_exit");
+                let drop = (f64::from(pipe.width_cm) / 3.0).round() as i64;
+                assert_eq!(entry.path.last().unwrap().position_cm[1] - pipe.path[0].position_cm[1], drop);
+                assert_eq!(pipe.path.last().unwrap().position_cm[1] - exit.path[0].position_cm[1], drop);
+                assert_eq!(entry.path[0].position_cm[1], exit.path.last().unwrap().position_cm[1]);
+                let track = d.gimmicks.iter().find(|g| g.id == format!("track-{}-0", a.pieces.iter().position(|p| std::ptr::eq(p,pipe)).unwrap())).unwrap();
+                assert_eq!(track.position[1] + track.track.as_ref().unwrap().centerline[0].floor_cm[1], pipe.path[0].position_cm[1]);
+                portals += 1;
+            }
+            assert!(portals > 0);
+            // A changed portal offset is rejected, not accepted as a loose gap.
+            let mut altered = a.clone();
+            let p = altered.pieces.iter_mut().find(|p| p.id == "tube_exit").unwrap();
+            p.origin_cm[1] += 1;
+            assert!(altered.validate().is_err());
+        }
+    }
+}
+
+#[test]
 fn save_failure_never_replaces_original() {
     let path = std::env::temp_dir().join(format!(
         "mapkit-track-preserve-{}-{}.memap",
