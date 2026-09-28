@@ -1,4 +1,5 @@
 {
+  "free_roam": false,
   "map_id": "synthetic-assets",
   "revision": 1,
   "bounds": {

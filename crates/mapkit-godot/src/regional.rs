@@ -52,7 +52,7 @@ impl MapKitRegionReader {
             }
             let index = reader.index();
             let result = serde_json::json!({"index_sha256": reader.identity(),
-                "world_content_hash": index.world_content_hash, "bounds": index.world.bounds,
+                "free_roam": index.world.free_roam, "world_content_hash": index.world_content_hash, "bounds": index.world.bounds,
                 "cell_size_cm": index.world.cell_size_cm, "side_cells": index.side_cells,
                 "region_count": index.regions.len(), "execution_cells": index.world.cell_count()?,
                 "retained_memory_bytes": reader.index_retained_bytes() * 2, "verification": "index-only"});

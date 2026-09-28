@@ -8,6 +8,7 @@
     "bounds",
     "buildings",
     "cell_size_cm",
+    "free_roam",
     "heightmaps",
     "map_id",
     "nodes",
@@ -74,6 +75,10 @@
           "type": "null"
         }
       ]
+    },
+    "free_roam": {
+      "description": "Post-finish presentation policy. Required in the current v1 source.",
+      "type": "boolean"
     },
     "gimmicks": {
       "type": "array",
@@ -187,6 +192,16 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
+        },
+        "finish_plaza": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/FinishPlaza"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "floor": {
           "$ref": "#/definitions/VenueFloor"
@@ -807,6 +822,75 @@
         },
         "settlement": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FinishPlaza": {
+      "type": "object",
+      "required": [
+        "center_cm",
+        "checkpoint_cm",
+        "entry_length_cm",
+        "forward",
+        "piece_index",
+        "radius_cm",
+        "recovery_cm",
+        "wall_height_cm"
+      ],
+      "properties": {
+        "center_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "checkpoint_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "entry_length_cm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "piece_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "radius_cm": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "recovery_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "wall_height_cm": {
+          "type": "integer",
+          "format": "int64"
         }
       },
       "additionalProperties": false

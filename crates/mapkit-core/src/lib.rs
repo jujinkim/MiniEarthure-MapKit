@@ -263,6 +263,8 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    /// Post-finish presentation policy. Required in the current v1 source.
+    pub free_roam: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assembled_track: Option<assembled_track::Assembly>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

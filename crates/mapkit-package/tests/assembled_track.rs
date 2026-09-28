@@ -285,3 +285,55 @@ fn actual_chain_mesh_seams_and_wide_corner_clearance() {
         }
     }
 }
+
+#[test]
+fn finish_plaza_and_editable_free_roam_keep_exact_source_validation() {
+    let settings = Settings {circuit:false, duration_seconds:60, gimmicks:vec![], ..Settings::default()};
+    let mut d = package::generate(&settings).unwrap();
+    assert!(!d.free_roam);
+    let a = d.assembled_track.as_ref().unwrap();
+    let plaza = a.finish_plaza.as_ref().unwrap();
+    assert_eq!((plaza.entry_length_cm,plaza.radius_cm,plaza.wall_height_cm),(800,800,120));
+    assert_eq!(a.pieces.last().unwrap().id,"finish_plaza");
+    assert_eq!(d.courses[0].definition.checkpoints.last().unwrap().position_cm,plaza.checkpoint_cm);
+    assert!(d.courses[0].definition.checkpoints.iter().all(|cp|cp.position_cm != plaza.center_cm));
+    let p=&a.pieces[plaza.piece_index];
+    assert_eq!(a.pieces[plaza.piece_index-1].path.last().unwrap().position_cm,p.path[0].position_cm);
+    let prior_length:u64 = a.pieces[..plaza.piece_index].iter().map(|p|p.path.windows(2).map(|w|{
+        ((0..3).map(|i|((w[1].position_cm[i]-w[0].position_cm[i]) as f64).powi(2)).sum::<f64>().sqrt().round()) as u64
+    }).sum::<u64>()).sum();
+    assert_eq!(a.length_cm,prior_length+400);
+    let center=plaza.center_cm;
+    let chunk=mapkit_core::generate(mapkit_core::GenerationInput{document:&d,cell:mapkit_core::Cell{x:(center[0]-d.bounds.min[0]).div_euclid(d.cell_size_cm as i64) as i32,y:(center[2]-d.bounds.min[1]).div_euclid(d.cell_size_cm as i64) as i32},heightgrid:None,max_triangles:500_000}).unwrap();
+    let road=format!("assembled-road-{}",plaza.piece_index);
+    let floor:Vec<_>=chunk.triangles.iter().filter(|t|t.object_id==road).collect();
+    assert!(floor.len()>=60);
+    assert!(floor.iter().all(|t|t.spawnable && t.vertices.iter().all(|v|v[1]==center[1])));
+    let wall=format!("assembled-wall-{}",plaza.piece_index);
+    assert!(chunk.triangles.iter().any(|t|t.object_id==wall && t.vertices.iter().any(|v|v[1]==center[1]+120)));
+    let old=read_bytes(&pack_bytes(d.clone(),BTreeMap::new()).unwrap()).unwrap();
+    d.free_roam=true;
+    package::reseal(&mut d).unwrap();
+    let loaded=read_bytes(&pack_bytes(d.clone(),BTreeMap::new()).unwrap()).unwrap();
+    assert!(loaded.inspection.free_roam);
+    assert_ne!(old.inspection.world_content_hash,loaded.inspection.world_content_hash);
+    package::verify(&loaded.document,&loaded.inspection.world_content_hash,&loaded.document.courses[0]).unwrap();
+    assert!(package::verify(&loaded.document,&loaded.inspection.world_content_hash,&old.document.courses[0]).is_err());
+    let bytes=indexed::pack_source(d.clone(),BTreeMap::new(),1).unwrap();
+    let mut reader=indexed::IndexedReader::open(std::io::Cursor::new(bytes),1024*1024*1024,None).unwrap();
+    assert!(reader.index().world.free_roam);
+    reader.audit_summary(1024*1024*1024,&indexed::ReadEpoch::default().begin()).unwrap();
+    d.seed+=1;
+    assert!(package::reseal(&mut d).is_err());
+    assert!(document(&Settings{gimmicks:vec![],..Settings::default()}).unwrap().assembled_track.unwrap().finish_plaza.is_none());
+}
+
+#[test]
+fn free_roam_is_required_boolean() {
+    let d=package::generate(&Settings{gimmicks:vec![],..Settings::default()}).unwrap();
+    let mut value=serde_json::to_value(&d).unwrap();
+    value.as_object_mut().unwrap().remove("free_roam");
+    assert!(serde_json::from_value::<mapkit_core::MapDocument>(value.clone()).is_err());
+    value["free_roam"]=serde_json::json!(1);
+    assert!(serde_json::from_value::<mapkit_core::MapDocument>(value).is_err());
+}

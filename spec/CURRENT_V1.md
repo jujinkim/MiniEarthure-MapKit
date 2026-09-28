@@ -152,3 +152,21 @@ The v1 assembly now requires piece widths/chain membership, ordinary-distance
 statistics and a non-spawnable venue floor definition. Selected families are
 mandatory; target time may be exceeded. See the replacement section in
 [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md).
+
+## Race finish policy (2026-09-28)
+
+`MapDocument.free_roam` is a required boolean in current v1. New manual and seeded
+documents use false; external geographic/terrain imports set true. It participates
+in both container content hashes, regional metadata and inspection responses.
+Generated sources allow this policy edit through `reseal_track_document`, which
+verifies exact current geometry and recomputes the generated course hash.
+
+Sprint assemblies end in one `finish_plaza`: an 8m entrance, 16m circular floor
+and 1.2m wall, open only at the entrance. `Assembly.finish_plaza` supplies the
+checkpoint, center, recovery pose direction and bounds to consumers. Only the
+first 4m of the entrance contributes race distance; no checkpoint or race distance
+is added inside the plaza. Circuits have no terminal piece. Rendering, collision,
+occupancy and budgets consume MapKit geometry.
+
+Focused package assembly, both containers, strict schema, audit accounting and
+course tests passed locally. Consumer driving acceptance is separate.

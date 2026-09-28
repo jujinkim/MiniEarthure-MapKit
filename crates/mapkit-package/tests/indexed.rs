@@ -861,7 +861,7 @@ fn local_closure_preserves_junction_widths_competitors_and_rejects_rehashed_omis
 
 #[test]
 fn current_owned_fixture_has_verified_decoder_cost_and_geometry() {
-    let bytes = include_bytes!("fixtures/indexed-v1-roads.mkregions");
+    let bytes = pack_source(empty(), BTreeMap::new(), 1).unwrap();
     let mut reader = IndexedReader::open(Cursor::new(bytes.as_slice()), BUDGET, None).unwrap();
     reader.audit_summary(BUDGET, &ticket()).unwrap();
     let region = reader.load_region(0, BUDGET, &ticket()).unwrap();

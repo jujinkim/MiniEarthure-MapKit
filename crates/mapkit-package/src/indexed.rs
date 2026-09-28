@@ -588,6 +588,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             world_content_hash: self.index.world_content_hash.clone(),
         };
         let inspection = Inspection {
+        free_roam: document.free_roam,
             package_sha256: identity.clone(),
             world_content_hash: self.index.world_content_hash.clone(),
             package_bytes: bytes_read,

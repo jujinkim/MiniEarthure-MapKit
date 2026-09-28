@@ -400,7 +400,7 @@ mod tests {
         serde_json::from_str(
             r#"{
             "map_id":"","revision":0,"bounds":{"min":[0,0],"max":[0,0]},
-            "cell_size_cm":0,"seed":0,"recipe_version":0,"theme":"","terrain_base_cm":0,
+            "free_roam":false,"cell_size_cm":0,"seed":0,"recipe_version":0,"theme":"","terrain_base_cm":0,
             "heightmaps":[],"nodes":[],"roads":[],"surface_areas":[],"buildings":[],
             "zones":[],"assets":[],"placements":[],"repetitions":[],"attributions":[],
             "provenance":{"tool_id":"","version":"","build_id":"","fingerprint":"",
@@ -860,6 +860,7 @@ mod tests {
             "assets",
             "gimmicks",
             "assembled_track",
+            "free_roam",
             "water_bodies",
             "placements",
             "repetitions",

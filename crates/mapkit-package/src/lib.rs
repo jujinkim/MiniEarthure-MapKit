@@ -72,6 +72,7 @@ pub struct PackageManifest {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inspection {
+    pub free_roam: bool,
     pub package_sha256: String,
     pub world_content_hash: String,
     pub package_bytes: u64,
@@ -640,6 +641,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
         .map(|(_, b)| b.len() as u64)
         .sum();
     let inspection = Inspection {
+        free_roam: document.free_roam,
         package_sha256: sha256(bytes),
         world_content_hash: manifest.world_content_hash.clone(),
         package_bytes: bytes.len() as u64,

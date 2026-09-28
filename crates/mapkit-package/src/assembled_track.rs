@@ -10,7 +10,7 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
     let mut checkpoints = Vec::new();
     let stride = a.pieces.len().div_ceil(48).max(1);
     for (i, p) in a.pieces.iter().enumerate() {
-        if i != 0 && (i <= 2 || i % stride != 0) {
+        if p.id == "finish_plaza" || i != 0 && (i <= 2 || i % stride != 0) {
             continue;
         }
         let start = &a.pieces[2];
@@ -29,10 +29,10 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
     }
     if !a.settings.circuit {
         let last = a.pieces.last().unwrap();
-        let position = last.path[last.path.len() * 3 / 4].position_cm;
+        let position = a.finish_plaza.as_ref().unwrap().checkpoint_cm;
         checkpoints.push(Checkpoint {
             position_cm: position,
-            radius_cm: last.path[last.path.len() * 3 / 4].lateral_cm + 30,
+            radius_cm: last.entry_width_cm / 2 + 30,
             shape: CheckpointShape::Sphere,
             placement_mode: PlacementMode::RoadSnap,
             surface_id: format!("assembled-road-{}", a.pieces.len() - 1),
@@ -66,6 +66,14 @@ pub fn generate(settings: &track::Settings) -> Result<MapDocument> {
     d.courses = vec![course(&d, &world)?];
     d.validate()?;
     Ok(d)
+}
+/// Rebind the generated course after an allowed metadata edit. Exact geometry
+/// verification is still mandatory; this does not certify edited track sources.
+pub fn reseal(document: &mut MapDocument) -> Result<()> {
+    track::verify_document(document)?;
+    let world = super::content_hash(document, &BTreeMap::new())?;
+    document.courses = vec![course(document, &world)?];
+    document.validate()
 }
 pub fn verify(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
     track::verify_document(document)?;

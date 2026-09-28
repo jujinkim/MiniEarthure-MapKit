@@ -1,4 +1,5 @@
 {
+  "free_roam": false,
   "map_id": "synthetic-buildings-placement",
   "revision": 1,
   "bounds": {

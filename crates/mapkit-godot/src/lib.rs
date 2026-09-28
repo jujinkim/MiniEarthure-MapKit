@@ -567,6 +567,14 @@ impl MapKitBridge {
         )
     }
     #[func]
+    fn reseal_track_document(&self, document: GString) -> GString {
+        response((|| {
+            let mut d = engine_document(&document.to_string())?;
+            mapkit_package::assembled_track::reseal(&mut d)?;
+            Ok(serde_json::json!({"document":d}))
+        })())
+    }
+    #[func]
     fn export_project(&self, path: GString, destination: GString) -> GString {
         response(
             read_project(Path::new(&path.to_string()))

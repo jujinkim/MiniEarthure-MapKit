@@ -33,6 +33,10 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
     (max_records as u64)
         .saturating_mul(std::mem::size_of::<usize>() as u64)
         .saturating_add(if document.gimmicks.is_empty(){4096}else{4*1024*1024})
+        .saturating_add(document.assembled_track.as_ref().map_or(0, |a| {
+            // Canonical assembly JSON is a bounded scratch tree, charged before allocation.
+            (a.pieces.iter().map(|p| p.path.len() + p.alternate_path.len() + 1).sum::<usize>() as u64).saturating_mul(4096)
+        }))
 }
 
 pub(crate) fn content_hash(
@@ -196,6 +200,9 @@ impl Serialize for Document<'_> {
     ) -> std::result::Result<S::Ok, S::Error> {
         let d = self.0;
         let mut m = serializer.serialize_map(None)?;
+        if let Some(assembly) = &d.assembled_track {
+            m.serialize_entry("assembled_track", &serde_json::to_value(assembly).map_err(serde::ser::Error::custom)?)?;
+        }
         m.serialize_entry("assets", &Normalized(&d.assets, self.1))?;
         m.serialize_entry("bounds", &Canonical(&d.bounds))?;
         m.serialize_entry("buildings", &Normalized(&d.buildings, self.1))?;
@@ -203,6 +210,7 @@ impl Serialize for Document<'_> {
         if let Some(environment) = &d.environment {
             m.serialize_entry("environment", &Canonical(environment))?;
         }
+        fields!(m, d, free_roam);
         if !d.gimmicks.is_empty() {m.serialize_entry("gimmicks", &Normalized(&d.gimmicks,self.1))?;}
         m.serialize_entry("heightmaps", &Normalized(&d.heightmaps, self.1))?;
         fields!(m, d, map_id);
