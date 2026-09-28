@@ -221,25 +221,9 @@ impl SpecialTrack {
         }
         mesh
     }
-    /// Ring centres and frames come from the same reference path as admission.
-    /// Each end is flared over the first/last 2 m with zero slope at the mouth.
-    pub fn swept_radius(&self, index: usize) -> f64 {
-        let distance = |a: usize, b: usize| {
-            self.centerline[a..=b]
-                .windows(2)
-                .map(|w| {
-                    (0..3)
-                        .map(|j| (w[1].floor_cm[j] - w[0].floor_cm[j]) as f64)
-                        .map(|v| v * v)
-                        .sum::<f64>()
-                        .sqrt()
-                })
-                .sum::<f64>()
-        };
-        let edge = distance(0, index).min(distance(index, self.centerline.len() - 1));
+    /// A uniform bore gives directly connected sections identical open rings.
+    pub fn swept_radius(&self, _index: usize) -> f64 {
         f64::from(self.radius_cm)
-            * (1.0
-                + 0.06 * (1.0 + libm::cos(std::f64::consts::PI * (edge / 200.0).clamp(0.0, 1.0))))
     }
     pub fn contains_swept(&self, point: [f64; 3], margin: f64) -> bool {
         self.centerline.windows(2).enumerate().any(|(i, w)| {

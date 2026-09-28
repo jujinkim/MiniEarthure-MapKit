@@ -300,6 +300,7 @@ fn decorate_inner(
             "material_json"=>serde_json::to_string(&a.material).unwrap().as_str()},
         );
     }
+    if document.assembled_track.is_some() { hidden.push("assembled-venue-floor"); }
     let mut presentation =
         vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};
     crate::road_style::decorate(document, &chunk, &mut presentation)?;

@@ -146,3 +146,9 @@ The current v1 special-track contract also accepts `swept_cylinder` with 2–512
 `centerline` floor/normal/forward frames. See [assembled tracks](../docs/ASSEMBLED_TRACKS.md).
 The canonical schema and source fingerprints identify this definition; no
 version increment or migration is introduced.
+
+2026-09-28 seeded variety replaces sharp-corner quotas and corridor escape rules.
+The v1 assembly now requires piece widths/chain membership, ordinary-distance
+statistics and a non-spawnable venue floor definition. Selected families are
+mandatory; target time may be exceeded. See the replacement section in
+[ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md).

@@ -158,3 +158,33 @@ mutation, shared halfpipe geometry, retained branch capacity, overview widths,
 all 43 presets, deterministic saves, cancellation and 576 layout samples.
 Godot fixtures render all three venue styles and eight pieces with a scale car;
 consumer physics and detailed driving are separately recorded by the owning app.
+
+## Seed variety and mandatory selections — 2026-09-28 replacement
+
+The current v1 generator reserves every selected family before ordinary fill.
+`sprint_lane` is a plain 32m road without an acceleration effect. Special chains
+start at one piece and extend with a seeded 50% continuation draw; piece, sample,
+cell and memory budgets remain binding. An impossible required layout returns
+`E_TRACK_BUDGET`, never a reduced selection. Target duration is a preference and
+may be exceeded. The bounded 24 candidates vary reservation positions, run lengths,
+ordinary curve clusters, slopes and widths; the winning valid candidate balances
+ordinary-distance straight share (seed target 10–90%) with duration. Sharp-turn
+frequency, mandatory left/right hairpins and the 16m straight ceiling are removed.
+
+Road/bore widths use 6/4/2m weights 2:2:1, with matched eased road ports and at least
+4m corner radius. Dedicated loops, halfpipes and the overpass retain their own
+profiles. Each piece records width, entry/exit width, ordinary-road membership and
+chain ID/index/count. Assembly statistics exclude required approaches and special
+pieces. Cylinder chains use one constant bore, open matching end rings and no
+internal funnel. Only the outer ends have ramps: height is diameter/3 and eased
+slope is at most 12%. The AI road reference and cylinder floor frames are separate.
+
+`floor` defines the common venue height/extent. Generated collision triangles and
+occupancy include it as `assembled-venue-floor`, always non-spawnable. The stage
+uses that height; generic chunk display hides its duplicate face. Checkpoint sizes,
+overview widths, ribbons, collision and occupancy consume actual piece samples.
+All own formats stay v1; new generator/catalogue/source fingerprints require fresh
+output. Original packages and user documents remain untouched.
+
+Focused automated evidence is linked from root `docs/SEED_TRACK_VARIETY.md`.
+Detailed driving, whole AI races, multiplayer and device acceptance remain user tests.

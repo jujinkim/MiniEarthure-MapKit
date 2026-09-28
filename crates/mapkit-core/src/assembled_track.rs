@@ -83,6 +83,9 @@ pub fn duration_options(circuit: bool) -> &'static [(u16, u8)] {
 }
 fn basic_ids() -> &'static [&'static str] {
     &[
+        "tube_entry",
+        "tube_exit",
+        "approach",
         "straight",
         "curve",
         "curve_left",
@@ -127,6 +130,13 @@ pub struct Sample {
 #[serde(deny_unknown_fields)]
 pub struct Piece {
     pub id: String,
+    pub width_cm: u32,
+    pub entry_width_cm: u32,
+    pub exit_width_cm: u32,
+    pub chain_id: u32,
+    pub chain_index: u32,
+    pub chain_count: u32,
+    pub ordinary: bool,
     pub origin_cm: Vertex,
     pub cube_span: u8,
     pub entry_speed_cmps: [u32; 2],
@@ -148,9 +158,22 @@ pub struct Assembly {
     pub pieces: Vec<Piece>,
     pub length_cm: u64,
     pub estimated_msec: u32,
+    pub straight_target_percent: u32,
+    pub ordinary_length_cm: u64,
+    pub ordinary_straight_cm: u64,
+    pub floor: VenueFloor,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VenueFloor {
+    pub min_cm: Vertex,
+    pub max_cm: Vertex,
 }
 pub fn catalogue_ids() -> &'static [&'static str] {
     &[
+        "tube_entry",
+        "tube_exit",
+        "approach",
         "straight",
         "curve",
         "curve_left",
@@ -184,6 +207,7 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "slalom_gates",
         "swing_gates",
         "piston_gates",
+        "sprint_lane",
         "loop",
         "spiral_up",
         "spiral_down",
@@ -208,12 +232,12 @@ pub fn fingerprint() -> String {
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
-        "basic_piece_ids":basic_ids(),
+        "basic_piece_ids":basic_ids(),"widths_cm":[600,400,200],"width_weights":[2,2,1],
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
         "catalogue_fingerprint":catalogue_fingerprint(),
-        "pieces":catalogue_ids().iter().map(|id| local_piece(id)).collect::<Vec<_>>()})
+        "pieces":catalogue_ids().iter().map(|id| variant(id, catalogue_width(id), 400, 400)).collect::<Vec<_>>()})
 }
 pub fn catalogue_fingerprint() -> String {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -222,13 +246,20 @@ pub fn catalogue_fingerprint() -> String {
             &canonical(
                 &catalogue_ids()
                     .iter()
-                    .map(|id| local_piece(id))
+                    .map(|id| variant(id, catalogue_width(id), 400, 400))
                     .collect::<Vec<_>>(),
             )
             .unwrap(),
         )
     })
     .clone()
+}
+fn catalogue_width(id: &str) -> u32 {
+    if id.ends_with("_narrow") || (id.starts_with("cylinder") && !id.starts_with("cylinder_wide")) {
+        200
+    } else {
+        400
+    }
 }
 fn round(v: f64) -> i64 {
     libm::round(v) as i64
@@ -389,8 +420,8 @@ fn build_local_piece(original_id: &str) -> Piece {
         "curve" | "curve_left" | "sharp_curve" | "sharp_curve_left" => {
             bend(
                 &mut p,
-                300,
-                500,
+                400,
+                400,
                 1,
                 if id.ends_with("_left") { -1 } else { 1 },
                 "drift",
@@ -408,7 +439,7 @@ fn build_local_piece(original_id: &str) -> Piece {
         }
         "chicane" => {
             for sign in [-1, 1, 1, -1] {
-                bend(&mut p, 300, 100, 1, sign, "drift");
+                bend(&mut p, 400, 0, 1, sign, "drift");
             }
         }
         id if id.starts_with("cylinder") || id == "banked_chicane" => {
@@ -431,29 +462,8 @@ fn build_local_piece(original_id: &str) -> Piece {
                 }
                 line(&mut p, [0, 0, 2400], [0, 0, SLOT], "cylinder");
             }
-            let total = p.windows(2).map(|w| distance(w[0].0, w[1].0)).sum::<u64>() as f64;
-            let mut travel = 0.0;
-            for i in 0..p.len() {
-                if i > 0 {
-                    travel += distance(p[i - 1].0, p[i].0) as f64;
-                }
-                if travel < 399.5 || total - travel < 399.5 {
-                    p[i].2 = "drive".into();
-                }
-            }
-            let mut station = 0.0;
-            let mut stations = vec![0.0];
-            for w in p.windows(2) {
-                station += distance(w[0].0, w[1].0) as f64;
-                stations.push(station);
-            }
-            for (sample, travel) in p.iter_mut().zip(stations) {
-                let edge = travel.min(station - travel);
-                if edge < 800.0 {
-                    sample.0[1] -=
-                        round(12.0 * libm::sin(std::f64::consts::PI * edge / 800.0).powi(2));
-                }
-                if id == "banked_chicane" && sample.2 == "cylinder" {
+            if id == "banked_chicane" {
+                for sample in &mut p {
                     sample.2 = "halfpipe".into();
                 }
             }
@@ -539,7 +549,7 @@ fn build_local_piece(original_id: &str) -> Piece {
             // 16 m lateral span. A wider lane must not turn this into a slalom
             // that can be driven straight through.
             for sign in [-1, 1, 1, -1, 1, -1, -1, 1] {
-                bend(&mut p, 300, 100, 1, sign, "drift");
+                bend(&mut p, 400, 0, 1, sign, "drift");
             }
         }
         "overpass" => {
@@ -684,11 +694,10 @@ fn build_local_piece(original_id: &str) -> Piece {
                 position_cm: *pos,
                 normal,
                 forward,
-                safe: mode == "drive"
+                safe: ["drive", "drift", "bridge"].contains(&mode.as_str())
                     && !id.starts_with("cylinder")
                     && ![
                         "banked_chicane",
-                        "overpass",
                         "jump_barrier",
                         "roller_waves",
                         "offset_jump",
@@ -735,51 +744,6 @@ fn build_local_piece(original_id: &str) -> Piece {
             }
         })
         .collect::<Vec<_>>();
-    if id.starts_with("cylinder") || id == "banked_chicane" {
-        let indices: Vec<_> = path
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| ["cylinder", "halfpipe"].contains(&s.mode.as_str()))
-            .map(|(i, _)| i)
-            .collect();
-        let track = SpecialTrack {
-            kind: if id == "banked_chicane" {
-                TrackKind::SweptHalfPipe
-            } else {
-                TrackKind::SweptCylinder
-            },
-            radius_cm: tube_radius,
-            width_cm: WIDTH as u32,
-            length_cm: 1600,
-            centerline: indices
-                .iter()
-                .map(|&i| TubeFrame {
-                    floor_cm: path[i].position_cm,
-                    normal: path[i].normal,
-                    forward: path[i].forward,
-                })
-                .collect(),
-        };
-        for (j, &i) in indices.iter().enumerate() {
-            path[i].tube_radius_cm = round(track.swept_radius(j)) as u32;
-        }
-        // Low funnel rails follow the same 4m approach/exit surface as admission.
-        // The floor is flush and the ring lip dips 12cm instead of forming a sill.
-        if let (Some(&first), Some(&last)) = (indices.first(), indices.last()) {
-            for i in 0..path.len() {
-                if path[i].mode != "drive" {
-                    continue;
-                }
-                let mouth = if i < first { first } else { last };
-                let edge = distance(path[i].position_cm, path[mouth].position_cm) as f64;
-                let t = (edge / 400.0).clamp(0.0, 1.0);
-                let t = t * t * (3.0 - 2.0 * t);
-                path[i].lateral_cm =
-                    round(f64::from(tube_radius) * 0.92 * (1.0 - t) + WIDTH as f64 / 2.0 * t)
-                        as u32;
-            }
-        }
-    }
     if narrow {
         let total = path
             .windows(2)
@@ -827,7 +791,7 @@ fn build_local_piece(original_id: &str) -> Piece {
                     normal: unit([-dx * dy, dx * dx + 1.0, -dy]),
                     forward: unit([dx, dy, 1.0]),
                     mode: "bridge".into(),
-                    safe: false,
+                    safe: true,
                     min_speed_cmps: 0,
                     lateral_cm: 100,
                     tube_radius_cm: 0,
@@ -857,6 +821,13 @@ fn build_local_piece(original_id: &str) -> Piece {
     });
     Piece {
         id: original_id.into(),
+        width_cm: if narrow { 200 } else { WIDTH as u32 },
+        entry_width_cm: WIDTH as u32,
+        exit_width_cm: WIDTH as u32,
+        chain_id: 0,
+        chain_index: 0,
+        chain_count: 0,
+        ordinary: basic_ids().contains(&id),
         cube_span: if id == "chicane" {
             2
         } else if small {
@@ -889,21 +860,7 @@ fn build_local_piece(original_id: &str) -> Piece {
         reference_msec: (len * 1000 / SPEED as u64) as u32,
     }
 }
-fn placed(id: &str, origin: Vertex, q: u8) -> Piece {
-    let mut p = local_piece(id);
-    p.origin_cm = origin;
-    p.quarter_turns = q;
-    for s in p.path.iter_mut().chain(&mut p.alternate_path) {
-        s.position_cm = add(rotate(s.position_cm, q), origin);
-        s.normal = rotate(s.normal, q);
-        s.forward = rotate(s.forward, q);
-    }
-    let a = add(rotate(p.reserved_min_cm, q), origin);
-    let b = add(rotate(p.reserved_max_cm, q), origin);
-    p.reserved_min_cm = std::array::from_fn(|i| a[i].min(b[i]));
-    p.reserved_max_cm = std::array::from_fn(|i| a[i].max(b[i]));
-    p
-}
+
 fn next(rng: &mut u64) -> u64 {
     *rng = rng.wrapping_add(0x9e3779b97f4a7c15);
     let mut z = *rng;
@@ -911,361 +868,468 @@ fn next(rng: &mut u64) -> u64 {
     z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
     z ^ (z >> 31)
 }
-// Grow a connected set of 32 m cells, then round its single outer boundary.
-// Frontier choices are finite and seeded. Reject holes, point contacts and long
-// collinear edges before adding a cell; closure never depends on a random walk.
-type GridPoint = [i64; 2];
-fn boundary(cells: &std::collections::BTreeSet<GridPoint>) -> Option<Vec<GridPoint>> {
-    let mut edges = std::collections::BTreeMap::new();
-    for &[x, z] in cells {
-        for (neighbour, a, b) in [
-            ([x - 1, z], [x, z], [x, z + 1]),
-            ([x, z + 1], [x, z + 1], [x + 1, z + 1]),
-            ([x + 1, z], [x + 1, z + 1], [x + 1, z]),
-            ([x, z - 1], [x + 1, z], [x, z]),
-        ] {
-            if !cells.contains(&neighbour) && edges.insert(a, b).is_some() {
-                return None; // Two edges at one vertex would pinch the track.
-            }
-        }
-    }
-    let start = *edges.keys().next()?;
-    let mut points = vec![];
-    let mut cursor = start;
-    for _ in 0..edges.len() {
-        points.push(cursor);
-        cursor = *edges.get(&cursor)?;
-        if cursor == start {
-            break;
-        }
-    }
-    if cursor != start || points.len() != edges.len() {
-        return None;
-    }
-    let direction = |a: GridPoint, b: GridPoint| [b[0] - a[0], b[1] - a[1]];
-    let corners: Vec<_> = (0..points.len())
-        .filter_map(|i| {
-            let previous = points[(i + points.len() - 1) % points.len()];
-            let current = points[i];
-            let next = points[(i + 1) % points.len()];
-            (direction(previous, current) != direction(current, next)).then_some(current)
-        })
-        .collect();
-    // At most 48 m between turns (64 m cell edge minus the two turn radii).
-    if (0..corners.len()).any(|i| {
-        let a = corners[i];
-        let b = corners[(i + 1) % corners.len()];
-        (a[0] - b[0]).abs() + (a[1] - b[1]).abs() > 2
-    }) {
-        return None;
-    }
-    Some(corners)
+fn width(rng: &mut u64) -> u32 {
+    [600, 600, 400, 400, 200][next(rng) as usize % 5]
 }
-fn circuit_runs(cells: &std::collections::BTreeSet<GridPoint>) -> Vec<(usize, i8)> {
-    let corners = boundary(cells).expect("accepted simple boundary");
-    let directions: Vec<_> = (0..corners.len())
-        .map(|i| {
-            let a = corners[i];
-            let b = corners[(i + 1) % corners.len()];
-            let delta = [b[0] - a[0], b[1] - a[1]];
-            let q = match [delta[0].signum(), delta[1].signum()] {
-                [0, 1] => 0,
-                [1, 0] => 1,
-                [0, -1] => 2,
-                [-1, 0] => 3,
-                _ => unreachable!(),
+fn family(id: &str) -> &str {
+    if id.starts_with("cylinder") {
+        "cylinder"
+    } else {
+        id
+    }
+}
+fn ramp_tiles(width: u32) -> usize {
+    ((f64::from(width) / 3.0 * 1.5 / 0.12) / TILE_CM as f64).ceil() as usize
+}
+fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
+    let mut p = local_piece(id);
+    p.width_cm = width;
+    p.entry_width_cm = entry;
+    p.exit_width_cm = exit;
+    p.connection_width_cm = entry;
+    if ["tube_entry", "tube_exit"].contains(&id) {
+        let tiles = ramp_tiles(width);
+        let length = tiles as i64 * TILE_CM;
+        let height = round(f64::from(width) / 3.0);
+        let down = id == "tube_exit";
+        p.path = (0..=tiles * 32)
+            .map(|i| {
+                let t = i as f64 / (tiles * 32) as f64;
+                let mut sample = p.path[0].clone();
+                let sign = if down { -1.0 } else { 1.0 };
+                let dy = sign * height as f64 * 6.0 * t * (1.0 - t) / length as f64;
+                sample.position_cm = [
+                    0,
+                    round(sign * height as f64 * t * t * (3.0 - 2.0 * t)),
+                    round(length as f64 * t),
+                ];
+                sample.forward = unit([0.0, dy, 1.0]);
+                sample.normal = unit([0.0, 1.0, -dy]);
+                sample.safe = false;
+                sample.mode = "drive".into();
+                sample
+            })
+            .collect();
+        p.cube_span = tiles as u8;
+    }
+    if id.starts_with("cylinder") {
+        for v in &mut p.path {
+            v.tube_radius_cm = width / 2;
+            v.lateral_cm = width / 2;
+            v.safe = false;
+        }
+    } else {
+        let total = p
+            .path
+            .windows(2)
+            .map(|w| distance(w[0].position_cm, w[1].position_cm))
+            .sum::<u64>() as f64;
+        let mut station = 0.0;
+        for i in 0..p.path.len() {
+            if i > 0 {
+                station += distance(p.path[i - 1].position_cm, p.path[i].position_cm) as f64;
+            }
+            if id == "loop" || id == "banked_chicane" || id == "overpass" {
+                continue;
+            }
+            let ease = |t: f64| {
+                let t = t.clamp(0.0, 1.0);
+                t * t * (3.0 - 2.0 * t)
             };
-            (delta[0].abs() + delta[1].abs(), q)
-        })
-        .collect();
-    directions
-        .iter()
-        .enumerate()
-        .map(|(i, &(length, q))| {
-            let next_q = directions[(i + 1) % directions.len()].1;
-            (
-                (length * 4 - 2) as usize,
-                if (next_q + 4 - q) % 4 == 1 { 1 } else { -1 },
-            )
-        })
-        .collect()
-}
-fn skeleton(settings: &Settings, runs: &[(usize, i8)]) -> Assembly {
-    let mut rng = settings.seed;
-    let mut runs = runs.to_vec();
-    let first = runs.iter().enumerate().max_by_key(|(_, r)| r.0).unwrap().0;
-    runs.rotate_left(first);
-    if !settings.circuit {
-        runs.truncate((runs.len() * 3 / 4).max(3));
-        runs.last_mut().unwrap().1 = 0;
+            let w = width as f64
+                + (entry as f64 - width as f64) * (1.0 - ease(station / 300.0))
+                + (exit as f64 - width as f64) * (1.0 - ease((total - station) / 300.0));
+            p.path[i].lateral_cm = round(w / 2.0) as u32;
+        }
     }
-    let mut pieces: Vec<Piece> = vec![];
-    let mut origin = [0; 3];
-    let mut heading = 0u8;
-    let mut used_hairpin = false;
-    let mut used_tube = false;
-    let mut pending_spiral = "";
-    let candidates: Vec<_> = settings
-        .gimmicks
-        .iter()
-        .map(String::as_str)
-        .filter(|id| !basic_ids().contains(id) && !id.starts_with("cylinder"))
-        .collect();
-    let tube_selected = settings
-        .gimmicks
-        .iter()
-        .any(|id| id.starts_with("cylinder"));
-    let mut bag = vec![];
-    let opportunities = runs
-        .iter()
-        .enumerate()
-        .filter(|(i, r)| *i > 0 && r.0 >= 6)
-        .count();
-    let mut used = 0;
-    let push = |id: &str, pieces: &mut Vec<Piece>, origin: &mut Vertex, heading: u8| {
-        let index = pieces.len();
-        let id = if index >= 3
-            && ((index as u64 + settings.seed) % 4 == 0
-                || !pieces.iter().any(|p| p.id.ends_with("_narrow")))
-        {
-            match id {
-                "straight" => "straight_narrow",
-                "chicane" => "chicane_narrow",
-                "zigzag" => "zigzag_narrow",
-                _ => id,
-            }
-        } else {
-            id
-        };
-        let wide = settings
-            .gimmicks
+    // Dedicated structures keep their own dimensions; their outer ports are 4m.
+    p.reference_msec = (p
+        .path
+        .windows(2)
+        .map(|w| distance(w[0].position_cm, w[1].position_cm))
+        .sum::<u64>()
+        * 1000
+        / SPEED as u64) as u32;
+    p
+}
+fn materialize(p: &Piece) -> Piece {
+    let mut out = variant(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm);
+    out.origin_cm = p.origin_cm;
+    out.quarter_turns = p.quarter_turns;
+    out.chain_id = p.chain_id;
+    out.chain_index = p.chain_index;
+    out.chain_count = p.chain_count;
+    out.ordinary = p.ordinary;
+    for v in out.path.iter_mut().chain(&mut out.alternate_path) {
+        v.position_cm = add(rotate(v.position_cm, p.quarter_turns), p.origin_cm);
+        v.forward = rotate(v.forward, p.quarter_turns);
+        v.normal = rotate(v.normal, p.quarter_turns);
+    }
+    out.reserved_min_cm = std::array::from_fn(|j| {
+        out.path
             .iter()
-            .any(|s| s.starts_with("cylinder_wide"))
-            || (pieces
-                .iter()
-                .filter(|p| p.id.starts_with("cylinder"))
-                .count() as u64
-                + settings.seed)
-                % 2
-                == 0;
-        let id = if wide {
-            match id {
-                "cylinder" => "cylinder_wide",
-                "cylinder_curve" => "cylinder_wide_curve",
-                "cylinder_curve_left" => "cylinder_wide_curve_left",
-                "cylinder_uturn" => "cylinder_wide_uturn",
-                "cylinder_uturn_left" => "cylinder_wide_uturn_left",
-                "cylinder_s_rise" => "cylinder_wide_s_rise",
-                _ => id,
+            .chain(&out.alternate_path)
+            .map(|v| v.position_cm[j])
+            .min()
+            .unwrap()
+            - if j == 1 {
+                p.width_cm as i64
+            } else {
+                p.width_cm as i64 / 2 + 60
             }
+    });
+    out.reserved_max_cm = std::array::from_fn(|j| {
+        out.path
+            .iter()
+            .chain(&out.alternate_path)
+            .map(|v| v.position_cm[j])
+            .max()
+            .unwrap()
+            + if j == 1 {
+                1600
+            } else {
+                p.width_cm as i64 / 2 + 60
+            }
+    });
+    out
+}
+fn push_piece(
+    pieces: &mut Vec<Piece>,
+    origin: &mut Vertex,
+    heading: u8,
+    id: &str,
+    w: u32,
+    ordinary: bool,
+    chain: [u32; 3],
+) {
+    let mut p = variant(id, w, w, w);
+    p.origin_cm = *origin;
+    p.quarter_turns = heading;
+    p.ordinary = ordinary;
+    p.chain_id = chain[0];
+    p.chain_index = chain[1];
+    p.chain_count = chain[2];
+    p = materialize(&p);
+    *origin = p.path.last().unwrap().position_cm;
+    pieces.push(p);
+}
+#[derive(Clone)]
+struct Block {
+    id: String,
+    count: usize,
+    width: u32,
+    balance: bool,
+}
+impl Block {
+    fn tiles(&self) -> usize {
+        let unit = if short_piece(&self.id) { 2 } else { 4 };
+        self.count * unit * (if self.balance { 2 } else { 1 })
+            + if self.id == "cylinder" {
+                2 * ramp_tiles(self.width)
+            } else {
+                2
+            }
+    }
+}
+fn required(s: &Settings) -> Result<Vec<Block>> {
+    let mut rng = s.seed ^ 0x814d229a;
+    let mut ids: Vec<_> = s
+        .gimmicks
+        .iter()
+        .filter(|id| !basic_ids().contains(&id.as_str()))
+        .map(|s| family(s).to_string())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    let mut blocks = vec![];
+    for id in ids {
+        let mut count = 1;
+        while next(&mut rng) % 2 == 0 {
+            count += 1;
+            if count > MAX_PIECES {
+                return Err(error(
+                    "E_TRACK_BUDGET",
+                    "required special chain exceeds piece budget",
+                ));
+            }
+        }
+        let w = if ["loop", "banked_chicane", "overpass"].contains(&id.as_str()) {
+            400
         } else {
-            id
+            width(&mut rng)
         };
-        let p = placed(id, *origin, heading);
-        *origin = p.path.last().unwrap().position_cm;
-        pieces.push(p);
-    };
-    for (run, &(tiles, turn)) in runs.iter().enumerate() {
-        let mut remaining = tiles;
-        if run == 0 {
-            for _ in 0..3 {
-                push("straight", &mut pieces, &mut origin, heading);
-            }
-            remaining -= 3;
-        } else if tiles >= 6 {
-            used += 1;
-            if !used_hairpin {
-                // A 48m bay has two 8m-separated returns, followed by a chicane.
-                // Ports remain on the original skeleton; the interior is now driven.
-                for (id, delta) in [
-                    ("straight", 0),
-                    ("hairpin_left", -2),
-                    ("straight", 0),
-                    ("hairpin", 2),
-                    ("chicane", 0),
-                    ("sharp_curve", 1),
-                    ("sharp_curve_left", -1),
-                    ("chicane", 0),
-                ] {
-                    let tube_left = settings.gimmicks.iter().any(|s| s == "cylinder_uturn_left")
-                        || settings.seed % 2 == 0;
-                    let id = if tube_selected
-                        && id == if tube_left { "hairpin_left" } else { "hairpin" }
-                    {
-                        used_tube = true;
-                        if tube_left {
-                            "cylinder_uturn_left"
-                        } else {
-                            "cylinder_uturn"
-                        }
-                    } else {
-                        id
-                    };
-                    push(id, &mut pieces, &mut origin, heading);
-                    heading = (i16::from(heading) + delta).rem_euclid(4) as u8;
-                }
-                remaining -= 6;
-                used_hairpin = true;
-            } else {
-                let density = match settings.difficulty.as_str() {
-                    "easy" => 1,
-                    "hard" => 3,
-                    _ => 2,
-                };
-                let mut id = "";
-                if !pending_spiral.is_empty() {
-                    id = pending_spiral;
-                    pending_spiral = "";
-                } else if !candidates.is_empty() && next(&mut rng) % 4 < density {
-                    if bag.is_empty() {
-                        bag = candidates
-                            .iter()
-                            .copied()
-                            .filter(|id| used < opportunities || !id.starts_with("spiral"))
-                            .collect();
-                        for j in (1..bag.len()).rev() {
-                            let k = next(&mut rng) as usize % (j + 1);
-                            bag.swap(j, k);
-                        }
-                    }
-                    id = bag.pop().unwrap_or("");
-                    if id.starts_with("spiral") {
-                        pending_spiral = if id == "spiral_up" {
-                            "spiral_down"
-                        } else {
-                            "spiral_up"
-                        };
-                    }
-                } else if tube_selected && next(&mut rng) % 4 < density {
-                    id = if settings.difficulty == "hard" && next(&mut rng) % 2 == 0 {
-                        "cylinder_s_rise"
-                    } else {
-                        "cylinder"
-                    };
-                    used_tube = true;
-                }
-                if !id.is_empty() {
-                    if short_piece(id) {
-                        push("chicane", &mut pieces, &mut origin, heading);
-                        push(id, &mut pieces, &mut origin, heading);
-                        push("chicane", &mut pieces, &mut origin, heading);
-                    } else {
-                        push("straight", &mut pieces, &mut origin, heading);
-                        push(id, &mut pieces, &mut origin, heading);
-                        push("straight", &mut pieces, &mut origin, heading);
-                    }
-                    remaining -= 6;
-                }
+        blocks.push(Block {
+            balance: id.starts_with("spiral"),
+            id,
+            count,
+            width: w,
+        });
+    }
+    for i in (1..blocks.len()).rev() {
+        let j = next(&mut rng) as usize % (i + 1);
+        blocks.swap(i, j);
+    }
+    Ok(blocks)
+}
+fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
+    let (mut length, mut ordinary, mut straight, mut time) = (0, 0, 0, 0);
+    let mut lo = [i64::MAX; 3];
+    let mut hi = [i64::MIN; 3];
+    for p in pieces {
+        time += p.reference_msec;
+        for v in p.path.iter().chain(&p.alternate_path) {
+            for j in 0..3 {
+                lo[j] = lo[j].min(v.position_cm[j]);
+                hi[j] = hi[j].max(v.position_cm[j]);
             }
         }
-        while remaining >= 2 {
-            if remaining >= 4 && settings.difficulty != "easy" && next(&mut rng) % 2 == 0 {
-                push("zigzag", &mut pieces, &mut origin, heading);
-                remaining -= 4;
-            } else {
-                push("chicane", &mut pieces, &mut origin, heading);
-                remaining -= 2;
+        for w in p.path.windows(2) {
+            let d = distance(w[0].position_cm, w[1].position_cm);
+            length += d;
+            if !p.ordinary {
+                continue;
             }
-        }
-        if remaining == 1 {
-            push("straight", &mut pieces, &mut origin, heading);
-        }
-        if turn != 0 {
-            let tube = tube_selected && run > 0 && (next(&mut rng) % 4 == 0 || !used_tube);
-            let id = if tube {
-                used_tube = true;
-                if turn == 1 {
-                    "cylinder_curve"
-                } else {
-                    "cylinder_curve_left"
-                }
-            } else if turn == 1 {
-                "sharp_curve"
-            } else {
-                "sharp_curve_left"
-            };
-            push(id, &mut pieces, &mut origin, heading);
-            heading = (i16::from(heading) + i16::from(turn)).rem_euclid(4) as u8;
+            ordinary += d;
+            // Horizontal heading, not the piece name: slopes count as straight.
+            let a = w[0].forward;
+            let b = w[1].forward;
+            if (a[0] as i128 * b[2] as i128 - a[2] as i128 * b[0] as i128).abs() < 5_000_000_000 {
+                straight += d;
+            }
         }
     }
-    let length_cm = pieces
+    let floor_y = lo[1] - 235; // Always below the lowest tube bottom, including 6m bores.
+    (
+        length,
+        ordinary,
+        straight,
+        time,
+        VenueFloor {
+            min_cm: [lo[0] - 1600, floor_y, lo[2] - 1600],
+            max_cm: [hi[0] + 1600, floor_y, hi[2] + 1600],
+        },
+    )
+}
+fn candidate(
+    s: &Settings,
+    blocks: &[Block],
+    attempt: u64,
+    target_percent: u32,
+) -> Result<Assembly> {
+    let mut rng = s.seed ^ attempt.wrapping_mul(0xa0761d6478bd642f);
+    let mut sides: Vec<Vec<&Block>> = vec![vec![]; 4];
+    for block in blocks {
+        let side = next(&mut rng) as usize % 4;
+        sides[side].push(block);
+    }
+    let needs: Vec<usize> = sides
         .iter()
-        .flat_map(|p| p.path.windows(2))
-        .map(|p| distance(p[0].position_cm, p[1].position_cm))
-        .sum();
-    let estimated_msec = pieces.iter().map(|p| p.reference_msec).sum();
-    Assembly {
-        settings: settings.clone(),
+        .enumerate()
+        .map(|(i, b)| b.iter().map(|v| v.tiles()).sum::<usize>() + if i == 0 { 3 } else { 0 })
+        .collect();
+    let target_tiles = (u32::from(s.duration_seconds) * SPEED as u32 / TILE_CM as u32) as usize;
+    let extra = (target_tiles.saturating_sub(needs.iter().sum::<usize>()) / 4).max(4);
+    let stretch = (attempt as usize % 8) * extra / 4;
+    let a = needs[0].max(needs[2]).max(6) + stretch;
+    let b = needs[1].max(needs[3]).max(6) + (7 - attempt as usize % 8) * extra / 4;
+    let runs = [a, b, a, b];
+    let mut pieces = vec![];
+    let mut origin = [0; 3];
+    let mut heading = 0;
+    let mut chain = 0;
+    for side in 0..if s.circuit { 4 } else { 3 } {
+        // For a sprint, reserve every selected block on the three traversed sides.
+        let mut list = sides[side].clone();
+        if !s.circuit && side == 2 {
+            list.extend(sides[3].iter());
+        }
+        let need = list.iter().map(|b| b.tiles()).sum::<usize>() + if side == 0 { 3 } else { 0 };
+        let mut remaining = runs[side].max(need) - need;
+        if side == 0 {
+            for _ in 0..3 {
+                push_piece(
+                    &mut pieces,
+                    &mut origin,
+                    heading,
+                    "straight",
+                    400,
+                    false,
+                    [0; 3],
+                );
+            }
+        }
+        let filler =
+            |remaining: &mut usize, pieces: &mut Vec<Piece>, origin: &mut Vertex, rng: &mut u64| {
+                let chance = f64::from(target_percent) * 2512.0
+                    / (f64::from(target_percent) * 2512.0 + (100 - target_percent) as f64 * 800.0);
+                let curved = *remaining >= 2
+                    && !pieces.iter().rev().take(4).all(|p| p.id == "chicane")
+                    && next(rng) % 10000 >= (chance * 10000.0) as u64;
+                let id = if curved {
+                    "chicane"
+                } else if pieces.iter().rev().take(4).all(|p| p.id == "straight")
+                    || next(rng) % 5 == 0
+                {
+                    "slope"
+                } else {
+                    "straight"
+                };
+                push_piece(pieces, origin, heading, id, width(rng), true, [0; 3]);
+                *remaining -= if curved { 2 } else { 1 };
+            };
+        for block in list {
+            let before = if remaining == 0 {
+                0
+            } else {
+                next(&mut rng) as usize % (remaining + 1)
+            };
+            let stop = remaining - before;
+            while remaining > stop {
+                filler(&mut remaining, &mut pieces, &mut origin, &mut rng);
+            }
+            chain += 1;
+            let tube = block.id == "cylinder";
+            push_piece(
+                &mut pieces,
+                &mut origin,
+                heading,
+                if tube { "tube_entry" } else { "straight" },
+                block.width,
+                false,
+                [0; 3],
+            );
+            for i in 0..block.count {
+                push_piece(
+                    &mut pieces,
+                    &mut origin,
+                    heading,
+                    &block.id,
+                    block.width,
+                    false,
+                    [chain, i as u32, block.count as u32],
+                );
+            }
+            if block.balance {
+                chain += 1;
+                let opposite = if block.id == "spiral_up" {
+                    "spiral_down"
+                } else {
+                    "spiral_up"
+                };
+                for i in 0..block.count {
+                    push_piece(
+                        &mut pieces,
+                        &mut origin,
+                        heading,
+                        opposite,
+                        block.width,
+                        false,
+                        [chain, i as u32, block.count as u32],
+                    );
+                }
+            }
+            push_piece(
+                &mut pieces,
+                &mut origin,
+                heading,
+                if tube { "tube_exit" } else { "straight" },
+                block.width,
+                false,
+                [0; 3],
+            );
+        }
+        while remaining > 0 {
+            filler(&mut remaining, &mut pieces, &mut origin, &mut rng);
+        }
+        if s.circuit || side < 2 {
+            push_piece(
+                &mut pieces,
+                &mut origin,
+                heading,
+                "sharp_curve",
+                width(&mut rng),
+                true,
+                [0; 3],
+            );
+            heading = (heading + 1) % 4;
+        }
+        if pieces.len() > MAX_PIECES {
+            return Err(error(
+                "E_TRACK_BUDGET",
+                "mandatory pieces and connecting roads exceed budget",
+            ));
+        }
+    }
+    // Match shared cross sections, with transitions entirely inside each road.
+    for i in 0..pieces.len() {
+        let prev = if i == 0 {
+            if s.circuit {
+                pieces.len() - 1
+            } else {
+                0
+            }
+        } else {
+            i - 1
+        };
+        let next = (i + 1).min(pieces.len() - 1);
+        let next = if i + 1 == pieces.len() && s.circuit {
+            0
+        } else {
+            next
+        };
+        let joint = |a: &Piece, b: &Piece| {
+            if a.id.starts_with("cylinder") || b.id.starts_with("cylinder") {
+                a.width_cm.min(b.width_cm)
+            } else if ["loop", "banked_chicane", "overpass"].contains(&a.id.as_str())
+                || ["loop", "banked_chicane", "overpass"].contains(&b.id.as_str())
+            {
+                400
+            } else {
+                (a.width_cm + b.width_cm) / 2
+            }
+        };
+        pieces[i].entry_width_cm = joint(&pieces[prev], &pieces[i]);
+        pieces[i].exit_width_cm = joint(&pieces[i], &pieces[next]);
+    }
+    pieces = pieces.iter().map(materialize).collect();
+    let (length_cm, ordinary_length_cm, ordinary_straight_cm, estimated_msec, floor) =
+        statistics(&pieces);
+    Ok(Assembly {
+        settings: s.clone(),
         generator_fingerprint: fingerprint(),
         catalogue_fingerprint: catalogue_fingerprint(),
         pieces,
         length_cm,
         estimated_msec,
-    }
+        straight_target_percent: target_percent,
+        ordinary_length_cm,
+        ordinary_straight_cm,
+        floor,
+    })
 }
 pub fn assemble(settings: &Settings) -> Result<Assembly> {
     let s = settings.normalized()?;
+    let blocks = required(&s)?;
+    let mut rng = s.seed ^ 0x51eed;
+    let ratio = 10 + (next(&mut rng) % 81) as u32;
     let target = u32::from(s.duration_seconds) * 1000;
-    let mut best: Option<Assembly> = None;
-    let mut consider = |runs: &[(usize, i8)]| {
-        let a = skeleton(&s, runs);
-        if a.validate().is_ok()
-            && best.as_ref().is_none_or(|b| {
-                a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
-            })
-        {
-            best = Some(a);
-        }
+    let score = |a: &Assembly| {
+        let actual = a.ordinary_straight_cm as f64 / a.ordinary_length_cm.max(1) as f64;
+        (actual - f64::from(ratio) / 100.0).abs() * 150.0
+            + f64::from(a.estimated_msec.abs_diff(target)) / 1000.0
     };
-    {
-        // Begin with an L, so even a one-minute course has both turn directions.
-        let mut cells = std::collections::BTreeSet::from([[0, 0], [0, 1], [1, 0]]);
-        let mut rng = s.seed;
-        for _ in 0..32 {
-            cancellation::checkpoint()?;
-            consider(&circuit_runs(&cells));
-            let mut frontier = std::collections::BTreeSet::new();
-            for &[x, z] in &cells {
-                for p in [[x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1]] {
-                    if !cells.contains(&p) {
-                        frontier.insert(p);
-                    }
-                }
-            }
-            let mut choices: Vec<_> = frontier.into_iter().collect();
-            // Fisher-Yates has a bounded number of steps and stable input order.
-            for i in (1..choices.len()).rev() {
-                let j = next(&mut rng) as usize % (i + 1);
-                choices.swap(i, j);
-            }
-            let mut added = false;
-            for p in choices {
-                let [x, z] = p;
-                // Tree-like growth keeps bays instead of filling a rectangle.
-                if [[x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1]]
-                    .iter()
-                    .filter(|q| cells.contains(*q))
-                    .count()
-                    != 1
-                {
-                    continue;
-                }
-                cells.insert(p);
-                if boundary(&cells).is_some() {
-                    added = true;
-                    break;
-                }
-                cells.remove(&p);
-            }
-            if !added {
-                break;
+    let mut best = None;
+    for attempt in 0..24 {
+        cancellation::checkpoint()?;
+        if let Ok(a) = candidate(&s, &blocks, attempt, ratio) {
+            if a.validate().is_ok() && best.as_ref().is_none_or(|b| score(&a) < score(b)) {
+                best = Some(a);
             }
         }
     }
-    let a = best.ok_or_else(|| error("E_TRACK_ASSEMBLY", "no admissible bounded layout"))?;
-    a.validate()?;
-    Ok(a)
+    best.ok_or_else(||error("E_TRACK_BUDGET","no connected collision-free layout fits the search, cell and memory budgets with every required gimmick"))
 }
+
 impl Assembly {
     pub fn validate(&self) -> Result<()> {
         let fail = || {
@@ -1289,29 +1353,44 @@ impl Assembly {
             return Err(fail());
         }
 
-        if self.estimated_msec == 0 || self.estimated_msec > 600_000 {
+        if self.estimated_msec == 0 {
             return Err(fail());
         }
-        if !self.pieces.iter().any(|p| p.id == "sharp_curve")
-            || !self.pieces.iter().any(|p| p.id == "sharp_curve_left")
-            || !self.pieces.iter().any(|p| p.id.starts_with("hairpin"))
-            || (self
-                .settings
-                .gimmicks
-                .iter()
-                .any(|s| s.starts_with("cylinder"))
-                && !self.pieces.iter().any(|p| p.id.starts_with("cylinder")))
+        for id in self
+            .settings
+            .gimmicks
+            .iter()
+            .filter(|id| !basic_ids().contains(&id.as_str()))
         {
-            return Err(fail());
+            if !self.pieces.iter().any(|p| family(&p.id) == family(id)) {
+                return Err(fail());
+            }
         }
-        // Circuit wrap is part of the same run; no five identical pieces.
+        // Only ordinary roads retain the repeated-piece limit.
         for i in 0..self.pieces.len() {
             if !self.settings.circuit && i + 4 >= self.pieces.len() {
                 break;
             }
-            if (1..5).all(|n| self.pieces[(i + n) % self.pieces.len()].id == self.pieces[i].id) {
+            if self.pieces[i].ordinary
+                && (1..5).all(|n| {
+                    let p = &self.pieces[(i + n) % self.pieces.len()];
+                    p.ordinary && p.id == self.pieces[i].id
+                })
+            {
                 return Err(fail());
             }
+        }
+        let stats = statistics(&self.pieces);
+        if (stats.0, stats.1, stats.2, stats.3, stats.4)
+            != (
+                self.length_cm,
+                self.ordinary_length_cm,
+                self.ordinary_straight_cm,
+                self.estimated_msec,
+                self.floor.clone(),
+            )
+        {
+            return Err(fail());
         }
         let mut length = 0;
         let mut time = 0;
@@ -1320,8 +1399,33 @@ impl Assembly {
             if !catalogue_ids().contains(&p.id.as_str())
                 || p.quarter_turns > 3
                 || p.path.len() < 2
-                || *p != placed(&p.id, p.origin_cm, p.quarter_turns)
+                || ![200, 400, 600].contains(&p.width_cm)
+                || *p != materialize(p)
             {
+                return Err(fail());
+            }
+            if p.chain_count > 0 {
+                if p.chain_id == 0 || p.chain_index >= p.chain_count || p.chain_index as usize > i {
+                    return Err(fail());
+                }
+                let first = i - p.chain_index as usize;
+                if first + p.chain_count as usize > self.pieces.len() {
+                    return Err(fail());
+                }
+                for (offset, member) in self.pieces[first..first + p.chain_count as usize]
+                    .iter()
+                    .enumerate()
+                {
+                    if member.chain_id != p.chain_id
+                        || member.chain_index != offset as u32
+                        || member.chain_count != p.chain_count
+                        || family(&member.id) != family(&p.id)
+                        || member.width_cm != p.width_cm
+                    {
+                        return Err(fail());
+                    }
+                }
+            } else if p.chain_id != 0 || p.chain_index != 0 {
                 return Err(fail());
             }
             if i > 0 {
@@ -1356,7 +1460,7 @@ impl Assembly {
                             (s.position_cm[1] - t.position_cm[1]).abs() < 250
                                 && (s.position_cm[0] - t.position_cm[0]).pow(2)
                                     + (s.position_cm[2] - t.position_cm[2]).pow(2)
-                                    < (WIDTH + 60).pow(2)
+                                    < (i64::from(s.lateral_cm + t.lateral_cm) + 60).pow(2)
                         })
                     }) {
                         return Err(fail());
@@ -1481,10 +1585,10 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                         },
                         radius_cm: if *id == "loop" {
                             LOOP_RADIUS
-                        } else if p.id.starts_with("cylinder_wide") || *id == "halfpipe" {
+                        } else if *id == "halfpipe" {
                             200
                         } else {
-                            100
+                            p.width_cm / 2
                         },
                         width_cm: if *id == "loop" {
                             LOOP_WIDTH
@@ -1495,12 +1599,19 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                         centerline: if *id == "loop" {
                             vec![]
                         } else {
-                            local_piece(&p.id)
+                            variant(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm)
                                 .path
                                 .iter()
                                 .filter(|s| ["cylinder", "halfpipe"].contains(&s.mode.as_str()))
                                 .map(|s| TubeFrame {
-                                    floor_cm: s.position_cm,
+                                    floor_cm: if *id == "cylinder" {
+                                        add(
+                                            s.position_cm,
+                                            [0, -round(f64::from(p.width_cm) / 3.0), 0],
+                                        )
+                                    } else {
+                                        s.position_cm
+                                    },
                                     normal: s.normal,
                                     forward: s.forward,
                                 })
@@ -1530,7 +1641,8 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                     }
                 }
                 "barrier" => {
-                    g.parts.push(box_part([0, 18, 0], [WIDTH, 36, 25]));
+                    g.parts
+                        .push(box_part([0, 18, 0], [p.width_cm as i64, 36, 25]));
                     g.color = [245, 168, 35, 255];
                 }
                 "fixed_obstacle" | "moving_obstacle" | "rotating_obstacle" => {
@@ -1559,7 +1671,8 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
                     });
                 }
                 _ => {
-                    g.parts.push(box_part([0, -2, 0], [WIDTH - 50, 4, 200]));
+                    g.parts
+                        .push(box_part([0, -2, 0], [p.width_cm as i64 - 50, 4, 200]));
                     g.motion.kind = if *id == "jump" {
                         MotionKind::JumpHeight
                     } else {
@@ -1669,6 +1782,25 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
 
 /// Faces and occupancy share this geometry; background never enters this path.
 pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Result<()> {
+    let f = &a.floor;
+    b.quad(
+        [
+            [f.min_cm[0], f.min_cm[1], f.min_cm[2]],
+            [f.min_cm[0], f.min_cm[1], f.max_cm[2]],
+            [f.max_cm[0], f.min_cm[1], f.max_cm[2]],
+            [f.max_cm[0], f.min_cm[1], f.min_cm[2]],
+        ],
+        Surface::Concrete,
+        "assembled-venue-floor",
+        false,
+    )?;
+    b.solid(
+        "assembled-venue-floor",
+        SolidShape::Box {
+            min: [f.min_cm[0], f.min_cm[1] - 50, f.min_cm[2]],
+            max: f.max_cm,
+        },
+    )?;
     for (index, p) in a.pieces.iter().enumerate() {
         for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
             for w in path.windows(2) {
@@ -1697,9 +1829,7 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
                     };
                     [-1, 1].map(|side| {
                         std::array::from_fn(|j| {
-                            s.position_cm[j]
-                                + right[j] * i64::from(s.lateral_cm.min(WIDTH as u32 / 2)) * side
-                                    / 1_000_000
+                            s.position_cm[j] + right[j] * i64::from(s.lateral_cm) * side / 1_000_000
                         })
                     })
                 };
@@ -1804,5 +1934,5 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
         })
         .map(|p| p.path.len() as u64 - 1 + p.alternate_path.len().saturating_sub(1) as u64)
         .sum::<u64>();
-    (segments * 100, segments * 3)
+    (segments * 100 + 10, segments * 3 + 1)
 }

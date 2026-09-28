@@ -170,10 +170,14 @@
       "required": [
         "catalogue_fingerprint",
         "estimated_msec",
+        "floor",
         "generator_fingerprint",
         "length_cm",
+        "ordinary_length_cm",
+        "ordinary_straight_cm",
         "pieces",
-        "settings"
+        "settings",
+        "straight_target_percent"
       ],
       "properties": {
         "catalogue_fingerprint": {
@@ -184,10 +188,23 @@
           "format": "uint32",
           "minimum": 0.0
         },
+        "floor": {
+          "$ref": "#/definitions/VenueFloor"
+        },
         "generator_fingerprint": {
           "type": "string"
         },
         "length_cm": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "ordinary_length_cm": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "ordinary_straight_cm": {
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
@@ -200,6 +217,11 @@
         },
         "settings": {
           "$ref": "#/definitions/Settings"
+        },
+        "straight_target_percent": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         }
       },
       "additionalProperties": false
@@ -1076,16 +1098,23 @@
     "Piece": {
       "type": "object",
       "required": [
+        "chain_count",
+        "chain_id",
+        "chain_index",
         "connection_width_cm",
         "cube_span",
         "entry_speed_cmps",
+        "entry_width_cm",
+        "exit_width_cm",
         "id",
+        "ordinary",
         "origin_cm",
         "path",
         "quarter_turns",
         "reference_msec",
         "reserved_max_cm",
-        "reserved_min_cm"
+        "reserved_min_cm",
+        "width_cm"
       ],
       "properties": {
         "alternate_path": {
@@ -1093,6 +1122,21 @@
           "items": {
             "$ref": "#/definitions/Sample"
           }
+        },
+        "chain_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "chain_id": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "chain_index": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "connection_width_cm": {
           "type": "integer",
@@ -1114,8 +1158,21 @@
           "maxItems": 2,
           "minItems": 2
         },
+        "entry_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "exit_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
         "id": {
           "type": "string"
+        },
+        "ordinary": {
+          "type": "boolean"
         },
         "origin_cm": {
           "type": "array",
@@ -1159,6 +1216,11 @@
           },
           "maxItems": 3,
           "minItems": 3
+        },
+        "width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         }
       },
       "additionalProperties": false
@@ -1723,6 +1785,34 @@
         },
         "world_content_hash": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VenueFloor": {
+      "type": "object",
+      "required": [
+        "max_cm",
+        "min_cm"
+      ],
+      "properties": {
+        "max_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "min_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
         }
       },
       "additionalProperties": false

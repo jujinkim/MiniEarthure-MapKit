@@ -50,7 +50,7 @@ static func create(_bounds: PackedInt64Array, assembly: Dictionary) -> Node3D:
 			var p := point(sample.position_cm)
 			lo = lo.min(p)
 			hi = hi.max(p)
-	var floor_y := lo.y-0.35
+	var floor_y := float(assembly.floor.min_cm[1])*0.01
 	var center := (lo+hi)*0.5
 	var extent := hi-lo+Vector3(32,0,32)
 	box(root,Vector3(center.x,floor_y-0.25,center.z),Vector3(extent.x,0.5,extent.z),VENUE.material("rc:floor",seed))

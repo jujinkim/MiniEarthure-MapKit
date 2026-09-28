@@ -21,7 +21,7 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
         };
         checkpoints.push(Checkpoint {
             position_cm: position,
-            radius_cm: (track::WIDTH / 2 + 30) as u32,
+            radius_cm: p.path[0].lateral_cm + 30,
             shape: CheckpointShape::Sphere,
             placement_mode: PlacementMode::RoadSnap,
             surface_id: format!("assembled-road-{}", if i == 0 { 2 } else { i }),
@@ -32,7 +32,7 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
         let position = last.path[last.path.len() * 3 / 4].position_cm;
         checkpoints.push(Checkpoint {
             position_cm: position,
-            radius_cm: (track::WIDTH / 2 + 30) as u32,
+            radius_cm: last.path[last.path.len() * 3 / 4].lateral_cm + 30,
             shape: CheckpointShape::Sphere,
             placement_mode: PlacementMode::RoadSnap,
             surface_id: format!("assembled-road-{}", a.pieces.len() - 1),

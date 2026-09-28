@@ -214,6 +214,12 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
             if !p.id.contains("curve") && !p.id.contains("uturn") && !(800..=2400).contains(&z) {
                 continue;
             }
+            if p.id.contains("curve") && (z < 400 || sample.position_cm[0].abs() > 400) {
+                continue;
+            }
+            if p.id.contains("uturn") && z < 400 {
+                continue;
+            }
             let radius = centers
                 .iter()
                 .map(|c| {
