@@ -1733,12 +1733,9 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
                         &format!("assembled-wall-{index}"),
                         false,
                     )?;
-                    b.quad(
-                        [b0, b1, a1, a0],
-                        Surface::Concrete,
-                        &format!("assembled-wall-{index}"),
-                        false,
-                    )?;
+                    // One geometric sheet: renderers/colliders handle both
+                    // sides. A reversed duplicate makes every shared edge
+                    // non-manifold and defeats native CCD edge suppression.
                     let min = std::array::from_fn(|j| {
                         [a0, b0, a1, b1].iter().map(|v| v[j]).min().unwrap() - 2
                     });
@@ -1856,12 +1853,6 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
         let up = [0, FINISH_WALL_CM, 0];
         b.quad(
             [a, add(a, up), add(c, up), c],
-            Surface::Concrete,
-            &wall,
-            false,
-        )?;
-        b.quad(
-            [c, add(c, up), add(a, up), a],
             Surface::Concrete,
             &wall,
             false,

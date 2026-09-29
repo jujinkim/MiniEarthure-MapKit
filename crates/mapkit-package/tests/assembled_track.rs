@@ -3,6 +3,67 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn generated_walls_have_no_reverse_coplanar_duplicates() {
+    let d = document(&Settings {
+        seed: 1,
+        circuit: false,
+        duration_seconds: 60,
+        gimmicks: vec![],
+        ..Settings::default()
+    })
+    .unwrap();
+    let assembly = d.assembled_track.as_ref().unwrap();
+    let mut checked = 0;
+    for piece in [
+        assembly.pieces.first().unwrap(),
+        assembly.pieces.last().unwrap(),
+    ] {
+        let p = piece.origin_cm;
+        let cell = d.cell_at([p[0], p[2]]).unwrap();
+        let chunk = mapkit_core::generate(mapkit_core::GenerationInput {
+            document: &d,
+            cell,
+            heightgrid: None,
+            max_triangles: 500_000,
+        })
+        .unwrap();
+        let mut planes = BTreeMap::new();
+        for face in chunk
+            .triangles
+            .iter()
+            .filter(|f| f.object_id.starts_with("assembled-wall-"))
+        {
+            let [a, b, c] = face.vertices;
+            let ab = std::array::from_fn::<_, 3, _>(|i| b[i] - a[i]);
+            let ac = std::array::from_fn::<_, 3, _>(|i| c[i] - a[i]);
+            let normal = [
+                ab[1] * ac[2] - ab[2] * ac[1],
+                ab[2] * ac[0] - ab[0] * ac[2],
+                ab[0] * ac[1] - ab[1] * ac[0],
+            ];
+            for axis in [0, 2] {
+                if a[axis] != b[axis] || a[axis] != c[axis] || normal[axis] == 0 {
+                    continue;
+                }
+                let key = (face.object_id.clone(), axis, a[axis]);
+                let sign = normal[axis].signum();
+                if let Some(previous) = planes.insert(key, sign) {
+                    assert_eq!(
+                        previous, sign,
+                        "one two-sided sheet, no overlapping reversed wall faces"
+                    );
+                }
+                checked += 1;
+            }
+        }
+    }
+    assert!(
+        checked >= 8,
+        "straight and finish boundary fixtures include wall faces"
+    );
+}
+
+#[test]
 fn reproducible_roundtrip_and_modified_source_rejected() {
     let settings = Settings::default();
     let d = package::generate(&settings).unwrap();

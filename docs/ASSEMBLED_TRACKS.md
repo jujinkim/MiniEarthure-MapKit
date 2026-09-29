@@ -323,3 +323,17 @@ height differences, physical floor alignment and tamper rejection. Existing case
 cover 2/4/6 m bores, internal mesh seams, slope limits, deterministic roundtrip,
 cancellation, original-file preservation, collision-only floor, circuit/sprint
 generation and attached obstacles. Actual entry/exit driving is a user check.
+
+## Wall topology (2026-09-30)
+
+Track and finish-plaza walls emit one geometric sheet. Renderers and physics
+consumers use two-sided handling; a reversed coplanar quad must not be emitted
+as a second sheet with a different diagonal. Such duplicates create non-manifold
+edges during continuous collision sweeps. Occupancy solids and wall dimensions
+are unchanged. Cell clipping remains canonical; consumers that retain a complete
+world may assemble adjoining obstacle triangles into a continuous physics mesh.
+
+The focused `generated_walls_have_no_reverse_coplanar_duplicates` package test
+passes for generated straight and finish boundary faces, and the Godot extension
+build succeeds. Format/recipe numbers remain v1; source fingerprints invalidate
+derived caches. Existing source packages and user artifacts are preserved.
