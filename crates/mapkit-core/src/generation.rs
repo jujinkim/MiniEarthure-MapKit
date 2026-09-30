@@ -268,6 +268,7 @@ fn generate_validated(
     let mut b = Builder {
         chunk: GeneratedChunk {
             water_bodies: crate::water::generate(d, &bounds)?,
+            grind_lines: d.grind_lines.iter().filter(|g| g.intersects(&bounds)).cloned().collect(),
             gimmicks: d.gimmicks.iter().filter(|g| g.intersects(&bounds)).cloned().collect(),
             asset_convexes: vec![],
             building_prisms: vec![],
@@ -338,7 +339,7 @@ fn generate_validated(
 
 /// Reuse exactly the integer cell clipping used for terrain, without collision.
 pub(crate) fn water_surface(bounds: &Bounds, height: i64, faces: &[[Point; 3]]) -> Result<Vec<[Vertex; 3]>> {
-    let mut builder = Builder { chunk: GeneratedChunk { water_bodies: vec![], gimmicks: vec![], asset_convexes: vec![], building_prisms: vec![], format_version: GENERATED_VERSION, cell: Cell{x:0,y:0}, triangles: vec![], objects: vec![] }, bounds: bounds.clone(), max: 4096, occupancy: None };
+    let mut builder = Builder { chunk: GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], asset_convexes: vec![], building_prisms: vec![], format_version: GENERATED_VERSION, cell: Cell{x:0,y:0}, triangles: vec![], objects: vec![] }, bounds: bounds.clone(), max: 4096, occupancy: None };
     for face in faces { builder.triangle(face.map(|p| [p[0],height,p[1]]), Surface::Concrete, "water", false)?; }
     Ok(builder.chunk.triangles.into_iter().map(|t|t.vertices).collect())
 }
@@ -346,7 +347,7 @@ pub(crate) fn water_surface(bounds: &Bounds, height: i64, faces: &[[Point; 3]]) 
 /// Bounded draft display uses the exact executable track tessellator.
 pub fn assembled_preview(d:&MapDocument)->Result<GeneratedChunk> {
     let a=d.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","track required"))?;
-    let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None};
+    let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],grind_lines:d.grind_lines.clone(),gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None};
     crate::assembled_track::generate(a,&mut b)?;
     if a.authoring.as_ref().is_some_and(|s| !s.grounded_supports) {
         b.chunk.triangles.retain(|t|t.object_id!="assembled-venue-floor");

@@ -106,6 +106,17 @@ impl MapDocument {
                 if !cells.contains(&cell) { cells.push(cell); }
             }}
         }
+        for line in &self.grind_lines {
+            if !base.iter().any(|c|self.cell_bounds(*c).is_ok_and(|b|line.intersects(&b))) {continue;}
+            // Keep the rail and its connected landing neighborhoods resident.
+            for candidate in std::iter::once(line).chain(line.start_connections.iter().chain(&line.end_connections).filter_map(|l|self.grind_lines.iter().find(|g|g.id==l.line))) {
+                for sample in candidate.samples() {
+                    for cell in self.window([sample.position_cm[0],sample.position_cm[2]]) {
+                        if !cells.contains(&cell) {cells.push(cell);}
+                    }
+                }
+            }
+        }
         cells.sort_by_key(|c| (c.y, c.x));
         cells
     }

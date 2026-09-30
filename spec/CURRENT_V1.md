@@ -212,3 +212,12 @@ The shared road slab, grounded floor and structural columns participate in exact
 source reconstruction, hash, cell costs and memory accounting. Generated
 sources retain this policy when converted to manual authoring. Independent
 manual sources and external imports do not enable it automatically.
+
+
+## Independent grind contract (2026-10-01)
+
+Current v1 includes explicit `grind_lines` source, endpoint connections and
+resolved cap geometry, plus RC attachment presets and common ordinary-road
+refinement. See [the current line contract](../docs/TRACK_AUTHORING.md#independent-grind-lines-and-rc-attachments-2026-10-01).
+`E_GRIND_SOURCE`, `E_GRIND_CONNECTION` and `E_GRIND_BUDGET` reject malformed
+geometry, unresolved endpoints and excessive interaction work respectively.

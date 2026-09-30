@@ -86,6 +86,12 @@
         "$ref": "#/definitions/Gimmick"
       }
     },
+    "grind_lines": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/GrindLine"
+      }
+    },
     "heightmaps": {
       "type": "array",
       "items": {
@@ -859,6 +865,22 @@
       },
       "additionalProperties": false
     },
+    "Endpoint": {
+      "type": "object",
+      "required": [
+        "end",
+        "line"
+      ],
+      "properties": {
+        "end": {
+          "type": "boolean"
+        },
+        "line": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "EnvironmentProfile": {
       "type": "object",
       "required": [
@@ -1172,6 +1194,62 @@
               "type": "null"
             }
           ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "GrindLine": {
+      "type": "object",
+      "required": [
+        "capture_width_cm",
+        "control_points",
+        "end_connections",
+        "id",
+        "start_connections",
+        "up"
+      ],
+      "properties": {
+        "capture_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "control_points": {
+          "description": "Two points form a straight line; 3n+1 points form cubic Bezier spans.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "end_connections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Endpoint"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "start_connections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Endpoint"
+          }
+        },
+        "up": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
         }
       },
       "additionalProperties": false
@@ -2151,6 +2229,12 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Connection"
+          }
+        },
+        "grind_lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/GrindLine"
           }
         },
         "grounded_supports": {

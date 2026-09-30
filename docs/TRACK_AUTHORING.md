@@ -137,3 +137,40 @@ for selection and existing-piece drag, async history/save/recovery and cancellat
 Its public [editing report](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md)
 records measurements and the 49-piece seed-derived 500 ms commit target miss.
 Detailed interactive/platform acceptance remains user verification.
+
+
+## Independent grind lines and RC attachments (2026-10-01)
+
+Current v1 adds optional `grind_lines` to both the map and authored source. A line
+has a unique UTF-8 ID (1–32 bytes), two straight points or 3n+1 cubic control points
+(4–49), a unit up vector in millionths, capture width (5–100 cm), and explicit
+start/end links (`line`, `end`). Endpoints must coincide within 2 cm. Maximums
+are 256 lines, 16 links per endpoint and 32,000 resolved samples per map. Source
+coordinates remain integer centimetres. Resolved samples carry a transported up
+frame, at most 35 cm spacing, and `capture_height_cm=4`; the visible striped cap
+and Runtime capture use that plane. Lines have no supporting collision of their
+own and do not infer interaction from collider names or materials.
+
+Source validation, canonical hashes, indexed audit ownership/scratch accounting,
+generated archive payloads, cell costs, driving windows, shared preview and chunk
+rendering include lines. The supporting rail/fence remains ordinary collision.
+Seed generation explicitly adds rail and suitable straight-fence lines, subject
+to the existing category/duration/attachment budgets. Conversion to authored
+source materializes the interactions. `attachment_lines` returns the explicit
+line for one rail placement; thereafter deleting or editing the line does not
+change its supporting collider or silently regenerate the interaction.
+
+RC attachments are `ramp_low` (25 cm), `ramp_standard` (60 cm), `ramp_triple`
+(three 25 cm ramps), left/right 2 m radius quarterpipes, and a 6 m rail with a
+60 cm top. They are static convex geometry with no automatic jump effect.
+Ordinary road paths, including cubic links, share curvature/width/twist
+refinement. Connected junctions clip only wall intervals inside the neighbor's
+road ribbon at the same height. Rendering, collision, occupancy and preview use
+the resulting common triangles; outside and grade-separated walls remain.
+
+Focused checks: four `mapkit-core` grind tests, package grind roundtrip, schema
+contract, the 12 assembled-track unit tests, authored source regressions and
+indexed ownership/hash tests. The earlier frame-orthogonality regression was
+fixed and the affected width/helix test passed. Full application driving and
+platform acceptance remain user verification. All own versions remain 1;
+source/schema fingerprints invalidate disposable caches, never user artifacts.

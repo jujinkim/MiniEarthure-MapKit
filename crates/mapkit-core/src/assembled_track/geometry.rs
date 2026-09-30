@@ -138,6 +138,54 @@ fn curve_frames(path: &mut [Sample]) {
         }));
     }
 }
+
+/// Shared longitudinal refinement for every ordinary ribbon, including authored
+/// cubics. Bound angular change and the error at the OUTER edge, not just the
+/// centreline. Hermite interpolation retains endpoint tangents and grade.
+pub(super) fn refine(path: &mut Vec<Sample>) {
+    let mut out = Vec::with_capacity(path.len());
+    for w in path.windows(2) {
+        let a = &w[0];
+        let b = &w[1];
+        let dot = |u: Vertex, v: Vertex| (0..3).map(|j| u[j] as f64 * v[j] as f64 / 1e12).sum::<f64>().clamp(-1.0, 1.0);
+        let turn = libm::acos(dot(a.forward, b.forward));
+        let twist = libm::acos(dot(a.normal, b.normal));
+        let width = a.lateral_cm.max(b.lateral_cm) as f64;
+        let len = distance(a.position_cm, b.position_cm) as f64;
+        let ordinary = !["flight", "cylinder", "loop", "halfpipe"].contains(&a.mode.as_str());
+        let steps = if ordinary {
+            (turn / 0.0174533).max(libm::sqrt(width * (turn * turn + twist * twist) / 4.0))
+                .max(if turn + twist > 0.001 { len / 35.0 } else { 1.0 }).ceil().clamp(1.0, 64.0) as usize
+        } else { 1 };
+        for i in 0..steps {
+            let t = i as f64 / steps as f64;
+            let mut s = a.clone();
+            if i > 0 {
+                s.position_cm = std::array::from_fn(|j| round(
+                    (2.0*t*t*t-3.0*t*t+1.0)*a.position_cm[j] as f64
+                    + (t*t*t-2.0*t*t+t)*len*a.forward[j] as f64/1e6
+                    + (-2.0*t*t*t+3.0*t*t)*b.position_cm[j] as f64
+                    + (t*t*t-t*t)*len*b.forward[j] as f64/1e6));
+                s.forward = unit(std::array::from_fn(|j| (1.0-t)*a.forward[j] as f64+t*b.forward[j] as f64));
+                let n = std::array::from_fn::<_,3,_>(|j| (1.0-t)*a.normal[j] as f64/1e6+t*b.normal[j] as f64/1e6);
+                let f=s.forward.map(|v|v as f64/1e6);
+                let dot: f64=(0..3).map(|j|n[j]*f[j]).sum();
+                s.normal=unit(std::array::from_fn(|j|n[j]-dot*f[j]));
+                s.lateral_cm = round((1.0-t)*a.lateral_cm as f64+t*b.lateral_cm as f64) as u32;
+            }
+            if out.last().is_none_or(|last: &Sample| last.position_cm != s.position_cm) { out.push(s); }
+        }
+    }
+    if let Some(last) = path.last() { out.push(last.clone()); }
+    *path = out;
+}
+
+/// Subdivide twisted quads across their width until diagonal ridge error is
+/// below one centimetre. Flat ribbons need no extra lateral triangles.
+pub(super) fn strips(a: &Sample, b: &Sample) -> i64 {
+    let delta = libm::sqrt((0..3).map(|j| ((a.normal[j]-b.normal[j]) as f64/1e6).powi(2)).sum());
+    (delta * a.lateral_cm.max(b.lateral_cm) as f64 / 2.0).ceil().clamp(1.0, 32.0) as i64
+}
 pub(super) fn shape(p: &mut Piece, width: u32) {
     let id = p.id.as_str();
     let left = id.contains("left");

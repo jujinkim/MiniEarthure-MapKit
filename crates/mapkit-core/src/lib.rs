@@ -3,6 +3,7 @@ pub mod water;
 pub mod assembled_track;
 pub use generation::assembled_preview;
 pub mod gimmick;
+pub mod grind;
 pub mod special_track;
 pub mod cancellation;
 mod convex;
@@ -273,6 +274,8 @@ pub struct MapDocument {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gimmicks: Vec<gimmick::Gimmick>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grind_lines: Vec<grind::GrindLine>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub courses: Vec<course::Course>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub environment: Option<environment::EnvironmentProfile>,
@@ -416,6 +419,7 @@ mod courtyard;
 impl MapDocument {
     pub fn normalize(&mut self) {
         self.water_bodies.sort_by(|a,b| a.id.cmp(&b.id));
+        self.grind_lines.sort_by(|a,b|a.id.cmp(&b.id));
         self.gimmicks.sort_by(|a, b| a.id.cmp(&b.id));
         self.courses.sort_by(|a, b| a.course_id.cmp(&b.course_id));
         self.nodes.sort_by(|a, b| a.id.cmp(&b.id));
@@ -736,6 +740,10 @@ impl MapDocument {
         }
         water::validate(self)?;
         gimmick::validate(self)?;
+        grind::validate(&self.grind_lines)?;
+        if self.grind_lines.iter().flat_map(|l|&l.control_points).any(|p|!self.bounds.contains([p[0],p[2]])) {
+            return Err(error("E_GRIND_SOURCE","grind path leaves document bounds"));
+        }
         if let Some(track) = &self.assembled_track { track.validate()?; assembled_track::verify_products(self,track)?; }
         placement::validate(self)?;
         Ok(())
@@ -804,6 +812,8 @@ pub struct GeneratedChunk {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gimmicks: Vec<gimmick::Gimmick>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grind_lines: Vec<grind::GrindLine>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub asset_convexes: Vec<GeneratedConvex>,
     /// Convex building parts. Empty collections are omitted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -846,6 +856,10 @@ impl GeneratedChunk {
         if !self.gimmicks.is_empty() {
             hash.update(b",\"gimmicks\":");
             hash.update(canonical(&self.gimmicks)?);
+        }
+        if !self.grind_lines.is_empty() {
+            hash.update(b",\"grind_lines\":");
+            hash.update(canonical(&self.grind_lines)?);
         }
         hash.update(b",\"objects\":[");
         for (index, object) in self.objects.iter().enumerate() {

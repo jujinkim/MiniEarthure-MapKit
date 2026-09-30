@@ -314,6 +314,9 @@ fn decorate_inner(
         presentation.set("track_seed", track.settings.seed as i64);
     }
     presentation.set("map_id", document.map_id.as_str());
+    let cell=chunk.get("cell").unwrap().to::<VarDictionary>();
+    let bounds=document.cell_bounds(mapkit_core::Cell{x:cell.get("x").unwrap().to::<i32>(),y:cell.get("y").unwrap().to::<i32>()})?;
+    presentation.set("cell_bounds_json",serde_json::to_string(&bounds).unwrap().as_str());
     chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);
     Ok(data)

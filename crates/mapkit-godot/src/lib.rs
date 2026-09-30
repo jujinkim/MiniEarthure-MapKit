@@ -89,7 +89,7 @@ impl MapKitBridge {
             let chunk=mapkit_core::assembled_preview(&d)?;
             let mut meshes:std::collections::BTreeMap<String,Vec<mapkit_core::Vertex>>=std::collections::BTreeMap::new();
             for t in chunk.triangles {meshes.entry(t.object_id).or_default().extend(t.vertices);}
-            Ok(serde_json::json!({"meshes":meshes,"gimmicks":chunk.gimmicks}))
+            Ok(serde_json::json!({"meshes":meshes,"gimmicks":chunk.gimmicks,"grind_lines":chunk.grind_lines.iter().map(|l|l.resolved_json()).collect::<Vec<_>>()}))
         })())
     }
     #[func]
@@ -116,6 +116,14 @@ impl MapKitBridge {
         response((|| {
             let i=serde_json::from_value(engine_value(&instance.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
             Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::piece(&i)?).unwrap())
+        })())
+    }
+    #[func]
+    fn track_attachment_lines(&self, instance:GString, attachment:GString)->GString {
+        response((|| {
+            let i=serde_json::from_value(engine_value(&instance.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            let a=serde_json::from_value(engine_value(&attachment.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::attachment_lines(&i,&a)?).unwrap())
         })())
     }
     #[func]
@@ -147,6 +155,7 @@ impl MapKitBridge {
     fn track_json(&self) -> GString {
         response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
             .map(|p|serde_json::json!({"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),
+                "grind_lines":p.document.grind_lines.iter().map(|l|l.resolved_json()).collect::<Vec<_>>(),
                 "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|if a.authoring.is_some(){10}else{a.settings.max_laps()})})))
     }
     #[func]

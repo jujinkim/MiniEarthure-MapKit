@@ -219,7 +219,7 @@ pub fn source_metadata(d: &MapDocument) -> MapDocument {
         free_roam: d.free_roam,
         assembled_track: d.assembled_track.clone(),
         water_bodies: vec![],
-        gimmicks: d.gimmicks.clone(),
+        grind_lines: d.grind_lines.clone(), gimmicks: d.gimmicks.clone(),
         courses: d.courses.clone(),
         environment: d.environment.as_ref().map(|value| {
             let mut header = value.clone();

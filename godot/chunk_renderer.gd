@@ -41,7 +41,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 	if lease != null: lease.track(root)
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
-	var job := {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "triangle": 0, "water": 0, "water_face": 0, "water_records": preload("./water_query.gd").records(view), "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
+	var job := {"root": root, "chunk": view, "lease": lease, "display_lease": lease, "grind": 0, "grind_records": preload("./grind_geometry.gd").records(view), "triangle": 0, "water": 0, "water_face": 0, "water_records": preload("./water_query.gd").records(view), "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
 	if resources != null:
 		resources.environment_profile = preload("./environment_profile.gd").defaults()
 		var environment_json := str(view.get("presentation",{}).get("environment_json",""))
@@ -79,6 +79,10 @@ static func _advance(job: Dictionary) -> bool:
 		job.cancelled = true
 		dispose(job)
 		return true
+	if int(job.grind) < job.grind_records.size():
+		job.root.add_child(preload("./grind_geometry.gd").visual(job.grind_records[job.grind], job.lease, JSON.parse_string(job.chunk.get("presentation",{}).get("cell_bounds_json","{}"))))
+		job.grind += 1
+		return false
 	var chunk: Dictionary = job.chunk
 	var presentation: Dictionary = chunk.get("presentation", {})
 	var sources: Dictionary = presentation.get("assets", {})

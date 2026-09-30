@@ -25,7 +25,7 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
         document.assets.len(),
         document.placements.len(),
         document.repetitions.len(),
-        document.water_bodies.len(),document.gimmicks.len(),
+        document.water_bodies.len(),document.gimmicks.len(),document.grind_lines.len(),
     ]
     .into_iter()
     .max()
@@ -33,6 +33,7 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
     (max_records as u64)
         .saturating_mul(std::mem::size_of::<usize>() as u64)
         .saturating_add(if document.gimmicks.is_empty(){4096}else{4*1024*1024})
+        .saturating_add(if document.grind_lines.is_empty(){0}else{8*1024*1024})
         .saturating_add(document.assembled_track.as_ref().map_or(0, |a| {
             // Canonical assembly JSON is a bounded scratch tree, charged before allocation.
             (a.pieces.iter().map(|p| p.path.len() + p.alternate_path.len() + p.control_points.len() + 1).sum::<usize>() as u64
@@ -128,7 +129,7 @@ by_id!(
     Zone,
     Asset,
     Placement,
-    Repetition, mapkit_core::water::WaterBody, mapkit_core::gimmick::Gimmick
+    Repetition, mapkit_core::water::WaterBody, mapkit_core::gimmick::Gimmick, mapkit_core::grind::GrindLine
 );
 impl NormalizeOrder for Heightmap {
     fn compare(&self, other: &Self) -> Ordering {
@@ -214,6 +215,7 @@ impl Serialize for Document<'_> {
         }
         fields!(m, d, free_roam);
         if !d.gimmicks.is_empty() {m.serialize_entry("gimmicks", &Normalized(&d.gimmicks,self.1))?;}
+        if !d.grind_lines.is_empty() {m.serialize_entry("grind_lines", &Normalized(&d.grind_lines,self.1))?;}
         m.serialize_entry("heightmaps", &Normalized(&d.heightmaps, self.1))?;
         fields!(m, d, map_id);
         m.serialize_entry("nodes", &Normalized(&d.nodes, self.1))?;
@@ -656,6 +658,12 @@ record!(mapkit_core::water::WaterBody,d,m,{fields!(m,d,bottom_cm,flow_cm_s,id,is
 impl Serialize for Canonical<'_,mapkit_core::gimmick::Gimmick> {
     fn serialize<S:serde::Serializer>(&self,serializer:S)->std::result::Result<S::Ok,S::Error> {
         // One bounded (32-part) record at a time; charged by scratch_bound.
+        serde_json::to_value(self.0).map_err(serde::ser::Error::custom)?.serialize(serializer)
+    }
+}
+
+impl Serialize for Canonical<'_,mapkit_core::grind::GrindLine> {
+    fn serialize<S: serde::Serializer>(&self,serializer:S)->std::result::Result<S::Ok,S::Error> {
         serde_json::to_value(self.0).map_err(serde::ser::Error::custom)?.serialize(serializer)
     }
 }

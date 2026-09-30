@@ -20,6 +20,7 @@ const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
 mod geometry;
+mod junction;
 mod layout;
 pub const WIDTHS: &[u32] = &[200, 400, 600, 800, 1200];
 mod grounding;
@@ -383,6 +384,7 @@ pub fn fingerprint() -> String {
             include_bytes!("special_track.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
+            include_bytes!("assembled_track/junction.rs").as_slice(),
             include_bytes!("assembled_track/authoring.rs").as_slice(),
             include_bytes!("assembled_track/obstacles.rs").as_slice(),
             include_bytes!("assembled_track/grounding.rs").as_slice(),
@@ -392,6 +394,7 @@ pub fn fingerprint() -> String {
 }
 pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
     let mut value = serde_json::to_value(a).unwrap();
+    value["grind_lines"] = serde_json::to_value(obstacles::grind_lines(a).iter().map(|l|l.resolved_json()).collect::<Vec<_>>()).unwrap();
     value["progress_checkpoints"]=serde_json::json!(authoring::common_checkpoints(a).into_iter().map(|(piece_index,sample_index)|serde_json::json!({"piece_index":piece_index,"sample_index":sample_index})).collect::<Vec<_>>());
     value
 }
@@ -1169,6 +1172,10 @@ fn materialize(p: &Piece) -> Piece {
             }
         }
     }
+    if out.id != "finish_plaza" {
+        geometry::refine(&mut out.path);
+        geometry::refine(&mut out.alternate_path);
+    }
     out.chain_id = p.chain_id;
     out.chain_index = p.chain_index;
     out.chain_count = p.chain_count;
@@ -1585,7 +1592,9 @@ pub fn verify_products(d: &MapDocument, a: &Assembly) -> Result<()> {
     expected.sort_by(|a, b| a.id.cmp(&b.id));
     let mut actual = d.gimmicks.clone();
     actual.sort_by(|a, b| a.id.cmp(&b.id));
-    if actual != expected
+    let mut expected_lines=obstacles::grind_lines(a); expected_lines.sort_by(|a,b|a.id.cmp(&b.id));
+    let mut actual_lines=d.grind_lines.clone(); actual_lines.sort_by(|a,b|a.id.cmp(&b.id));
+    if actual != expected || actual_lines != expected_lines
         || d.seed != a.settings.seed
         || !d.nodes.is_empty()
         || !d.roads.is_empty()
@@ -1629,10 +1638,18 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
             bounds.max[j] = bounds.max[j].max(g.safety_max_cm[j * 2]);
         }
     }
+    let grind_lines=obstacles::grind_lines(&a);
+    for line in &grind_lines {
+        for point in &line.control_points { for j in 0..2 {
+            bounds.min[j]=bounds.min[j].min(point[j*2]-400);
+            bounds.max[j]=bounds.max[j].max(point[j*2]+400);
+        }}
+    }
     let mut d = MapDocument {
         free_roam: false,
         assembled_track: Some(a.clone()),
         water_bodies: vec![],
+        grind_lines,
         gimmicks: objects,
         courses: vec![],
         environment: Some(environment::EnvironmentProfile {
@@ -1736,12 +1753,12 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
         emit_shape(&support.shape, &id, b)?;
     }
     for (index, p) in a.pieces.iter().enumerate() {
-        generate_piece(p, index, b)?;
+        generate_piece(p, index, b, &junction::neighbors(a, index))?;
     }
     Ok(())
 }
 
-fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result<()> {
+fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece]) -> Result<()> {
     if p.id == "finish_plaza" {
         return generate_plaza(p, index, b);
     }
@@ -1778,11 +1795,7 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result
             if !special {
                 // A wide twisted helix quad creates a diagonal ridge. Subdivide
                 // across the lane so wheel contacts follow the swept surface.
-                let strips = if p.id.starts_with("spiral") || p.id.starts_with("curve_") {
-                    8
-                } else {
-                    1
-                };
+                let strips = geometry::strips(&w[0], &w[1]);
                 let mix = |a: Vertex, b: Vertex, n: i64| {
                     std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
                 };
@@ -1842,7 +1855,9 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result
             } else {
                 WALL
             };
-            for (a0, b0) in [(al, bl), (ar, br)] {
+            for (edge_a, edge_b) in [(al, bl), (ar, br)] {
+              let alternate = if branch { &p.path } else { &p.alternate_path };
+              for (a0, b0) in junction::visible(edge_a, edge_b, neighbors, alternate) {
                 let a1 = std::array::from_fn(|j| a0[j] + w[0].normal[j] * wall / 1_000_000);
                 let b1 = std::array::from_fn(|j| b0[j] + w[1].normal[j] * wall / 1_000_000);
                 b.quad(
@@ -1864,6 +1879,7 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result
                     &format!("assembled-wall-{index}"),
                     SolidShape::Box { min, max },
                 )?;
+              }
             }
         }
     }
@@ -2077,4 +2093,24 @@ fn emit_shape(shape: &CollisionConvex, id: &str, b: &mut impl TrackGeometry) -> 
         )?;
     }
     Ok(())
+}
+
+/// Common public line sampling, independent of road instances.
+pub fn grind_path(points: &[Vertex], width: u32) -> Vec<Sample> {
+    let mut p=geometry::bezier(points,width,width,width);
+    geometry::refine(&mut p);
+    let mut out=vec![];
+    for w in p.windows(2) {
+        let steps=(distance(w[0].position_cm,w[1].position_cm).div_ceil(35)).max(1);
+        for i in 0..steps {
+            if out.len()>32_000 {return out;}
+            let t=i as f64/steps as f64;
+            let mut s=w[0].clone();
+            s.position_cm=std::array::from_fn(|j|round(w[0].position_cm[j] as f64*(1.0-t)+w[1].position_cm[j] as f64*t));
+            s.forward=unit(std::array::from_fn(|j|w[0].forward[j] as f64*(1.0-t)+w[1].forward[j] as f64*t));
+            out.push(s);
+        }
+    }
+    if let Some(last)=p.pop() {out.push(last);}
+    out
 }

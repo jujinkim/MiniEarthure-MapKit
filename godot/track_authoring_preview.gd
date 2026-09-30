@@ -55,6 +55,8 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 			rows[g.id + ":arrow"] = {"vertices":PackedVector3Array([Vector3(-0.35,0,0.25),Vector3(0,0,-0.55),Vector3(0.35,0,0.25)]), "owner":owner, "color":Color.WHITE, "emission":true, "lit":true, "pose":pose}
 		objects.merge(rows)
 		gimmicks[raw.id] = {"source":raw, "owner":owner, "rows":rows}
+	for line: Dictionary in result.data.get("grind_lines", []):
+		objects.merge(preload("./grind_geometry.gd").rows(line))
 	for id: String in objects:
 		if token != null and token.is_cancelled(): return {"error":"Track preview cancelled."}
 		var entry: Dictionary = objects[id]

@@ -2,6 +2,12 @@
 use super::*;
 
 pub const KINDS: &[&str] = &[
+    "ramp_low",
+    "ramp_standard",
+    "ramp_triple",
+    "quarterpipe_left",
+    "quarterpipe_right",
+    "grind_rail",
     "fixed_obstacle",
     "moving_obstacle",
     "rotating_obstacle",
@@ -113,10 +119,13 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
         &p.path
     };
     let s = sample(path, site.station);
+    if kind.starts_with("quarterpipe") && s.lateral_cm < 400 { return None; }
     let jump = kind == "jump_barrier";
     let slalom = kind == "slalom_gates";
     let rotating = ["rotating_obstacle", "swing_gates"].contains(&kind);
-    let guard = if jump {
+    let guard = if kind.starts_with("ramp") || kind.starts_with("quarterpipe") || kind=="grind_rail" {
+        600
+    } else if jump {
         450
     } else if slalom {
         350
@@ -153,6 +162,9 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
         half = half.min(t.lateral_cm as i64);
     }
     let sweep = match kind {
+        "ramp_low" | "ramp_standard" | "ramp_triple" => 50,
+        "quarterpipe_left" | "quarterpipe_right" => 200,
+        "grind_rail" => 20,
         "fixed_obstacle" => 20,
         "moving_obstacle" => 40, // 40cm box plus 40cm translation, centred on sweep
         "rotating_obstacle" => 37, // sqrt(20²+30²), full rotation
@@ -184,7 +196,7 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
     };
     // Verify footprint corners against the actual curved/tapered road ribbon.
     // Rotation uses its complete disc, translation its complete lateral sweep.
-    let reach = if slalom {
+    let reach = if kind=="ramp_triple" { 330 } else if kind=="grind_rail" { 300 } else if kind.starts_with("quarterpipe") { 150 } else if kind.starts_with("ramp") { 110 } else if slalom {
         140
     } else if rotating {
         sweep
@@ -404,6 +416,7 @@ pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
         }
         _ => {}
     }
+    if let Some(parts) = rc_parts(&o.kind) { g.parts = parts; g.color = [90, 180, 200, 255]; }
     let radius = g
         .parts
         .iter()
@@ -437,9 +450,10 @@ mod tests {
     }
     #[test]
     fn resolved_attachments_fit_three_widths_and_use_real_motion_geometry() {
-        for width in [200, 400, 600] {
+        for width in [200, 400, 600, 800] {
             let a = fixture("sprint_lane", width);
             for kind in KINDS {
+                if (kind.starts_with("quarterpipe") && width<800) || (kind.starts_with("ramp") && width<400) {continue;}
                 let o = safe_site(
                     &a,
                     &Site {
@@ -575,4 +589,71 @@ mod tests {
         }
         assert!(place(&budget).unwrap().0.is_empty());
     }
+}
+
+fn wedge(x: i64, z: i64, width: i64, length: i64, height: i64) -> CollisionConvex {
+    CollisionConvex { vertices: vec![[x-width/2,0,z-length/2],[x+width/2,0,z-length/2],[x-width/2,0,z+length/2],[x+width/2,0,z+length/2],[x-width/2,height,z+length/2],[x+width/2,height,z+length/2]],
+        faces: vec![[0,1,3],[0,3,2],[0,4,1],[1,4,5],[0,2,4],[1,5,3],[2,3,5],[2,5,4]] }
+}
+fn rc_parts(kind: &str) -> Option<Vec<CollisionConvex>> {
+    Some(match kind {
+        "ramp_low" => vec![wedge(0,0,100,160,25)],
+        "ramp_standard" => vec![wedge(0,0,100,220,60)],
+        "ramp_triple" => [-250,0,250].map(|z|wedge(0,z,100,160,25)).to_vec(),
+        "grind_rail" => vec![box_part([0,57,0],[12,6,600]),box_part([0,27,-220],[10,54,12]),box_part([0,27,220],[10,54,12])],
+        "quarterpipe_left" | "quarterpipe_right" => {
+            let sign=if kind.ends_with("left") {-1.0} else {1.0};
+            (0..32).map(|i| {
+                let p=|n:f64| {let t=n/32.0*std::f64::consts::FRAC_PI_2; [round(sign*200.0*libm::sin(t)),round(200.0*(1.0-libm::cos(t)))]};
+                let a=p(i as f64);let b=p((i+1) as f64);
+                let outer=|n:f64| {let t=n/32.0*std::f64::consts::FRAC_PI_2; [round(sign*208.0*libm::sin(t)),round(200.0-208.0*libm::cos(t))]};
+                let c=outer(i as f64); let d=outer((i+1) as f64);
+                let vertices=vec![[a[0],a[1],-150],[a[0],a[1],150],[b[0],b[1],-150],[b[0],b[1],150],[c[0],c[1],-150],[c[0],c[1],150],[d[0],d[1],-150],[d[0],d[1],150]];
+                {
+                    let mut shape=CollisionConvex {vertices,faces:vec![[0,2,3],[0,3,1],[4,5,7],[4,7,6],[0,1,5],[0,5,4],[2,6,7],[2,7,3],[0,4,6],[0,6,2],[1,3,7],[1,7,5]]};
+                    let center=std::array::from_fn::<_,3,_>(|j|shape.vertices.iter().map(|v|v[j] as f64).sum::<f64>()/8.0);
+                    for face in &mut shape.faces {
+                        let [a,b,c]=face.map(|n|shape.vertices[n as usize]);
+                        let u=std::array::from_fn::<_,3,_>(|j|b[j]-a[j]);let v=std::array::from_fn::<_,3,_>(|j|c[j]-a[j]);
+                        let n=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+                        if (0..3).map(|j|n[j] as f64*(center[j]-a[j] as f64)).sum::<f64>()>0.0 {face.swap(1,2);}
+                    }
+                    shape
+                }
+            }).collect()
+        },
+        _=>return None,
+    })
+}
+
+pub(super) fn grind_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
+    let mut out=a.authoring.as_ref().or(a.seed_source.as_ref()).map_or_else(Vec::new,|s|s.grind_lines.clone());
+    if a.authoring.is_some() { return out; }
+    for line in rail_lines(a).into_iter().chain(seed_fence_lines(a)) {
+        if !out.iter().any(|existing|existing.id==line.id) { out.push(line); }
+    }
+    out
+}
+
+pub(super) fn rail_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
+    let mut out=vec![];
+    for (i,o) in a.obstacles.iter().enumerate().filter(|(_,o)|o.kind=="grind_rail") {
+        let s=sample(path(a,o),o.station_cm);
+        let base=offset(&s,o.lateral_cm);
+        let points=[-300,300].map(|d|std::array::from_fn(|j|base[j]+s.normal[j]*61/1_000_000+s.forward[j]*d/1_000_000));
+        out.push(crate::grind::GrindLine {id:format!("rail-{i}"),control_points:points.to_vec(),up:s.normal,capture_width_cm:30,start_connections:vec![],end_connections:vec![]});
+    }
+    out
+}
+
+pub(super) fn seed_fence_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
+    let mut out=vec![];
+    // This is explicit generator placement, never collider name/material detection.
+    if a.authoring.is_none() && a.settings.categories.iter().any(|v|v=="gimmick") {
+        for (i,p) in a.pieces.iter().enumerate().filter(|(i,p)|*i>3 && *i%7==0 && p.id=="straight") {
+            let points=[p.path.first().unwrap(),p.path.last().unwrap()].map(|s| add(offset(s,s.lateral_cm as i64),s.normal.map(|v|v*(WALL+1)/1_000_000)));
+            out.push(crate::grind::GrindLine{id:format!("fence-{i}"),control_points:points.to_vec(),up:p.path[0].normal,capture_width_cm:30,start_connections:vec![],end_connections:vec![]});
+        }
+    }
+    out
 }

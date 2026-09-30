@@ -162,6 +162,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             for settings in std::iter::once(&source.settings).chain(source.original_seed.iter()) {
                 retained.string(&settings.difficulty)?;retained.vector(&settings.categories)?;for id in &settings.categories{retained.string(id)?;}
             }
+            retained_grind(&mut retained, &source.grind_lines)?;
             retained.vector(&source.instances)?;
             for i in &source.instances {retained.string(&i.id)?;retained.string(&i.preset)?;retained.vector(&i.control_points)?;}
             retained.vector(&source.connections)?;for c in &source.connections{retained.string(&c.from)?;retained.string(&c.to)?;}
@@ -351,6 +352,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             }
         }
     }
+    retained_grind(&mut retained, &document.grind_lines)?;
     retained.vector(gimmicks)?;
     for mapkit_core::gimmick::Gimmick {
         id,
@@ -924,6 +926,7 @@ mod tests {
             "zones",
             "assets",
             "gimmicks",
+            "grind_lines",
             "assembled_track",
             "free_roam",
             "water_bodies",
@@ -940,4 +943,17 @@ mod tests {
             "update the retained ownership walker for every new document field"
         );
     }
+}
+
+fn retained_grind(retained: &mut Retained, lines: &Vec<mapkit_core::grind::GrindLine>) -> Result<()> {
+    retained.vector(lines)?;
+    for line in lines {
+        retained.string(&line.id)?;
+        retained.vector(&line.control_points)?;
+        for links in [&line.start_connections,&line.end_connections] {
+            retained.vector(links)?;
+            for link in links {retained.string(&link.line)?;}
+        }
+    }
+    Ok(())
 }

@@ -70,6 +70,8 @@ pub struct Source {
     pub checkpoints: Vec<Checkpoint>,
     pub actions: Vec<Action>,
     pub attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grind_lines: Vec<crate::grind::GrindLine>,
 }
 impl Source {
     pub fn empty() -> Self {
@@ -83,12 +85,24 @@ impl Source {
             checkpoints: vec![],
             actions: vec![],
             attachments: vec![],
+            grind_lines: vec![],
         }
     }
 }
+/// One bounded preset placement returns explicit, independently editable interactions.
+pub fn attachment_lines(instance: &Instance, attachment: &Attachment) -> Result<Vec<crate::grind::GrindLine>> {
+    let mut source=Source::empty();
+    source.instances.push(instance.clone());
+    source.attachments.push(attachment.clone());
+    let assembly=compile(&source)?;
+    Ok(obstacles::rail_lines(&assembly))
+}
+
 pub fn from_assembly(a: &Assembly) -> Source {
     if let Some(source) = a.authoring.as_ref().or(a.seed_source.as_ref()) {
-        return source.clone();
+        let mut source=source.clone();
+        source.grind_lines=obstacles::grind_lines(a);
+        return source;
     }
     let ids: Vec<_> = (0..a.pieces.len()).map(|i| format!("piece-{i}")).collect();
     let mut connections = vec![];
@@ -147,6 +161,7 @@ pub fn from_assembly(a: &Assembly) -> Source {
         paths,
         checkpoints,
         actions: vec![],
+        grind_lines: obstacles::grind_lines(a),
         attachments: a
             .obstacles
             .iter()
@@ -280,6 +295,7 @@ pub fn compile(source: &Source) -> Result<Assembly> {
 }
 
 fn compile_uncached(source: &Source) -> Result<Assembly> {
+    crate::grind::validate(&source.grind_lines)?;
     if source.instances.len() > MAX_PIECES
         || source.connections.len() > 1024
         || source.paths.len() > 32

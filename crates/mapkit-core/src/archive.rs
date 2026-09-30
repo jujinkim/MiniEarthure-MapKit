@@ -15,7 +15,7 @@ pub fn archive_key(world: &str, cell: Cell) -> String {
 }
 pub fn archive_limit(cost: &GenerationCost) -> u64 {
     let id = cost.max_object_id_bytes.max(128);
-    (HEADER as u64 + 20)
+    (HEADER as u64 + 26)
         .saturating_add(cost.water_bytes)
         .saturating_add(cost.gimmick_bytes)
         .saturating_add(cost.asset_convexes.saturating_mul(960 + id))
@@ -138,6 +138,10 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
     if out.len() as u64 + 4 + water.len() as u64 > max_bytes { return Err(invalid()); }
     out.extend_from_slice(&(water.len() as u32).to_le_bytes());
     out.extend(water);
+    let lines=canonical(&chunk.grind_lines)?;
+    if out.len() as u64 + 4 + lines.len() as u64 > max_bytes {return Err(invalid());}
+    out.extend_from_slice(&(lines.len() as u32).to_le_bytes());
+    out.extend(lines);
     Ok(out)
 }
 struct Reader<'a> {
@@ -204,7 +208,7 @@ pub fn decode_archive(
     }
     let mut chunk = GeneratedChunk {
         water_bodies: vec![],
-        gimmicks: vec![],
+        grind_lines: vec![], gimmicks: vec![],
         asset_convexes: vec![],
         building_prisms: vec![],
         format_version: GENERATED_VERSION,
@@ -331,6 +335,11 @@ pub fn decode_archive(
     chunk.water_bodies = serde_json::from_slice(r.take(water_len)?).map_err(|_| invalid())?;
     crate::water::validate_bodies(&chunk.water_bodies.iter().map(|w|w.body.clone()).collect::<Vec<_>>(), &crate::Bounds { min: [-10_000_000;2], max: [10_000_000;2] }).map_err(|_| invalid())?;
     if chunk.water_bodies.iter().any(|w|w.surface.iter().flatten().any(|p|p[1]!=w.body.surface_cm || p[0].unsigned_abs()>10_000_000 || p[2].unsigned_abs()>10_000_000)) { return Err(invalid()); }
+    let line_len=r.u32()? as usize;
+    if line_len as u64>cost.gimmick_bytes+2 {return Err(invalid());}
+    chunk.grind_lines=serde_json::from_slice(r.take(line_len)?).map_err(|_|invalid())?;
+    crate::grind::validate_geometry(&chunk.grind_lines).map_err(|_|invalid())?;
+    if chunk.grind_lines.iter().map(|l|l.memory_bytes()).sum::<u64>()+chunk.gimmicks.iter().map(|g|g.memory_bytes()).sum::<u64>()>cost.gimmick_bytes {return Err(invalid());}
     if chunk.water_bodies.len() > 1024 || chunk.water_bodies.iter().any(|w| w.body.vertices() > 512 || w.surface.len() > 4096) || chunk.water_bodies.iter().map(|w|w.body.memory_bytes()).sum::<u64>() > cost.water_bytes { return Err(invalid()); }
     if r.offset != bytes.len() || chunk.hash()?.as_bytes() != hash {
         return Err(invalid());
@@ -345,7 +354,7 @@ mod tests {
     fn archive_roundtrip_corruption_and_allocation_limits() {
         let chunk = GeneratedChunk {
             water_bodies: vec![],
-            gimmicks: vec![],
+            grind_lines: vec![], gimmicks: vec![],
             asset_convexes: vec![],
             building_prisms: vec![],
             format_version: GENERATED_VERSION,
