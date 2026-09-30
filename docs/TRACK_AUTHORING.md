@@ -92,3 +92,48 @@ Automated delivery: 49 relevant Rust tests across core geometry/authoring, packa
 schema and memory accounting passed on macOS arm64; the category matrix covers
 42 mode/target/category combinations at seed 42. CLI and Godot extension builds
 passed. Current-source consumer binding checks are recorded by the integration root.
+
+
+## Compiler and preview preparation — 2026-10-01
+
+Interactive consumers can prepare source edits and preview data in an isolated
+worker. `authoring::compile` retains one successful source/result pair per thread,
+bounded by the existing source/assembly limits. Exact source equality reuses that
+compiler-owned result. Returned values are clones; caller mutation, failed work
+and cancelled work cannot seed or modify the cache. Cancellation is checked even
+on a hit. Threads never share this mutable cache and it is released on thread exit.
+
+`Assembly::validate` and general document/package verification still compare all
+derived fields against deterministic compiler output and check products/courses.
+There is no caller-supplied trust flag or validation-skip option. The preparation
+unit test verifies one actual compile across document construction and repeated
+validation, equality with the uncached compiler (including graph/issues/supports),
+tampering rejection, cache isolation, changed input and cancellation. All own
+formats remain v1; implementation fingerprints change with source as usual.
+
+`godot/track_authoring_preview.gd` now exposes data-only `prepare` and main-thread
+`apply`/`select` paths; `create` remains the convenience entry point. Preparation
+uses the same production tessellator and gimmick geometry, with packed vertices,
+normals, poses and object signatures. Optional prior preparation is immutable;
+unchanged gimmick rows are reused only on exact source and ownership equality.
+Scene application replaces changed objects, retains identical nodes/resources,
+and changes selection materials without recompiling. Object owner metadata groups
+roads, attached actions and obstacles for consumer drag ghosts; floor/supports
+are separate final-commit geometry. The worker cancellation token is optional.
+
+Scoped macOS arm64 / Godot 4.7.2 validation: native build, one new compiler-cache
+unit test, eight completed track-authoring tests and package tests
+`authored_source_roundtrip_draft_export_and_tampering`,
+`finish_plaza_and_editable_free_roam_keep_exact_source_validation`, and
+`source_mode_and_course_progress_remain_distinct` passed. The long 42-case
+category/duration matrix was deliberately stopped, so this is not a full suite
+pass. Initial unfiltered test discovery also found an unrelated existing
+`tests/water.rs:22` initializer missing `contact_class` and `snow_retention_percent`;
+it is outside this patch and remains a known unrelated test compilation failure.
+[Native logs](validation/track-preparation-2026-10-01/) retain the actual scope.
+
+MapEditor verifies fresh/reused preview equivalence, zero whole-preview/mesh builds
+for selection and existing-piece drag, async history/save/recovery and cancellation.
+Its public [editing report](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md)
+records measurements and the 49-piece seed-derived 500 ms commit target miss.
+Detailed interactive/platform acceptance remains user verification.

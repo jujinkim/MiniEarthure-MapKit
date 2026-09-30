@@ -259,7 +259,27 @@ pub fn snap(instance: &Instance, target: &Instance) -> Result<Instance> {
     out.entry_width_cm = end.lateral_cm * 2;
     Ok(out)
 }
+// One bounded compiler result per worker thread. Validation still compares every
+// derived field against this compiler-owned value; callers cannot supply a
+// certificate or disable validation. Never cache errors or cancelled work.
+thread_local! {
+    static LAST_COMPILED: std::cell::RefCell<Option<(Source, Assembly)>> = const { std::cell::RefCell::new(None) };
+    #[cfg(test)] static COMPILE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 pub fn compile(source: &Source) -> Result<Assembly> {
+    cancellation::checkpoint()?;
+    if let Some(result) = LAST_COMPILED.with(|cache| cache.borrow().as_ref()
+        .filter(|(input, _)| input == source).map(|(_, result)| result.clone())) {
+        return Ok(result);
+    }
+    #[cfg(test)] COMPILE_COUNT.with(|count| count.set(count.get() + 1));
+    let result = compile_uncached(source)?;
+    cancellation::checkpoint()?;
+    LAST_COMPILED.with(|cache| *cache.borrow_mut() = Some((source.clone(), result.clone())));
+    Ok(result)
+}
+
+fn compile_uncached(source: &Source) -> Result<Assembly> {
     if source.instances.len() > MAX_PIECES
         || source.connections.len() > 1024
         || source.paths.len() > 32
@@ -958,4 +978,49 @@ pub(super) fn seed_shortcut(a: &Assembly) -> Result<Assembly> {
     out.authoring = None;
     out.seed_source = Some(source);
     Ok(out)
+}
+
+#[cfg(test)]
+mod preparation_tests {
+    use super::*;
+
+    #[test]
+    fn compiler_owned_reuse_keeps_full_external_validation() {
+        let mut source = shortcut_source();
+        source.grounded_supports = true;
+        LAST_COMPILED.with(|cache| *cache.borrow_mut() = None);
+        COMPILE_COUNT.with(|count| count.set(0));
+        let expected = compile_uncached(&source).unwrap();
+        let actual = compile(&source).unwrap();
+        assert_eq!(actual, expected); // paths, issues, supports, actions and bounds
+        let document = document_from_assembly(actual.clone()).unwrap();
+        document.validate().unwrap();
+        verify_document(&document).unwrap();
+        COMPILE_COUNT.with(|count| assert_eq!(count.get(), 1));
+        for change in 0..4 {
+            let mut corrupt = document.clone();
+            let assembly = corrupt.assembled_track.as_mut().unwrap();
+            match change {
+                0 => assembly.pieces[0].path[0].position_cm[0] += 1,
+                1 => assembly.issues.push("forged issue".into()),
+                2 => assembly.supports.clear(),
+                _ => assembly.routes[0].estimated_msec += 1,
+            }
+            assert!(corrupt.validate().is_err(), "tampering {change} passed");
+        }
+        let mut corrupt = document.clone();
+        corrupt.gimmicks[0].position[0] += 1;
+        assert!(corrupt.validate().is_err());
+        // A caller's mutations cannot affect the cached compiler result.
+        let mut changed = actual;
+        changed.pieces.clear();
+        assert_eq!(compile(&source).unwrap(), expected);
+        let cancelled = cancellation::CancellationToken::default();
+        cancelled.cancel();
+        assert_eq!(cancelled.run(|| compile(&source)).unwrap_err().code, "E_CANCELLED");
+        let mut different = source.clone();
+        different.instances[0].position_cm[0] += 37;
+        assert_eq!(compile(&different).unwrap(), compile_uncached(&different).unwrap());
+        assert_eq!(compile(&source).unwrap(), expected);
+    }
 }
