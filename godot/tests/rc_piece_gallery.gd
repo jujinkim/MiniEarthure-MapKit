@@ -12,35 +12,16 @@ func run() -> void:
 	for kind in ["banked_chicane","overpass","roller_waves","offset_jump"]:
 		if OS.has_environment("RC_PIECE_KINDS") and kind not in OS.get_environment("RC_PIECE_KINDS").split(","): continue
 		var native: RefCounted = ClassDB.instantiate("MapKitBridge")
-		var settings: Dictionary = JSON.parse_string(native.track_catalogue()).data.defaults
-		settings.duration_seconds=120;settings.difficulty="hard";settings.gimmicks=[kind]
-		var generated := {};var index := -1;var file := ""
-		for seed in range(1,9):
-			settings.seed=seed;file=ProjectSettings.globalize_path("user://%s-%d.memap" % [kind,seed])
-			generated=JSON.parse_string(native.generate_track(JSON.stringify(settings),file))
-			if not generated.ok: break
-			for i in generated.data.document.assembled_track.pieces.size():
-				if generated.data.document.assembled_track.pieces[i].id==kind: index=i;break
-			if index>=0: break
-		check(generated.get("ok",false) and index>=0,"piece fixture "+kind)
-		if index<0: continue
-		check(JSON.parse_string(native.open_package(file)).ok,"piece opens")
-		var assembly: Dictionary = generated.data.document.assembled_track
-		var piece: Dictionary = assembly.pieces[index]
-		var world := Node3D.new();root.add_child(world)
-		world.add_child(STAGE.create(native.map_bounds(),assembly))
-		var window: Dictionary = JSON.parse_string(native.cell_window(piece.origin_cm[0],piece.origin_cm[2]))
-		for cell: Dictionary in window.data.cells:
-			var packed: Dictionary = native.generate_chunk_packed(cell.x,cell.y)
-			check(packed.ok,"piece geometry")
-			var presentation: Dictionary = native.with_presentation(packed.data)
-			check(presentation.ok,"piece presentation")
-			var job := RENDER.begin(presentation.data.chunk,world)
-			while not RENDER.advance(job): pass
-			check(job.error.is_empty(),"piece rendering")
-		for gimmick: Dictionary in generated.data.document.get("gimmicks",[]):
-			if not gimmick.id.begins_with("track-%d-" % index): continue
-			var visual := GEOMETRY.visual(gimmick);world.add_child(visual);visual.transform=GEOMETRY.pose(gimmick,350)
+		var source: Dictionary=JSON.parse_string(native.track_shortcut_source()).data
+		source.original_seed=null
+		for key in ["connections","paths","checkpoints","actions","attachments"]: source[key]=[]
+		source.instances=[{"id":"gallery","preset":kind,"position_cm":[0,0,0],"rotation_mdeg":[0,0,0],"width_cm":400,"entry_width_cm":400,"exit_width_cm":400,"control_points":[]}]
+		var generated: Dictionary=JSON.parse_string(native.compile_track_source(JSON.stringify(source)))
+		check(generated.ok,"explicit gallery source "+kind)
+		if not generated.ok: continue
+		var piece: Dictionary=generated.data.document.assembled_track.pieces[0]
+		var world: Node3D=preload("../track_authoring_preview.gd").create(generated.data.document)
+		root.add_child(world)
 		var car := Node3D.new();world.add_child(car)
 		car.position=GEOMETRY.point(piece.origin_cm)+Vector3.UP*0.15
 		car.rotation.y=-float(piece.quarter_turns)*PI/2.0

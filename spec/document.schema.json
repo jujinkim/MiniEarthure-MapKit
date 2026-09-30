@@ -170,6 +170,48 @@
   },
   "additionalProperties": false,
   "definitions": {
+    "Action": {
+      "type": "object",
+      "required": [
+        "height_cm",
+        "id",
+        "kind",
+        "piece",
+        "sample"
+      ],
+      "properties": {
+        "height_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "landing": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Checkpoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "piece": {
+          "type": "string"
+        },
+        "sample": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
     "Assembly": {
       "type": "object",
       "required": [
@@ -177,6 +219,7 @@
         "estimated_msec",
         "floor",
         "generator_fingerprint",
+        "issues",
         "length_cm",
         "obstacle_eligible_length_cm",
         "obstacle_target_count",
@@ -184,9 +227,20 @@
         "ordinary_length_cm",
         "ordinary_straight_cm",
         "pieces",
+        "routes",
         "settings"
       ],
       "properties": {
+        "authoring": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Source"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "catalogue_fingerprint": {
           "type": "string"
         },
@@ -210,6 +264,12 @@
         },
         "generator_fingerprint": {
           "type": "string"
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "length_cm": {
           "type": "integer",
@@ -247,6 +307,22 @@
           "items": {
             "$ref": "#/definitions/Piece"
           }
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Route"
+          }
+        },
+        "seed_source": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Source"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "settings": {
           "$ref": "#/definitions/Settings"
@@ -333,6 +409,37 @@
         "roughness_per_mille": {
           "type": "integer",
           "format": "uint16",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Attachment": {
+      "type": "object",
+      "required": [
+        "kind",
+        "path",
+        "piece",
+        "side",
+        "station_cm"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "piece": {
+          "type": "string"
+        },
+        "side": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "station_cm": {
+          "type": "integer",
+          "format": "uint64",
           "minimum": 0.0
         }
       },
@@ -492,6 +599,24 @@
     "Checkpoint": {
       "type": "object",
       "required": [
+        "piece",
+        "sample"
+      ],
+      "properties": {
+        "piece": {
+          "type": "string"
+        },
+        "sample": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Checkpoint2": {
+      "type": "object",
+      "required": [
         "placement_mode",
         "position_cm",
         "radius_cm",
@@ -602,6 +727,22 @@
       },
       "additionalProperties": false
     },
+    "Connection": {
+      "type": "object",
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "Course": {
       "type": "object",
       "required": [
@@ -653,7 +794,7 @@
         "checkpoints": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/Checkpoint"
+            "$ref": "#/definitions/Checkpoint2"
           }
         },
         "display_name": {
@@ -846,6 +987,7 @@
         "checkpoint_cm",
         "entry_length_cm",
         "forward",
+        "normal",
         "piece_index",
         "radius_cm",
         "recovery_cm",
@@ -875,6 +1017,15 @@
           "format": "int64"
         },
         "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "normal": {
           "type": "array",
           "items": {
             "type": "integer",
@@ -1052,6 +1203,73 @@
           "minimum": 0.0
         },
         "step_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Instance": {
+      "type": "object",
+      "required": [
+        "control_points",
+        "entry_width_cm",
+        "exit_width_cm",
+        "id",
+        "position_cm",
+        "preset",
+        "rotation_mdeg",
+        "width_cm"
+      ],
+      "properties": {
+        "control_points": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "entry_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "exit_width_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "preset": {
+          "type": "string"
+        },
+        "rotation_mdeg": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "width_cm": {
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
@@ -1288,6 +1506,25 @@
       },
       "additionalProperties": false
     },
+    "Path": {
+      "type": "object",
+      "required": [
+        "id",
+        "pieces"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "pieces": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "Piece": {
       "type": "object",
       "required": [
@@ -1295,6 +1532,7 @@
         "chain_id",
         "chain_index",
         "connection_width_cm",
+        "control_points",
         "cube_span",
         "entry_speed_cmps",
         "entry_width_cm",
@@ -1307,6 +1545,7 @@
         "reference_msec",
         "reserved_max_cm",
         "reserved_min_cm",
+        "rotation_mdeg",
         "width_cm"
       ],
       "properties": {
@@ -1335,6 +1574,18 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
+        },
+        "control_points": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
         },
         "cube_span": {
           "type": "integer",
@@ -1406,6 +1657,15 @@
           "items": {
             "type": "integer",
             "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "rotation_mdeg": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int32"
           },
           "maxItems": 3,
           "minItems": 3
@@ -1704,6 +1964,33 @@
       },
       "additionalProperties": false
     },
+    "Route": {
+      "type": "object",
+      "required": [
+        "estimated_msec",
+        "id",
+        "pieces"
+      ],
+      "properties": {
+        "estimated_msec": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "pieces": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0.0
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "Sample": {
       "type": "object",
       "required": [
@@ -1784,14 +2071,20 @@
     "Settings": {
       "type": "object",
       "required": [
+        "categories",
         "circuit",
         "difficulty",
         "duration_seconds",
-        "gimmicks",
         "seed",
         "time_minutes"
       ],
       "properties": {
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "circuit": {
           "type": "boolean"
         },
@@ -1803,12 +2096,6 @@
           "format": "uint16",
           "minimum": 0.0
         },
-        "gimmicks": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
         "seed": {
           "type": "integer",
           "format": "uint64",
@@ -1818,6 +2105,71 @@
           "type": "integer",
           "format": "uint16",
           "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Source": {
+      "type": "object",
+      "required": [
+        "actions",
+        "attachments",
+        "checkpoints",
+        "connections",
+        "instances",
+        "paths",
+        "settings"
+      ],
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Action"
+          }
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Attachment"
+          }
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Checkpoint"
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Connection"
+          }
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Instance"
+          }
+        },
+        "original_seed": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Settings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paths": {
+          "description": "First route is the base route. Other routes include the shared start/finish.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Path"
+          }
+        },
+        "settings": {
+          "$ref": "#/definitions/Settings"
         }
       },
       "additionalProperties": false

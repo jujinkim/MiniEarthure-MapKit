@@ -35,7 +35,9 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
         .saturating_add(if document.gimmicks.is_empty(){4096}else{4*1024*1024})
         .saturating_add(document.assembled_track.as_ref().map_or(0, |a| {
             // Canonical assembly JSON is a bounded scratch tree, charged before allocation.
-            (a.pieces.iter().map(|p| p.path.len() + p.alternate_path.len() + 1).sum::<usize>() as u64).saturating_mul(4096)
+            (a.pieces.iter().map(|p| p.path.len() + p.alternate_path.len() + p.control_points.len() + 1).sum::<usize>() as u64
+                + a.routes.iter().map(|r|r.pieces.len() as u64+1).sum::<u64>()
+                + a.authoring.iter().chain(a.seed_source.iter()).map(|s|s.instances.iter().map(|i|i.control_points.len() as u64+1).sum::<u64>()+s.paths.iter().map(|p|p.pieces.len() as u64+1).sum::<u64>()+s.connections.len() as u64+s.checkpoints.len() as u64+s.actions.len() as u64+s.attachments.len() as u64).sum::<u64>()).saturating_mul(4096)
         }))
 }
 

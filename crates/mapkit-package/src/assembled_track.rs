@@ -7,46 +7,37 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
         .assembled_track
         .as_ref()
         .ok_or_else(|| error("E_TRACK_REQUIRED", "assembled track required"))?;
-    let mut checkpoints = Vec::new();
-    let stride = a.pieces.len().div_ceil(48).max(1);
-    for (i, p) in a.pieces.iter().enumerate() {
-        if p.id == "finish_plaza" || i != 0 && (i <= 2 || i % stride != 0) {
-            continue;
-        }
-        let start = &a.pieces[2];
-        let position = if i == 0 {
-            start.path[start.path.len() / 2].position_cm
-        } else {
-            p.path[0].position_cm
-        };
-        checkpoints.push(Checkpoint {
-            position_cm: position,
-            radius_cm: p.path[0].lateral_cm + 30,
-            shape: CheckpointShape::Sphere,
-            placement_mode: PlacementMode::RoadSnap,
-            surface_id: format!("assembled-road-{}", if i == 0 { 2 } else { i }),
-        });
-    }
-    if !a.settings.circuit {
-        let last = a.pieces.last().unwrap();
-        let position = a.finish_plaza.as_ref().unwrap().checkpoint_cm;
-        checkpoints.push(Checkpoint {
-            position_cm: position,
-            radius_cm: last.entry_width_cm / 2 + 30,
-            shape: CheckpointShape::Sphere,
-            placement_mode: PlacementMode::RoadSnap,
-            surface_id: format!("assembled-road-{}", a.pieces.len() - 1),
-        });
-    }
+    track::authoring::executable(a)?;
+    let checkpoints = track::authoring::common_checkpoints(a)
+        .into_iter()
+        .map(|(i, n)| {
+            let sample = &a.pieces[i].path[n];
+            Checkpoint {
+                position_cm: sample.position_cm,
+                radius_cm: sample.lateral_cm + 30,
+                shape: CheckpointShape::Sphere,
+                placement_mode: PlacementMode::RoadSnap,
+                surface_id: format!("assembled-road-{i}"),
+            }
+        })
+        .collect();
+    let first = &a.pieces[a.routes[0].pieces[0]].path[0];
     Course::from_definition(
         CourseBody {
             map_id: document.map_id.clone(),
-            display_name: format!(
-                "Seed {} · {} s{}",
-                a.settings.seed,
-                a.settings.duration_seconds,
-                if a.settings.circuit { "/lap" } else { "" }
-            ),
+            display_name: if a.authoring.is_some() {
+                format!(
+                    "Authored track · {:.1} s estimate",
+                    a.estimated_msec as f64 / 1000.0
+                )
+            } else {
+                format!(
+                    "Seed {} · {} s{}",
+                    a.settings.seed,
+                    a.settings.duration_seconds,
+                    if a.settings.circuit { "/lap" } else { "" }
+                )
+            },
             world_content_hash: world.into(),
             mode: if a.settings.circuit {
                 Mode::Circuit
@@ -54,7 +45,7 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
                 Mode::Sprint
             },
             start_mode: StartMode::Ground,
-            start_direction: [0, 1],
+            start_direction: [first.forward[0], first.forward[2]],
             checkpoints,
         },
         &document.bounds,
@@ -72,13 +63,23 @@ pub fn generate(settings: &track::Settings) -> Result<MapDocument> {
 pub fn reseal(document: &mut MapDocument) -> Result<()> {
     track::verify_document(document)?;
     let world = super::content_hash(document, &BTreeMap::new())?;
-    document.courses = vec![course(document, &world)?];
+    if document
+        .assembled_track
+        .as_ref()
+        .is_some_and(|a| !a.issues.is_empty())
+    {
+        document.courses.clear();
+    } else {
+        document.courses = vec![course(document, &world)?];
+    }
     document.validate()
 }
 pub fn verify(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
     track::verify_document(document)?;
     candidate.validate(world, &document.bounds)?;
-    if *candidate != course(document, world)? {
+    let mut definition = candidate.clone();
+    definition.validation = None;
+    if definition != course(document, world)? {
         return Err(error(
             "E_TRACK_COURSE",
             "course does not match the assembled course",
@@ -94,4 +95,14 @@ pub fn save(settings: &track::Settings, path: &Path) -> Result<serde_json::Value
     Ok(
         serde_json::json!({"document":document,"path":path,"package_sha256":sha256(&bytes),"package_bytes":bytes.len()}),
     )
+}
+
+pub fn compile_source(source: &track::authoring::Source) -> Result<MapDocument> {
+    let mut d = track::document_from_assembly(track::authoring::compile(source)?)?;
+    if d.assembled_track.as_ref().unwrap().issues.is_empty() {
+        let world = super::content_hash(&d, &BTreeMap::new())?;
+        d.courses = vec![course(&d, &world)?];
+    }
+    d.validate()?;
+    Ok(d)
 }

@@ -17,6 +17,7 @@ unsafe impl ExtensionLibrary for MapKitExtension {}
 struct MapKitBridge {
     base: Base<RefCounted>,
     package: Option<Package>,
+    draft: Option<mapkit_core::MapDocument>,
     visual_margin_cm: i64,
     presentation: std::cell::RefCell<presentation::Cache>,
     prepared: std::cell::RefCell<std::collections::BTreeMap<Cell, serde_json::Value>>,
@@ -27,6 +28,7 @@ impl IRefCounted for MapKitBridge {
         Self {
             base,
             package: None,
+            draft: None,
             visual_margin_cm: 0,
             prepared: Default::default(),
             presentation: Default::default(),
@@ -81,6 +83,50 @@ impl MapKitBridge {
         response(Ok(mapkit_core::assembled_track::catalogue()))
     }
     #[func]
+    fn track_preview(&self, document:GString)->GString {
+        response((|| {
+            let d=engine_document(&document.to_string())?;
+            let chunk=mapkit_core::assembled_preview(&d)?;
+            let mut meshes:std::collections::BTreeMap<String,Vec<mapkit_core::Vertex>>=std::collections::BTreeMap::new();
+            for t in chunk.triangles {meshes.entry(t.object_id).or_default().extend(t.vertices);}
+            Ok(serde_json::json!({"meshes":meshes,"gimmicks":chunk.gimmicks}))
+        })())
+    }
+    #[func]
+    fn track_shortcut_source(&self)->GString {
+        response(Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::shortcut_source()).unwrap()))
+    }
+    #[func]
+    fn track_authoring_source(&self, document:GString)->GString {
+        response((|| {
+            let d=engine_document(&document.to_string())?;
+            Ok(serde_json::to_value(d.assembled_track.as_ref().map_or_else(mapkit_core::assembled_track::authoring::Source::empty,mapkit_core::assembled_track::authoring::from_assembly)).unwrap())
+        })())
+    }
+    #[func]
+    fn compile_track_source(&self, source:GString)->GString {
+        response((|| {
+            let source=serde_json::from_value(engine_value(&source.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            let d=mapkit_package::assembled_track::compile_source(&source)?;
+            Ok(serde_json::json!({"document":d}))
+        })())
+    }
+    #[func]
+    fn track_instance(&self, instance:GString)->GString {
+        response((|| {
+            let i=serde_json::from_value(engine_value(&instance.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::piece(&i)?).unwrap())
+        })())
+    }
+    #[func]
+    fn snap_track_instance(&self, instance:GString, target:GString)->GString {
+        response((|| {
+            let i=serde_json::from_value(engine_value(&instance.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            let t=serde_json::from_value(engine_value(&target.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::snap(&i,&t)?).unwrap())
+        })())
+    }
+    #[func]
     fn generate_track(&self, settings: GString, destination: GString) -> GString {
         response((|| {
             let settings=serde_json::from_value(engine_value(&settings.to_string())?)
@@ -94,14 +140,14 @@ impl MapKitBridge {
             let p=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
             let c=mapkit_core::course::decode(course.to_string().as_bytes())?;
             mapkit_package::assembled_track::verify(&p.document,&p.inspection.world_content_hash,&c)?;
-            Ok(serde_json::json!({"assembly":p.document.assembled_track,"course":c}))
+            Ok(serde_json::json!({"seed_verified":p.document.assembled_track.as_ref().is_some_and(|a|a.authoring.is_none()),"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),"course":c}))
         })())
     }
     #[func]
     fn track_json(&self) -> GString {
         response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
-            .map(|p|serde_json::json!({"assembly":p.document.assembled_track,
-                "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|a.settings.max_laps())})))
+            .map(|p|serde_json::json!({"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),
+                "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|if a.authoring.is_some(){10}else{a.settings.max_laps()})})))
     }
     #[func]
     fn track_start_surface(&self, x_cm: i64, y_cm: i64) -> GString {
@@ -131,6 +177,7 @@ impl MapKitBridge {
     #[func]
     fn open_package(&mut self, path: GString) -> GString {
         self.package = None;
+        self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         response(read(Path::new(&path.to_string())).map(|p| {
@@ -145,6 +192,7 @@ impl MapKitBridge {
     #[func]
     fn open_package_budgeted(&mut self, path: GString, memory_limit: i64) -> GString {
         self.package = None;
+        self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
@@ -173,6 +221,7 @@ impl MapKitBridge {
         memory_limit: i64,
     ) -> GString {
         self.package = None;
+        self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
@@ -198,6 +247,7 @@ impl MapKitBridge {
     #[func]
     fn open_package_bytes(&mut self, bytes: PackedByteArray) -> GString {
         self.package = None;
+        self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         response(read_bytes(bytes.as_slice()).map(|p| {
@@ -244,22 +294,24 @@ impl MapKitBridge {
     #[func]
     fn open_project(&mut self, path: GString) -> GString {
         self.package = None;
+        self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
-        response(
-            read_project(Path::new(&path.to_string()))
-                .and_then(|(d, f)| pack_bytes(d, f))
-                .and_then(|b| read_bytes(&b))
-                .map(|p| {
-                    let info = serde_json::to_value(&p.inspection).unwrap();
-                    self.visual_margin_cm = p
-                        .visual_margin_cm()
-                        .unwrap_or(i64::from(p.document.cell_size_cm));
-                    self.package = Some(p);
-                    info
-                }),
-        )
+        response((|| {
+            let (d,f)=read_project(Path::new(&path.to_string()))?;
+            if d.assembled_track.as_ref().is_some_and(|a|!a.issues.is_empty()) {
+                let info=serde_json::json!({"draft":true,"map_id":d.map_id,"bounds":d.bounds,"free_roam":d.free_roam});
+                self.draft=Some(d);
+                return Ok(info);
+            }
+            let p=read_bytes(&pack_bytes(d,f)?)?;
+            let info=serde_json::to_value(&p.inspection).unwrap();
+            self.visual_margin_cm=p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
+            self.package=Some(p);
+            Ok(info)
+        })())
     }
+
     #[func]
     fn overview_cost(&self) -> GString {
         response(
@@ -311,6 +363,7 @@ impl MapKitBridge {
     }
     #[func]
     fn document_json(&self) -> GString {
+        if let Some(d)=&self.draft {return response(Ok(serde_json::to_value(d).unwrap()));}
         response(
             self.package
                 .as_ref()

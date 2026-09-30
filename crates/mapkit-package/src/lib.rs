@@ -427,6 +427,7 @@ pub fn pack_bytes(
     let mut d = document.into();
     d.normalize();
     d.validate()?;
+    if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; }
     files.insert("document.json".into(), canonical(&d)?);
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
         return Err(error("E_REFERENCE", "unexpected or missing file"));

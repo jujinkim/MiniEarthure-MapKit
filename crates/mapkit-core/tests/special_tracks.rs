@@ -280,12 +280,9 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
 
 #[test]
 fn curved_halfpipe_has_open_crown_and_real_solid_sidewalls() {
-    let d = assembled_track::document(&assembled_track::Settings {
-        duration_seconds: 120,
-        gimmicks: vec!["banked_chicane".into()],
-        ..assembled_track::Settings::default()
-    })
-    .unwrap();
+    let mut source=assembled_track::authoring::Source::empty();
+    source.instances.push(assembled_track::authoring::instance("halfpipe","banked_chicane",400));
+    let d=assembled_track::document_from_assembly(assembled_track::authoring::compile(&source).unwrap()).unwrap();
     let t = d
         .gimmicks
         .iter()

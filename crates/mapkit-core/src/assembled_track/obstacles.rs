@@ -123,7 +123,7 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
     } else {
         250
     };
-    if site.station < guard || site.station + guard > length(path) {
+    if site.station < guard || site.station > length(path).saturating_sub(guard) {
         return None;
     }
     // World-axis rotating objects require a level support; other attachments
@@ -233,8 +233,25 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
     }
     Some(o)
 }
+pub(super) fn authored(a: &Assembly, index: usize, o: &authoring::Attachment) -> Option<Obstacle> {
+    if (o.path == "alternate" && a.pieces[index].alternate_path.len() < 2)
+        || a.pieces[index].path.len() < 2
+    {
+        return None;
+    }
+    safe_site(
+        a,
+        &Site {
+            piece: index,
+            branch: o.path == "alternate",
+            station: o.station_cm,
+        },
+        &o.kind,
+        o.side,
+    )
+}
 pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
-    if !a.settings.gimmicks.iter().any(|id| id == "obstacles") {
+    if !a.settings.categories.iter().any(|id| id == "gimmick") {
         return Ok((vec![], 0, 0));
     }
     let mut sites = vec![];
@@ -322,12 +339,7 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
             }
         }
     }
-    if out.is_empty() {
-        return Err(error(
-            "E_TRACK_OBSTACLES",
-            "obstacles selected but no safe attachment fits the finalized roads and object budget",
-        ));
-    }
+
     Ok((out, eligible, target))
 }
 pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
@@ -418,7 +430,7 @@ mod tests {
             pieces,
             &Settings {
                 circuit: false,
-                gimmicks: vec!["obstacles".into()],
+                categories: vec!["gimmick".into()],
                 ..Settings::default()
             },
         )
@@ -503,11 +515,11 @@ mod tests {
             "boost_chain",
         ] {
             let a = fixture(id, 400);
-            assert_eq!(place(&a).unwrap_err().code, "E_TRACK_OBSTACLES", "{id}");
+            assert!(place(&a).unwrap().0.is_empty(), "{id}");
         }
         let mut a = fixture("sprint_lane", 400);
         a.pieces.truncate(3);
-        assert_eq!(place(&a).unwrap_err().code, "E_TRACK_OBSTACLES");
+        assert!(place(&a).unwrap().0.is_empty());
     }
     #[test]
     fn difficulty_density_budget_and_seed_repeatability() {
@@ -561,6 +573,6 @@ mod tests {
                 [0; 3],
             );
         }
-        assert_eq!(place(&budget).unwrap_err().code, "E_TRACK_OBSTACLES");
+        assert!(place(&budget).unwrap().0.is_empty());
     }
 }

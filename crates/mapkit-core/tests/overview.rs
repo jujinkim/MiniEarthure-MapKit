@@ -104,10 +104,10 @@ fn overview_exposes_authored_levels_and_widths_for_navigation() {
 
 #[test]
 fn assembly_overview_includes_both_routes_and_actual_lane_widths() {
-    let d=assembled_track::document(&assembled_track::Settings{duration_seconds:120,gimmicks:vec!["overpass".into()],..Default::default()}).unwrap();
+    let d=assembled_track::document_from_assembly(assembled_track::authoring::compile(&assembled_track::authoring::shortcut_source()).unwrap()).unwrap();
     let view=overview(&d).unwrap();
-    let branch=view.roads.iter().find(|r|r.id.ends_with("-bridge")).unwrap();
-    assert!(branch.points.iter().any(|p|p[1]>=branch.points[0][1]+200));
+    let branch=view.roads.iter().find(|r|r.id=="assembled-road-7").unwrap();
+    assert!(branch.points.iter().any(|p|p[1]>=500));
     assert!(branch.widths_cm.iter().all(|w|*w==200));
     assert!(view.roads.iter().any(|r|r.widths_cm.iter().any(|w|*w != r.widths_cm[0])));
     let bytes=view.to_json(u64::MAX).unwrap();

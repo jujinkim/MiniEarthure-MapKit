@@ -1,6 +1,7 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod water;
 pub mod assembled_track;
+pub use generation::assembled_preview;
 pub mod gimmick;
 pub mod special_track;
 pub mod cancellation;
@@ -735,7 +736,7 @@ impl MapDocument {
         }
         water::validate(self)?;
         gimmick::validate(self)?;
-        if let Some(track) = &self.assembled_track { track.validate()?; }
+        if let Some(track) = &self.assembled_track { track.validate()?; assembled_track::verify_products(self,track)?; }
         placement::validate(self)?;
         Ok(())
     }

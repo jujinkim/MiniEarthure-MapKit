@@ -289,6 +289,7 @@ impl MapKitRegionReader {
                 snapshot.package.inspection.retained_memory_bytes as i64,
             );
             let bridge = Gd::from_init_fn(|base| MapKitBridge {
+                draft: None,
                 base,
                 visual_margin_cm: snapshot
                     .package

@@ -139,8 +139,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     if let Some(a) = &document.assembled_track {
         retained.string(&a.settings.difficulty)?;
-        retained.vector(&a.settings.gimmicks)?;
-        for id in &a.settings.gimmicks {
+        retained.vector(&a.settings.categories)?;
+        for id in &a.settings.categories {
             retained.string(id)?;
         }
         retained.string(&a.generator_fingerprint)?;
@@ -150,9 +150,25 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             retained.string(&o.kind)?;
             retained.string(&o.path)?;
         }
+        retained.vector(&a.routes)?;
+        for route in &a.routes { retained.string(&route.id)?; retained.vector(&route.pieces)?; }
+        retained.vector(&a.issues)?; for issue in &a.issues {retained.string(issue)?;}
+        for source in a.authoring.iter().chain(a.seed_source.iter()) {
+            for settings in std::iter::once(&source.settings).chain(source.original_seed.iter()) {
+                retained.string(&settings.difficulty)?;retained.vector(&settings.categories)?;for id in &settings.categories{retained.string(id)?;}
+            }
+            retained.vector(&source.instances)?;
+            for i in &source.instances {retained.string(&i.id)?;retained.string(&i.preset)?;retained.vector(&i.control_points)?;}
+            retained.vector(&source.connections)?;for c in &source.connections{retained.string(&c.from)?;retained.string(&c.to)?;}
+            retained.vector(&source.paths)?;for p in &source.paths{retained.string(&p.id)?;retained.vector(&p.pieces)?;for id in &p.pieces{retained.string(id)?;}}
+            retained.vector(&source.checkpoints)?;for c in &source.checkpoints{retained.string(&c.piece)?;}
+            retained.vector(&source.attachments)?;for a in &source.attachments{retained.string(&a.kind)?;retained.string(&a.piece)?;retained.string(&a.path)?;}
+            retained.vector(&source.actions)?;for a in &source.actions{retained.string(&a.id)?;retained.string(&a.kind)?;retained.string(&a.piece)?;if let Some(c)=&a.landing{retained.string(&c.piece)?;}}
+        }
         retained.vector(&a.pieces)?;
         for p in &a.pieces {
             retained.string(&p.id)?;
+            retained.vector(&p.control_points)?;
             retained.vector(&p.path)?;
             retained.vector(&p.alternate_path)?;
             for sample in p.path.iter().chain(&p.alternate_path) {
@@ -776,10 +792,9 @@ mod tests {
 
     #[test]
     fn swept_centerline_and_assembled_paths_charge_retained_capacity() {
-        let mut d = mapkit_core::assembled_track::document(
-            &mapkit_core::assembled_track::Settings::default(),
-        )
-        .unwrap();
+        let mut source=mapkit_core::assembled_track::authoring::Source::empty();
+        source.instances.push(mapkit_core::assembled_track::authoring::instance("pipe","cylinder",400));
+        let mut d=mapkit_core::assembled_track::document_from_assembly(mapkit_core::assembled_track::authoring::compile(&source).unwrap()).unwrap();
         let before = document_retained_bytes(&d).unwrap();
         let t = d
             .gimmicks
@@ -806,12 +821,10 @@ mod tests {
 
     #[test]
     fn attached_obstacles_charge_capacity_and_owned_strings() {
-        let mut d =
-            mapkit_core::assembled_track::document(&mapkit_core::assembled_track::Settings {
-                gimmicks: vec!["obstacles".into()],
-                ..Default::default()
-            })
-            .unwrap();
+        let mut source=mapkit_core::assembled_track::authoring::Source::empty();
+        source.instances.push(mapkit_core::assembled_track::authoring::instance("road","sprint_lane",400));
+        source.attachments.push(mapkit_core::assembled_track::authoring::Attachment{kind:"fixed_obstacle".into(),piece:"road".into(),path:"main".into(),station_cm:800,side:1});
+        let mut d=mapkit_core::assembled_track::document_from_assembly(mapkit_core::assembled_track::authoring::compile(&source).unwrap()).unwrap();
         let before = document_retained_bytes(&d).unwrap();
         let obstacles = &mut d.assembled_track.as_mut().unwrap().obstacles;
         let old = obstacles.capacity();
@@ -831,13 +844,9 @@ mod tests {
 
     #[test]
     fn alternate_route_retains_spare_capacity_and_sample_strings() {
-        let mut d =
-            mapkit_core::assembled_track::document(&mapkit_core::assembled_track::Settings {
-                duration_seconds: 120,
-                gimmicks: vec!["overpass".into()],
-                ..Default::default()
-            })
-            .unwrap();
+        let mut source=mapkit_core::assembled_track::authoring::Source::empty();
+        source.instances.push(mapkit_core::assembled_track::authoring::instance("overpass","overpass",400));
+        let mut d=mapkit_core::assembled_track::document_from_assembly(mapkit_core::assembled_track::authoring::compile(&source).unwrap()).unwrap();
         let before = document_retained_bytes(&d).unwrap();
         let path = &mut d
             .assembled_track

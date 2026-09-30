@@ -13,7 +13,7 @@ func run() -> void:
 	for seed in 3:
 		var native: RefCounted = ClassDB.instantiate("MapKitBridge")
 		var settings: Dictionary = JSON.parse_string(native.track_catalogue()).data.defaults
-		settings.seed=seed;settings.duration_seconds=60;settings.gimmicks=[]
+		settings.seed=seed;settings.duration_seconds=60;settings.categories=["driving"]
 		var file := ProjectSettings.globalize_path("user://venue-%d.memap" % seed)
 		var generated: Dictionary = JSON.parse_string(native.generate_track(JSON.stringify(settings),file))
 		check(generated.ok,"generated visual fixture")

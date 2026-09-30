@@ -18,7 +18,10 @@ const LOOP_OFFSET: i64 = 143;
 const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
+pub mod authoring;
+mod geometry;
 mod layout;
+pub const WIDTHS: &[u32] = &[200, 400, 600, 800, 1200];
 mod obstacles;
 pub use obstacles::Obstacle;
 
@@ -29,7 +32,7 @@ pub struct Settings {
     pub circuit: bool,
     pub duration_seconds: u16,
     pub difficulty: String,
-    pub gimmicks: Vec<String>,
+    pub categories: Vec<String>,
     pub time_minutes: u16,
 }
 impl Default for Settings {
@@ -39,7 +42,7 @@ impl Default for Settings {
             circuit: true,
             duration_seconds: 60,
             difficulty: "normal".into(),
-            gimmicks: selection_ids().iter().map(|v| (*v).into()).collect(),
+            categories: selection_ids().iter().map(|v| (*v).into()).collect(),
             time_minutes: 720,
         }
     }
@@ -52,9 +55,10 @@ impl Settings {
                 .any(|v| v.0 == self.duration_seconds)
             || !["easy", "normal", "hard"].contains(&self.difficulty.as_str())
             || self.time_minutes >= 1440
-            || self.gimmicks.len() > selection_ids().len()
+            || self.categories.is_empty()
+            || self.categories.len() > selection_ids().len()
             || self
-                .gimmicks
+                .categories
                 .iter()
                 .any(|s| !selection_ids().contains(&s.as_str()))
         {
@@ -64,8 +68,8 @@ impl Settings {
             ));
         }
         let mut s = self.clone();
-        s.gimmicks.sort();
-        s.gimmicks.dedup();
+        s.categories.sort();
+        s.categories.dedup();
         Ok(s)
     }
     pub fn max_laps(&self) -> u8 {
@@ -130,6 +134,8 @@ pub struct Sample {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Piece {
+    pub rotation_mdeg: [i32; 3],
+    pub control_points: Vec<Vertex>,
     pub id: String,
     pub width_cm: u32,
     pub entry_width_cm: u32,
@@ -153,6 +159,10 @@ pub struct Piece {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Assembly {
+    pub authoring: Option<authoring::Source>,
+    pub seed_source: Option<authoring::Source>,
+    pub routes: Vec<authoring::Route>,
+    pub issues: Vec<String>,
     pub settings: Settings,
     pub generator_fingerprint: String,
     pub catalogue_fingerprint: String,
@@ -172,20 +182,45 @@ pub struct Assembly {
 /// Resolve a grid anchor without generating a whole collision cell. Callers
 /// must still verify the full footprint, wheel support and occupied volume.
 pub fn start_surface_at(assembly: &Assembly, point: [i64; 2]) -> Option<String> {
-    assembly.pieces.iter().take(START_PIECES).enumerate().find_map(|(i, p)| {
-        let first = p.path.first()?;
-        let last = p.path.last()?;
-        let half = i64::from(p.width_cm) / 2;
-        (point[0] >= first.position_cm[0] - half
-            && point[0] <= first.position_cm[0] + half
-            && point[1] >= first.position_cm[2]
-            && point[1] <= last.position_cm[2])
-            .then(|| format!("assembled-road-{i}"))
-    })
+    let route = assembly.routes.first()?;
+    route
+        .pieces
+        .iter()
+        .take(
+            authoring::common_checkpoints(assembly)
+                .first()
+                .and_then(|(index, _)| route.pieces.iter().position(|i| i == index))
+                .map_or(START_PIECES, |i| i + 1),
+        )
+        .find_map(|&i| {
+            let p = &assembly.pieces[i];
+            p.path
+                .windows(2)
+                .any(|w| {
+                    let a = w[0].position_cm;
+                    let b = w[1].position_cm;
+                    let (dx, dz) = ((b[0] - a[0]) as f64, (b[2] - a[2]) as f64);
+                    let length = dx * dx + dz * dz;
+                    if length < 1.0 {
+                        return false;
+                    }
+                    let t =
+                        ((point[0] - a[0]) as f64 * dx + (point[1] - a[2]) as f64 * dz) / length;
+                    let side = ((point[0] - a[0]) as f64 * dz - (point[1] - a[2]) as f64 * dx)
+                        .abs()
+                        / libm::sqrt(length);
+                    (0.0..=1.0).contains(&t)
+                        && side <= f64::from(w[0].lateral_cm.min(w[1].lateral_cm))
+                        && w.iter().all(|s| s.safe && s.normal[1] > 990000)
+                })
+                .then(|| format!("assembled-road-{i}"))
+        })
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FinishPlaza {
+    pub normal: Vertex,
     pub center_cm: Vertex,
     pub recovery_cm: Vertex,
     pub forward: Vertex,
@@ -199,25 +234,26 @@ fn plaza_center(p: &Piece) -> Vertex {
     let half = i64::from(p.width_cm) / 2;
     add(
         p.origin_cm,
-        rotate(
+        geometry::rotate3(
             [
                 0,
                 0,
                 FINISH_ENTRY_CM + round(libm::sqrt((FINISH_RADIUS_CM.pow(2) - half.pow(2)) as f64)),
             ],
-            p.quarter_turns,
+            p.rotation_mdeg,
         ),
     )
 }
 fn finish_plaza(pieces: &[Piece]) -> Option<FinishPlaza> {
     let p = pieces.last()?;
     (p.id == "finish_plaza").then(|| FinishPlaza {
+        normal: geometry::rotate3([0, 1_000_000, 0], p.rotation_mdeg),
         center_cm: plaza_center(p),
         recovery_cm: plaza_center(p),
-        forward: rotate([0, 0, 1_000_000], p.quarter_turns),
+        forward: geometry::rotate3([0, 0, 1_000_000], p.rotation_mdeg),
         checkpoint_cm: add(
             p.origin_cm,
-            rotate([0, 0, FINISH_ENTRY_CM / 2], p.quarter_turns),
+            geometry::rotate3([0, 0, FINISH_ENTRY_CM / 2], p.rotation_mdeg),
         ),
         radius_cm: FINISH_RADIUS_CM,
         entry_length_cm: FINISH_ENTRY_CM,
@@ -243,6 +279,29 @@ pub struct VenueFloor {
 }
 pub fn catalogue_ids() -> &'static [&'static str] {
     &[
+        "gentle45",
+        "gentle45_left",
+        "gentle90",
+        "gentle90_left",
+        "right90",
+        "right90_left",
+        "sharp135",
+        "sharp135_left",
+        "jump_panel",
+        "free_curve",
+        "flight_curve",
+        "spiral90_right_up",
+        "spiral90_right_down",
+        "spiral90_left_up",
+        "spiral90_left_down",
+        "spiral180_right_up",
+        "spiral180_right_down",
+        "spiral180_left_up",
+        "spiral180_left_down",
+        "spiral360_right_up",
+        "spiral360_right_down",
+        "spiral360_left_up",
+        "spiral360_left_down",
         "finish_plaza",
         "tube_entry",
         "tube_exit",
@@ -294,22 +353,25 @@ pub fn catalogue_ids() -> &'static [&'static str] {
 }
 /// Public choices are deliberately separate from resolved road presets.
 pub fn selection_ids() -> &'static [&'static str] {
-    &[
-        "cylinder",
-        "banked_chicane",
-        "overpass",
-        "roller_waves",
-        "offset_jump",
-        "sprint_lane",
-        "loop",
-        "spiral_up",
-        "spiral_down",
+    &["driving", "gimmick", "action"]
+}
+pub fn category(id: &str) -> &'static str {
+    if [
         "jump",
+        "offset_jump",
+        "jump_panel",
         "acceleration_panel",
         "boost_chain",
         "air_ring",
-        "obstacles",
     ]
+    .contains(&id)
+    {
+        "action"
+    } else if pipe_piece(id) || ["loop", "overpass", "obstacles"].contains(&id) {
+        "gimmick"
+    } else {
+        "driving"
+    }
 }
 pub fn fingerprint() -> String {
     sha256(
@@ -317,15 +379,23 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track.rs").as_slice(),
             include_bytes!("special_track.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
+            include_bytes!("assembled_track/geometry.rs").as_slice(),
+            include_bytes!("assembled_track/authoring.rs").as_slice(),
             include_bytes!("assembled_track/obstacles.rs").as_slice(),
         ]
         .concat(),
     )
 }
+pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
+    let mut value = serde_json::to_value(a).unwrap();
+    value["progress_checkpoints"]=serde_json::json!(authoring::common_checkpoints(a).into_iter().map(|(piece_index,sample_index)|serde_json::json!({"piece_index":piece_index,"sample_index":sample_index})).collect::<Vec<_>>());
+    value
+}
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
-        "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":[600,400,200],"width_weights":[2,2,1],
+        "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
+        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
@@ -346,6 +416,15 @@ pub fn catalogue_fingerprint() -> String {
         )
     })
     .clone()
+}
+pub fn supported_widths(id: &str) -> &'static [u32] {
+    if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
+        &[400]
+    } else if id.starts_with("cylinder") {
+        &[200, 400, 600]
+    } else {
+        WIDTHS
+    }
 }
 fn catalogue_width(id: &str) -> u32 {
     if id.ends_with("_narrow") || (id.starts_with("cylinder") && !id.starts_with("cylinder_wide")) {
@@ -938,6 +1017,8 @@ fn build_local_piece(original_id: &str) -> Piece {
             + if a == 1 { 1600 } else { 320 }
     });
     Piece {
+        rotation_mdeg: [0; 3],
+        control_points: vec![],
         id: original_id.into(),
         width_cm: if narrow { 200 } else { WIDTH as u32 },
         entry_width_cm: WIDTH as u32,
@@ -986,9 +1067,6 @@ fn next(rng: &mut u64) -> u64 {
     z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
     z ^ (z >> 31)
 }
-fn width(rng: &mut u64) -> u32 {
-    [600, 600, 400, 400, 200][next(rng) as usize % 5]
-}
 fn family(id: &str) -> &str {
     if id.starts_with("cylinder") {
         "cylinder"
@@ -1004,9 +1082,7 @@ fn pipe_piece(id: &str) -> bool {
 }
 /// Only authored outer portals drop. Internal tube joints remain flush.
 fn portal_drop(previous: &str, next: &str, width: u32) -> i64 {
-    if previous == "tube_entry" && pipe_piece(next)
-        || pipe_piece(previous) && next == "tube_exit"
-    {
+    if previous == "tube_entry" && pipe_piece(next) || pipe_piece(previous) && next == "tube_exit" {
         round(f64::from(width) / 3.0)
     } else {
         0
@@ -1014,6 +1090,7 @@ fn portal_drop(previous: &str, next: &str, width: u32) -> i64 {
 }
 fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
     let mut p = local_piece(id);
+    geometry::shape(&mut p, width.max(entry).max(exit));
     p.width_cm = width;
     p.entry_width_cm = entry;
     p.exit_width_cm = exit;
@@ -1051,29 +1128,11 @@ fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
             v.safe = false;
         }
     } else {
-        let total = p
-            .path
-            .windows(2)
-            .map(|w| distance(w[0].position_cm, w[1].position_cm))
-            .sum::<u64>() as f64;
-        let mut station = 0.0;
-        for i in 0..p.path.len() {
-            if i > 0 {
-                station += distance(p.path[i - 1].position_cm, p.path[i].position_cm) as f64;
-            }
-            if id == "loop" || id == "banked_chicane" || id == "overpass" {
-                continue;
-            }
-            let ease = |t: f64| {
-                let t = t.clamp(0.0, 1.0);
-                t * t * (3.0 - 2.0 * t)
-            };
-            let w = width as f64
-                + (entry as f64 - width as f64) * (1.0 - ease(station / 300.0))
-                + (exit as f64 - width as f64) * (1.0 - ease((total - station) / 300.0));
-            p.path[i].lateral_cm = round(w / 2.0) as u32;
+        if !["loop", "banked_chicane", "overpass"].contains(&id) {
+            geometry::taper(&mut p.path, width, entry, exit);
         }
     }
+
     if id == "finish_plaza" {
         let mut center = p.path.last().unwrap().clone();
         center.position_cm = plaza_center(&p);
@@ -1088,14 +1147,35 @@ fn materialize(p: &Piece) -> Piece {
     let mut out = variant(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm);
     out.origin_cm = p.origin_cm;
     out.quarter_turns = p.quarter_turns;
+    out.rotation_mdeg = p.rotation_mdeg;
+    out.control_points = p.control_points.clone();
+    if !p.control_points.is_empty() {
+        out.path = geometry::bezier(
+            &p.control_points,
+            p.width_cm,
+            p.entry_width_cm,
+            p.exit_width_cm,
+        );
+        if p.id == "flight_curve" {
+            for s in &mut out.path {
+                s.mode = "flight".into();
+                s.safe = false;
+                s.min_speed_cmps = 1500;
+                s.above_cm = 700;
+            }
+        }
+    }
     out.chain_id = p.chain_id;
     out.chain_index = p.chain_index;
     out.chain_count = p.chain_count;
     out.ordinary = p.ordinary;
     for v in out.path.iter_mut().chain(&mut out.alternate_path) {
-        v.position_cm = add(rotate(v.position_cm, p.quarter_turns), p.origin_cm);
-        v.forward = rotate(v.forward, p.quarter_turns);
-        v.normal = rotate(v.normal, p.quarter_turns);
+        v.position_cm = add(
+            geometry::rotate3(v.position_cm, p.rotation_mdeg),
+            p.origin_cm,
+        );
+        v.forward = geometry::rotate3(v.forward, p.rotation_mdeg);
+        v.normal = geometry::rotate3(v.normal, p.rotation_mdeg);
     }
     out.reserved_min_cm = std::array::from_fn(|j| {
         out.path
@@ -1130,6 +1210,7 @@ fn materialize(p: &Piece) -> Piece {
             out.reserved_max_cm[j] = out.reserved_max_cm[j].max(center[j] + FINISH_RADIUS_CM + 60);
         }
     }
+    out.reference_msec = (race_length(&out) * 1000 / SPEED as u64) as u32;
     out
 }
 fn push_piece(
@@ -1147,6 +1228,7 @@ fn push_piece(
     let mut p = variant(id, w, w, w);
     p.origin_cm = *origin;
     p.quarter_turns = heading;
+    p.rotation_mdeg = [0, i32::from(heading) * 90000, 0];
     p.ordinary = ordinary;
     p.chain_id = chain[0];
     p.chain_index = chain[1];
@@ -1162,6 +1244,8 @@ fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
     for p in pieces {
         time += p.reference_msec;
         for v in p.path.iter().chain(&p.alternate_path) {
+            let (_,_,bottom,top)=geometry::volume(v);
+            lo[1]=lo[1].min(bottom); hi[1]=hi[1].max(top);
             for j in 0..3 {
                 lo[j] = lo[j].min(v.position_cm[j]);
                 hi[j] = hi[j].max(v.position_cm[j]);
@@ -1200,14 +1284,32 @@ pub fn assemble(settings: &Settings) -> Result<Assembly> {
 
 impl Assembly {
     pub fn validate(&self) -> Result<()> {
+        if let Some(source) = &self.authoring {
+            if *self != authoring::compile(source)? {
+                return Err(error(
+                    "E_TRACK_MODIFIED",
+                    "compiled geometry differs from authoring source",
+                ));
+            }
+            return Ok(());
+        }
+        if let Some(source) = &self.seed_source {
+            let mut expected = authoring::compile(source)?;
+            expected.authoring = None;
+            expected.seed_source = Some(source.clone());
+            if *self != expected || !self.issues.is_empty() {
+                return Err(error("E_TRACK_MODIFIED", "seed graph compilation differs"));
+            }
+            return Ok(());
+        }
         let fail = || {
             error(
                 "E_TRACK_ASSEMBLY",
-                "assembly exceeds time, connection, catalogue or resource constraints",
+                "invalid compiled seed geometry, routes or resource budget",
             )
         };
         if self.settings.normalized()? != self.settings
-            || self.pieces.is_empty()
+            || self.pieces.len() < START_PIECES
             || self.pieces.len() > MAX_PIECES
             || self
                 .pieces
@@ -1217,116 +1319,72 @@ impl Assembly {
                 > MAX_SAMPLES
             || self.generator_fingerprint != fingerprint()
             || self.catalogue_fingerprint != catalogue_fingerprint()
+            || !layout::valid_runs(&self.pieces, self.settings.circuit)
         {
             return Err(fail());
         }
-
-        if self.finish_plaza != finish_plaza(&self.pieces)
-            || self
-                .pieces
-                .iter()
-                .filter(|p| p.id == "finish_plaza")
-                .count()
-                != usize::from(!self.settings.circuit)
-        {
-            return Err(fail());
-        }
-        if self.estimated_msec == 0 {
-            return Err(fail());
-        }
-        for id in self
-            .settings
-            .gimmicks
-            .iter()
-            .filter(|id| id.as_str() != "obstacles")
-        {
-            if !self.pieces.iter().any(|p| family(&p.id) == family(id)) {
+        for p in &self.pieces {
+            cancellation::checkpoint()?;
+            if !catalogue_ids().contains(&p.id.as_str())
+                || !supported_widths(&p.id).contains(&p.width_cm)
+                || p.path.len() < 2
+                || *p != materialize(p)
+                || geometry::self_intersects(p)
+            {
                 return Err(fail());
             }
         }
-        if !layout::valid_runs(&self.pieces, self.settings.circuit) {
+        for route in &self.routes {
+            if route.pieces.is_empty() || route.pieces.iter().any(|i| *i >= self.pieces.len()) {
+                return Err(fail());
+            }
+            for pair in route.pieces.windows(2) {
+                let a = &self.pieces[pair[0]];
+                let b = &self.pieces[pair[1]];
+                let mut end = a.path.last().unwrap().clone();
+                end.position_cm[1] -= portal_drop(&a.id, &b.id, b.width_cm);
+                if !authoring::joined(&end, &b.path[0]) {
+                    return Err(fail());
+                }
+            }
+            if self.settings.circuit
+                && !authoring::joined(
+                    self.pieces[*route.pieces.last().unwrap()]
+                        .path
+                        .last()
+                        .unwrap(),
+                    &self.pieces[route.pieces[0]].path[0],
+                )
+            {
+                return Err(fail());
+            }
+        }
+        for i in 0..self.pieces.len() {
+            for j in 0..i.saturating_sub(1) {
+                if self.settings.circuit && i + 1 == self.pieces.len() && j == 0 {
+                    continue;
+                }
+                if authoring::conflict(&self.pieces[i], &self.pieces[j]) {
+                    return Err(fail());
+                }
+            }
+        }
+        if self.routes.is_empty() {
             return Err(fail());
         }
-        let stats = statistics(&self.pieces);
-        if (stats.0, stats.1, stats.2, stats.3, stats.4)
+        let base: Vec<_> = self.routes[0]
+            .pieces
+            .iter()
+            .map(|i| self.pieces[*i].clone())
+            .collect();
+        let stats = statistics(&base);
+        if (stats.0, stats.1, stats.2, stats.3)
             != (
                 self.length_cm,
                 self.ordinary_length_cm,
                 self.ordinary_straight_cm,
                 self.estimated_msec,
-                self.floor.clone(),
             )
-        {
-            return Err(fail());
-        }
-        let mut length = 0;
-        let mut time = 0;
-        for (i, p) in self.pieces.iter().enumerate() {
-            cancellation::checkpoint()?;
-            if !catalogue_ids().contains(&p.id.as_str())
-                || p.quarter_turns > 3
-                || p.path.len() < 2
-                || ![200, 400, 600].contains(&p.width_cm)
-                || *p != materialize(p)
-            {
-                return Err(fail());
-            }
-            if p.chain_count > 0 {
-                if p.chain_id == 0 || p.chain_index >= p.chain_count || p.chain_index as usize > i {
-                    return Err(fail());
-                }
-                let first = i - p.chain_index as usize;
-                if first + p.chain_count as usize > self.pieces.len() {
-                    return Err(fail());
-                }
-                for (offset, member) in self.pieces[first..first + p.chain_count as usize]
-                    .iter()
-                    .enumerate()
-                {
-                    if member.chain_id != p.chain_id
-                        || member.chain_index != offset as u32
-                        || member.chain_count != p.chain_count
-                        || family(&member.id) != family(&p.id)
-                        || member.width_cm != p.width_cm
-                    {
-                        return Err(fail());
-                    }
-                }
-            } else if p.chain_id != 0 || p.chain_index != 0 {
-                return Err(fail());
-            }
-            if i > 0 {
-                let previous_piece = &self.pieces[i - 1];
-                let previous = previous_piece.path.last().unwrap();
-                let mut connection = previous.position_cm;
-                connection[1] -= portal_drop(&previous_piece.id, &p.id, p.width_cm);
-                if connection != p.path[0].position_cm
-                    || previous.forward != p.path[0].forward
-                    || previous.normal != p.path[0].normal
-                {
-                    return Err(fail());
-                }
-            }
-            length += race_length(p);
-            time += p.reference_msec;
-            for (j, other) in self.pieces.iter().take(i.saturating_sub(1)).enumerate() {
-                if self.settings.circuit && i + 1 == self.pieces.len() && j == 0 {
-                    continue;
-                }
-                if layout::overlaps(p, other) {
-                    return Err(fail());
-                }
-            }
-        }
-        if length != self.length_cm
-            || time != self.estimated_msec
-            || (self.settings.circuit && {
-                let start = &self.pieces[0].path[0];
-                let end = self.pieces.last().unwrap().path.last().unwrap();
-                start.position_cm != end.position_cm
-                    || start.forward != end.forward
-                    || start.normal != end.normal
-            })
         {
             return Err(fail());
         }
@@ -1379,7 +1437,9 @@ fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
             "loop" => vec![("acceleration_panel", 350), ("loop", 1000)],
             id if id.starts_with("cylinder") => vec![("cylinder", 0)],
             "banked_chicane" => vec![("halfpipe", 0)],
-            "jump" | "offset_jump" => vec![("acceleration_panel", 350), ("jump", 950)],
+            "jump" | "offset_jump" | "jump_panel" => {
+                vec![("acceleration_panel", 350), ("jump", 950)]
+            }
             "air_ring" => vec![
                 ("acceleration_panel", 350),
                 ("jump", 950),
@@ -1400,12 +1460,12 @@ fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
                 id: format!("track-{index}-{n}"),
                 position: add(
                     p.origin_cm,
-                    rotate(
+                    geometry::rotate3(
                         [0, 0, if short_piece(&p.id) { *z / 2 } else { *z }],
-                        p.quarter_turns,
+                        p.rotation_mdeg,
                     ),
                 ),
-                rotation_mdeg: [0, i32::from(p.quarter_turns) * 90_000, 0],
+                rotation_mdeg: p.rotation_mdeg,
                 scale_per_mille: [1000; 3],
                 parts: vec![],
                 track: None,
@@ -1509,8 +1569,32 @@ fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
     );
     out
 }
+pub fn verify_products(d: &MapDocument, a: &Assembly) -> Result<()> {
+    let mut expected = gimmicks(a);
+    expected.extend(authoring::action_gimmicks(a)?);
+    expected.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut actual = d.gimmicks.clone();
+    actual.sort_by(|a, b| a.id.cmp(&b.id));
+    if actual != expected
+        || d.seed != a.settings.seed
+        || !d.nodes.is_empty()
+        || !d.roads.is_empty()
+        || !d.heightmaps.is_empty()
+        || !d.placements.is_empty()
+    {
+        return Err(error(
+            "E_TRACK_MODIFIED",
+            "track products differ from their authoring source",
+        ));
+    }
+    Ok(())
+}
 pub fn document(settings: &Settings) -> Result<MapDocument> {
     let a = assemble(settings)?;
+    document_from_assembly(a)
+}
+pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
+    let settings = a.settings.clone();
     let mut bounds = Bounds {
         min: [i64::MAX; 2],
         max: [i64::MIN; 2],
@@ -1521,7 +1605,14 @@ pub fn document(settings: &Settings) -> Result<MapDocument> {
             bounds.max[j] = bounds.max[j].max(p.reserved_max_cm[j * 2] + 4000);
         }
     }
-    let objects = gimmicks(&a);
+    if a.pieces.is_empty() {
+        bounds = Bounds {
+            min: [-3200, -3200],
+            max: [3200, 3200],
+        };
+    }
+    let mut objects = gimmicks(&a);
+    objects.extend(authoring::action_gimmicks(&a)?);
     for g in &objects {
         for j in 0..2 {
             bounds.min[j] = bounds.min[j].min(g.safety_min_cm[j * 2]);
@@ -1589,7 +1680,11 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
         .as_ref()
         .ok_or_else(|| error("E_TRACK_REQUIRED", "map is not an assembled track"))?;
     a.validate()?;
-    let expected = document(&a.settings)?;
+    let expected = if let Some(source) = &a.authoring {
+        document_from_assembly(authoring::compile(source)?)?
+    } else {
+        document(&a.settings)?
+    };
     let mut actual = d.clone();
     actual.courses.clear();
     actual.free_roam = expected.free_roam;
@@ -1640,15 +1735,8 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
                 let edges = |s: &Sample| {
                     let n = s.normal.map(|v| v as f64 / 1e6);
                     let f = s.forward.map(|v| v as f64 / 1e6);
-                    let right = if s.mode == "spiral" {
-                        let center = add(p.origin_cm, rotate([0, 0, 1600], p.quarter_turns));
-                        unit([
-                            (center[0] - s.position_cm[0]) as f64,
-                            0.0,
-                            (center[2] - s.position_cm[2]) as f64,
-                        ])
-                    } else if s.mode == "loop" {
-                        rotate([1_000_000, 0, 0], p.quarter_turns)
+                    let right = if s.mode == "loop" {
+                        geometry::rotate3([1_000_000, 0, 0], p.rotation_mdeg)
                     } else {
                         unit([
                             n[1] * f[2] - n[2] * f[1],
@@ -1707,9 +1795,9 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
                     continue;
                 }
                 let station = |s: &Sample| {
-                    let f = rotate([0, 0, 1], p.quarter_turns);
+                    let f = geometry::rotate3([0, 0, 1_000_000], p.rotation_mdeg);
                     (0..3)
-                        .map(|j| (s.position_cm[j] - p.origin_cm[j]) * f[j])
+                        .map(|j| (s.position_cm[j] - p.origin_cm[j]) * f[j] / 1_000_000)
                         .sum::<i64>()
                 };
                 if p.id == "overpass" && (station(&w[0]) < 400 || station(&w[1]) > 2800) {
@@ -1776,7 +1864,7 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
 fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -> Result<()> {
     let center = plaza_center(p);
     let half = i64::from(p.width_cm) / 2;
-    let transform = |v| add(p.origin_cm, rotate(v, p.quarter_turns));
+    let transform = |v| add(p.origin_cm, geometry::rotate3(v, p.rotation_mdeg));
     let road = format!("assembled-road-{index}");
     let wall = format!("assembled-wall-{index}");
     let entry = [
@@ -1794,13 +1882,13 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
             + (2.0 * std::f64::consts::PI - 2.0 * opening) * i as f64 / 64.0;
         boundary.push(add(
             center,
-            rotate(
+            geometry::rotate3(
                 [
                     round(FINISH_RADIUS_CM as f64 * libm::sin(angle)),
                     0,
                     round(FINISH_RADIUS_CM as f64 * libm::cos(angle)),
                 ],
-                p.quarter_turns,
+                p.rotation_mdeg,
             ),
         ));
     }
@@ -1815,9 +1903,9 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
             center,
             a,
             c,
-            add(center, [0, -10, 0]),
-            add(a, [0, -10, 0]),
-            add(c, [0, -10, 0]),
+            add(center, geometry::rotate3([0, -10, 0], p.rotation_mdeg)),
+            add(a, geometry::rotate3([0, -10, 0], p.rotation_mdeg)),
+            add(c, geometry::rotate3([0, -10, 0], p.rotation_mdeg)),
         ];
         b.solid(
             &road,
@@ -1850,7 +1938,7 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
         .map(|w| (w[0], w[1]))
         .chain([(entry[0], entry[1]), (entry[2], entry[3])])
     {
-        let up = [0, FINISH_WALL_CM, 0];
+        let up = geometry::rotate3([0, FINISH_WALL_CM, 0], p.rotation_mdeg);
         b.quad(
             [a, add(a, up), add(c, up), c],
             Surface::Concrete,
@@ -1860,9 +1948,21 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
         b.solid(
             &wall,
             SolidShape::Box {
-                min: std::array::from_fn(|j| a[j].min(c[j]) - 2),
+                min: std::array::from_fn(|j| {
+                    [a, c, add(a, up), add(c, up)]
+                        .iter()
+                        .map(|v| v[j])
+                        .min()
+                        .unwrap()
+                        - 2
+                }),
                 max: std::array::from_fn(|j| {
-                    a[j].max(c[j]) + if j == 1 { FINISH_WALL_CM } else { 2 }
+                    [a, c, add(a, up), add(c, up)]
+                        .iter()
+                        .map(|v| v[j])
+                        .max()
+                        .unwrap()
+                        + 2
                 }),
             },
         )?;

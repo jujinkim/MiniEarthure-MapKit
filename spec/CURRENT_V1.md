@@ -191,3 +191,14 @@ station/frame, lateral sweep and AI action positions are validated by exact
 reconstruction. Duration options are 60/90/120 seconds in both modes, with circuit
 lap limits 3/2/2. Sprint-lane geometry is 1600cm. See
 [assembled tracks](../docs/ASSEMBLED_TRACKS.md) for placement and budget rules.
+
+## Category generation and authored track graphs (2026-09-30 replacement)
+
+[TRACK_AUTHORING.md](../docs/TRACK_AUTHORING.md) is the current track definition.
+Settings use three candidate categories and 60/90/120s ±10% base-route time;
+there are no mandatory family/obstacle occurrences. Full 3D instances, ports,
+Bézier links, shared progress, branches and independent actions replace the
+linear/grid-only source. Seed exact reproduction and manual source compilation
+are distinct verification modes. Disconnected drafts save as projects but cannot
+export execution packages; manual courses retain player completion requirements.
+The document schema, generator and catalogue fingerprints change within v1.

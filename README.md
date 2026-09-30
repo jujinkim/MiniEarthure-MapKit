@@ -391,3 +391,5 @@ and [new dependency notices](THIRD_PARTY.md). Consumer integration and actual
 whole-map driving acceptance remain in progress.
 
 Current street geometry: [rounded corners and automatic deck safety](docs/ROAD_SAFETY.md).
+
+- [Current v1 category generation and authored track graphs](docs/TRACK_AUTHORING.md)
