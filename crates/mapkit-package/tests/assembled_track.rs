@@ -73,6 +73,15 @@ fn reproducible_roundtrip_and_modified_source_rejected() {
         pack_bytes(package::generate(&settings).unwrap(), BTreeMap::new()).unwrap()
     );
     let p = read_bytes(&bytes).unwrap();
+    let mut support_edit = p.document.to_document();
+    let a = support_edit.assembled_track.as_mut().unwrap();
+    if let Some(support) = a.supports.first_mut() {
+        support.shape.vertices[0][0] += 1;
+        assert!(support_edit.validate().is_err());
+    }
+    let mut floor_edit = p.document.to_document();
+    floor_edit.assembled_track.as_mut().unwrap().floor.min_cm[1] -= 1;
+    assert!(floor_edit.validate().is_err());
     assert_eq!(p.document.assembled_track, d.assembled_track);
     package::verify(
         &p.document,
@@ -371,6 +380,9 @@ fn source_mode_and_course_progress_remain_distinct() {
     let source = authoring::from_assembly(seed.assembled_track.as_ref().unwrap());
     let manual = package::compile_source(&source).unwrap();
     assert!(manual.assembled_track.as_ref().unwrap().authoring.is_some());
+    assert!(source.grounded_supports);
+    assert_eq!(manual.assembled_track.as_ref().unwrap().floor, seed.assembled_track.as_ref().unwrap().floor);
+    assert_eq!(manual.assembled_track.as_ref().unwrap().supports, seed.assembled_track.as_ref().unwrap().supports);
     assert_eq!(
         source.original_seed,
         Some(Settings::default().normalized().unwrap())

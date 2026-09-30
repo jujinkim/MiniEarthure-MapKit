@@ -348,6 +348,8 @@ pub fn assembled_preview(d:&MapDocument)->Result<GeneratedChunk> {
     let a=d.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","track required"))?;
     let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None};
     crate::assembled_track::generate(a,&mut b)?;
-    b.chunk.triangles.retain(|t|t.object_id!="assembled-venue-floor");
+    if a.authoring.as_ref().is_some_and(|s| !s.grounded_supports) {
+        b.chunk.triangles.retain(|t|t.object_id!="assembled-venue-floor");
+    }
     Ok(b.chunk)
 }

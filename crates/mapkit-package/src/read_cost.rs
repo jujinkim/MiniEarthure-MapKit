@@ -88,7 +88,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     // overlap with retained data. Image decoder limits are sequential; heightmap
     // seams retain at most four edges of 513 i64 samples per PNG under v1 limits.
     let transient =
-        structured * 96 + bytes.len() as u64 * 2 + image_peak + pngs * (4 * 513 * 8 + 256);
+        structured * 96 + bytes.len() as u64 * 2 + image_peak.max(track_workspace(structured)) + pngs * (4 * 513 * 8 + 256);
     Ok(ReadCost {
         retained_memory_bytes: retained,
         validation_peak_bytes: (retained + transient).max(bytes.len() as u64 * 4 + 8 * 1024 * 1024),
@@ -148,4 +148,11 @@ pub(super) fn decoder_peak(entry: &mut impl Read, name: &str, size: u64) -> u64 
         return FULL;
     }
     8 * 1024 * 1024
+}
+
+/// Grounding keeps one bounded piece mesh, including the temporary public tube
+/// mesh, at a time. Source-proportional allowance saturates at the enforced mesh
+/// workspace limit; charged before parsing/validation in both containers.
+pub(crate) fn track_workspace(source_bytes: u64) -> u64 {
+    source_bytes.saturating_mul(512).min(96 * 1024 * 1024) + 1024 * 1024
 }

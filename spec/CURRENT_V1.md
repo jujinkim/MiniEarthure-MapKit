@@ -202,3 +202,13 @@ linear/grid-only source. Seed exact reproduction and manual source compilation
 are distinct verification modes. Disconnected drafts save as projects but cannot
 export execution packages; manual courses retain player completion requirements.
 The document schema, generator and catalogue fingerprints change within v1.
+
+
+## Grounded seed support policy (2026-09-30)
+
+Current v1 requires `Assembly.supports` and `Source.grounded_supports`.
+See [grounded seed structures](../docs/ASSEMBLED_TRACKS.md#grounded-seed-structures-2026-09-30).
+The shared road slab, grounded floor and structural columns participate in exact
+source reconstruction, hash, cell costs and memory accounting. Generated
+sources retain this policy when converted to manual authoring. Independent
+manual sources and external imports do not enable it automatically.

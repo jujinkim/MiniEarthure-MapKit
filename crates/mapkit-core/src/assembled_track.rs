@@ -22,6 +22,8 @@ pub mod authoring;
 mod geometry;
 mod layout;
 pub const WIDTHS: &[u32] = &[200, 400, 600, 800, 1200];
+mod grounding;
+pub use grounding::Support;
 mod obstacles;
 pub use obstacles::Obstacle;
 
@@ -167,6 +169,7 @@ pub struct Assembly {
     pub generator_fingerprint: String,
     pub catalogue_fingerprint: String,
     pub pieces: Vec<Piece>,
+    pub supports: Vec<Support>,
     pub obstacles: Vec<Obstacle>,
     pub obstacle_eligible_length_cm: u64,
     pub obstacle_target_count: u32,
@@ -382,6 +385,7 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/authoring.rs").as_slice(),
             include_bytes!("assembled_track/obstacles.rs").as_slice(),
+            include_bytes!("assembled_track/grounding.rs").as_slice(),
         ]
         .concat(),
     )
@@ -1244,8 +1248,9 @@ fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
     for p in pieces {
         time += p.reference_msec;
         for v in p.path.iter().chain(&p.alternate_path) {
-            let (_,_,bottom,top)=geometry::volume(v);
-            lo[1]=lo[1].min(bottom); hi[1]=hi[1].max(top);
+            let (_, _, bottom, top) = geometry::volume(v);
+            lo[1] = lo[1].min(bottom);
+            hi[1] = hi[1].max(top);
             for j in 0..3 {
                 lo[j] = lo[j].min(v.position_cm[j]);
                 hi[j] = hi[j].max(v.position_cm[j]);
@@ -1393,6 +1398,11 @@ impl Assembly {
             || self.obstacle_eligible_length_cm != eligible
             || self.obstacle_target_count != target
         {
+            return Err(fail());
+        }
+        let mut grounded = self.clone();
+        grounding::apply(&mut grounded)?;
+        if self.floor != grounded.floor || self.supports != grounded.supports {
             return Err(fail());
         }
         Ok(())
@@ -1721,120 +1731,139 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
             max: f.max_cm,
         },
     )?;
+    for support in &a.supports {
+        let id = format!("assembled-support-{}", support.piece_index);
+        emit_shape(&support.shape, &id, b)?;
+    }
     for (index, p) in a.pieces.iter().enumerate() {
-        if p.id == "finish_plaza" {
-            generate_plaza(p, index, b)?;
-            continue;
-        }
-        for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
-            for w in path.windows(2) {
-                cancellation::checkpoint()?;
-                let special = w.iter().any(|s| s.mode == "flight")
-                    || w.iter()
-                        .all(|s| ["loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()));
-                let edges = |s: &Sample| {
-                    let n = s.normal.map(|v| v as f64 / 1e6);
-                    let f = s.forward.map(|v| v as f64 / 1e6);
-                    let right = if s.mode == "loop" {
-                        geometry::rotate3([1_000_000, 0, 0], p.rotation_mdeg)
-                    } else {
-                        unit([
-                            n[1] * f[2] - n[2] * f[1],
-                            n[2] * f[0] - n[0] * f[2],
-                            n[0] * f[1] - n[1] * f[0],
-                        ])
-                    };
-                    [-1, 1].map(|side| {
-                        std::array::from_fn(|j| {
-                            s.position_cm[j] + right[j] * i64::from(s.lateral_cm) * side / 1_000_000
-                        })
-                    })
-                };
-                let [al, ar] = edges(&w[0]);
-                let [bl, br] = edges(&w[1]);
-                let id = format!(
-                    "assembled-road-{index}{}",
-                    if branch { "-bridge" } else { "" }
-                );
-                if !special {
-                    // A wide twisted helix quad creates a diagonal ridge. Subdivide
-                    // across the lane so wheel contacts follow the swept surface.
-                    let strips = if p.id.starts_with("spiral") || p.id.starts_with("curve_") {
-                        8
-                    } else {
-                        1
-                    };
-                    let mix = |a: Vertex, b: Vertex, n: i64| {
-                        std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
-                    };
-                    for strip in 0..strips {
-                        b.quad(
-                            [
-                                mix(al, ar, strip),
-                                mix(bl, br, strip),
-                                mix(bl, br, strip + 1),
-                                mix(al, ar, strip + 1),
-                            ],
-                            Surface::Asphalt,
-                            &id,
-                            true,
-                        )?;
-                    }
-                    let min = std::array::from_fn(|j| {
-                        [al, ar, bl, br].iter().map(|v| v[j]).min().unwrap()
-                            - if j == 1 { 10 } else { 0 }
-                    });
-                    let max = std::array::from_fn(|j| {
-                        [al, ar, bl, br].iter().map(|v| v[j]).max().unwrap()
-                    });
-                    b.solid(&id, SolidShape::Box { min, max })?;
-                }
-                if w.iter()
-                    .any(|s| ["cylinder", "halfpipe", "flight"].contains(&s.mode.as_str()))
-                {
-                    continue;
-                }
-                let station = |s: &Sample| {
-                    let f = geometry::rotate3([0, 0, 1_000_000], p.rotation_mdeg);
-                    (0..3)
-                        .map(|j| (s.position_cm[j] - p.origin_cm[j]) * f[j] / 1_000_000)
-                        .sum::<i64>()
-                };
-                if p.id == "overpass" && (station(&w[0]) < 400 || station(&w[1]) > 2800) {
-                    continue;
-                }
-                let wall = if branch {
-                    30
-                } else if p.id.starts_with("cylinder") || p.id == "banked_chicane" {
-                    25 + 30 * station(&w[0]).clamp(0, 400) / 400
-                } else if w[0].mode == "loop" {
-                    120
+        generate_piece(p, index, b)?;
+    }
+    Ok(())
+}
+
+fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result<()> {
+    if p.id == "finish_plaza" {
+        return generate_plaza(p, index, b);
+    }
+    for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
+        for w in path.windows(2) {
+            cancellation::checkpoint()?;
+            let special = w.iter().any(|s| s.mode == "flight")
+                || w.iter()
+                    .all(|s| ["loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()));
+            let edges = |s: &Sample| {
+                let n = s.normal.map(|v| v as f64 / 1e6);
+                let f = s.forward.map(|v| v as f64 / 1e6);
+                let right = if s.mode == "loop" {
+                    geometry::rotate3([1_000_000, 0, 0], p.rotation_mdeg)
                 } else {
-                    WALL
+                    unit([
+                        n[1] * f[2] - n[2] * f[1],
+                        n[2] * f[0] - n[0] * f[2],
+                        n[0] * f[1] - n[1] * f[0],
+                    ])
                 };
-                for (a0, b0) in [(al, bl), (ar, br)] {
-                    let a1 = std::array::from_fn(|j| a0[j] + w[0].normal[j] * wall / 1_000_000);
-                    let b1 = std::array::from_fn(|j| b0[j] + w[1].normal[j] * wall / 1_000_000);
+                [-1, 1].map(|side| {
+                    std::array::from_fn(|j| {
+                        s.position_cm[j] + right[j] * i64::from(s.lateral_cm) * side / 1_000_000
+                    })
+                })
+            };
+            let [al, ar] = edges(&w[0]);
+            let [bl, br] = edges(&w[1]);
+            let id = format!(
+                "assembled-road-{index}{}",
+                if branch { "-bridge" } else { "" }
+            );
+            if !special {
+                // A wide twisted helix quad creates a diagonal ridge. Subdivide
+                // across the lane so wheel contacts follow the swept surface.
+                let strips = if p.id.starts_with("spiral") || p.id.starts_with("curve_") {
+                    8
+                } else {
+                    1
+                };
+                let mix = |a: Vertex, b: Vertex, n: i64| {
+                    std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
+                };
+                for strip in 0..strips {
                     b.quad(
-                        [a0, a1, b1, b0],
+                        [
+                            mix(al, ar, strip),
+                            mix(bl, br, strip),
+                            mix(bl, br, strip + 1),
+                            mix(al, ar, strip + 1),
+                        ],
+                        Surface::Asphalt,
+                        &id,
+                        true,
+                    )?;
+                    b.quad(
+                        [
+                            lower(mix(ar, al, strips - strip)),
+                            lower(mix(ar, al, strips - strip - 1)),
+                            lower(mix(br, bl, strips - strip - 1)),
+                            lower(mix(br, bl, strips - strip)),
+                        ],
                         Surface::Concrete,
-                        &format!("assembled-wall-{index}"),
+                        &format!("assembled-shell-{index}"),
                         false,
                     )?;
-                    // One geometric sheet: renderers/colliders handle both
-                    // sides. A reversed duplicate makes every shared edge
-                    // non-manifold and defeats native CCD edge suppression.
-                    let min = std::array::from_fn(|j| {
-                        [a0, b0, a1, b1].iter().map(|v| v[j]).min().unwrap() - 2
-                    });
-                    let max = std::array::from_fn(|j| {
-                        [a0, b0, a1, b1].iter().map(|v| v[j]).max().unwrap() + 2
-                    });
-                    b.solid(
-                        &format!("assembled-wall-{index}"),
-                        SolidShape::Box { min, max },
-                    )?;
                 }
+                slab_sides([al, bl, br, ar], &format!("assembled-shell-{index}"), b)?;
+                let min = std::array::from_fn(|j| {
+                    [al, ar, bl, br].iter().map(|v| v[j]).min().unwrap()
+                        - if j == 1 { 10 } else { 0 }
+                });
+                let max =
+                    std::array::from_fn(|j| [al, ar, bl, br].iter().map(|v| v[j]).max().unwrap());
+                b.solid(&id, SolidShape::Box { min, max })?;
+            }
+            if w.iter()
+                .any(|s| ["cylinder", "halfpipe", "flight"].contains(&s.mode.as_str()))
+            {
+                continue;
+            }
+            let station = |s: &Sample| {
+                let f = geometry::rotate3([0, 0, 1_000_000], p.rotation_mdeg);
+                (0..3)
+                    .map(|j| (s.position_cm[j] - p.origin_cm[j]) * f[j] / 1_000_000)
+                    .sum::<i64>()
+            };
+            if p.id == "overpass" && (station(&w[0]) < 400 || station(&w[1]) > 2800) {
+                continue;
+            }
+            let wall = if branch {
+                30
+            } else if p.id.starts_with("cylinder") || p.id == "banked_chicane" {
+                25 + 30 * station(&w[0]).clamp(0, 400) / 400
+            } else if w[0].mode == "loop" {
+                120
+            } else {
+                WALL
+            };
+            for (a0, b0) in [(al, bl), (ar, br)] {
+                let a1 = std::array::from_fn(|j| a0[j] + w[0].normal[j] * wall / 1_000_000);
+                let b1 = std::array::from_fn(|j| b0[j] + w[1].normal[j] * wall / 1_000_000);
+                b.quad(
+                    [a0, a1, b1, b0],
+                    Surface::Concrete,
+                    &format!("assembled-wall-{index}"),
+                    false,
+                )?;
+                // One geometric sheet: renderers/colliders handle both
+                // sides. A reversed duplicate makes every shared edge
+                // non-manifold and defeats native CCD edge suppression.
+                let min = std::array::from_fn(|j| {
+                    [a0, b0, a1, b1].iter().map(|v| v[j]).min().unwrap() - 2
+                });
+                let max = std::array::from_fn(|j| {
+                    [a0, b0, a1, b1].iter().map(|v| v[j]).max().unwrap() + 2
+                });
+                b.solid(
+                    &format!("assembled-wall-{index}"),
+                    SolidShape::Box { min, max },
+                )?;
             }
         }
     }
@@ -1858,10 +1887,22 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
             }
         })
         .sum::<u64>();
-    (segments * 100 + 10, segments * 3 + 1)
+    let supports = a
+        .supports
+        .iter()
+        .filter(|s| {
+            (0..2).all(|j| {
+                s.shape.bounds().min[j] <= bounds.max[j] && s.shape.bounds().max[j] >= bounds.min[j]
+            })
+        })
+        .count() as u64;
+    (
+        segments * 200 + 10 + supports * 60,
+        segments * 3 + 1 + supports,
+    )
 }
 
-fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -> Result<()> {
+fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result<()> {
     let center = plaza_center(p);
     let half = i64::from(p.width_cm) / 2;
     let transform = |v| add(p.origin_cm, geometry::rotate3(v, p.rotation_mdeg));
@@ -1874,6 +1915,7 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
         transform([half, 0, 0]),
     ];
     b.quad(entry, Surface::Asphalt, &road, true)?;
+    slab_shell(entry, &format!("assembled-shell-{index}"), b)?;
     let mut boundary = vec![];
     let opening = libm::asin(half as f64 / FINISH_RADIUS_CM as f64);
     for i in 0..=64 {
@@ -1899,14 +1941,19 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
         let a = boundary[i];
         let c = boundary[(i + 1) % boundary.len()];
         b.triangle([center, a, c], Surface::Asphalt, &road, true)?;
-        let vertices = vec![
-            center,
-            a,
-            c,
-            add(center, geometry::rotate3([0, -10, 0], p.rotation_mdeg)),
-            add(a, geometry::rotate3([0, -10, 0], p.rotation_mdeg)),
-            add(c, geometry::rotate3([0, -10, 0], p.rotation_mdeg)),
-        ];
+        b.triangle(
+            [lower(center), lower(c), lower(a)],
+            Surface::Concrete,
+            &format!("assembled-shell-{index}"),
+            false,
+        )?;
+        b.quad(
+            [a, c, lower(c), lower(a)],
+            Surface::Concrete,
+            &format!("assembled-shell-{index}"),
+            false,
+        )?;
+        let vertices = vec![center, a, c, lower(center), lower(a), lower(c)];
         b.solid(
             &road,
             SolidShape::Convex(CollisionConvex {
@@ -1965,6 +2012,68 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut crate::generation::Builder) -
                         + 2
                 }),
             },
+        )?;
+    }
+    Ok(())
+}
+
+// Both execution and grounding use this tessellator; no second road model.
+trait TrackGeometry {
+    fn triangle(
+        &mut self,
+        v: [Vertex; 3],
+        surface: Surface,
+        id: &str,
+        spawnable: bool,
+    ) -> Result<()>;
+    fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()>;
+    fn quad(&mut self, v: [Vertex; 4], surface: Surface, id: &str, spawnable: bool) -> Result<()> {
+        self.triangle([v[0], v[1], v[2]], surface, id, spawnable)?;
+        self.triangle([v[0], v[2], v[3]], surface, id, spawnable)
+    }
+}
+impl TrackGeometry for crate::generation::Builder {
+    fn triangle(
+        &mut self,
+        v: [Vertex; 3],
+        surface: Surface,
+        id: &str,
+        spawnable: bool,
+    ) -> Result<()> {
+        self.triangle(v, surface, id, spawnable)
+    }
+    fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()> {
+        self.solid(id, shape)
+    }
+}
+fn lower(mut v: Vertex) -> Vertex {
+    v[1] -= 10;
+    v
+}
+fn slab_shell(v: [Vertex; 4], id: &str, b: &mut impl TrackGeometry) -> Result<()> {
+    b.quad(
+        [lower(v[3]), lower(v[2]), lower(v[1]), lower(v[0])],
+        Surface::Concrete,
+        id,
+        false,
+    )?;
+    slab_sides(v, id, b)
+}
+fn slab_sides(v: [Vertex; 4], id: &str, b: &mut impl TrackGeometry) -> Result<()> {
+    // End caps at every sample would create internal collision seams; only sides.
+    for [a, c] in [[v[0], v[1]], [v[2], v[3]]] {
+        b.quad([a, c, lower(c), lower(a)], Surface::Concrete, id, false)?;
+    }
+    Ok(())
+}
+fn emit_shape(shape: &CollisionConvex, id: &str, b: &mut impl TrackGeometry) -> Result<()> {
+    b.solid(id, SolidShape::Convex(shape.clone()))?;
+    for face in &shape.faces {
+        b.triangle(
+            face.map(|i| shape.vertices[i as usize]),
+            Surface::Concrete,
+            id,
+            false,
         )?;
     }
     Ok(())

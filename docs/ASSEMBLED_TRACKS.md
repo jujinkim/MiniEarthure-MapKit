@@ -339,3 +339,54 @@ The focused `generated_walls_have_no_reverse_coplanar_duplicates` package test
 passes for generated straight and finish boundary faces, and the Godot extension
 build succeeds. Format/recipe numbers remain v1; source fingerprints invalidate
 derived caches. Existing source packages and user artifacts are preserved.
+
+
+## Grounded seed structures (2026-09-30)
+
+New seed assemblies ground the venue at the minimum of the actual road slab,
+finish plaza, branch geometry and transformed special-track inner/shell mesh.
+Vehicle-clearance envelopes, flight trajectories and decorations do not lower it.
+Track positions, ports and start/finish are preserved. Ordinary ribbons/plazas
+now expose their 10cm underside and side faces. Twisted ribbons use the same
+subdivision on both sides. Integer centimetre bounds round outward; the
+special mesh retains its existing 1/100cm vertex quantization.
+
+`Assembly.supports` records the owning piece index and one explicit convex
+20×20cm vertical column for each piece with an airborne underside. Its flat cap
+uses the minimum clipped underside over the entire square, preventing curved
+or sloping decks from being pierced. Deterministic centre-first longitudinal
+and lateral candidates include rising/falling pieces and alternate branches;
+pure flight has no support. The floor and support geometry are recomputed during
+source validation and included in canonical content hashes.
+
+Columns may intersect lower roads if the union of nearby columns and obstacle
+motion sweeps leaves a continuous 110cm lane. Starting runways, bores, required
+flight, launch and landing space are protected. No valid placement yields
+`E_TRACK_SUPPORT`; the seed generator rejects that candidate within its existing
+24 attempts and reports the reason if none succeeds. Consumers retain the live
+map after a failed/cancelled generation.
+
+Display triangles, collision triangles and occupancy consume the same column
+convex under `assembled-support-<piece_index>`. Columns and
+`assembled-shell-<piece_index>` are non-spawnable structures, never venue floors
+or recovery roads. Cell triangle/solid costs, retained convex capacities and
+pre-validation mesh workspace are accounted. Grounding retains at most one
+300,000-face piece mesh; both package readers reserve its bounded workspace.
+
+`Source.grounded_supports` is false for independent manual sources. Conversion
+from a seed preserves true with its original settings, so edits, preview,
+project/package saves and reopening deterministically rebuild the policy.
+External imports are unchanged. Current own formats remain v1, with the updated
+required schema and source/catalogue/build fingerprints; no original files are
+converted or overwritten.
+
+
+Focused verification: six grounding unit tests cover actual slab/shell extrema,
+flat/graded/high endpoints, helices, pipes, loops, branches and plaza, 20cm caps,
+partial intrusion/110cm boundaries, combined obstructions, rejected placement,
+seed conversion and cell-seam collision/occupancy/cost identity. Existing core,
+special-track, authoring/category, package roundtrip/tampering/cancellation,
+retained-memory and source-budget regressions passed. Schema regeneration and
+Draft 7 validation passed without a format increment. Native Godot binding,
+shared venue rendering and consumer contact/authoring checks passed. Detailed
+application driving/editing and platform acceptance remain user verification.

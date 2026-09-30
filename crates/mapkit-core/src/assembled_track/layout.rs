@@ -174,6 +174,7 @@ pub(super) fn finish(pieces: Vec<Piece>, s: &Settings) -> Assembly {
         catalogue_fingerprint: catalogue_fingerprint(),
         finish_plaza: finish_plaza(&pieces),
         pieces,
+        supports: vec![],
         obstacles: vec![],
         obstacle_eligible_length_cm: 0,
         obstacle_target_count: 0,
@@ -304,11 +305,12 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         a.obstacles = obstacles;
         a.obstacle_eligible_length_cm = eligible;
         a.obstacle_target_count = target;
+        grounding::apply(&mut a)?;
         if a.validate().is_ok() {
             if shortcut {
                 return match authoring::seed_shortcut(&a) {
                     Ok(graph) => Ok(Some(graph)),
-                    Err(e) if e.code == "E_CANCELLED" => Err(e),
+                    Err(e) if e.code == "E_CANCELLED" || e.code == "E_TRACK_SUPPORT" => Err(e),
                     Err(_) => Ok(None),
                 };
             }
@@ -321,9 +323,14 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
     let s = settings.normalized()?;
     let target = u32::from(s.duration_seconds) * 1000;
     let mut best: Option<Assembly> = None;
+    let mut support_failure = None;
     for attempt in 0..24 {
         cancellation::checkpoint()?;
-        if let Some(a) = candidate(&s, attempt)? {
+        let candidate = match candidate(&s, attempt) {
+            Err(e) if e.code == "E_TRACK_SUPPORT" => { support_failure = Some(e); continue; }
+            other => other?,
+        };
+        if let Some(a) = candidate {
             if best.as_ref().is_none_or(|b| {
                 a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
             }) {
@@ -331,6 +338,7 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
             }
         }
     }
+    if best.is_none() { if let Some(e) = support_failure { return Err(error("E_TRACK_SUPPORT", format!("Requested {} s; no valid result in 24 layout candidates: {}", s.duration_seconds, e.message))); } }
     let a=best.ok_or_else(||error("E_TRACK_DURATION",format!("Requested {} s; closest unavailable: no connected layout within search/resource budget",s.duration_seconds)))?;
     if a.estimated_msec.abs_diff(target) > target / 10 {
         return Err(error(

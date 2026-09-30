@@ -145,6 +145,11 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         }
         retained.string(&a.generator_fingerprint)?;
         retained.string(&a.catalogue_fingerprint)?;
+        retained.vector(&a.supports)?;
+        for support in &a.supports {
+            retained.vector(&support.shape.vertices)?;
+            retained.vector(&support.shape.faces)?;
+        }
         retained.vector(&a.obstacles)?;
         for o in &a.obstacles {
             retained.string(&o.kind)?;
@@ -816,6 +821,27 @@ mod tests {
             path.capacity(),
             size_of::<mapkit_core::assembled_track::Sample>(),
         ) - allocation(old, size_of::<mapkit_core::assembled_track::Sample>());
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
+    }
+
+    #[test]
+    fn support_geometry_charges_all_owned_capacity() {
+        use mapkit_core::assembled_track::{self as track, authoring::*};
+        let mut source = Source::empty();
+        source.grounded_supports = true;
+        source.instances.push(instance("slope", "slope_down", 400));
+        let mut d = track::document_from_assembly(compile(&source).unwrap()).unwrap();
+        assert_eq!(d.assembled_track.as_ref().unwrap().supports.len(), 1);
+        let before = document_retained_bytes(&d).unwrap();
+        let supports = &mut d.assembled_track.as_mut().unwrap().supports;
+        let old = supports.capacity();
+        supports.reserve(128);
+        let mut extra = allocation(supports.capacity(), size_of::<track::Support>()) - allocation(old, size_of::<track::Support>());
+        let shape = &mut supports[0].shape;
+        let old = shape.vertices.capacity(); shape.vertices.reserve(1000);
+        extra += allocation(shape.vertices.capacity(), size_of::<Vertex>()) - allocation(old, size_of::<Vertex>());
+        let old = shape.faces.capacity(); shape.faces.reserve(1000);
+        extra += allocation(shape.faces.capacity(), size_of::<[u8; 3]>()) - allocation(old, size_of::<[u8; 3]>());
         assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
     }
 

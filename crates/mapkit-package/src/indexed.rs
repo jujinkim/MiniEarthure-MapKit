@@ -382,7 +382,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             validation_peak_bytes: retained
                 + structured * 96
                 + compressed * 2
-                + decoder
+                + decoder.max(crate::read_cost::track_workspace(structured))
                 + pngs * (4 * 513 * 8 + 256),
         }
     }

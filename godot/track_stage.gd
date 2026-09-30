@@ -51,8 +51,10 @@ static func create(_bounds: PackedInt64Array, assembly: Dictionary) -> Node3D:
 			lo = lo.min(p)
 			hi = hi.max(p)
 	var floor_y := float(assembly.floor.min_cm[1])*0.01
-	var center := (lo+hi)*0.5
-	var extent := hi-lo+Vector3(32,0,32)
+	var floor_a := point(assembly.floor.min_cm)
+	var floor_b := point(assembly.floor.max_cm)
+	var center := (floor_a+floor_b)*0.5
+	var extent := (floor_b-floor_a).abs()
 	box(root,Vector3(center.x,floor_y-0.25,center.z),Vector3(extent.x,0.5,extent.z),VENUE.material("rc:floor",seed))
 	for side in [-1,1]:
 		box(root,Vector3(center.x,floor_y+0.65,center.z+side*(extent.z/2-1)),Vector3(extent.x-2,1.3,0.25),black)

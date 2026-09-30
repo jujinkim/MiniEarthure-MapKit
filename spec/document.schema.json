@@ -228,7 +228,8 @@
         "ordinary_straight_cm",
         "pieces",
         "routes",
-        "settings"
+        "settings",
+        "supports"
       ],
       "properties": {
         "authoring": {
@@ -326,6 +327,12 @@
         },
         "settings": {
           "$ref": "#/definitions/Settings"
+        },
+        "supports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Support"
+          }
         }
       },
       "additionalProperties": false
@@ -2116,6 +2123,7 @@
         "attachments",
         "checkpoints",
         "connections",
+        "grounded_supports",
         "instances",
         "paths",
         "settings"
@@ -2144,6 +2152,9 @@
           "items": {
             "$ref": "#/definitions/Connection"
           }
+        },
+        "grounded_supports": {
+          "type": "boolean"
         },
         "instances": {
           "type": "array",
@@ -2217,6 +2228,24 @@
         "ground",
         "air"
       ]
+    },
+    "Support": {
+      "type": "object",
+      "required": [
+        "piece_index",
+        "shape"
+      ],
+      "properties": {
+        "piece_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "shape": {
+          "$ref": "#/definitions/CollisionConvex"
+        }
+      },
+      "additionalProperties": false
     },
     "Surface": {
       "type": "string",

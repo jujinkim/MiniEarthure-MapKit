@@ -61,6 +61,7 @@ pub struct Attachment {
 #[serde(deny_unknown_fields)]
 pub struct Source {
     pub original_seed: Option<Settings>,
+    pub grounded_supports: bool,
     pub settings: Settings,
     pub instances: Vec<Instance>,
     pub connections: Vec<Connection>,
@@ -74,6 +75,7 @@ impl Source {
     pub fn empty() -> Self {
         Self {
             original_seed: None,
+            grounded_supports: false,
             settings: Settings::default(),
             instances: vec![],
             connections: vec![],
@@ -124,6 +126,7 @@ pub fn from_assembly(a: &Assembly) -> Source {
         .collect();
     Source {
         original_seed: Some(a.settings.clone()),
+        grounded_supports: true,
         settings: a.settings.clone(),
         instances: a
             .pieces
@@ -557,6 +560,7 @@ pub fn compile(source: &Source) -> Result<Assembly> {
         generator_fingerprint: fingerprint(),
         catalogue_fingerprint: catalogue_fingerprint(),
         pieces,
+        supports: vec![],
         obstacles: vec![],
         obstacle_eligible_length_cm: 0,
         obstacle_target_count: 0,
@@ -586,6 +590,7 @@ pub fn compile(source: &Source) -> Result<Assembly> {
             ));
         }
     }
+    if source.grounded_supports { grounding::apply(&mut assembly)?; }
     assembly.issues.sort();
     assembly.issues.dedup();
     Ok(assembly)
