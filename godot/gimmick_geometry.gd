@@ -30,7 +30,7 @@ static func points(part: Dictionary) -> PackedVector3Array:
 	return result
 
 static func resolved(g: Dictionary) -> Dictionary:
-	if not g.has("track") or g.has("track_mesh"): return g
+	if (not g.has("track") and g.get("curved_faces",[]).is_empty()) or g.has("track_mesh"): return g
 	var bridge = ClassDB.instantiate("MapKitBridge")
 	var result: Dictionary = JSON.parse_string(bridge.resolve_gimmick(JSON.stringify(g)))
 	return result.data if result.get("ok",false) else {}

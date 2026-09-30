@@ -33,6 +33,10 @@ pub struct Gimmick {
     pub rotation_mdeg: [i32; 3],
     pub scale_per_mille: [u32; 3],
     pub parts: Vec<CollisionConvex>,
+    /// Explicit (part, triangle) pairs forming a curved driving surface.
+    /// All remaining faces retain the ordinary blocking shell role.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub curved_faces: Vec<[u16; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub track: Option<special_track::SpecialTrack>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -56,6 +60,11 @@ impl Gimmick {
             || self.motion.delta_cm.iter().any(|v| v.unsigned_abs() > 3200)
             || self.motion.impulse_cmps.iter().any(|v| v.unsigned_abs() > 5000)
             || !(100..=60_000).contains(&self.motion.cooldown_ms) { return false; }
+        if self.curved_faces.len() > 2048
+            || (!self.curved_faces.is_empty() && (self.track.is_some() || self.motion.kind != MotionKind::Static))
+            || self.curved_faces.iter().any(|[part, face]| self.parts.get(*part as usize)
+                .is_none_or(|p| *face as usize >= p.faces.len()))
+            || self.curved_faces.iter().collect::<BTreeSet<_>>().len() != self.curved_faces.len() { return false; }
         let active = matches!(self.motion.kind, MotionKind::TargetSpeed | MotionKind::JumpHeight | MotionKind::AirRing);
         if active != self.effect.is_some() { return false; }
         if let Some(e)=&self.effect {
@@ -86,7 +95,7 @@ impl Gimmick {
     }
     pub fn memory_bytes(&self) -> u64 {
         // Source/JSON/Variant copies, physics proxies and procedural display meshes.
-        16_384 + self.parts.len() as u64 * 32_768 + self.track.as_ref().map_or(0, |t| t.tile_count() as u64 * 4096)
+        16_384 + self.parts.len() as u64 * 32_768 + self.curved_faces.len() as u64 * 128 + self.track.as_ref().map_or(0, |t| t.tile_count() as u64 * 4096)
     }
     /// Track interiors are never generated spawn or recovery surfaces, even if
     /// a normal road/terrain triangle happens to lie underneath the structure.
@@ -112,6 +121,24 @@ impl Gimmick {
         let mut value=serde_json::to_value(self).unwrap();
         value["memory_bytes"]=serde_json::json!(self.memory_bytes());
         if let Some(t)=&self.track { value["track_mesh"]=serde_json::to_value(t.mesh()).unwrap(); }
+        if !self.curved_faces.is_empty() {
+            let selected: BTreeSet<_> = self.curved_faces.iter().copied().collect();
+            let mut inner = Vec::new();
+            let mut shell = Vec::new();
+            for (part_index, part) in self.parts.iter().enumerate() {
+                for (face_index, face) in part.faces.iter().enumerate() {
+                    let triangle = face.map(|index| std::array::from_fn::<_, 3, _>(|axis|
+                        part.vertices[index as usize][axis] * i64::from(self.scale_per_mille[axis]) / 10));
+                    if selected.contains(&[part_index as u16, face_index as u16]) { inner.push(triangle); }
+                    else { shell.push(triangle); }
+                }
+            }
+            value["track_mesh"] = serde_json::json!({"units_per_metre":10000,"inner":inner,"shell":shell});
+            // Resolved geometry is already scaled; rendering/collision consume
+            // these same faces once. Authoring/occupancy retain original parts.
+            value["parts"] = serde_json::json!([]);
+            value["scale_per_mille"] = serde_json::json!([1000,1000,1000]);
+        }
         value
     }
     /// Conservative authoring/grid occupancy. Keep compound parts separate so a

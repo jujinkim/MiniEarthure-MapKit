@@ -1113,6 +1113,20 @@
           "maxItems": 4,
           "minItems": 4
         },
+        "curved_faces": {
+          "description": "Explicit (part, triangle) pairs forming a curved driving surface. All remaining faces retain the ordinary blocking shell role.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
         "effect": {
           "anyOf": [
             {

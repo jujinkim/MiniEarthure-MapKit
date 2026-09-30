@@ -101,6 +101,15 @@ Tracks replace ordinary convex parts with a bounded shared mesh; all other
 definitions retain the 32-part cap. See [special driving](../docs/SPECIAL_DRIVING.md)
 for dimensions, deterministic quantization, cost and spawn exclusions.
 
+Current v1 also permits `curved_faces`, at most 2,048 unique `[part, triangle]`
+pairs on static convex structures. Indices must reference existing faces and
+cannot accompany a parametric track. Quarterpipe presets mark only their inner
+arc. Resolved rendering/collision use those exact triangles as a shared
+`track_mesh.inner`, with the other faces in the blocking shell; original parts
+remain the source and occupancy geometry. Resolution bakes scale once and adds
+128 bytes per selected face to the conservative memory estimate. No name or
+material inference grants a curved driving role.
+
 Required safety bounds enclose the full transformed motion and authored landing
 area. Validation uses a conservative integer L1 radius, bounded displacement,
 period, scale, impulse and total extent; bounds must remain inside the map.

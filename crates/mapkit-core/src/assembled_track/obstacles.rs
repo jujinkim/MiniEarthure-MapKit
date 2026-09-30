@@ -370,6 +370,7 @@ pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
         ],
         scale_per_mille: [1000; 3],
         parts: vec![],
+        curved_faces: vec![],
         track: None,
         effect: None,
         surface: Surface::Asphalt,
@@ -417,6 +418,9 @@ pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
         _ => {}
     }
     if let Some(parts) = rc_parts(&o.kind) { g.parts = parts; g.color = [90, 180, 200, 255]; }
+    if o.kind.starts_with("quarterpipe") {
+        g.curved_faces = (0..g.parts.len()).flat_map(|part| [[part as u16,0],[part as u16,1]]).collect();
+    }
     let radius = g
         .parts
         .iter()

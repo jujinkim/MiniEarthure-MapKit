@@ -751,6 +751,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 [i64::from(sample.lateral_cm) * 2 - 50, 4, 200],
             )],
             track: None,
+            curved_faces: vec![],
             effect: Some(Effect {
                 strength_percent: 100,
                 jump_height_cm: action.height_cm,

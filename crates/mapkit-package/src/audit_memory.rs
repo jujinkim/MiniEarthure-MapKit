@@ -360,6 +360,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         rotation_mdeg: _,
         scale_per_mille: _,
         parts,
+        curved_faces,
         track,
         effect: _,
         surface: _,
@@ -383,6 +384,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             retained.vector(&t.centerline)?;
         }
         retained.vector(parts)?;
+        retained.vector(curved_faces)?;
         for CollisionConvex { vertices, faces } in parts {
             retained.vector(vertices)?;
             retained.vector(faces)?;

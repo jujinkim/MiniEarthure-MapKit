@@ -55,3 +55,28 @@ fn line() -> GrindLine {
     let removed=track::document_from_assembly(compile(&source).unwrap()).unwrap();
     assert!(removed.grind_lines.is_empty());assert_eq!(d.gimmicks,removed.gimmicks,"deleting the interaction leaves the supporting rail collider intact");
 }
+
+#[test] fn quarterpipe_inner_faces_keep_their_driving_role_and_exact_geometry() {
+    for kind in ["quarterpipe_left", "quarterpipe_right"] {
+        let mut source=Source::empty();
+        source.instances.push(instance("road","sprint_lane",800));
+        source.attachments.push(Attachment{kind:kind.into(),piece:"road".into(),path:"main".into(),station_cm:800,side:1});
+        let d=track::document_from_assembly(compile(&source).unwrap()).unwrap();
+        let g=&d.gimmicks[0];
+        assert!(g.valid());assert_eq!(g.curved_faces.len(),64);
+        let reopened: gimmick::Gimmick=serde_json::from_slice(&canonical(g).unwrap()).unwrap();
+        assert_eq!(&reopened,g);
+        let resolved=g.resolved_json();
+        let inner=resolved["track_mesh"]["inner"].as_array().unwrap();
+        assert_eq!(inner.len(),64);assert!(resolved["parts"].as_array().unwrap().is_empty());
+        assert_eq!(resolved["track_mesh"]["shell"].as_array().unwrap().len(),g.parts.iter().map(|p|p.faces.len()).sum::<usize>()-64);
+        for (index,[part,face]) in g.curved_faces.iter().enumerate() {
+            for vertex in 0..3 {
+                let p=g.parts[*part as usize].vertices[g.parts[*part as usize].faces[*face as usize][vertex] as usize];
+                assert_eq!(inner[index][vertex],serde_json::json!(p.map(|axis|axis*100)));
+            }
+        }
+        let mut invalid=g.clone();invalid.curved_faces.push([99,0]);assert!(!invalid.valid());
+        let mut invalid=g.clone();invalid.curved_faces.push([0,0]);assert!(!invalid.valid());
+    }
+}

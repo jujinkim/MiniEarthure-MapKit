@@ -1485,6 +1485,7 @@ fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
                 rotation_mdeg: p.rotation_mdeg,
                 scale_per_mille: [1000; 3],
                 parts: vec![],
+                curved_faces: vec![],
                 track: None,
                 effect: None,
                 surface: Surface::Asphalt,
