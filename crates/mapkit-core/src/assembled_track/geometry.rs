@@ -61,7 +61,7 @@ pub(super) fn bezier(points: &[Vertex], width: u32, entry: u32, exit: u32) -> Ve
     let mut path = vec![];
     for cp in points.windows(4).step_by(3) {
         let length: u64 = cp.windows(2).map(|w| distance(w[0], w[1])).sum();
-        let steps = (length / 40).clamp(8, 1024);
+        let steps = (length / 80).clamp(8, 1024);
         for i in 0..=steps {
             if i == 0 && !path.is_empty() {
                 continue;
@@ -142,6 +142,8 @@ fn curve_frames(path: &mut [Sample]) {
 /// Shared longitudinal refinement for every ordinary ribbon, including authored
 /// cubics. Bound angular change and the error at the OUTER edge, not just the
 /// centreline. Hermite interpolation retains endpoint tangents and grade.
+/// Two-degree / 80cm spans avoid amplifying centimetre quantization into short,
+/// alternating flat/steep faces; the outer-edge error bound still applies.
 pub(super) fn refine(path: &mut Vec<Sample>) {
     let mut out = Vec::with_capacity(path.len());
     for w in path.windows(2) {
@@ -154,8 +156,8 @@ pub(super) fn refine(path: &mut Vec<Sample>) {
         let len = distance(a.position_cm, b.position_cm) as f64;
         let ordinary = !["flight", "cylinder", "loop", "halfpipe"].contains(&a.mode.as_str());
         let steps = if ordinary {
-            (turn / 0.0174533).max(libm::sqrt(width * (turn * turn + twist * twist) / 4.0))
-                .max(if turn + twist > 0.001 { len / 35.0 } else { 1.0 }).ceil().clamp(1.0, 64.0) as usize
+            (turn / 0.0349066).max(libm::sqrt(width * (turn * turn + twist * twist) / 4.0))
+                .max(if turn + twist > 0.001 { len / 80.0 } else { 1.0 }).ceil().clamp(1.0, 64.0) as usize
         } else { 1 };
         for i in 0..steps {
             let t = i as f64 / steps as f64;
@@ -240,7 +242,7 @@ pub(super) fn shape(p: &mut Piece, width: u32) {
             0.0
         };
         let radians = degrees * std::f64::consts::PI / 180.0;
-        let steps = ((radius as f64 * radians / 35.0).ceil() as usize).max(32);
+        let steps = ((radius as f64 * radians / 80.0).ceil() as usize).max(32);
         p.path = (0..=steps)
             .map(|i| {
                 let t = i as f64 / steps as f64;
@@ -371,4 +373,31 @@ pub(super) fn ribbon_edges(s: &Sample, inset: u32) -> [Vertex;2] {
     let right=std::array::from_fn::<_,3,_>(|j|round(basis[j][0]*1e6));
     [-1,1].map(|side| std::array::from_fn(|j|
         s.position_cm[j]+right[j]*i64::from(s.lateral_cm.saturating_sub(inset))*side/1_000_000))
+}
+
+#[cfg(test)]
+mod playtest_surface_tests {
+    use super::*;
+    #[test]
+    fn ordinary_grade_quantization() {
+        for id in ["curve_up","curve_down","curve_left_up","curve_left_down","spiral_up","spiral_down"] {
+            let p=materialize(&variant(id,600,600,600));
+            let mut error: f64=0.0;
+            let mut shortest: f64=f64::MAX;
+            for w in p.path.windows(2) {
+                let d=std::array::from_fn::<_,3,_>(|j|(w[1].position_cm[j]-w[0].position_cm[j]) as f64);
+                let horizontal=libm::sqrt(d[0]*d[0]+d[2]*d[2]);
+                if horizontal<1.0 {continue;}
+                shortest=shortest.min(horizontal);
+                let f=std::array::from_fn::<_,3,_>(|j|(w[0].forward[j]+w[1].forward[j]) as f64/2e6);
+                let intended=f[1]/libm::sqrt(f[0]*f[0]+f[2]*f[2]);
+                error=error.max((d[1]/horizontal-intended).abs());
+            }
+            println!("SURFACE {id} samples={} shortest_cm={shortest:.3} max_grade_error={error:.5}",p.path.len());
+            assert!(error<0.04,"integer road chord must stay within four percentage points of its authored grade");
+            assert_eq!(p.path.first().unwrap().position_cm,[0,0,0]);
+            assert_eq!(p.path.first().unwrap().normal,[0,1_000_000,0]);
+            assert_eq!(p.path.last().unwrap().normal,[0,1_000_000,0]);
+        }
+    }
 }

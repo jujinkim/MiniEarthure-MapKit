@@ -403,3 +403,19 @@ can remove a wall. The same surviving segments emit render/collision faces and
 occupancy. Formats remain v1; derived geometry uses the changed source fingerprint.
 
 Focused results: [playtest geometry verification](validation/playtest-2026-10-02/README.md).
+
+## Quantized curved-road sampling — 2026-10-02 replacement
+
+Ordinary analytic curves and authored cubics start with 80cm spans. Shared
+refinement limits tangent changes to two degrees while retaining the existing
+outer-edge/twist error bound. This replaces 35cm/one-degree refinement, whose
+repeated subdivision amplified centimetre height rounding into alternating
+short flat/steep collision faces. End positions, normals, widths, surface strips
+and common display/collision vertices are preserved. No format increment.
+
+A 6m-wide curve's maximum centreline grade error falls from 0.03032 to 0.00824;
+spirals fall from 0.10028 to 0.03645. Tests bound error below 0.04 and preserve
+flat endpoint frames. Synthetic held-throttle Runtime checks pass all six
+ordinary grades and both spirals. Downward spiral unsupported ticks fall 12→0
+and road-relative chassis height span 0.1042→0.0329m. These are short fixture
+results, not full-course or platform acceptance.

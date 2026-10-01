@@ -1,0 +1,15 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 7.81s
+     Running unittests src/lib.rs (target/debug/deps/mapkit_core-47b25b0992e68373)
+
+running 1 test
+SURFACE curve_up samples=111 shortest_cm=17.493 max_grade_error=0.03032
+SURFACE curve_down samples=111 shortest_cm=17.493 max_grade_error=0.03032
+SURFACE curve_left_up samples=111 shortest_cm=17.493 max_grade_error=0.03032
+SURFACE curve_left_down samples=111 shortest_cm=17.493 max_grade_error=0.03032
+SURFACE spiral_up samples=433 shortest_cm=10.630 max_grade_error=0.10028
+SURFACE spiral_down samples=433 shortest_cm=10.630 max_grade_error=0.10028
+test assembled_track::geometry::playtest_surface_tests::ordinary_grade_quantization ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.01s
+
