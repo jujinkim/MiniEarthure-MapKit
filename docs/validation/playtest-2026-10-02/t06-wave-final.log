@@ -1,0 +1,42 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 8.60s
+     Running unittests src/lib.rs (target/debug/deps/mapkit_core-47b25b0992e68373)
+
+running 18 tests
+SURFACE curve_up samples=49 shortest_cm=77.795 max_grade_error=0.00824
+SURFACE curve_down samples=49 shortest_cm=77.795 max_grade_error=0.00824
+SURFACE curve_left_up samples=49 shortest_cm=77.795 max_grade_error=0.00824
+SURFACE curve_left_down samples=49 shortest_cm=77.795 max_grade_error=0.00824
+SURFACE spiral_up samples=194 shortest_cm=19.313 max_grade_error=0.03645
+SURFACE spiral_down samples=194 shortest_cm=19.313 max_grade_error=0.03645
+test assembled_track::geometry::playtest_surface_tests::ordinary_grade_quantization ... ok
+
+thread 'assembled_track::geometry::playtest_surface_tests::wave_ribbon_edges_never_fold_backwards' (20550221) panicked at crates/mapkit-core/src/assembled_track/geometry.rs:417:25:
+zigzag width=1200: folded edge [433, 0, 2421] -> [433, 0, 2421]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test assembled_track::geometry::playtest_surface_tests::wave_ribbon_edges_never_fold_backwards ... FAILED
+test assembled_track::grounding::tests::partial_road_intrusion_combines_columns_and_obstacle_sweeps ... ok
+test assembled_track::grounding::tests::flat_track_has_no_columns_and_flight_does_not_lower_floor ... ok
+test assembled_track::grounding::tests::seed_conversion_preserves_policy_but_independent_manual_does_not_enable_it ... ok
+test assembled_track::junction::tests::trims_interior_preserves_outer_and_grade_separation ... ok
+test assembled_track::grounding::tests::impossible_support_rejected_and_slope_still_supported ... ok
+test assembled_track::grounding::tests::support_cell_seams_share_collision_occupancy_cost_and_identity ... ok
+test assembled_track::layout::tests::return_search_failure_and_cancellation_preserve_input ... ok
+test assembled_track::layout::tests::return_route_uses_modules_and_only_short_seams ... ok
+test assembled_track::obstacles::tests::resolved_attachments_fit_three_widths_and_use_real_motion_geometry ... ok
+test assembled_track::authoring::practice_tests::manual_flight_keeps_landings_budgets_and_exact_static_structures ... ok
+test assembled_track::junction::tests::curved_and_tapered_road_has_no_barcode_wall_fragments ... ok
+test assembled_track::obstacles::tests::difficulty_density_budget_and_seed_repeatability ... ok
+test assembled_track::obstacles::tests::actual_slopes_curves_helices_and_branch_are_candidates_but_structures_and_grid_are_not ... ok
+test assembled_track::authoring::preparation_tests::compiler_owned_reuse_keeps_full_external_validation ... ok
+test assembled_track::layout::tests::automatic_composition_is_a_graph_candidate ... ok
+test assembled_track::grounding::tests::actual_mesh_ground_and_support_endpoints_across_shapes ... ok
+
+failures:
+
+failures:
+    assembled_track::geometry::playtest_surface_tests::wave_ribbon_edges_never_fold_backwards
+
+test result: FAILED. 17 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 1.23s
+
+error: test failed, to rerun pass `-p mapkit-core --lib`

@@ -1,0 +1,42 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+   Compiling mapkit-package v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-package)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3.59s
+     Running tests/assembled_track.rs (target/debug/deps/assembled_track-976b3b36942aa8df)
+
+running 1 test
+WALL_FIXTURE 0 straight width=400 origin=[0, 0, 0] rotation=[0, 0, 0]
+WALL_FIXTURE 1 straight width=400 origin=[0, 0, 800] rotation=[0, 0, 0]
+WALL_FIXTURE 2 straight width=400 origin=[0, 0, 1600] rotation=[0, 0, 0]
+WALL_FIXTURE 3 spiral180_right_down width=400 origin=[0, 0, 2400] rotation=[0, 0, 0]
+WALL_FIXTURE 4 slope_up width=200 origin=[1600, -400, 2400] rotation=[0, 180000, 0]
+WALL_FIXTURE 5 spiral360_left_down width=800 origin=[1600, -300, 1600] rotation=[0, 180000, 0]
+WALL_FIXTURE 6 sharp135 width=800 origin=[1600, -1100, 1600] rotation=[0, 180000, 0]
+WALL_FIXTURE 7 zigzag width=800 origin=[746, -1100, 1246] rotation=[0, -45000, 0]
+WALL_FIXTURE 8 spiral360_right_down width=800 origin=[-3779, -1100, 5771] rotation=[0, -45000, 0]
+WALL_FIXTURE 9 spiral180_right_down width=400 origin=[-3779, -1900, 5771] rotation=[0, -45000, 0]
+WALL_FIXTURE 10 gentle45_left width=600 origin=[-2648, -2300, 6902] rotation=[0, 135000, 0]
+WALL_FIXTURE 11 spiral180_right_up width=600 origin=[-951, -2300, 6199] rotation=[0, 90000, 0]
+WALL_FIXTURE 12 sharp135 width=200 origin=[-951, -1900, 4599] rotation=[0, -90000, 0]
+WALL_FIXTURE 13 slope_up width=200 origin=[-1234, -1900, 5282] rotation=[0, 45000, 0]
+WALL_FIXTURE 14 spiral90_left_up width=400 origin=[-668, -1800, 5848] rotation=[0, 45000, 0]
+WALL_FIXTURE 15 sharp135 width=600 origin=[-668, -1600, 6979] rotation=[0, -45000, 0]
+WALL_FIXTURE 16 gentle90 width=600 origin=[-385, -1600, 7662] rotation=[0, 90000, 0]
+WALL_FIXTURE 17 gentle90_left width=1200 origin=[2015, -1600, 5262] rotation=[0, 180000, 0]
+WALL_FIXTURE 18 spiral180_right_up width=400 origin=[6815, -1600, 462] rotation=[0, 90000, 0]
+WALL_FIXTURE 19 slope_up width=400 origin=[6815, -1200, -1138] rotation=[0, -90000, 0]
+WALL_FIXTURE 20 spiral180_left_up width=400 origin=[6015, -1100, -1138] rotation=[0, -90000, 0]
+WALL_FIXTURE 21 finish_plaza width=400 origin=[6015, -700, -2738] rotation=[0, 90000, 0]
+
+thread 'generated_walls_have_no_reverse_coplanar_duplicates' (20546792) panicked at crates/mapkit-package/tests/assembled_track.rs:54:25:
+opposite wall faces overlap: assembled-wall-7 [[-1427, -1100, 2478], [-1427, -1040, 2478], [-1427, -1040, 2476]] [[-1427, -1100, 2474], [-1427, -1040, 2474], [-1427, -1040, 2478]]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test generated_walls_have_no_reverse_coplanar_duplicates ... FAILED
+
+failures:
+
+failures:
+    generated_walls_have_no_reverse_coplanar_duplicates
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `-p mapkit-package --test assembled_track`

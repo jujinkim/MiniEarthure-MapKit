@@ -1180,6 +1180,12 @@ fn materialize(p: &Piece) -> Piece {
     out.chain_index = p.chain_index;
     out.chain_count = p.chain_count;
     out.ordinary = p.ordinary;
+    position_piece(out,p)
+}
+fn position_piece(mut out: Piece, p: &Piece) -> Piece {
+    out.origin_cm=p.origin_cm;
+    out.rotation_mdeg=p.rotation_mdeg;
+    out.quarter_turns=p.quarter_turns;
     for v in out.path.iter_mut().chain(&mut out.alternate_path) {
         v.position_cm = add(
             geometry::rotate3(v.position_cm, p.rotation_mdeg),

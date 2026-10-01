@@ -1,0 +1,32 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+   Compiling mapkit-package v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-package)
+    Finished `test` profile [optimized + debuginfo] target(s) in 21.25s
+     Running tests/assembled_track.rs (target/debug/deps/assembled_track-976b3b36942aa8df)
+
+running 10 tests
+test authored_source_roundtrip_draft_export_and_tampering ... ok
+test manual_flight_and_static_shapes_survive_both_containers ... ok
+
+thread 'generated_walls_have_no_reverse_coplanar_duplicates' (20542144) panicked at crates/mapkit-package/tests/assembled_track.rs:51:21:
+assertion `left == right` failed: one two-sided sheet, no overlapping reversed wall faces
+  left: -1
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test generated_walls_have_no_reverse_coplanar_duplicates ... FAILED
+test free_roam_is_required_boolean ... ok
+test venue_floor_is_collision_only_and_budgeted ... ok
+test finish_plaza_and_editable_free_roam_keep_exact_source_validation ... ok
+test cancellation_and_invalid_requests ... ok
+test source_mode_and_course_progress_remain_distinct ... ok
+test save_failure_never_replaces_original ... ok
+test reproducible_roundtrip_and_modified_source_rejected has been running for over 60 seconds
+test reproducible_roundtrip_and_modified_source_rejected ... ok
+
+failures:
+
+failures:
+    generated_walls_have_no_reverse_coplanar_duplicates
+
+test result: FAILED. 9 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 82.42s
+
+error: test failed, to rerun pass `-p mapkit-package --test assembled_track`

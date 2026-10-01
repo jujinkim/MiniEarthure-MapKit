@@ -419,3 +419,12 @@ flat endpoint frames. Synthetic held-throttle Runtime checks pass all six
 ordinary grades and both spirals. Downward spiral unsupported ticks fall 12→0
 and road-relative chassis height span 0.1042→0.0329m. These are short fixture
 results, not full-course or platform acceptance.
+
+The 2026-10-02 [modular return policy](TRACK_AUTHORING.md#modular-circuit-returns--2026-10-02-replacement) replaces long direct cubic closure with bounded catalogue-piece routing and a short final seam.
+
+The widened-wave follow-up limits zigzag/chicane amplitude by a conservative
+curvature bound: `min(1.5 × width, length² / (300 × (width/2 + 100cm)))`.
+A straight narrow piece retains a straight centreline. This prevents an 8m-wide
+wave's inner ribbon from folding and emitting overlapping reversed walls.
+Across five wave presets and all 2/4/6/8/12m widths, neither edge moves backwards;
+coincident quantized edge points are harmless and zero-area faces are omitted.

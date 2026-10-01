@@ -266,7 +266,12 @@ pub(super) fn shape(p: &mut Piece, width: u32) {
         } else {
             6400.0
         };
-        let amplitude = width as f64 * 1.5;
+        // Bound the second derivative of sin(4πt)·sin²(πt). Its magnitude
+        // is below 300; keeping radius beyond the outer edge prevents a wide
+        // ribbon from folding back over itself at a wave crest.
+        let amplitude = if id == "straight_narrow" { 0.0 } else {
+            (width as f64 * 1.5).min(length*length/(300.0*(width as f64/2.0+100.0)))
+        };
         p.path = (0..=256)
             .map(|i| {
                 let t = i as f64 / 256.0;
@@ -400,4 +405,21 @@ mod playtest_surface_tests {
             assert_eq!(p.path.last().unwrap().normal,[0,1_000_000,0]);
         }
     }
+    #[test]
+    fn wave_ribbon_edges_never_fold_backwards() {
+        for id in ["zigzag","chicane","zigzag_narrow","chicane_narrow","straight_narrow"] {
+            for width in [200,400,600,800,1200] {
+                let p=materialize(&variant(id,width,width,width));
+                for w in p.path.windows(2) {
+                    let a=ribbon_edges(&w[0],0);let b=ribbon_edges(&w[1],0);
+                    for side in 0..2 {
+                        let progress: i128=(0..3).map(|j|i128::from(b[side][j]-a[side][j])*i128::from(w[0].forward[j]+w[1].forward[j])).sum();
+                        assert!(progress>=0,"{id} width={width}: folded edge {:?} -> {:?}",a[side],b[side]);
+                    }
+                }
+                if id=="straight_narrow" {assert!(p.path.iter().all(|s|s.position_cm[0]==0));}
+            }
+        }
+    }
+
 }

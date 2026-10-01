@@ -133,6 +133,10 @@ fn category_combinations_time_bounds_and_exclusion() {
                         "tube_entry",
                         "tube_exit",
                         "free_curve",
+                        // Basic return modules replace the former always-available free curve.
+                        "right90", "right90_left", "gentle45", "gentle45_left",
+                        "slope_up", "slope_down", "spiral360_right_up", "spiral360_left_up",
+                        "spiral360_right_down", "spiral360_left_down",
                     ]
                     .contains(&p.id.as_str())
                     {

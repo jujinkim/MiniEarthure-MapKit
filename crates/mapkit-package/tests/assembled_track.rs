@@ -47,12 +47,14 @@ fn generated_walls_have_no_reverse_coplanar_duplicates() {
                 }
                 let key = (face.object_id.clone(), axis, a[axis]);
                 let sign = normal[axis].signum();
-                if let Some(previous) = planes.insert(key, sign) {
-                    assert_eq!(
-                        previous, sign,
-                        "one two-sided sheet, no overlapping reversed wall faces"
-                    );
+                let entry: &mut Vec<(i64,[[i64;3];3])> = planes.entry(key).or_default();
+                for (previous,vertices) in entry.iter() {
+                    if *previous!=sign {
+                        assert!(coplanar_overlap_area(*vertices,face.vertices,axis)<0.001,
+                            "opposite wall faces overlap: {} {vertices:?} {:?}",face.object_id,face.vertices);
+                    }
                 }
+                entry.push((sign,face.vertices));
                 checked += 1;
             }
         }
@@ -61,6 +63,41 @@ fn generated_walls_have_no_reverse_coplanar_duplicates() {
         checked >= 8,
         "straight and finish boundary fixtures include wall faces"
     );
+}
+
+// Coplanarity alone is insufficient: a notched finish wall can have disjoint
+// faces facing opposite directions on the same plane. Reject shared area only.
+fn coplanar_overlap_area(a: [[i64;3];3],b: [[i64;3];3],axis: usize) -> f64 {
+    let project=|v: [i64;3]| if axis==0 {[v[1] as f64,v[2] as f64]} else {[v[0] as f64,v[1] as f64]};
+    let a=a.map(project);let b=b.map(project);
+    let side=|p: [f64;2],q: [f64;2],r: [f64;2]| (q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);
+    let orientation=side(b[0],b[1],b[2]).signum();
+    let mut polygon=a.to_vec();
+    for i in 0..3 {
+        if polygon.is_empty() {return 0.0;}
+        let mut out=vec![];
+        let mut previous=*polygon.last().unwrap();
+        let mut before=side(b[i],b[(i+1)%3],previous)*orientation;
+        for point in polygon {
+            let after=side(b[i],b[(i+1)%3],point)*orientation;
+            if (before>=0.0)!=(after>=0.0) {
+                let t=before/(before-after);
+                out.push([previous[0]+(point[0]-previous[0])*t,previous[1]+(point[1]-previous[1])*t]);
+            }
+            if after>=0.0 {out.push(point);}
+            previous=point;before=after;
+        }
+        polygon=out;
+    }
+    (0..polygon.len()).map(|i|{let p=polygon[i];let q=polygon[(i+1)%polygon.len()];p[0]*q[1]-p[1]*q[0]}).sum::<f64>().abs()/2.0
+}
+
+#[test]
+fn wall_overlap_check_distinguishes_disjoint_faces_and_diagonals() {
+    let a=[[0,0,0],[0,10,0],[0,10,10]];
+    assert_eq!(coplanar_overlap_area(a,[[0,0,0],[0,10,10],[0,0,10]],0),0.0);
+    assert!(coplanar_overlap_area(a,[[0,0,0],[0,0,10],[0,10,0]],0)>0.0);
+    assert_eq!(coplanar_overlap_area(a,[[0,20,0],[0,30,0],[0,30,10]],0),0.0);
 }
 
 #[test]

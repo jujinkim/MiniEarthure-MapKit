@@ -198,3 +198,28 @@ Scoped validation: manual-link/landing/budget/exact-shape unit test, retained
 automatic-flight regression, manual source package tampering test, both-container
 static-shape audit and published schema test. Consumer physics/UI acceptance is
 separate.
+
+## Modular circuit returns — 2026-10-02 replacement
+
+Circuit closure uses bounded deterministic best-first search over existing
+straight, right-angle, 45-degree, grade and height-return spiral modules.
+These basic return connectors remain available regardless of random content
+category, just as the previous free-curve closure was. Arbitrarily long cubic
+returns are removed. A final cubic seam is allowed only between endpoints at
+most 800cm apart, with control-polygon length at most 1600cm, forward-facing
+end tangents and at most 23% vertical tangent component. Larger returns must
+consist of catalogue pieces. Hand-authored free curves remain unrestricted by
+this generator-only seam policy.
+
+A closure stores at most 4096 nodes and 64 added modules, charges existing
+piece/sample/time budgets, rejects self/other-road collisions, and checks
+cancellation while expanding. Rejected/ cancelled searches do not mutate the
+live candidate. Templates reuse only immutable local piece geometry; placement
+and collision still use each candidate's actual frame and source. Equivalent
+50cm pose bins retain the cheapest arrival with stable ordering.
+
+The 24-candidate outer limit and requested-time ±10% rule remain. Closure is
+attempted after another four reference seconds of growth. A candidate within
+one percent of the target stops the deterministic search early. No wall-clock
+cutoff, long-curve fallback, reduced category or manufactured success is used.
+All own formats stay v1; current source fingerprints identify regenerated data.

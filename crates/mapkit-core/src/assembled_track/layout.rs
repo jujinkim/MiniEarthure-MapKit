@@ -1,4 +1,4 @@
-//! Bounded continuous-space extension, backtracking and direct cubic closure.
+//! Bounded continuous-space extension and piece-based return routing.
 use super::*;
 pub(super) fn overlaps(a: &Piece, b: &Piece) -> bool {
     if !(0..3).all(|j| {
@@ -90,72 +90,108 @@ fn add_block(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
         false
     }
 }
-fn closure(pieces: &mut Vec<Piece>, s: &Settings) -> bool {
-    if !s.circuit {
-        return append(pieces, "finish_plaza", 400);
-    }
-    let end = end(pieces);
-    let goal = &pieces[0].path[0];
-    let reach = (distance(end.position_cm, goal.position_cm) as i64 / 2).max(2400);
-    let approach = add(end.position_cm, end.forward.map(|v| v * reach / 1_000_000));
-    let departure = add(
-        goal.position_cm,
-        goal.forward.map(|v| -v * reach / 1_000_000),
-    );
-    let delta = unit(std::array::from_fn(|j| {
-        (goal.position_cm[j] - end.position_cm[j]) as f64
-    }));
-    let offset = (reach / 2).max(2400);
-    let side = if s.seed % 2 == 0 { 1 } else { -1 };
-    let middle = std::array::from_fn(|j| {
-        (end.position_cm[j] + goal.position_cm[j]) / 2
-            + match j {
-                0 => delta[2] * offset * side / 1_000_000,
-                2 => -delta[0] * offset * side / 1_000_000,
-                _ => 0,
-            }
-    });
-    let before = add(middle, delta.map(|v| -v * reach / 1_000_000));
-    let after = add(middle, delta.map(|v| v * reach / 1_000_000));
-    let mut best: Option<Piece> = None;
-    let elapsed: u32 = pieces.iter().map(|p| p.reference_msec).sum();
-    let target = u32::from(s.duration_seconds) * 1000;
-    for controls in [
-        vec![end.position_cm, approach, departure, goal.position_cm],
-        vec![
-            end.position_cm,
-            approach,
-            before,
-            middle,
-            after,
-            departure,
-            goal.position_cm,
-        ],
-    ] {
-        let mut p = variant("free_curve", 400, end.lateral_cm * 2, goal.lateral_cm * 2);
-        p.control_points = controls;
-        p = materialize(&p);
-        if geometry::self_intersects(&p)
-            || pieces
-                .iter()
-                .enumerate()
-                .any(|(i, other)| i > 0 && i + 1 < pieces.len() && authoring::conflict(&p, other))
-        {
-            continue;
+const MAX_SEAM_CM: u64 = 800;
+const MAX_SEAM_CONTROLS_CM: u64 = 1600;
+const CLOSURE_NODES: usize = 4096;
+
+fn short_seam(last: &Sample, goal: &Sample) -> Option<Piece> {
+    let gap=distance(last.position_cm,goal.position_cm);
+    if !(50..=MAX_SEAM_CM).contains(&gap) {return None;}
+    let direction=unit(std::array::from_fn(|j|(goal.position_cm[j]-last.position_cm[j]) as f64));
+    let dot=|a: Vertex,b: Vertex| (0..3).map(|j|a[j] as f64*b[j] as f64/1e12).sum::<f64>();
+    if dot(direction,last.forward)<0.5 || dot(direction,goal.forward)<0.5 {return None;}
+    let reach=(gap/3).max(50) as i64;
+    let mut p=variant("free_curve",400,last.lateral_cm*2,goal.lateral_cm*2);
+    p.control_points=vec![last.position_cm,
+        add(last.position_cm,last.forward.map(|v|v*reach/1_000_000)),
+        add(goal.position_cm,goal.forward.map(|v|-v*reach/1_000_000)),goal.position_cm];
+    if p.control_points.windows(2).map(|w|distance(w[0],w[1])).sum::<u64>()>MAX_SEAM_CONTROLS_CM {return None;}
+    p=materialize(&p);
+    if geometry::self_intersects(&p) || p.path.iter().any(|s|s.forward[1].abs()>230_000) {return None;}
+    Some(p)
+}
+
+fn return_piece(previous: &Piece, id: &str, templates: &mut std::collections::BTreeMap<(String,u32),Piece>) -> Piece {
+    let last=previous.path.last().unwrap();
+    let yaw=round(libm::atan2(last.forward[0] as f64,last.forward[2] as f64)*180000.0/std::f64::consts::PI) as i32;
+    let template=templates.entry((id.into(),last.lateral_cm*2)).or_insert_with(||materialize(&variant(id,400,last.lateral_cm*2,400)));
+    let mut p=template.clone();
+    p.origin_cm=last.position_cm;
+    p.rotation_mdeg=[0,yaw,0];
+    p.quarter_turns=(yaw.rem_euclid(360000)/90000) as u8;
+    position_piece(template.clone(),&p)
+}
+
+fn closure(pieces: &mut Vec<Piece>, s: &Settings) -> Result<bool> {
+    if !s.circuit {return Ok(append(pieces,"finish_plaza",400));}
+    struct Node {piece: Piece,parent: Option<usize>,cost: u64,samples: usize,depth: usize}
+    let goal=pieces[0].path[0].clone();
+    let budget=(u32::from(s.duration_seconds)*1100).saturating_sub(pieces.iter().map(|p|p.reference_msec).sum::<u32>());
+    let heuristic=|sample: &Sample| {
+        let ahead=add(sample.position_cm,sample.forward.map(|v|v*500/1_000_000));
+        distance(ahead,goal.position_cm)+sample.position_cm[1].abs_diff(goal.position_cm[1])*6
+    };
+    let key=|sample: &Sample| {
+        let yaw=round(libm::atan2(sample.forward[0] as f64,sample.forward[2] as f64)*4.0/std::f64::consts::PI);
+        (sample.position_cm[0].div_euclid(50),sample.position_cm[1].div_euclid(50),sample.position_cm[2].div_euclid(50),yaw)
+    };
+    let mut templates=std::collections::BTreeMap::new();
+    let mut nodes=vec![Node{piece:pieces.last().unwrap().clone(),parent:None,cost:0,samples:pieces.iter().map(|p|p.path.len()+p.alternate_path.len()).sum(),depth:0}];
+    let mut open=std::collections::BinaryHeap::new();
+    open.push(std::cmp::Reverse((0u64,0usize)));
+    let mut visited=std::collections::BTreeMap::new();
+    visited.insert(key(nodes[0].piece.path.last().unwrap()),0u64);
+    while let Some(std::cmp::Reverse((_,index)))=open.pop() {
+        cancellation::checkpoint()?;
+        let node=&nodes[index];
+        let last=node.piece.path.last().unwrap();
+        if visited.get(&key(last)).is_some_and(|cost|*cost<node.cost) {continue;}
+        let mut chain=vec![];
+        let mut parent=Some(index);
+        while let Some(i)=parent {if i>0 {chain.push(i);} parent=nodes[i].parent;}
+        let clear=|p: &Piece| {
+            !pieces.iter().any(|other|authoring::conflict(p,other))
+                && !chain.iter().any(|i|authoring::conflict(p,&nodes[*i].piece))
+        };
+        let seam=short_seam(last,&goal);
+        let joined=authoring::joined(last,&goal);
+        if node.depth>0 && (joined || seam.as_ref().is_some_and(|p|clear(p)
+            && node.cost+u64::from(p.reference_msec)<=u64::from(budget)
+            && node.samples+p.path.len()<=MAX_SAMPLES)) {
+            chain.reverse();
+            for i in chain {pieces.push(nodes[i].piece.clone());}
+            if !joined {pieces.push(seam.unwrap());}
+            return Ok(true);
         }
-        if best.as_ref().is_none_or(|b| {
-            (elapsed + p.reference_msec).abs_diff(target)
-                < (elapsed + b.reference_msec).abs_diff(target)
-        }) {
-            best = Some(p);
+        if nodes.len()>=CLOSURE_NODES || node.depth>=64 || pieces.len()+node.depth+2>=MAX_PIECES {continue;}
+        let mut choices=vec!["straight","right90","right90_left","gentle45","gentle45_left"];
+        let height=last.position_cm[1]-goal.position_cm[1];
+        if height>0 {choices.push("slope_down");}
+        if height<0 {choices.push("slope_up");}
+        if height>=800 {choices.push("spiral360_right_down");choices.push("spiral360_left_down");}
+        if height<= -800 {choices.push("spiral360_right_up");choices.push("spiral360_left_up");}
+        let mut next=vec![];
+        for id in choices {
+            cancellation::checkpoint()?;
+            let p=return_piece(&node.piece,id,&mut templates);
+            let cost=node.cost+u64::from(p.reference_msec);
+            let endpoint=p.path.last().unwrap();
+            let k=key(endpoint);
+            let minimum=distance(endpoint.position_cm,goal.position_cm).max(endpoint.position_cm[1].abs_diff(goal.position_cm[1])*6)*1000/SPEED as u64;
+            if cost+minimum>u64::from(budget)+64 || node.samples+p.path.len()>MAX_SAMPLES
+                || visited.get(&k).is_some_and(|old|*old<=cost) || !clear(&p) {continue;}
+            let score=cost+heuristic(endpoint)*1800/SPEED as u64;
+            next.push((p,k,cost,score,node.samples,node.depth));
+        }
+        for (p,k,cost,score,samples,depth) in next {
+            if nodes.len()>=CLOSURE_NODES {break;}
+            visited.insert(k,cost);
+            let next_index=nodes.len();
+            nodes.push(Node{samples:samples+p.path.len(),piece:p,parent:Some(index),cost,depth:depth+1});
+            open.push(std::cmp::Reverse((score,next_index)));
         }
     }
-    if let Some(p) = best {
-        pieces.push(p);
-        true
-    } else {
-        false
-    }
+    Ok(false)
 }
 pub(super) fn finish(pieces: Vec<Piece>, s: &Settings) -> Assembly {
     let stats = statistics(&pieces);
@@ -258,6 +294,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     let target = u32::from(s.duration_seconds) * 1000;
     let mut best: Option<Assembly> = None;
     let mut backtracks = 0;
+    let mut closure_after=target/3;
     for _ in 0..MAX_PIECES {
         cancellation::checkpoint()?;
         let elapsed: u32 = pieces.iter().map(|p| p.reference_msec).sum();
@@ -265,9 +302,10 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
             pieces.pop();
             break;
         }
-        if elapsed > target / 3 {
+        if elapsed > closure_after {
+            closure_after=elapsed+4000;
             let mut connected = pieces.clone();
-            if closure(&mut connected, s) {
+            if closure(&mut connected, s)? {
                 let a = finish(connected, s);
                 if best.as_ref().is_none_or(|b| {
                     a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
@@ -336,6 +374,8 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
             }) {
                 best = Some(a);
             }
+            // A deterministic one-percent result needs no more candidate search.
+            if best.as_ref().is_some_and(|a|a.estimated_msec.abs_diff(target)<=target/100) {break;}
         }
     }
     if best.is_none() { if let Some(e) = support_failure { return Err(error("E_TRACK_SUPPORT", format!("Requested {} s; no valid result in 24 layout candidates: {}", s.duration_seconds, e.message))); } }
@@ -356,6 +396,36 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn return_route_uses_modules_and_only_short_seams() {
+        let mut pieces=vec![];
+        let mut origin=[0;3];
+        for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
+        let start=pieces.len();
+        assert!(closure(&mut pieces,&Settings::default()).unwrap());
+        assert!(pieces[start..].iter().filter(|p|p.id!="free_curve").count()>=3);
+        for p in &pieces[start..] {
+            assert_eq!(*p,materialize(p));
+            if p.id=="free_curve" {assert!(p.control_points.windows(2).map(|w|distance(w[0],w[1])).sum::<u64>()<=MAX_SEAM_CONTROLS_CM);}
+        }
+        assert!(authoring::joined(pieces.last().unwrap().path.last().unwrap(),&pieces[0].path[0]));
+        assert!(short_seam(&pieces[START_PIECES-1].path[0],&pieces[0].path[0]).is_none());
+    }
+    #[test]
+    fn return_search_failure_and_cancellation_preserve_input() {
+        let mut pieces=vec![];
+        let mut origin=[0;3];
+        for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
+        let before=pieces.clone();
+        let mut settings=Settings::default();
+        settings.duration_seconds=0;
+        assert!(!closure(&mut pieces,&settings).unwrap());
+        assert_eq!(pieces,before);
+        let token=cancellation::CancellationToken::default();
+        token.cancel();
+        assert_eq!(token.run(||closure(&mut pieces,&Settings::default())).unwrap_err().code,"E_CANCELLED");
+        assert_eq!(pieces,before);
+    }
     #[test]
     fn automatic_composition_is_a_graph_candidate() {
         let mut found = false;
