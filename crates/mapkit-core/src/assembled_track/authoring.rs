@@ -72,6 +72,9 @@ pub struct Source {
     pub attachments: Vec<Attachment>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub grind_lines: Vec<crate::grind::GrindLine>,
+    /// Explicit static collision, independent of roads and interaction lines.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub structures: Vec<Gimmick>,
 }
 impl Source {
     pub fn empty() -> Self {
@@ -86,6 +89,7 @@ impl Source {
             actions: vec![],
             attachments: vec![],
             grind_lines: vec![],
+            structures: vec![],
         }
     }
 }
@@ -162,6 +166,7 @@ pub fn from_assembly(a: &Assembly) -> Source {
         checkpoints,
         actions: vec![],
         grind_lines: obstacles::grind_lines(a),
+        structures: vec![],
         attachments: a
             .obstacles
             .iter()
@@ -296,6 +301,9 @@ pub fn compile(source: &Source) -> Result<Assembly> {
 
 fn compile_uncached(source: &Source) -> Result<Assembly> {
     crate::grind::validate(&source.grind_lines)?;
+    if source.structures.len() > 32 || source.structures.iter().any(|g| !g.valid() || g.motion.kind != MotionKind::Static || g.effect.is_some() || !g.id.starts_with("authored-")) {
+        return Err(error("E_TRACK_SOURCE", "at most 32 valid authored- static structures required"));
+    }
     if source.instances.len() > MAX_PIECES
         || source.connections.len() > 1024
         || source.paths.len() > 32
@@ -456,6 +464,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         if action.sample >= pieces[i].path.len()
             || ![
                 "jump_panel",
+                "manual_flight",
                 "acceleration_panel",
                 "boost_chain",
                 "air_ring",
@@ -464,6 +473,9 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
             || !(50..=1000).contains(&action.height_cm)
         {
             return Err(error("E_TRACK_SOURCE", "invalid action"));
+        }
+        if action.kind == "manual_flight" && (action.landing.is_none() || !pieces[i].path[action.sample].safe) {
+            return Err(error("E_TRACK_SOURCE", "manual flight requires supported takeoff and landing references"));
         }
         if action.kind == "boost_chain"
             && pieces[i].path[action.sample..]
@@ -524,7 +536,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                 .find(|id| pieces[names[*id]].id != "flight_curve");
             let declared = at > 0
                 && source.actions.iter().any(|a| {
-                    a.kind == "jump_panel"
+                    (a.kind == "jump_panel" || a.kind == "manual_flight")
                         && a.piece == path.pieces[at - 1]
                         && a.landing
                             .as_ref()
@@ -532,7 +544,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                 });
             if !declared {
                 issues.push(format!(
-                    "{}: flight requires a jump approach and declared supported landing",
+                    "{}: flight requires an automatic or manual approach and declared supported landing",
                     id
                 ));
             }
@@ -733,8 +745,9 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
     let Some(source) = a.authoring.as_ref().or(a.seed_source.as_ref()) else {
         return Ok(vec![]);
     };
-    let mut out = vec![];
+    let mut out = source.structures.clone();
     for action in &source.actions {
+        if action.kind == "manual_flight" { continue; }
         let i = source
             .instances
             .iter()
@@ -1039,5 +1052,44 @@ mod preparation_tests {
         different.instances[0].position_cm[0] += 37;
         assert_eq!(compile(&different).unwrap(), compile_uncached(&different).unwrap());
         assert_eq!(compile(&source).unwrap(), expected);
+    }
+}
+
+#[cfg(test)]
+mod practice_tests {
+    use super::*;
+    #[test]
+    fn manual_flight_keeps_landings_budgets_and_exact_static_structures() {
+        let mut source=shortcut_source();
+        source.actions[0].kind="manual_flight".into();
+        let assembly=compile(&source).unwrap();
+        executable(&assembly).unwrap();
+        assert!(action_gimmicks(&assembly).unwrap().is_empty());
+        let mut missing=source.clone();
+        missing.actions[0].landing=None;
+        assert_eq!(compile(&missing).unwrap_err().code,"E_TRACK_SOURCE");
+        let mut short=source.clone();
+        let landing=short.actions[0].landing.as_mut().unwrap();
+        let i=short.instances.iter().position(|i|i.id==landing.piece).unwrap();
+        landing.sample=assembly.pieces[i].path.len()-1;
+        assert!(executable(&compile(&short).unwrap()).is_err());
+        let mut undeclared=source.clone();undeclared.actions.clear();
+        assert!(executable(&compile(&undeclared).unwrap()).is_err());
+        let mut solid=action_gimmicks(&compile(&shortcut_source()).unwrap()).unwrap()[0].clone();
+        solid.motion.kind=MotionKind::Static;
+        solid.effect=None;
+        solid.id="authored-beam".into();
+        source.structures.push(solid.clone());
+        let document=document_from_assembly(compile(&source).unwrap()).unwrap();
+        assert!(document.gimmicks.contains(&solid));
+        verify_document(&document).unwrap();
+        let mut modified=document.clone();
+        modified.gimmicks.iter_mut().find(|g|g.id==solid.id).unwrap().position[0]+=1;
+        assert!(verify_document(&modified).is_err());
+        source.structures=vec![solid;33];
+        assert!(compile(&source).is_err());
+        source.structures.clear();
+        source.actions=vec![source.actions[0].clone();65];
+        assert_eq!(compile(&source).unwrap_err().code,"E_TRACK_BUDGET");
     }
 }

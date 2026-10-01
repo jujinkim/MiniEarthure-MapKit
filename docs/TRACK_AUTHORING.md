@@ -174,3 +174,27 @@ indexed ownership/hash tests. The earlier frame-orthogonality regression was
 fixed and the affected width/helix test passed. Full application driving and
 platform acceptance remain user verification. All own versions remain 1;
 source/schema fingerprints invalidate disposable caches, never user artifacts.
+
+
+## Manual airborne links and static authored structures (2026-10-01)
+
+A source action with `kind: "manual_flight"` declares a supported takeoff
+(`piece`, `sample`), supported `landing` reference and `height_cm` envelope.
+It emits no automatic launch/boost effect. This explicitly replaces the rule
+that every flight link must have a `jump_panel`. Missing references, unsupported
+starts, landing runway (at least 6 m), width, height/range, ordered connections,
+clearance and existing graph/action/sample budgets still apply. This is geometric
+admission, never a claim that a player has completed a course.
+
+Optional `Source.structures` contains at most 32 explicit static Gimmicks whose
+IDs begin `authored-`, with no effect. Shared compilation, rendering, collision,
+exact reconstruction and both package containers include them. The complete
+convex/mesh source and canonical hashing scratch are charged to existing memory
+budgets. A solid beam is authored here; its independent `grind_lines` interaction
+does not create collision or regenerate a deleted beam. No output editing is
+needed. These additions retain current v1 and change source/schema fingerprints.
+
+Scoped validation: manual-link/landing/budget/exact-shape unit test, retained
+automatic-flight regression, manual source package tampering test, both-container
+static-shape audit and published schema test. Consumer physics/UI acceptance is
+separate.

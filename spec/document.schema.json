@@ -2279,6 +2279,13 @@
         },
         "settings": {
           "$ref": "#/definitions/Settings"
+        },
+        "structures": {
+          "description": "Explicit static collision, independent of roads and interaction lines.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Gimmick"
+          }
         }
       },
       "additionalProperties": false

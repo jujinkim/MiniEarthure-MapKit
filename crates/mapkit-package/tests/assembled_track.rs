@@ -408,3 +408,25 @@ fn source_mode_and_course_progress_remain_distinct() {
         }
     }
 }
+
+#[test]
+fn manual_flight_and_static_shapes_survive_both_containers() {
+    let mut source=authoring::shortcut_source();
+    let automatic=package::compile_source(&source).unwrap();
+    let mut beam=automatic.gimmicks.iter().find(|g|g.id.starts_with("action-")).unwrap().clone();
+    beam.id="authored-test-beam".into();
+    beam.motion.kind=mapkit_core::gimmick::MotionKind::Static;
+    beam.effect=None;
+    source.structures.push(beam.clone());
+    source.actions[0].kind="manual_flight".into();
+    let document=package::compile_source(&source).unwrap();
+    let bytes=pack_bytes(document.clone(),BTreeMap::new()).unwrap();
+    let read=read_bytes(&bytes).unwrap();
+    assert!(read.document.gimmicks.contains(&beam));
+    assert!(!read.document.gimmicks.iter().any(|g|g.id.starts_with("action-")));
+    assert!(read.document.courses[0].validation.is_none());
+    let indexed=indexed::pack_source(document.clone(),BTreeMap::new(),1).unwrap();
+    let mut reader=indexed::IndexedReader::open(std::io::Cursor::new(&indexed),u64::MAX,None).unwrap();
+    reader.audit(u64::MAX,&indexed::ReadEpoch::default().begin()).unwrap();
+    assert_eq!(reader.index().world_content_hash,read.inspection.world_content_hash);
+}

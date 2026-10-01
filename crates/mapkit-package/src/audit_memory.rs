@@ -163,6 +163,12 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
                 retained.string(&settings.difficulty)?;retained.vector(&settings.categories)?;for id in &settings.categories{retained.string(id)?;}
             }
             retained_grind(&mut retained, &source.grind_lines)?;
+            retained.vector(&source.structures)?;
+            for g in &source.structures {
+                retained.string(&g.id)?; retained.vector(&g.parts)?; retained.vector(&g.curved_faces)?;
+                for p in &g.parts { retained.vector(&p.vertices)?; retained.vector(&p.faces)?; }
+                if let Some(t) = &g.track { retained.vector(&t.centerline)?; }
+            }
             retained.vector(&source.instances)?;
             for i in &source.instances {retained.string(&i.id)?;retained.string(&i.preset)?;retained.vector(&i.control_points)?;}
             retained.vector(&source.connections)?;for c in &source.connections{retained.string(&c.from)?;retained.string(&c.to)?;}

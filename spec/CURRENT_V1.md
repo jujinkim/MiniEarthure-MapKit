@@ -230,3 +230,9 @@ resolved cap geometry, plus RC attachment presets and common ordinary-road
 refinement. See [the current line contract](../docs/TRACK_AUTHORING.md#independent-grind-lines-and-rc-attachments-2026-10-01).
 `E_GRIND_SOURCE`, `E_GRIND_CONNECTION` and `E_GRIND_BUDGET` reject malformed
 geometry, unresolved endpoints and excessive interaction work respectively.
+
+
+Current v1 permits `manual_flight` approach/landing declarations and bounded
+explicit static `Source.structures`. See the [manual airborne link
+contract](../docs/TRACK_AUTHORING.md#manual-airborne-links-and-static-authored-structures-2026-10-01).
+No automatic action or player completion proof is implied.

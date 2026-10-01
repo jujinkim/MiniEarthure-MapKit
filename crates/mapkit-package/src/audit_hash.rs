@@ -38,7 +38,7 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
             // Canonical assembly JSON is a bounded scratch tree, charged before allocation.
             (a.pieces.iter().map(|p| p.path.len() + p.alternate_path.len() + p.control_points.len() + 1).sum::<usize>() as u64
                 + a.routes.iter().map(|r|r.pieces.len() as u64+1).sum::<u64>()
-                + a.authoring.iter().chain(a.seed_source.iter()).map(|s|s.instances.iter().map(|i|i.control_points.len() as u64+1).sum::<u64>()+s.paths.iter().map(|p|p.pieces.len() as u64+1).sum::<u64>()+s.connections.len() as u64+s.checkpoints.len() as u64+s.actions.len() as u64+s.attachments.len() as u64).sum::<u64>()).saturating_mul(4096)
+                + a.authoring.iter().chain(a.seed_source.iter()).map(|s|s.instances.iter().map(|i|i.control_points.len() as u64+1).sum::<u64>()+s.paths.iter().map(|p|p.pieces.len() as u64+1).sum::<u64>()+s.connections.len() as u64+s.checkpoints.len() as u64+s.actions.len() as u64+s.attachments.len() as u64+s.structures.iter().map(|g|1+g.parts.iter().map(|p|1+p.vertices.len() as u64+p.faces.len() as u64).sum::<u64>()+g.curved_faces.len() as u64+g.track.as_ref().map_or(0,|t|t.centerline.len() as u64)).sum::<u64>()).sum::<u64>()).saturating_mul(4096)
         }))
 }
 
