@@ -76,6 +76,11 @@ pub fn reseal(document: &mut MapDocument) -> Result<()> {
 }
 pub fn verify(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
     track::verify_document(document)?;
+    verify_course(document, world, candidate)
+}
+/// Association checks for an already deterministically verified immutable document.
+/// This alone does not certify the document; `verify` remains the complete public check.
+pub fn verify_course(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
     candidate.validate(world, &document.bounds)?;
     let mut definition = candidate.clone();
     definition.validation = None;

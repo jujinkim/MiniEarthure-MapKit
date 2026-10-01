@@ -17,6 +17,8 @@ unsafe impl ExtensionLibrary for MapKitExtension {}
 struct MapKitBridge {
     base: Base<RefCounted>,
     package: Option<Package>,
+    // A successful geometry verification belongs only to this immutable open package.
+    track_verified: std::cell::Cell<bool>,
     draft: Option<mapkit_core::MapDocument>,
     visual_margin_cm: i64,
     presentation: std::cell::RefCell<presentation::Cache>,
@@ -28,6 +30,7 @@ impl IRefCounted for MapKitBridge {
         Self {
             base,
             package: None,
+            track_verified: std::cell::Cell::new(false),
             draft: None,
             visual_margin_cm: 0,
             prepared: Default::default(),
@@ -147,7 +150,11 @@ impl MapKitBridge {
         response((|| {
             let p=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
             let c=mapkit_core::course::decode(course.to_string().as_bytes())?;
-            mapkit_package::assembled_track::verify(&p.document,&p.inspection.world_content_hash,&c)?;
+            if !self.track_verified.get() {
+                mapkit_core::assembled_track::verify_document(&p.document)?;
+                self.track_verified.set(true);
+            }
+            mapkit_package::assembled_track::verify_course(&p.document,&p.inspection.world_content_hash,&c)?;
             Ok(serde_json::json!({"seed_verified":p.document.assembled_track.as_ref().is_some_and(|a|a.authoring.is_none()),"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),"course":c}))
         })())
     }
@@ -186,6 +193,7 @@ impl MapKitBridge {
     #[func]
     fn open_package(&mut self, path: GString) -> GString {
         self.package = None;
+        self.track_verified.set(false);
         self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
@@ -201,6 +209,7 @@ impl MapKitBridge {
     #[func]
     fn open_package_budgeted(&mut self, path: GString, memory_limit: i64) -> GString {
         self.package = None;
+        self.track_verified.set(false);
         self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
@@ -230,6 +239,7 @@ impl MapKitBridge {
         memory_limit: i64,
     ) -> GString {
         self.package = None;
+        self.track_verified.set(false);
         self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
@@ -256,6 +266,7 @@ impl MapKitBridge {
     #[func]
     fn open_package_bytes(&mut self, bytes: PackedByteArray) -> GString {
         self.package = None;
+        self.track_verified.set(false);
         self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
@@ -303,6 +314,7 @@ impl MapKitBridge {
     #[func]
     fn open_project(&mut self, path: GString) -> GString {
         self.package = None;
+        self.track_verified.set(false);
         self.draft = None;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();

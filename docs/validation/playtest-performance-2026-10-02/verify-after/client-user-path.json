@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/Applications/Godot_mono.app/Contents/MacOS/Godot",
+    "--headless",
+    "--path",
+    "/var/folders/x1/m2hfwq4n42l32hys2jxzvd8w0000gn/T/miniearthure-check-ilpp7czr",
+    "--script",
+    "res://check_user_path.gd"
+  ],
+  "elapsed_seconds": 0.445,
+  "exit_code": 0,
+  "unexpected_diagnostics": [],
+  "strict_applied": true,
+  "import_cache": "/private/tmp/playtest-client",
+  "owned_children": {}
+}

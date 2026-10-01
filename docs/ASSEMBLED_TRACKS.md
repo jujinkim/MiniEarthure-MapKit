@@ -440,3 +440,10 @@ The same quantized placement defines the beam/legs and independent grind line
 (41cm source height); no inferred collider metadata or checkpoint shortcut is
 introduced. Existing files remain intact. Current source regeneration uses v1.
 [Focused results](validation/playtest-2026-10-02/README.md).
+
+## Immutable verification reuse (T14, 2026-10-02)
+
+The Godot bridge caches successful deterministic document verification only for its
+current immutable open package. Candidate identity/world/bounds/course equality
+checks still run each time; all reopen paths reset it. CLI full verification remains
+unchanged. [Measured regression and invalidation evidence](validation/playtest-performance-2026-10-02/README.md).

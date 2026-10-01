@@ -1,0 +1,20 @@
+{
+  "command": [
+    "/Applications/Godot_mono.app/Contents/MacOS/Godot",
+    "--headless",
+    "--import",
+    "--frame-delay",
+    "1000",
+    "--path",
+    "/var/folders/x1/m2hfwq4n42l32hys2jxzvd8w0000gn/T/miniearthure-check-1h4hpiyd"
+  ],
+  "elapsed_seconds": 6.042,
+  "exit_code": 0,
+  "unexpected_diagnostics": [
+    "WARNING: Detected another project.godot at res://addons/miniearthure_runtime/test_project. The folder will be ignored.",
+    "ERROR: EditorSettings not instantiated yet when getting setting \"export/android/shutdown_adb_on_exit\"."
+  ],
+  "strict_applied": false,
+  "import_cache": "/private/tmp/playtest-client",
+  "owned_children": {}
+}
