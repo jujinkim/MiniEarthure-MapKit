@@ -390,3 +390,16 @@ retained-memory and source-budget regressions passed. Schema regeneration and
 Draft 7 validation passed without a format increment. Native Godot binding,
 shared venue rendering and consumer contact/authoring checks passed. Detailed
 application driving/editing and platform acceptance remain user verification.
+
+## Connected-road wall clipping — 2026-10-02
+
+Wall visibility now clips against the two actual triangles between adjacent
+integer ribbon edges, shared with road generation. The previous chord rectangles
+left wedge-shaped gaps on curves and tapered connections, producing repeated
+wall fragments inside passable junctions. The 2cm outer-edge inset and 5cm
+surface-height tolerance remain, preserving exterior boundaries and separated
+road levels. Only connected roads, split/merge siblings and the alternate branch
+can remove a wall. The same surviving segments emit render/collision faces and
+occupancy. Formats remain v1; derived geometry uses the changed source fingerprint.
+
+Focused results: [playtest geometry verification](validation/playtest-2026-10-02/README.md).

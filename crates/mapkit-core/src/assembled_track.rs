@@ -1770,6 +1770,7 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
                 || w.iter()
                     .all(|s| ["loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()));
             let edges = |s: &Sample| {
+                if s.mode != "loop" { return geometry::ribbon_edges(s,0); }
                 let n = s.normal.map(|v| v as f64 / 1e6);
                 let f = s.forward.map(|v| v as f64 / 1e6);
                 let right = if s.mode == "loop" {

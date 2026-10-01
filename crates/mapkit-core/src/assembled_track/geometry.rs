@@ -363,3 +363,12 @@ pub(super) fn euler(m: [[f64; 3]; 3]) -> [i32; 3] {
     };
     [pitch, yaw, roll].map(|a| round(a * 180000.0 / std::f64::consts::PI) as i32)
 }
+
+/// Integer ribbon edges shared by generation and connected-road wall clipping.
+/// A small inward offset preserves coincident outer walls at ordinary joins.
+pub(super) fn ribbon_edges(s: &Sample, inset: u32) -> [Vertex;2] {
+    let basis=basis(s);
+    let right=std::array::from_fn::<_,3,_>(|j|round(basis[j][0]*1e6));
+    [-1,1].map(|side| std::array::from_fn(|j|
+        s.position_cm[j]+right[j]*i64::from(s.lateral_cm.saturating_sub(inset))*side/1_000_000))
+}

@@ -17,21 +17,29 @@ pub(super) fn neighbors(a: &Assembly, index: usize) -> Vec<&Piece> {
         .map(|(i,_)| &a.pieces[i]).collect()
 }
 
-fn interval(a: Vertex, b: Vertex, w: &[Sample]) -> Option<(f64,f64)> {
-    if w.iter().any(|s| ["flight","loop","cylinder","halfpipe"].contains(&s.mode.as_str())) { return None; }
-    let delta = std::array::from_fn::<_,3,_>(|j| (w[1].position_cm[j]-w[0].position_cm[j]) as f64);
-    let length = libm::sqrt(delta.iter().map(|v|v*v).sum());
-    if length < 1.0 { return None; }
-    let f = delta.map(|v|v/length);
-    let n = w[0].normal.map(|v|v as f64/1e6);
-    let r = [n[1]*f[2]-n[2]*f[1],n[2]*f[0]-n[0]*f[2],n[0]*f[1]-n[1]*f[0]];
-    let mut lo: f64 = 0.0;
-    let mut hi: f64 = 1.0;
-    for (axis,min,max) in [(f,0.0,length),(n,-5.0,5.0),(r,-(w[0].lateral_cm.min(w[1].lateral_cm) as f64)+2.0,w[0].lateral_cm.min(w[1].lateral_cm) as f64-2.0)] {
-        let p: f64 = (0..3).map(|j|(a[j]-w[0].position_cm[j]) as f64*axis[j]).sum();
-        let d: f64 = (0..3).map(|j|(b[j]-a[j]) as f64*axis[j]).sum();
-        if d.abs()<1e-9 { if p<min || p>max { return None; } }
-        else { let x=(min-p)/d; let y=(max-p)/d; lo=lo.max(x.min(y)); hi=hi.min(x.max(y)); }
+// Clip against the actual rendered/colliding road triangles. Chord-aligned
+// rectangles leave a wedge at every curved/tapered join (the barcode walls).
+fn triangle_interval(a: Vertex, b: Vertex, triangle: [Vertex; 3]) -> Option<(f64,f64)> {
+    let sub = |a: Vertex,b: Vertex| std::array::from_fn::<_,3,_>(|j| (a[j]-b[j]) as f64);
+    let cross = |a: [f64;3],b: [f64;3]| [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+    let dot = |a: [f64;3],b: [f64;3]| (0..3).map(|j| a[j]*b[j]).sum::<f64>();
+    let raw = cross(sub(triangle[1],triangle[0]),sub(triangle[2],triangle[0]));
+    let length = libm::sqrt(dot(raw,raw));
+    if length<1e-9 { return None; }
+    let normal = raw.map(|v|v/length);
+    let mut planes = vec![(normal,triangle[0],-5.0),(normal.map(|v|-v),triangle[0],-5.0)];
+    for i in 0..3 {
+        let edge = sub(triangle[(i+1)%3],triangle[i]);
+        planes.push((cross(normal,edge),triangle[i],0.0));
+    }
+    let mut lo: f64=0.0;
+    let mut hi: f64=1.0;
+    for (axis,origin,min) in planes {
+        let start=dot(sub(a,origin),axis)-min;
+        let delta=dot(sub(b,a),axis);
+        if delta.abs()<1e-9 { if start< -1e-7 { return None; } }
+        else if delta>0.0 { lo=lo.max(-start/delta); }
+        else { hi=hi.min(-start/delta); }
         if hi<=lo { return None; }
     }
     Some((lo,hi))
@@ -40,7 +48,14 @@ fn interval(a: Vertex, b: Vertex, w: &[Sample]) -> Option<(f64,f64)> {
 pub(super) fn visible(a: Vertex, b: Vertex, neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(Vertex,Vertex)> {
     let mut hidden = vec![];
     for path in neighbors.iter().flat_map(|p| [&p.path[..],&p.alternate_path[..]]).chain(std::iter::once(alternate)) {
-        for w in path.windows(2) { if let Some(range)=interval(a,b,w) { hidden.push(range); } }
+        for w in path.windows(2) {
+            if w.iter().any(|s| ["flight","loop","cylinder","halfpipe"].contains(&s.mode.as_str())) { continue; }
+            let [al,ar]=geometry::ribbon_edges(&w[0],2);
+            let [bl,br]=geometry::ribbon_edges(&w[1],2);
+            for triangle in [[al,bl,br],[al,br,ar]] {
+                if let Some(range)=triangle_interval(a,b,triangle) { hidden.push(range); }
+            }
+        }
     }
     hidden.sort_by(|a,b|a.0.total_cmp(&b.0));
     let at = |t: f64| std::array::from_fn(|j|round(a[j] as f64+(b[j]-a[j]) as f64*t));
@@ -66,4 +81,20 @@ pub(super) fn visible(a: Vertex, b: Vertex, neighbors: &[&Piece], alternate: &[S
         assert_eq!(kept.len(),2);
         assert!(kept[0].1[0]< -190 && kept[1].0[0]>190);
     }
+    #[test]
+    fn curved_and_tapered_road_has_no_barcode_wall_fragments() {
+        for id in ["gentle90", "curve_up", "curve_left_down", "straight_narrow"] {
+            let p=variant(id,600,400,600);
+            for w in p.path.windows(2) {
+                let inside = |s: &Sample| {
+                    let basis=geometry::basis(s);
+                    std::array::from_fn(|j| s.position_cm[j]+round(basis[j][0]*s.lateral_cm as f64*0.8))
+                };
+                let a=inside(&w[0]);
+                let b=inside(&w[1]);
+                assert!(visible(a,b,&[&p],&[]).is_empty(), "{id}: interior wall {a:?} -> {b:?}");
+            }
+        }
+    }
+
 }
