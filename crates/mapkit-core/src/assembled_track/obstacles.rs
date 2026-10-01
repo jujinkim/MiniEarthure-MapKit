@@ -111,7 +111,66 @@ fn eligible_piece(index: usize, p: &Piece) -> bool {
         ]
         .contains(&p.id.as_str())
 }
+// A rail is a chord across one supported corner. The 110cm corridor remains
+// inside its road, so the lower rail never sends a vehicle through an outer wall.
+fn chord_distance(point: Vertex, a: Vertex, b: Vertex) -> (f64,f64) {
+    let delta=std::array::from_fn::<_,3,_>(|j|(b[j]-a[j]) as f64);
+    let len=delta.iter().map(|v|v*v).sum::<f64>().max(1.0);
+    let t=((0..3).map(|j|(point[j]-a[j]) as f64*delta[j]).sum::<f64>()/len).clamp(0.0,1.0);
+    let d=std::array::from_fn::<_,3,_>(|j|point[j] as f64-a[j] as f64-delta[j]*t);
+    (libm::sqrt(d[0]*d[0]+d[2]*d[2]),d[1].abs())
+}
+fn rail_chord(path: &[Sample], station: u64) -> Option<(Sample,i64)> {
+    let span=station.saturating_sub(150).min(length(path).saturating_sub(station+150)).min(800);
+    for half in (150..=span).rev().step_by(100) {
+        let a=sample(path,station-half);
+        let b=sample(path,station+half);
+        if dot(a.forward,b.forward)>0.866025 || dot(a.forward,b.forward)<0.0 {continue;}
+        if a.normal[1]<999_000 || b.normal[1]<999_000 || a.position_cm[1].abs_diff(b.position_cm[1])>3 {continue;}
+        let chord=distance(a.position_cm,b.position_cm);
+        if chord*100>=half*2*99 {continue;}
+        let count=chord.div_ceil(50).max(1);
+        let covered=(0..=count).all(|i| {
+            let point=std::array::from_fn(|j|a.position_cm[j]+(b.position_cm[j]-a.position_cm[j])*i as i64/count as i64);
+            path.windows(2).any(|w| {
+                if w.iter().any(|s|!s.safe || s.normal[1]<999_000) {return false;}
+                let (across,height)=chord_distance(point,w[0].position_cm,w[1].position_cm);
+                height<=3.0 && across+55.0<=w[0].lateral_cm.min(w[1].lateral_cm) as f64
+            })
+        });
+        if !covered {continue;}
+        let mut frame=a.clone();
+        frame.position_cm=std::array::from_fn(|j|(a.position_cm[j]+b.position_cm[j])/2);
+        frame.forward=unit(std::array::from_fn(|j|(b.position_cm[j]-a.position_cm[j]) as f64));
+        frame.normal=[0,1_000_000,0];
+        return Some((frame,chord as i64));
+    }
+    None
+}
+fn rail_site(a: &Assembly,site: &Site) -> Option<Obstacle> {
+    let p=&a.pieces[site.piece];
+    let path=if site.branch {&p.alternate_path} else {&p.path};
+    let (frame,len)=rail_chord(path,site.station)?;
+    let ends=[-len/2,len/2].map(|d|add(frame.position_cm,frame.forward.map(|v|v*d/1_000_000)));
+    for (i,other) in a.pieces.iter().enumerate() {
+        for (branch,samples) in [(false,&other.path),(true,&other.alternate_path)] {
+            if i==site.piece && branch==site.branch {continue;}
+            // The approach/departure shares this road's port; its endpoint
+            // width is not a spherical obstacle extending into this corner.
+            if [path.first(),path.last()].into_iter().flatten().any(|end|
+                [samples.first(),samples.last()].into_iter().flatten().any(|other|authoring::joined(end,other))) {continue;}
+            if samples.iter().any(|s| {
+                let (across,height)=chord_distance(s.position_cm,ends[0],ends[1]);
+                across<55.0+s.lateral_cm as f64 && height<150.0
+            }) {return None;}
+        }
+    }
+    Some(Obstacle {kind:"grind_rail".into(),piece_index:site.piece,path:if site.branch {"alternate"} else {"main"}.into(),station_cm:site.station,
+        position_cm:frame.position_cm,normal:frame.normal,forward:frame.forward,lateral_cm:0,half_width_cm:20,
+        avoid_lateral_cm:-(frame.lateral_cm as i64-50).min(60),jump_station_cm:None,jump_position_cm:None})
+}
 fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacle> {
+    if kind=="grind_rail" {return rail_site(a,site);}
     let p = &a.pieces[site.piece];
     let path = if site.branch {
         &p.alternate_path
@@ -162,7 +221,7 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
         half = half.min(t.lateral_cm as i64);
     }
     let sweep = match kind {
-        "ramp_low" | "ramp_standard" | "ramp_triple" => 50,
+        "ramp_low" | "ramp_standard" | "ramp_triple" => 80,
         "quarterpipe_left" | "quarterpipe_right" => 200,
         "grind_rail" => 20,
         "fixed_obstacle" => 20,
@@ -355,7 +414,8 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
     Ok((out, eligible, target))
 }
 pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
-    let s = sample(path(a, o), o.station_cm);
+    let mut s = sample(path(a, o), o.station_cm);
+    if o.kind=="grind_rail" {s.position_cm=o.position_cm;s.normal=o.normal;s.forward=o.forward;}
     let half = o.half_width_cm as i64;
     let mut g = Gimmick {
         id: format!("track-obstacle-{index}"),
@@ -418,6 +478,10 @@ pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
         _ => {}
     }
     if let Some(parts) = rc_parts(&o.kind) { g.parts = parts; g.color = [90, 180, 200, 255]; }
+    if o.kind=="grind_rail" {
+        let (_,len)=rail_chord(path(a,o),o.station_cm).expect("validated corner rail");
+        g.parts=rail_parts(len);
+    }
     if o.kind.starts_with("quarterpipe") {
         g.curved_faces = (0..g.parts.len()).flat_map(|part| [[part as u16,0],[part as u16,1]]).collect();
     }
@@ -457,6 +521,7 @@ mod tests {
         for width in [200, 400, 600, 800] {
             let a = fixture("sprint_lane", width);
             for kind in KINDS {
+                if *kind=="grind_rail" {continue;}
                 if (kind.starts_with("quarterpipe") && width<800) || (kind.starts_with("ramp") && width<400) {continue;}
                 let o = safe_site(
                     &a,
@@ -488,6 +553,29 @@ mod tests {
                 };
                 assert_eq!(g.motion.kind, expected);
             }
+        }
+    }
+    #[test]
+    fn wider_ramps_and_low_corner_rail_share_geometry() {
+        for kind in ["ramp_low","ramp_standard","ramp_triple"] {
+            for part in rc_parts(kind).unwrap() {
+                assert_eq!(part.vertices.iter().map(|v|v[0]).max().unwrap()-part.vertices.iter().map(|v|v[0]).min().unwrap(),160);
+            }
+        }
+        assert!(rail_chord(&fixture("sprint_lane",400).pieces[3].path,800).is_none());
+        for id in ["right90","right90_left","gentle90","gentle90_left"] {
+            let mut a=fixture(id,400);
+            let station=length(&a.pieces[3].path)/2;
+            let o=rail_site(&a,&Site{piece:3,branch:false,station}).unwrap_or_else(||panic!("corner rail {id}"));
+            a.obstacles=vec![o.clone()];
+            let g=gimmick(&a,&o,0);
+            assert!(g.valid());
+            assert_eq!(g.parts[0].vertices.iter().map(|v|v[1]).max(),Some(40));
+            let line=rail_lines(&a).remove(0);
+            let (_,len)=rail_chord(&a.pieces[3].path,station).unwrap();
+            assert_eq!(line.control_points,[-len/2,len/2].map(|d|add(g.position,geometry::rotate3([0,41,d],g.rotation_mdeg))).to_vec());
+            assert!((len as u64)<2*station);
+            assert!(line.control_points.iter().all(|v|v[1]==41));
         }
     }
     #[test]
@@ -599,12 +687,15 @@ fn wedge(x: i64, z: i64, width: i64, length: i64, height: i64) -> CollisionConve
     CollisionConvex { vertices: vec![[x-width/2,0,z-length/2],[x+width/2,0,z-length/2],[x-width/2,0,z+length/2],[x+width/2,0,z+length/2],[x-width/2,height,z+length/2],[x+width/2,height,z+length/2]],
         faces: vec![[0,1,3],[0,3,2],[0,4,1],[1,4,5],[0,2,4],[1,5,3],[2,3,5],[2,5,4]] }
 }
+fn rail_parts(length: i64) -> Vec<CollisionConvex> {
+    vec![box_part([0,37,0],[12,6,length]),box_part([0,17,-length/3],[10,34,12]),box_part([0,17,length/3],[10,34,12])]
+}
 fn rc_parts(kind: &str) -> Option<Vec<CollisionConvex>> {
     Some(match kind {
-        "ramp_low" => vec![wedge(0,0,100,160,25)],
-        "ramp_standard" => vec![wedge(0,0,100,220,60)],
-        "ramp_triple" => [-250,0,250].map(|z|wedge(0,z,100,160,25)).to_vec(),
-        "grind_rail" => vec![box_part([0,57,0],[12,6,600]),box_part([0,27,-220],[10,54,12]),box_part([0,27,220],[10,54,12])],
+        "ramp_low" => vec![wedge(0,0,160,160,25)],
+        "ramp_standard" => vec![wedge(0,0,160,220,60)],
+        "ramp_triple" => [-250,0,250].map(|z|wedge(0,z,160,160,25)).to_vec(),
+        "grind_rail" => rail_parts(600),
         "quarterpipe_left" | "quarterpipe_right" => {
             let sign=if kind.ends_with("left") {-1.0} else {1.0};
             (0..32).map(|i| {
@@ -642,10 +733,11 @@ pub(super) fn grind_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
 pub(super) fn rail_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
     let mut out=vec![];
     for (i,o) in a.obstacles.iter().enumerate().filter(|(_,o)|o.kind=="grind_rail") {
-        let s=sample(path(a,o),o.station_cm);
-        let base=offset(&s,o.lateral_cm);
-        let points=[-300,300].map(|d|std::array::from_fn(|j|base[j]+s.normal[j]*61/1_000_000+s.forward[j]*d/1_000_000));
-        out.push(crate::grind::GrindLine {id:format!("rail-{i}"),control_points:points.to_vec(),up:s.normal,capture_width_cm:30,start_connections:vec![],end_connections:vec![]});
+        let g=gimmick(a,o,i);
+        let (_,len)=rail_chord(path(a,o),o.station_cm).expect("validated corner rail");
+        // Resolve both from the same quantized transform as the physical beam.
+        let points=[-len/2,len/2].map(|d|add(g.position,geometry::rotate3([0,41,d],g.rotation_mdeg)));
+        out.push(crate::grind::GrindLine {id:format!("rail-{i}"),control_points:points.to_vec(),up:o.normal,capture_width_cm:30,start_connections:vec![],end_connections:vec![]});
     }
     out
 }

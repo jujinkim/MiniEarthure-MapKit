@@ -1,0 +1,26 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+error: expressions must be enclosed in braces to be used as const generic arguments
+   --> crates/mapkit-core/src/assembled_track/obstacles.rs:573:32
+    |
+573 |             assert!(len as u64<2*station);
+    |                                ^^^^^^^^^
+    |
+help: enclose the `const` expression in braces
+    |
+573 |             assert!(len as u64<{ 2*station });
+    |                                +           +
+
+error: `<` is interpreted as a start of generic arguments for `u64`, not a comparison
+   --> crates/mapkit-core/src/assembled_track/obstacles.rs:573:31
+    |
+573 |             assert!(len as u64<2*station);
+    |                               ^--------- interpreted as generic arguments
+    |                               |
+    |                               not interpreted as comparison
+    |
+help: try comparing the cast value
+    |
+573 |             assert!((len as u64)<2*station);
+    |                     +          +
+
+error: could not compile `mapkit-core` (lib test) due to 2 previous errors

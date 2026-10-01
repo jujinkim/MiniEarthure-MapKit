@@ -7,4 +7,3 @@ test assembled_track::junction::tests::trims_interior_preserves_outer_and_grade_
 test assembled_track::junction::tests::curved_and_tapered_road_has_no_barcode_wall_fragments ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.05s
-

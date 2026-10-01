@@ -8,4 +8,3 @@ test assembled_track::layout::tests::return_route_uses_modules_and_only_short_se
 test assembled_track::layout::tests::automatic_composition_is_a_graph_candidate ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.43s
-

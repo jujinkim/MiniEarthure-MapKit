@@ -9,4 +9,3 @@ test wall_overlap_check_distinguishes_disjoint_faces_and_diagonals ... ok
 test generated_walls_have_no_reverse_coplanar_duplicates ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.33s
-

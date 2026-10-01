@@ -428,3 +428,15 @@ A straight narrow piece retains a straight centreline. This prevents an 8m-wide
 wave's inner ribbon from folding and emitting overlapping reversed walls.
 Across five wave presets and all 2/4/6/8/12m widths, neither edge moves backwards;
 coincident quantized edge points are harmless and zero-area faces are omitted.
+
+## Playtest ramp and corner rail placement — 2026-10-02
+
+Low/standard/triple ramp width is 160cm (formerly 100cm). Rail beam top is
+40cm (formerly 60cm). Rails resolve a 30–90 degree chord across a level corner,
+with a 110cm corridor wholly inside its supported road. Endpoints are at least
+150cm from the piece ports; length is bounded by a 1600cm arc. Unsupported,
+steep, straight, crossing-road or wall-intersecting sites are rejected.
+The same quantized placement defines the beam/legs and independent grind line
+(41cm source height); no inferred collider metadata or checkpoint shortcut is
+introduced. Existing files remain intact. Current source regeneration uses v1.
+[Focused results](validation/playtest-2026-10-02/README.md).

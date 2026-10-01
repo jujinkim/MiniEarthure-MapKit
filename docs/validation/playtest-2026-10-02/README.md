@@ -62,3 +62,13 @@ The repeated [duration probe](t07-duration-wave.log) is unchanged and PASS (3.16
 The unchanged nine package checks retain the earlier passing evidence; affected
 wall geometry was rerun after the wave change. Consumer native/load evidence is
 collected with the following ramp/rail update to avoid duplicate dependency builds.
+
+## Wider ramps and lower corner rails
+
+[Four obstacle units](t08-obstacles-final.log) PASS: ramp width, beam top,
+right/left tight and gentle corner eligibility, exact common geometry/line
+transform, straight rejection, width clearance, density, budgets and repeated
+placement. [Native/CLI build](t08-build.log) PASS. Consumer package roundtrip,
+render/collision identity and physical jump/capture/exit/landing are verified
+by the owning consumer; no private product code is published here.
+Full corner driving and device feel remain user verification.

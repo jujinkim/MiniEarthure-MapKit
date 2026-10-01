@@ -1,0 +1,22 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 10.52s
+     Running unittests src/lib.rs (target/debug/deps/mapkit_core-47b25b0992e68373)
+
+running 4 tests
+
+thread 'assembled_track::obstacles::tests::wider_ramps_and_low_corner_rail_share_geometry' (20557003) panicked at crates/mapkit-core/src/assembled_track/obstacles.rs:565:86:
+corner rail right90
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test assembled_track::obstacles::tests::wider_ramps_and_low_corner_rail_share_geometry ... FAILED
+test assembled_track::obstacles::tests::resolved_attachments_fit_three_widths_and_use_real_motion_geometry ... ok
+test assembled_track::obstacles::tests::difficulty_density_budget_and_seed_repeatability ... ok
+test assembled_track::obstacles::tests::actual_slopes_curves_helices_and_branch_are_candidates_but_structures_and_grid_are_not ... ok
+
+failures:
+
+failures:
+    assembled_track::obstacles::tests::wider_ramps_and_low_corner_rail_share_geometry
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `-p mapkit-core --lib`
