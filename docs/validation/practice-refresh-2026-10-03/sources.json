@@ -1,0 +1,9 @@
+{
+  "base_commit": "0232724eca0b5d2bf385601f2b868ce569796626",
+  "generator_fingerprint": "16289d3c86b3265b462cca92d1efbca77f77c9742c4e647dd86c23b01b256444",
+  "changed_files": {
+    "map-kit/crates/mapkit-core/src/assembled_track/geometry.rs": "12bbb413e3606cf3af7d6a8ff0b3e1ff2f9c675bc9d998974b52b1dd7aed7f5e",
+    "map-kit/crates/mapkit-core/src/assembled_track/authoring.rs": "12f6ec743e613ce96f4927c4891232c1378a576ec97b885df2cc1bf348128611",
+    "map-kit/crates/mapkit-core/tests/track_authoring.rs": "8b861d0b06c1d29db86f68b5011262f9bc04d40fc549ba8d75f397e70ab94cb9"
+  }
+}

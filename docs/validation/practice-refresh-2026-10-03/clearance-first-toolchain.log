@@ -1,0 +1,22 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 17.30s
+     Running tests/track_authoring.rs (map-kit/target/debug/deps/track_authoring-21af07f4600ba1b0)
+
+running 2 tests
+
+thread 'finite_straight_clearance_keeps_crossings_overlaps_margins_and_height' (21567916) panicked at crates/mapkit-core/tests/track_authoring.rs:312:9:
+assertion `left == right` failed: parallel clearance: ["Every road must belong to a base or alternative route", "Set a base route, start and finish", "Set shared start and finish checkpoints"]
+  left: false
+ right: true
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test finite_straight_clearance_keeps_crossings_overlaps_margins_and_height ... FAILED
+test finite_straight_clearance_allows_eight_metre_six_radius_corners ... ok
+
+failures:
+
+failures:
+    finite_straight_clearance_keeps_crossings_overlaps_margins_and_height
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p mapkit-core --test track_authoring`

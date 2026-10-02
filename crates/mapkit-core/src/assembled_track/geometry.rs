@@ -331,6 +331,7 @@ pub(super) fn shape(p: &mut Piece, width: u32) -> bool {
 
 // Conservative sample volume, including tilted lane edges and the supported
 // vehicle envelope. Tube samples reserve the complete bore and shell.
+const ROAD_CLEARANCE_CM: i64 = 30;
 pub(super) fn volume(s: &Sample) -> (Vertex, i64, i64, i64) {
     let radius = i64::from(s.tube_radius_cm);
     if radius > 0 {
@@ -346,7 +347,7 @@ pub(super) fn volume(s: &Sample) -> (Vertex, i64, i64, i64) {
     let side = ((s.normal[0].abs() + s.normal[2].abs()) * height + 999_999) / 1_000_000;
     (
         s.position_cm,
-        i64::from(s.lateral_cm) + WALL_THICKNESS_CM + 30 + side,
+        i64::from(s.lateral_cm) + WALL_THICKNESS_CM + ROAD_CLEARANCE_CM + side,
         s.position_cm[1] - edge_y + up_y.min(0) - 15,
         s.position_cm[1] + edge_y + up_y.max(0),
     )
@@ -355,6 +356,79 @@ pub(super) fn volume_overlap(a: &Sample, b: &Sample) -> bool {
     let (ac, ar, alo, ahi) = volume(a);
     let (bc, br, blo, bhi) = volume(b);
     alo < bhi && blo < ahi && (ac[0] - bc[0]).pow(2) + (ac[2] - bc[2]).pow(2) < (ar + br).pow(2)
+}
+
+/// A conservative finite footprint, only for level, constant-width straight
+/// ribbons. All quantized edges are enclosed; the existing wall and vehicle
+/// margins extend both the sides and the ends. Other geometry keeps the sample
+/// volume check, including banks, tubes, flights, tapers and alternate paths.
+fn straight_footprint(p: &Piece) -> Option<[[f64; 2]; 4]> {
+    let first = p.path.first()?;
+    if p.path.len() < 2 || !p.alternate_path.is_empty()
+        || p.width_cm != p.entry_width_cm || p.width_cm != p.exit_width_cm
+        || first.forward[1] != 0
+    {
+        return None;
+    }
+    let length = libm::hypot(first.forward[0] as f64, first.forward[2] as f64);
+    if length < 1.0 { return None; }
+    let forward = [first.forward[0] as f64 / length, first.forward[2] as f64 / length];
+    let side = [forward[1], -forward[0]];
+    let origin = [first.position_cm[0] as f64, first.position_cm[2] as f64];
+    let project = |v: Vertex, axis: [f64; 2]| {
+        (v[0] as f64 - origin[0]) * axis[0] + (v[2] as f64 - origin[1]) * axis[1]
+    };
+    let mut lo = [f64::INFINITY; 2];
+    let mut hi = [f64::NEG_INFINITY; 2];
+    let mut previous = 0.0;
+    for s in &p.path {
+        let station = project(s.position_cm, forward);
+        if !s.safe || s.mode != "drive" || s.tube_radius_cm != 0
+            || s.normal != [0, 1_000_000, 0] || s.forward != first.forward
+            || s.lateral_cm != first.lateral_cm || s.position_cm[1] != first.position_cm[1]
+            // Allow only the quantization error of a straight centreline.
+            || project(s.position_cm, side).abs() > 1.0 || station < previous
+        {
+            return None;
+        }
+        previous = station;
+        for edge in ribbon_edges(s, 0) {
+            if edge[1] != first.position_cm[1] { return None; }
+            for (i, axis) in [forward, side].into_iter().enumerate() {
+                let v = project(edge, axis);
+                lo[i] = lo[i].min(v);
+                hi[i] = hi[i].max(v);
+            }
+        }
+    }
+    if previous <= 0.0 { return None; }
+    let margin = (WALL_THICKNESS_CM + ROAD_CLEARANCE_CM) as f64;
+    lo = lo.map(|v| v - margin);
+    hi = hi.map(|v| v + margin);
+    Some([[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]]
+        .map(|v| std::array::from_fn(|j| origin[j] + forward[j] * v[0] + side[j] * v[1])))
+}
+
+/// SAT may only disprove a broad-phase collision. Touching or uncertain bounds
+/// retain the previous conservative result and the existing shared-port rules.
+pub(super) fn separated_straights(a: &Piece, b: &Piece) -> bool {
+    let (Some(a), Some(b)) = (straight_footprint(a), straight_footprint(b)) else { return false; };
+    [a, b].iter().any(|corners| {
+        corners.windows(2).take(2).any(|edge| {
+            let delta = [edge[1][0] - edge[0][0], edge[1][1] - edge[0][1]];
+            let length = libm::hypot(delta[0], delta[1]);
+            if length < 1.0 { return false; }
+            let axis = [-delta[1] / length, delta[0] / length];
+            let range = |points: &[[f64; 2]; 4]| points.iter().fold(
+                (f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                    let v = (p[0] - a[0][0]) * axis[0] + (p[1] - a[0][1]) * axis[1];
+                    (lo.min(v), hi.max(v))
+                });
+            let (alo, ahi) = range(&a);
+            let (blo, bhi) = range(&b);
+            ahi + 1e-6 < blo || bhi + 1e-6 < alo
+        })
+    })
 }
 
 pub(super) fn self_intersects(p: &Piece) -> bool {
@@ -420,6 +494,43 @@ pub(super) fn ordinary_grade_valid(p: &Piece) -> bool {
             (b[1]-a[1]).abs() as f64 <= 0.23*libm::sqrt(dx*dx+dz*dz)+1e-9
         })
     })
+}
+
+#[cfg(test)]
+mod straight_clearance_tests {
+    use super::*;
+    #[test]
+    fn uncertain_shapes_keep_broad_phase_and_actual_edges_bound_footprint() {
+        let road = |id, start, points| {
+            let mut i = authoring::instance(id, "free_curve", 800);
+            i.position_cm = start;
+            i.control_points = points;
+            authoring::piece(&i).unwrap()
+        };
+        let a = road("a", [0, 0, -3000], vec![[0, 0, 0], [0, 0, 1000], [0, 0, 2000], [0, 0, 3000]]);
+        let b = road("b", [600, 0, 600], vec![[0, 0, 0], [800, 0, 0], [1600, 0, 0], [2400, 0, 0]]);
+        assert!(volume_overlap(a.path.last().unwrap(), &b.path[0]));
+        assert!(separated_straights(&a, &b));
+        assert!(separated_straights(&b, &a));
+        for case in 0..8 {
+            let mut uncertain = a.clone();
+            match case {
+                0 => uncertain.path[1].normal = [0, 999999, 1000],
+                1 => uncertain.path[1].forward = [1000, 0, 999999],
+                2 => uncertain.path[1].lateral_cm += 1,
+                3 => uncertain.path[1].position_cm[1] += 1,
+                4 => uncertain.path[1].tube_radius_cm = 400,
+                5 => uncertain.path[1].mode = "flight".into(),
+                6 => uncertain.alternate_path = uncertain.path.clone(),
+                _ => uncertain.path[1].position_cm[0] += 10,
+            }
+            assert!(!separated_straights(&uncertain, &b), "fallback case {case}");
+        }
+        let mut edges = a;
+        // Bounds must enclose the delivered ribbon, not just width metadata.
+        edges.path.last_mut().unwrap().ribbon_cm = Some([[-600, 0, 200], [600, 0, 200]]);
+        assert!(!separated_straights(&edges, &b));
+    }
 }
 
 #[cfg(test)]

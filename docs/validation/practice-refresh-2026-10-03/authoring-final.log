@@ -1,0 +1,15 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/track_authoring.rs (map-kit/target/debug/deps/track_authoring-21af07f4600ba1b0)
+
+running 8 tests
+test free_curve_vertical_frame_and_degenerate_rejection ... ok
+test free_placement_and_draft_source ... ok
+test tilted_ribbon_edges_reserve_vertical_clearance ... ok
+test composed_shortcut_is_connected_with_shared_progress ... ok
+test invalid_action_and_landing_sample_still_rejected ... ok
+test full_orientation_snap_and_pipe_portals ... ok
+test flight_export_needs_declared_approach_landing_and_supported_progress ... ok
+test widths_curves_helices_and_continuous_jump ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.06s
+

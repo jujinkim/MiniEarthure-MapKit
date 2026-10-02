@@ -250,3 +250,82 @@ fn flight_export_needs_declared_approach_landing_and_supported_progress() {
         .iter()
         .any(|i| i.contains("supported driving surface")));
 }
+
+fn straight(id: &str, start: [i64; 3], end: [i64; 3]) -> Instance {
+    let mut road = instance(id, "free_curve", 800);
+    road.position_cm = start;
+    road.control_points = (0..=3).map(|n| std::array::from_fn(|j| (end[j] - start[j]) * n / 3)).collect();
+    road
+}
+
+#[test]
+fn finite_straight_clearance_allows_eight_metre_six_radius_corners() {
+    for side in [-1, 1] {
+        for yaw in [0, 17300, 45000, 90000, 137250, 180000, 270000] {
+            let mut source = Source::empty();
+            source.settings.circuit = false;
+            let mut corner = instance("bend", "free_curve", 800);
+            corner.control_points = vec![[0, 0, 0], [0, 0, 331], [side * 269, 0, 600], [side * 600, 0, 600]];
+            source.instances = vec![
+                straight("approach", [0, 0, -3000], [0, 0, 0]), corner,
+                straight("departure", [side * 600, 0, 600], [side * 3000, 0, 600]),
+            ];
+            let angle = f64::from(yaw).to_radians() / 1000.0;
+            for road in &mut source.instances {
+                let [x, y, z] = road.position_cm;
+                road.position_cm = [113 + (x as f64 * angle.cos() + z as f64 * angle.sin()).round() as i64,
+                    y + 437, -251 + (-x as f64 * angle.sin() + z as f64 * angle.cos()).round() as i64];
+                road.rotation_mdeg = [0, yaw, 0];
+            }
+            source.connections = vec![Connection { from: "approach".into(), to: "bend".into() },
+                Connection { from: "bend".into(), to: "departure".into() }];
+            source.paths = vec![Path { id: "route".into(), pieces: vec!["approach".into(), "bend".into(), "departure".into()] }];
+            source.checkpoints = vec![Checkpoint { piece: "approach".into(), sample: 0 },
+                Checkpoint { piece: "departure".into(), sample: 0 }];
+            let assembly = compile(&source).unwrap();
+            assert!(assembly.issues.is_empty(), "side={side}, yaw={yaw}: {:?}", assembly.issues);
+            assembly.validate().unwrap();
+        }
+    }
+}
+
+#[test]
+fn finite_straight_clearance_keeps_crossings_overlaps_margins_and_height() {
+    let approach = straight("approach", [0, 0, -3000], [0, 0, 0]);
+    for (label, other, collision) in [
+        ("crossing", straight("other", [-1500, 0, -1500], [1500, 0, -1500]), true),
+        ("overlap", straight("other", [0, 0, -2900], [0, 0, 100]), true),
+        ("corner overlap", straight("other", [400, 0, 400], [2800, 0, 400]), true),
+        ("corner clearance", straight("other", [550, 0, 550], [2950, 0, 550]), true),
+        ("corner touching", straight("other", [560, 0, 560], [2960, 0, 560]), true),
+        ("corner separated", straight("other", [562, 0, 562], [2962, 0, 562]), false),
+        ("parallel clearance", straight("other", [959, 0, -3000], [959, 0, 0]), true),
+        ("end clearance", straight("other", [0, 0, 159], [0, 0, 2559]), true),
+        ("end separated", straight("other", [0, 0, 161], [0, 0, 2561]), false),
+        ("shared port", straight("other", [0, 0, 0], [0, 0, 2400]), false),
+        ("low overpass", straight("other", [-1500, 249, -1500], [1500, 249, -1500]), true),
+        ("clear overpass", straight("other", [-1500, 251, -1500], [1500, 251, -1500]), false),
+    ] {
+        let mut source = Source::empty();
+        source.instances = vec![approach.clone(), other];
+        let assembly = compile(&source).unwrap();
+        assert_eq!(assembly.issues.iter().any(|i| i.contains("road clearance collision")), collision, "{label}: {:?}", assembly.issues);
+    }
+}
+
+#[test]
+fn invalid_action_and_landing_sample_still_rejected() {
+    let original = shortcut_source();
+    let assembly = compile(&original).unwrap();
+    for landing in [false, true] {
+        let mut source = original.clone();
+        let action = &mut source.actions[0];
+        let (name, sample) = if landing {
+            let cp = action.landing.as_mut().unwrap();
+            (&cp.piece, &mut cp.sample)
+        } else { (&action.piece, &mut action.sample) };
+        let index = source.instances.iter().position(|i| &i.id == name).unwrap();
+        *sample = assembly.pieces[index].path.len();
+        assert_eq!(compile(&source).unwrap_err().code, "E_TRACK_SOURCE");
+    }
+}

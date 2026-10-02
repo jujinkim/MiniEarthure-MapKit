@@ -561,3 +561,26 @@ failure. Seed 7, 60-second one-way start cell (0,0) contains 6,802 solids, inclu
 existing difficulty distribution are retained. Native bridge and CLI builds pass.
 The unrelated earlier water-fixture compile failure above remains historical;
 detailed application driving and platform acceptance remain user checks.
+
+## Finite straight-road clearance — 2026-10-03
+
+Authored 8m-wide approaches/departures separated by a 6m-radius quarter turn
+were incorrectly rejected: the endpoint distance is about 8.49m, below the
+9.6m sum of the sample-volume radii. After the existing broad check, level,
+straight, constant-width drive ribbons now receive a conservative finite
+footprint check. Bounds enclose every quantized ribbon edge and extend the sides
+and ends by the existing 50cm wall plus 30cm vehicle clearance. A separating axis
+must prove strict separation before a collision can be dismissed. Touching or
+uncertain bounds retain the old result. No course IDs, smaller margins or larger
+shared-port exclusions are involved. Curves, banks, grades, tapers, tubes, flight
+and alternate paths retain the previous check. No public API/schema/version changes.
+
+[Focused results](validation/practice-refresh-2026-10-03/README.md): two new
+clearance integration tests, one fallback/edge-bound unit, eight other authoring
+tests, five authoring units and three package tests pass; CLI/native build passes.
+Coverage includes both turn directions at seven rotations, crossings/overlap,
+insufficient side/end clearance, shared ports, low/clear overpasses, tilted
+ribbons, invalid action/landing samples, source identity/tampering and cancellation.
+The existing sampled broad phase is unchanged; its pre-existing near-tangent
+sample-phase limitation is recorded with the initial fixture failure. Detailed
+application driving and platform acceptance remain user verification.

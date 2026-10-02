@@ -657,6 +657,9 @@ pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
     if !layout::overlaps(a, b) {
         return false;
     }
+    if geometry::separated_straights(a, b) {
+        return false;
+    }
     let mut joints: Vec<_> = [&a.path[0], a.path.last().unwrap()]
         .into_iter()
         .flat_map(|s| {
