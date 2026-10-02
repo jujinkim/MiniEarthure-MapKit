@@ -34,7 +34,6 @@ pub struct TrackMesh {
     #[serde(skip)]
     pub tiles: Vec<(Vertex, Vertex)>,
 }
-const STEPS: usize = 256;
 pub(crate) const fn loop_offset_cm(width_cm: u32) -> i64 {
     // Preserve lane width while leaving clearance for both 50 cm barriers.
     width_cm as i64 * 65 / 100 + crate::assembled_track::WALL_THICKNESS_CM
@@ -78,12 +77,45 @@ impl SpecialTrack {
     fn bands(&self) -> usize {
         if self.kind == TrackKind::Loop {
             1
-        } else if self.radius_cm * 2 > self.length_cm {
-            64
-        } else if self.radius_cm * 4 > self.length_cm {
-            32
         } else {
-            16
+            let r=f64::from(self.radius_cm);let l=f64::from(self.length_cm);
+            // Flare sag, axial distance and change in its longitudinal normal.
+            (l/150.0).max(libm::sqrt(0.06*r*std::f64::consts::PI.powi(2)/0.5))
+                .max(0.24*std::f64::consts::PI.powi(2)*r/l/2.0f64.to_radians()).ceil() as usize
+        }
+    }
+    fn ring_steps(&self) -> usize {
+        let span=if self.kind==TrackKind::SweptHalfPipe {std::f64::consts::PI} else {std::f64::consts::TAU};
+        let r=f64::from(self.radius_cm)*1.12+10.0;
+        (span/2.0f64.to_radians()).max(span/(2.0*libm::acos(1.0-0.25/r))).ceil() as usize
+    }
+    pub fn longitudinal_parameters(&self) -> Vec<f64> {
+        if self.kind!=TrackKind::Loop {
+            let n=self.ring_steps();return (0..=n).map(|i|i as f64/n as f64).collect();
+        }
+        use crate::curve_sampling::{parameters, Probe};
+        parameters(|u| {
+            let t=u*std::f64::consts::TAU;
+            let derivative=|x:f64| {if x>0.0 && x<1.0 {6.0*x*(1.0-x)/1.60} else {0.0}};
+            let r=f64::from(self.radius_cm);
+            Probe { points:[self.point(u,0.5,false),self.point(u,0.0,false),self.point(u,1.0,false),self.point(u,0.0,true),self.point(u,1.0,true)],
+                tangent:[loop_offset_cm(self.width_cm) as f64*(derivative((t-0.85)/1.60)+derivative((t-3.83)/1.60)),
+                    r*libm::sin(t)*(1.0+0.6*libm::cos(t)),r*libm::cos(t)*(1.0+0.6*libm::cos(t))],
+                normal:[0.0,libm::cos(t),-libm::sin(t)] }
+        }, &[0.0,0.85/std::f64::consts::TAU,2.45/std::f64::consts::TAU,3.83/std::f64::consts::TAU,5.43/std::f64::consts::TAU,1.0],150.0,0.25,4.0f64.to_radians())
+    }
+    fn point(&self,u:f64,v:f64,outer:bool)->[f64;3] {
+        let t=u*std::f64::consts::TAU;let (sn,cs)=(libm::sin(t),libm::cos(t));
+        let r=f64::from(self.radius_cm);let thickness=if outer {10.0} else {0.0};
+        if self.kind==TrackKind::Loop {
+            let smooth=|v:f64| {let u=v.clamp(0.0,1.0);u*u*(3.0-2.0*u)};
+            let shift=-1.0+smooth((t-0.85)/1.60)+smooth((t-3.83)/1.60);
+            [loop_offset_cm(self.width_cm) as f64*shift+(v-0.5)*f64::from(self.width_cm),
+                r*(1.0-cs)+0.30*r*sn*sn-thickness*cs,
+                r*(sn+0.60*(t*0.5+libm::sin(2.0*t)*0.25))+thickness*sn]
+        } else {
+            let radius=r+0.12*r*(1.0+libm::cos(v*std::f64::consts::TAU))*0.5;
+            [(radius+thickness)*sn,radius-(radius+thickness)*cs,(v-0.5)*f64::from(self.length_cm)]
         }
     }
     pub fn tile_count(&self) -> usize {
@@ -91,9 +123,9 @@ impl SpecialTrack {
             self.kind,
             TrackKind::SweptCylinder | TrackKind::SweptHalfPipe
         ) {
-            128 * self.centerline.len().saturating_sub(1)
+            self.ring_steps() * self.centerline.len().saturating_sub(1)
         } else {
-            STEPS * self.bands()
+            (self.longitudinal_parameters().len()-1) * self.bands()
         }
     }
     pub fn bound_radius(&self) -> i64 {
@@ -126,47 +158,13 @@ impl SpecialTrack {
             shell: vec![],
             tiles: vec![],
         };
-        let r = f64::from(self.radius_cm);
-        let w = f64::from(self.width_cm);
-        let l = f64::from(self.length_cm);
+        let parameters=self.longitudinal_parameters();
+        let steps=parameters.len()-1;
         let bands = self.bands();
         let point = |i: usize, j: usize, outer: bool| -> Vertex {
-            let t = i as f64 * std::f64::consts::TAU / STEPS as f64;
-            let (sn, cs) = (libm::sin(t), libm::cos(t));
-            let thickness = if outer { 10.0 } else { 0.0 };
-            let p = match self.kind {
-                TrackKind::Loop => {
-                    // Integrate radius r*(1 + .6*cos(theta)): 1.6r at the floor,
-                    // .4r at the crown. Open, separated ends avoid self-overlap.
-                    // Smooth lateral separation keeps entrance and exit disjoint.
-                    let smooth = |v: f64| {
-                        let u = v.clamp(0.0, 1.0);
-                        u * u * (3.0 - 2.0 * u)
-                    };
-                    let shift = -1.0 + smooth((t - 0.85) / 1.60) + smooth((t - 3.83) / 1.60);
-                    let x = loop_offset_cm(self.width_cm) as f64 * shift + (j as f64 - 0.5) * w;
-                    [
-                        x,
-                        r * (1.0 - cs) + 0.30 * r * sn * sn - thickness * cs,
-                        r * (sn + 0.60 * (t * 0.5 + libm::sin(2.0 * t) * 0.25)) + thickness * sn,
-                    ]
-                }
-                TrackKind::SweptCylinder | TrackKind::SweptHalfPipe => unreachable!(),
-                TrackKind::Cylinder => {
-                    let u = j as f64 / bands as f64;
-                    // Flared entrances leave the bottom tangent to the access road.
-                    let flare = 0.12 * r * (1.0 + libm::cos(u * std::f64::consts::TAU)) * 0.5;
-                    let radius = r + flare;
-                    [
-                        (radius + thickness) * sn,
-                        radius - (radius + thickness) * cs,
-                        (u - 0.5) * l,
-                    ]
-                }
-            };
-            p.map(|v| libm::round(v * 100.0) as i64)
+            self.point(parameters[i],j as f64/bands as f64,outer).map(|v|libm::round(v*100.0) as i64)
         };
-        for i in 0..STEPS {
+        for i in 0..steps {
             for j in 0..bands {
                 let mut inside = [
                     point(i, j, false),
@@ -199,7 +197,7 @@ impl SpecialTrack {
                         edge == 0
                             || edge == 2
                             || (edge == 3 && i == 0)
-                            || (edge == 1 && i + 1 == STEPS)
+                            || (edge == 1 && i + 1 == steps)
                     } else {
                         (edge == 0 && j + 1 == bands) || (edge == 2 && j == 0)
                     };
@@ -256,6 +254,7 @@ impl SpecialTrack {
             shell: vec![],
             tiles: vec![],
         };
+        let steps=self.ring_steps();
         let radii: Vec<_> = (0..self.centerline.len())
             .map(|i| self.swept_radius(i))
             .collect();
@@ -269,9 +268,9 @@ impl SpecialTrack {
                 n[0] * t[1] - n[1] * t[0],
             ];
             let a = if self.kind == TrackKind::SweptHalfPipe {
-                -std::f64::consts::FRAC_PI_2 + j as f64 * std::f64::consts::PI / 128.0
+                -std::f64::consts::FRAC_PI_2 + j as f64 * std::f64::consts::PI / steps as f64
             } else {
-                j as f64 * std::f64::consts::TAU / 128.0
+                j as f64 * std::f64::consts::TAU / steps as f64
             };
             let r = radii[i];
             let shell = r + if outer { 10.0 } else { 0.0 };
@@ -285,7 +284,7 @@ impl SpecialTrack {
             })
         };
         for i in 0..self.centerline.len() - 1 {
-            for j in 0..128 {
+            for j in 0..steps {
                 let inside = [
                     point(i, j, false),
                     point(i + 1, j, false),
@@ -310,7 +309,7 @@ impl SpecialTrack {
                     if (edge == 3 && i == 0)
                         || (edge == 1 && i + 2 == self.centerline.len())
                         || (self.kind == TrackKind::SweptHalfPipe
-                            && ((edge == 0 && j == 0) || (edge == 2 && j == 127)))
+                            && ((edge == 0 && j == 0) || (edge == 2 && j + 1 == steps)))
                     {
                         let k = (edge + 1) % 4;
                         mesh.shell.extend([

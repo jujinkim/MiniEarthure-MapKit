@@ -1,5 +1,57 @@
 //! Quantized, width-aware ribbons. All consumers use these frames.
 use super::*;
+use crate::curve_sampling::{self as sampling, norm, cross, Probe};
+
+/// Evaluate unrounded centre and frame, select bounded intervals, then quantize
+/// once. All mesh/collision/wall/occupancy consumers receive these same samples.
+fn analytical(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32, entry: u32, exit: u32, mode: &str) -> Vec<Sample> {
+    analytical_raw(eval,breaks,width,entry,exit,mode).into_iter().map(|(s,_,_)|s).collect()
+}
+fn analytical_raw(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32, entry: u32, exit: u32, mode: &str) -> Vec<(Sample,[f64;3],f64)> {
+    let length: f64 = (0..64).map(|i| {
+        let a=eval(i as f64/64.0).0; let b=eval((i+1) as f64/64.0).0;
+        sampling::length(std::array::from_fn(|j|b[j]-a[j]))
+    }).sum();
+    let transition=(f64::from(width.abs_diff(entry).max(width.abs_diff(exit)))*2.0).max(300.0).min(length/2.0).max(1.0);
+    let half_width=|t:f64| {
+        let ease=|x:f64| {let x=x.clamp(0.0,1.0); x*x*(3.0-2.0*x)};
+        (width as f64+(entry as f64-width as f64)*(1.0-ease(t*length/transition))
+            +(exit as f64-width as f64)*(1.0-ease((1.0-t)*length/transition)))*0.5
+    };
+    let frame=|t| {
+        let (p,f)=eval(t);let f=norm(f);
+        let mut side=norm([f[2],0.0,-f[0]]);
+        if sampling::length(side)<0.5 {side=[1.0,0.0,0.0];}
+        let n=norm(cross(f,side));
+        (p,f,n,side)
+    };
+    let ts=sampling::parameters(|t| {
+        let (p,f,n,side)=frame(t); let w=half_width(t);
+        Probe {points:[p,
+            std::array::from_fn(|j|p[j]-side[j]*w),std::array::from_fn(|j|p[j]+side[j]*w),
+            std::array::from_fn(|j|p[j]-side[j]*(w+WALL_THICKNESS_CM as f64)+n[j]*WALL as f64),
+            std::array::from_fn(|j|p[j]+side[j]*(w+WALL_THICKNESS_CM as f64)+n[j]*WALL as f64)],tangent:f,normal:n}
+    }, breaks,150.0,if mode=="spiral" {0.6} else {0.75},if mode=="spiral" {3.5f64.to_radians()} else {4.0f64.to_radians()});
+    ts.into_iter().map(|mut t| {
+        if mode=="spiral" && (0.125..=0.875).contains(&t) {
+            // Choose stations on integer height contours of the original helix.
+            // Rounding arbitrary short spans can turn an analytic 20.8% inner
+            // grade into >23%. Move the station, never resample rounded points.
+            let target=round(eval(t).0[1]) as f64;
+            let increasing=eval(1.0).0[1]>eval(0.0).0[1];
+            let (mut lo,mut hi)=(0.0,1.0);
+            for _ in 0..40 {
+                let mid=(lo+hi)*0.5;
+                if (eval(mid).0[1]<target)==increasing {lo=mid;} else {hi=mid;}
+            }
+            t=(lo+hi)*0.5;
+        }
+        let (p,f,n,side)=frame(t);
+        let mut s=sample(p.map(round),f,width,mode);
+        s.ribbon_cm=Some([-1.0,1.0].map(|sign|std::array::from_fn(|j|round(p[j]+side[j]*half_width(t)*sign))));
+        s.normal=unit(n);s.lateral_cm=round(half_width(t)) as u32;(s,p,half_width(t))
+    }).collect()
+}
 
 pub(super) fn rotate3(v: Vertex, rotation: [i32; 3]) -> Vertex {
     let mut p = v.map(|v| v as f64);
@@ -22,6 +74,7 @@ fn sample(position: Vertex, tangent: [f64; 3], width: u32, mode: &str) -> Sample
     ]);
     Sample {
         position_cm: position,
+        ribbon_cm: None,
         forward: f,
         normal,
         mode: mode.into(),
@@ -55,38 +108,27 @@ pub(super) fn taper(path: &mut [Sample], width: u32, entry: u32, exit: u32) {
             + (f64::from(entry) - f64::from(width)) * (1.0 - ease(station / transition))
             + (f64::from(exit) - f64::from(width)) * (1.0 - ease((length - station) / transition));
         path[i].lateral_cm = round(w / 2.0) as u32;
+        path[i].ribbon_cm = None;
     }
 }
 pub(super) fn bezier(points: &[Vertex], width: u32, entry: u32, exit: u32) -> Vec<Sample> {
     let mut path = vec![];
-    for cp in points.windows(4).step_by(3) {
-        let length: u64 = cp.windows(2).map(|w| distance(w[0], w[1])).sum();
-        let steps = (length / 80).clamp(8, 1024);
-        for i in 0..=steps {
-            if i == 0 && !path.is_empty() {
-                continue;
-            }
-            let t = i as f64 / steps as f64;
-            let u = 1.0 - t;
-            let pos = std::array::from_fn(|j| {
-                round(
-                    u * u * u * cp[0][j] as f64
-                        + 3.0 * u * u * t * cp[1][j] as f64
-                        + 3.0 * u * t * t * cp[2][j] as f64
-                        + t * t * t * cp[3][j] as f64,
-                )
-            });
-            let tangent = std::array::from_fn(|j| {
-                3.0 * u * u * (cp[1][j] - cp[0][j]) as f64
-                    + 6.0 * u * t * (cp[2][j] - cp[1][j]) as f64
-                    + 3.0 * t * t * (cp[3][j] - cp[2][j]) as f64
-            });
-            path.push(sample(pos, tangent, width, "drive"));
-        }
+    for (index,cp) in points.windows(4).step_by(3).enumerate() {
+        let part=analytical_raw(|t| {
+            let u=1.0-t;
+            let pos=std::array::from_fn(|j|u*u*u*cp[0][j] as f64+3.0*u*u*t*cp[1][j] as f64+3.0*u*t*t*cp[2][j] as f64+t*t*t*cp[3][j] as f64);
+            let tangent=std::array::from_fn(|j|3.0*u*u*(cp[1][j]-cp[0][j]) as f64+6.0*u*t*(cp[2][j]-cp[1][j]) as f64+3.0*t*t*(cp[3][j]-cp[2][j]) as f64);
+            (pos,tangent)
+        }, &[0.0,1.0],width,if index==0 {entry} else {width},if index*3+4==points.len() {exit} else {width},"drive");
+        path.extend(part.into_iter().skip(if index==0 {0} else {1}));
     }
-    curve_frames(&mut path);
-    taper(&mut path, width, entry, exit);
-    path
+    let mut samples: Vec<_>=path.iter().map(|(s,_,_)|s.clone()).collect();
+    curve_frames(&mut samples);
+    for (s,(_,position,width)) in samples.iter_mut().zip(path) {
+        let side=norm(cross(s.normal.map(|v|v as f64/1e6),s.forward.map(|v|v as f64/1e6)));
+        s.ribbon_cm=Some([-1.0,1.0].map(|sign|std::array::from_fn(|j|round(position[j]+side[j]*width*sign))));
+    }
+    samples
 }
 // Parallel transport through vertical tangents; distribute endpoint roll so ports
 // agree with the gravity frame without an abrupt twist at the final sample.
@@ -139,56 +181,58 @@ fn curve_frames(path: &mut [Sample]) {
     }
 }
 
-/// Shared longitudinal refinement for every ordinary ribbon, including authored
-/// cubics. Bound angular change and the error at the OUTER edge, not just the
-/// centreline. Hermite interpolation retains endpoint tangents and grade.
-/// Two-degree / 80cm spans avoid amplifying centimetre quantization into short,
-/// alternating flat/steep faces; the outer-edge error bound still applies.
-pub(super) fn refine(path: &mut Vec<Sample>) {
-    let mut out = Vec::with_capacity(path.len());
-    for w in path.windows(2) {
-        let a = &w[0];
-        let b = &w[1];
-        let dot = |u: Vertex, v: Vertex| (0..3).map(|j| u[j] as f64 * v[j] as f64 / 1e12).sum::<f64>().clamp(-1.0, 1.0);
-        let turn = libm::acos(dot(a.forward, b.forward));
-        let twist = libm::acos(dot(a.normal, b.normal));
-        let width = a.lateral_cm.max(b.lateral_cm) as f64;
-        let len = distance(a.position_cm, b.position_cm) as f64;
-        let ordinary = !["flight", "cylinder", "loop", "halfpipe"].contains(&a.mode.as_str());
-        let steps = if ordinary {
-            (turn / 0.0349066).max(libm::sqrt(width * (turn * turn + twist * twist) / 4.0))
-                .max(if turn + twist > 0.001 { len / 80.0 } else { 1.0 }).ceil().clamp(1.0, 64.0) as usize
-        } else { 1 };
-        for i in 0..steps {
-            let t = i as f64 / steps as f64;
-            let mut s = a.clone();
-            if i > 0 {
-                s.position_cm = std::array::from_fn(|j| round(
-                    (2.0*t*t*t-3.0*t*t+1.0)*a.position_cm[j] as f64
-                    + (t*t*t-2.0*t*t+t)*len*a.forward[j] as f64/1e6
-                    + (-2.0*t*t*t+3.0*t*t)*b.position_cm[j] as f64
-                    + (t*t*t-t*t)*len*b.forward[j] as f64/1e6));
-                s.forward = unit(std::array::from_fn(|j| (1.0-t)*a.forward[j] as f64+t*b.forward[j] as f64));
-                let n = std::array::from_fn::<_,3,_>(|j| (1.0-t)*a.normal[j] as f64/1e6+t*b.normal[j] as f64/1e6);
-                let f=s.forward.map(|v|v as f64/1e6);
-                let dot: f64=(0..3).map(|j|n[j]*f[j]).sum();
-                s.normal=unit(std::array::from_fn(|j|n[j]-dot*f[j]));
-                s.lateral_cm = round((1.0-t)*a.lateral_cm as f64+t*b.lateral_cm as f64) as u32;
-            }
-            if out.last().is_none_or(|last: &Sample| last.position_cm != s.position_cm) { out.push(s); }
-        }
-    }
-    if let Some(last) = path.last() { out.push(last.clone()); }
-    *path = out;
-}
-
 /// Subdivide twisted quads across their width until diagonal ridge error is
 /// below one centimetre. Flat ribbons need no extra lateral triangles.
 pub(super) fn strips(a: &Sample, b: &Sample) -> i64 {
-    let delta = libm::sqrt((0..3).map(|j| ((a.normal[j]-b.normal[j]) as f64/1e6).powi(2)).sum());
-    (delta * a.lateral_cm.max(b.lateral_cm) as f64 / 2.0).ceil().clamp(1.0, 32.0) as i64
+    let [al,ar]=ribbon_edges(a,0);let [bl,br]=ribbon_edges(b,0);
+    let ab=std::array::from_fn(|j|(bl[j]-al[j]) as f64);
+    let ac=std::array::from_fn(|j|(br[j]-al[j]) as f64);
+    let n=norm(cross(ab,ac));
+    let warp=(0..3).map(|j|(ar[j]-al[j]) as f64*n[j]).sum::<f64>().abs()/4.0;
+    warp.ceil().clamp(1.0,32.0) as i64
 }
-pub(super) fn shape(p: &mut Piece, width: u32) {
+pub(super) fn ramp(length:f64,rise:f64,width:u32,entry:u32,exit:u32)->Vec<Sample> {
+    analytical(|t|([0.0,rise*spiral_rise(t),length*t],[0.0,rise*spiral_pitch(t),length]),
+        &[0.0,0.125,0.875,1.0],width,entry,exit,"drive")
+}
+fn pipe_path(id: &str, width: u32) -> Vec<Sample> {
+    let mode=if id=="banked_chicane" {"halfpipe"} else {"cylinder"};
+    let mut origin=[0.0;3];let mut yaw:f64=0.0;let mut path=vec![];
+    let mut segment=|distance:f64,turn:f64| {
+        let (sn,cs)=(libm::sin(yaw),libm::cos(yaw));
+        let at=|t:f64| {
+            let (x,z,dx,dz)=if turn==0.0 {(0.0,distance*t,0.0,distance)} else {
+                let a=turn.abs()*t;let sign=turn.signum();
+                (sign*400.0*(1.0-libm::cos(a)),400.0*libm::sin(a),sign*400.0*libm::sin(a)*turn.abs(),400.0*libm::cos(a)*turn.abs())
+            };
+            let pos=[origin[0]+cs*x+sn*z,0.0,origin[2]-sn*x+cs*z];
+            let mut f=[cs*dx+sn*dz,0.0,-sn*dx+cs*dz];let mut p=pos;
+            if id.ends_with("_s_rise") {
+                let a=std::f64::consts::PI*p[2]/SLOT as f64;
+                p[1]=80.0*libm::sin(a).powi(2);
+                f[1]=80.0*std::f64::consts::PI/SLOT as f64*libm::sin(2.0*a)*f[2];
+            }
+            (p,f)
+        };
+        let end=at(1.0).0;
+        let mut part=analytical(at,&[0.0,1.0],width,width,width,mode);
+        for s in &mut part {s.tube_radius_cm=width/2;s.safe=false;s.above_cm=250;s.below_cm=50;}
+        let skip=usize::from(!path.is_empty());path.extend(part.into_iter().skip(skip));
+        origin=end;origin[1]=0.0;yaw+=turn;
+    };
+    let quarter=std::f64::consts::FRAC_PI_2;
+    if id.contains("curve") || id.contains("uturn") {
+        segment(400.0,0.0);
+        segment(0.0,quarter*if id.contains("uturn") {2.0} else {1.0}*if id.ends_with("left") {-1.0} else {1.0});
+        segment(400.0,0.0);
+    } else {
+        segment(800.0,0.0);
+        for sign in [-1.0,1.0,1.0,-1.0] {segment(0.0,sign*quarter);}
+        segment(800.0,0.0);
+    }
+    path
+}
+pub(super) fn shape(p: &mut Piece, width: u32) -> bool {
     let id = p.id.as_str();
     let left = id.contains("left");
     let sign = if left { -1.0 } else { 1.0 };
@@ -222,7 +266,7 @@ pub(super) fn shape(p: &mut Piece, width: u32) {
             angle
         };
         let radius = if spiral {
-            800.max(width / 2 + 200)
+            800.max(width / 2 + 700)
         } else if id.starts_with("gentle") || id == "curve" || id == "curve_left" || grade_curve {
             1600.max(width * 4)
         } else if id.starts_with("right") || id.starts_with("sharp_curve") {
@@ -242,24 +286,12 @@ pub(super) fn shape(p: &mut Piece, width: u32) {
             0.0
         };
         let radians = degrees * std::f64::consts::PI / 180.0;
-        let steps = ((radius as f64 * radians / 80.0).ceil() as usize).max(32);
-        p.path = (0..=steps)
-            .map(|i| {
-                let t = i as f64 / steps as f64;
-                let a = t * radians;
-                let dy = rise * spiral_pitch(t) / (radius as f64 * radians);
-                sample(
-                    [
-                        round(sign * radius as f64 * (1.0 - libm::cos(a))),
-                        round(rise * spiral_rise(t)),
-                        round(radius as f64 * libm::sin(a)),
-                    ],
-                    [sign * libm::sin(a), dy, libm::cos(a)],
-                    width,
-                    if spiral { "spiral" } else { "drift" },
-                )
-            })
-            .collect();
+        p.path = analytical(|t| {
+            let a = t * radians;
+            let dy = rise * spiral_pitch(t) / (radius as f64 * radians);
+            ([sign * radius as f64 * (1.0-libm::cos(a)), rise*spiral_rise(t), radius as f64*libm::sin(a)],
+             [sign*libm::sin(a),dy,libm::cos(a)])
+        }, &[0.0,0.125,0.875,1.0], p.width_cm,p.entry_width_cm,p.exit_width_cm, if spiral {"spiral"} else {"drift"});
     } else if id == "zigzag" || id == "chicane" || id.ends_with("_narrow") {
         let length = if id.starts_with("straight") {
             1600.0
@@ -272,31 +304,29 @@ pub(super) fn shape(p: &mut Piece, width: u32) {
         let amplitude = if id == "straight_narrow" { 0.0 } else {
             (width as f64 * 1.5).min(length*length/(300.0*(width as f64/2.0+100.0)))
         };
-        p.path = (0..=256)
-            .map(|i| {
-                let t = i as f64 / 256.0;
-                let a = t * std::f64::consts::TAU * 2.0;
-                sample(
-                    [
-                        round(
-                            amplitude * libm::sin(a) * libm::sin(std::f64::consts::PI * t).powi(2),
-                        ),
-                        0,
-                        round(length * t),
-                    ],
-                    [0.0, 0.0, 1.0],
-                    width,
-                    "drift",
-                )
-            })
-            .collect();
-        for i in 1..p.path.len() - 1 {
-            p.path[i].forward = unit(std::array::from_fn(|j| {
-                (p.path[i + 1].position_cm[j] - p.path[i - 1].position_cm[j]) as f64
-            }));
-        }
+        p.path = analytical(|t| {
+            let pi = std::f64::consts::PI;
+            let a = t*pi*4.0;
+            let sn = libm::sin(pi*t);
+            let dx = amplitude*(4.0*pi*libm::cos(a)*sn*sn+pi*libm::sin(a)*libm::sin(2.0*pi*t));
+            ([amplitude*libm::sin(a)*sn*sn,0.0,length*t], [dx,0.0,length])
+        }, &[0.0,0.25,0.5,0.75,1.0],p.width_cm,p.entry_width_cm,p.exit_width_cm,"drift");
+    } else if ["slope_up","slope_down"].contains(&id) {
+        let rise = if id.ends_with("down") {-100.0} else {100.0};
+        p.path = analytical(|t| ([0.0,rise*spiral_rise(t),800.0*t],[0.0,rise*spiral_pitch(t),800.0]),
+            &[0.0,0.125,0.875,1.0],p.width_cm,p.entry_width_cm,p.exit_width_cm,"drive");
+    } else if id == "slope" {
+        p.path = analytical(|t| {
+            let (u,sign) = if t<0.5 {(t*2.0,1.0)} else {(2.0-t*2.0,-1.0)};
+            ([0.0,62.5*spiral_rise(u),800.0*t],[0.0,125.0*spiral_pitch(u)*sign,800.0])
+        }, &[0.0,0.0625,0.4375,0.5,0.5625,0.9375,1.0],p.width_cm,p.entry_width_cm,p.exit_width_cm,"drive");
+    } else if id.starts_with("cylinder") || id=="banked_chicane" {
+        p.path=pipe_path(id,p.width_cm);
+    } else {
+        return false;
     }
     p.reference_msec = (race_length(p) * 1000 / SPEED as u64) as u32;
+    true
 }
 
 // Conservative sample volume, including tilted lane edges and the supported
@@ -374,15 +404,50 @@ pub(super) fn euler(m: [[f64; 3]; 3]) -> [i32; 3] {
 /// Integer ribbon edges shared by generation and connected-road wall clipping.
 /// A small inward offset preserves coincident outer walls at ordinary joins.
 pub(super) fn ribbon_edges(s: &Sample, inset: u32) -> [Vertex;2] {
+    if inset==0 {if let Some(edges)=s.ribbon_cm {return edges;}}
     let basis=basis(s);
     let right=std::array::from_fn::<_,3,_>(|j|round(basis[j][0]*1e6));
     [-1,1].map(|side| std::array::from_fn(|j|
-        s.position_cm[j]+right[j]*i64::from(s.lateral_cm.saturating_sub(inset))*side/1_000_000))
+        s.position_cm[j]+round(right[j] as f64*f64::from(s.lateral_cm.saturating_sub(inset))*side as f64/1e6)))
+}
+
+pub(super) fn ordinary_grade_valid(p: &Piece) -> bool {
+    if !(p.id.starts_with("spiral") || ["slope","slope_up","slope_down","curve_up","curve_down","curve_left_up","curve_left_down"].contains(&p.id.as_str())) {return true;}
+    p.path.windows(2).all(|w| {
+        let a=ribbon_edges(&w[0],0);let b=ribbon_edges(&w[1],0);
+        [(a[0],b[0]),(w[0].position_cm,w[1].position_cm),(a[1],b[1])].into_iter().all(|(a,b)| {
+            let dx=(b[0]-a[0]) as f64;let dz=(b[2]-a[2]) as f64;
+            (b[1]-a[1]).abs() as f64 <= 0.23*libm::sqrt(dx*dx+dz*dz)+1e-9
+        })
+    })
 }
 
 #[cfg(test)]
 mod playtest_surface_tests {
     use super::*;
+    #[test]
+    fn final_edges_grade_frames_spacing_and_planar_triangles() {
+        for id in ["slope","slope_up","slope_down","curve_up","curve_left_down","spiral90_left_up","spiral180_right_down","spiral_up","spiral_down","gentle45","hairpin"] {
+            for width in WIDTHS {
+                let p=materialize(&variant(id,*width,*width,*width));
+                assert!(ordinary_grade_valid(&p),"{id} w={width}: inner/centre/outer grade exceeds 23%: {:?}",p.path.windows(2).filter(|w| {
+                    let a=ribbon_edges(&w[0],0);let b=ribbon_edges(&w[1],0);
+                    (0..2).any(|i| {let dx=(b[i][0]-a[i][0]) as f64;let dz=(b[i][2]-a[i][2]) as f64;(b[i][1]-a[i][1]).abs() as f64>0.23*libm::sqrt(dx*dx+dz*dz)})
+                }).map(|w|(ribbon_edges(&w[0],0),ribbon_edges(&w[1],0))).collect::<Vec<_>>());
+                for pair in p.path.windows(2) {
+                    assert!(distance(pair[0].position_cm,pair[1].position_cm)<=152,"{id}: spacing");
+                    for vectors in [[pair[0].forward,pair[1].forward],[pair[0].normal,pair[1].normal]] {
+                        let dot=(0..3).map(|j|vectors[0][j] as f64*vectors[1][j] as f64/1e12).sum::<f64>().clamp(-1.0,1.0);
+                        assert!(libm::acos(dot).to_degrees()<=4.01,"{id}: frame turn");
+                    }
+                    if ["slope","slope_up","slope_down","gentle45","hairpin"].contains(&id) {
+                        assert_eq!(strips(&pair[0],&pair[1]),1,"planar trapezoids need two triangles");
+                    }
+                }
+                assert_eq!(p,materialize(&p),"deterministic final quantization");
+            }
+        }
+    }
     #[test]
     fn ordinary_grade_quantization() {
         for id in ["curve_up","curve_down","curve_left_up","curve_left_down","spiral_up","spiral_down"] {

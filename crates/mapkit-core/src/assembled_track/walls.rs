@@ -15,10 +15,10 @@ pub(super) fn outward_at(path: &[Sample], at: usize, side: i64, rotation: [i32;3
     let here=edge(at);
     let n=path[at].normal.map(|v|v as f64/1e6);
     // A one-centimetre ordinary-ribbon perturbation must not turn a 50cm offset
-    // back on itself. Estimate its tangents over one barrier thickness. Loops
-    // have a fixed ribbon axis and retain their local three-dimensional miters.
+    // back on itself. Estimate tangents over one barrier thickness, including
+    // loop crowns where adaptive intervals can be shorter than the offset.
     // Positions and lane widths remain the original quantized ribbon vertices.
-    let tangent_span=if path[at].mode=="loop" {1} else {WALL_THICKNESS_CM as u64};
+    let tangent_span=WALL_THICKNESS_CM as u64;
     let mut before=at;
     while before>0 {
         before-=1;
@@ -39,7 +39,26 @@ pub(super) fn outward_at(path: &[Sample], at: usize, side: i64, rotation: [i32;3
     }
     let bisector=unit(std::array::from_fn(|j|normals.iter().map(|n|n[j]).sum())).map(|v|v as f64/1e6);
     let cosine=(0..3).map(|j|bisector[j]*normals[0][j]).sum::<f64>().max(0.5);
-    std::array::from_fn(|j|round(bisector[j]*WALL_THICKNESS_CM as f64/cosine))
+    let ideal=std::array::from_fn::<_,3,_>(|j|bisector[j]*WALL_THICKNESS_CM as f64/cosine);
+    let mut result=ideal.map(round);
+    if path[at].mode=="loop" {
+        // Choose the nearest integer offset that also preserves face-normal
+        // thickness. A rotated short crown chord can lose just over 1cm when
+        // three independently rounded components all point inward.
+        let local: Vec<_>=[at.saturating_sub(1),(at+1).min(path.len()-1)].into_iter().filter(|&i|i!=at).map(|i| {
+            let e=edge(i);let d=std::array::from_fn::<_,3,_>(|j|(e[j]-here[j]) as f64);
+            unit([n[1]*d[2]-n[2]*d[1],n[2]*d[0]-n[0]*d[2],n[0]*d[1]-n[1]*d[0]]).map(|v|v as f64/1e6)
+        }).collect();
+        let error=|v:Vertex|local.iter().map(|n|((0..3).map(|j|n[j]*v[j] as f64).sum::<f64>().abs()-WALL_THICKNESS_CM as f64).abs()).fold(0.0,f64::max);
+        if error(result)>1.0 {
+            let original=result;let mut best=error(result);
+            for x in -1..=1 {for y in -1..=1 {for z in -1..=1 {
+                let candidate=add(original,[x,y,z]);let cost=error(candidate);
+                if cost<best {best=cost;result=candidate;}
+            }}}
+        }
+    }
+    result
 }
 
 pub(super) fn ring(base: Vertex, outward: Vertex, up: Vertex, reverse: bool) -> Ring {

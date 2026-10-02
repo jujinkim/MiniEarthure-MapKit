@@ -134,17 +134,18 @@ fn quantized_surface_direction_changes_stay_below_five_degrees() {
                 t.radius_cm = radius;
                 t.length_cm = length;
                 let mesh = t.mesh();
-                let bands = t.tile_count() / 256;
+                let steps = t.longitudinal_parameters().len()-1;
+                let bands = t.tile_count() / steps;
                 assert_eq!(mesh.units_per_metre, 10000);
                 let ns: Vec<_> = mesh.inner.iter().map(normal).collect();
                 let mut largest = 0.0f64;
-                for i in 0..256 {
+                for i in 0..steps {
                     for j in 0..bands {
                         for k in 0..2 {
                             let index = (i * bands + j) * 2 + k;
                             for other in [
                                 index ^ 1,
-                                ((i + 1).min(255) * bands + j) * 2 + k,
+                                ((i + 1).min(steps-1) * bands + j) * 2 + k,
                                 (i * bands + (j + 1).min(bands - 1)) * 2 + k,
                             ] {
                                 let dot = (0..3)
@@ -158,7 +159,8 @@ fn quantized_surface_direction_changes_stay_below_five_degrees() {
                 }
                 assert!(largest <= 5.0, "{id} r={radius} l={length}: {largest}");
                 // Analytic maximum sag plus integer quantization, in centimetres.
-                let angular = 1.6 * radius as f64 * (1.0 - libm::cos(std::f64::consts::PI / 256.0));
+                let largest_step=t.longitudinal_parameters().windows(2).map(|p|p[1]-p[0]).fold(0.0,f64::max);
+                let angular = 1.6 * radius as f64 * (1.0 - libm::cos(std::f64::consts::PI * largest_step));
                 let axial = if id == "cylinder" {
                     0.06 * radius as f64 * (1.0 - libm::cos(std::f64::consts::PI / bands as f64))
                 } else {

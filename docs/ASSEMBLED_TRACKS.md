@@ -481,3 +481,28 @@ reports four supported wheels on the 60cm wall top (chassis height 0.71879m),
 20m/s impact rejection from both sides, and both-seed/both-side scrape regressions
 without relocation or ghost impulses. Actual course driving and platform acceptance
 remain user checks.
+
+## Analytic surface sampling — 2026-10-02 replacement
+
+Ordinary curves now sample the unrounded analytic centre and ribbon, quantizing
+only final centimetre vertices. Adaptive intervals bound tangent/frame changes
+to 4 degrees, surface approximation to 1cm and longitudinal spacing to 1.5m.
+Quarter-point probes detect inflections; planar trapezoids need one strip, while
+non-planar ribbons add strips from their actual surface error. Rendering, barriers,
+collision and occupancy consume the same final edges. The former minimum sample
+counts and post-quantization curve refinement are removed.
+
+Spirals preserve width and rise, using radius max(8m, half-width + 7m). Their
+final inside/centre/outside edges are validated against 23% grade. Ordinary
+ramps ease in/out over the first/last eighth with constant middle grade. Loops
+and pipes use adaptive longitudinal and angular sampling while retaining their
+high-precision surfaces and vertical sections, without the ordinary grade cap.
+Costs, bounds and placement use the resulting geometry. Shared seams and
+internal-face cancellation remain active. All formats remain v1.
+
+Scoped automated results: assembled geometry units (all widths, grades, frames,
+spacing, deterministic edges), five wall units (closed seams and thickness),
+five special-track units, eight authoring units excluding the unrelated category
+combination matrix, all twelve assembled-package units and native/CLI build pass.
+Two implementation failures were corrected: vertical endpoint side vectors and
+loop-crown miter noise under adaptive sampling. Detailed driving is a user check.

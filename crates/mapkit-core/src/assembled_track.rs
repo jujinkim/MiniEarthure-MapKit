@@ -126,6 +126,10 @@ fn short_piece(id: &str) -> bool {
 #[serde(deny_unknown_fields)]
 pub struct Sample {
     pub position_cm: Vertex,
+    /// Final analytic lane edges, quantized directly rather than offset from an
+    /// already rounded centre. Dedicated structure frames use their own mesh.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ribbon_cm: Option<[Vertex; 2]>,
     pub normal: Vertex,
     pub forward: Vertex,
     pub mode: String,
@@ -385,6 +389,7 @@ pub fn fingerprint() -> String {
         &[
             include_bytes!("assembled_track.rs").as_slice(),
             include_bytes!("special_track.rs").as_slice(),
+            include_bytes!("curve_sampling.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/junction.rs").as_slice(),
@@ -466,7 +471,7 @@ fn distance(a: Vertex, b: Vertex) -> u64 {
     )) as u64
 }
 fn line(points: &mut Vec<(Vertex, Vertex, String)>, a: Vertex, b: Vertex, mode: &str) {
-    let n = (distance(a, b) / if mode == "cylinder" { 50 } else { 150 }).max(1) as i64;
+    let n = distance(a, b).div_ceil(if mode == "cylinder" { 50 } else { 150 }).max(1) as i64;
     for i in 0..=n {
         if i == 0 && !points.is_empty() {
             continue;
@@ -732,21 +737,22 @@ fn build_local_piece(original_id: &str) -> Piece {
                 "boost",
             );
             p.last_mut().unwrap().2 = "loop".into();
-            let mesh = SpecialTrack {
+            let track = SpecialTrack {
                 kind: TrackKind::Loop,
                 radius_cm: LOOP_RADIUS,
                 width_cm: LOOP_WIDTH,
                 length_cm: 1600,
                 centerline: vec![],
-            }
-            .mesh();
+            };
+            let mesh=track.mesh();
+            let parameters=track.longitudinal_parameters();
             // Same ribbon vertices as the existing loop, including separated ends.
             for (i, faces) in mesh.inner.chunks_exact(2).enumerate() {
                 if i == 0 {
                     continue;
                 }
                 let pos = std::array::from_fn(|a| (faces[0][0][a] + faces[1][2][a]) / 200);
-                let t = i as f64 * std::f64::consts::TAU / 256.0;
+                let t = parameters[i] * std::f64::consts::TAU;
                 p.push((
                     add(pos, [0, 0, 1000]),
                     [0, round(libm::cos(t) * 1e6), round(-libm::sin(t) * 1e6)],
@@ -908,6 +914,7 @@ fn build_local_piece(original_id: &str) -> Piece {
             };
             Sample {
                 position_cm: *pos,
+                ribbon_cm: None,
                 normal,
                 forward,
                 safe: ["drive", "drift", "bridge"].contains(&mode.as_str())
@@ -996,6 +1003,7 @@ fn build_local_piece(original_id: &str) -> Piece {
                 };
                 Sample {
                     position_cm: [round(x), round(200.0 * t * t * (3.0 - 2.0 * t)), z],
+                    ribbon_cm: None,
                     normal: unit([-dx * dy, dx * dx + 1.0, -dy]),
                     forward: unit([dx, dy, 1.0]),
                     mode: "bridge".into(),
@@ -1101,35 +1109,17 @@ fn portal_drop(previous: &str, next: &str, width: u32) -> i64 {
 }
 fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
     let mut p = local_piece(id);
-    geometry::shape(&mut p, width.max(entry).max(exit));
     p.width_cm = width;
     p.entry_width_cm = entry;
     p.exit_width_cm = exit;
     p.connection_width_cm = entry;
+    let analytical = geometry::shape(&mut p, width.max(entry).max(exit));
     if ["tube_entry", "tube_exit"].contains(&id) {
         let tiles = ramp_tiles(width);
         let length = tiles as i64 * TILE_CM;
         let height = round(f64::from(width) / 3.0);
-        p.path = (0..=tiles * 32)
-            .map(|i| {
-                let t = i as f64 / (tiles * 32) as f64;
-                let mut sample = p.path[0].clone();
-                // Entry rises to the portal; departure starts below the pipe
-                // floor and rises back to ordinary road level without a lip.
-                let sign = 1.0;
-                let dy = sign * height as f64 * 6.0 * t * (1.0 - t) / length as f64;
-                sample.position_cm = [
-                    0,
-                    round(sign * height as f64 * t * t * (3.0 - 2.0 * t)),
-                    round(length as f64 * t),
-                ];
-                sample.forward = unit([0.0, dy, 1.0]);
-                sample.normal = unit([0.0, 1.0, -dy]);
-                sample.safe = false;
-                sample.mode = "drive".into();
-                sample
-            })
-            .collect();
+        p.path = geometry::ramp(length as f64,height as f64,width,entry,exit);
+        for sample in &mut p.path { sample.safe = false; }
         p.cube_span = tiles as u8;
     }
     if id.starts_with("cylinder") {
@@ -1139,7 +1129,7 @@ fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
             v.safe = false;
         }
     } else {
-        if !["loop", "banked_chicane", "overpass"].contains(&id) {
+        if !analytical && !["loop", "banked_chicane", "overpass", "tube_entry", "tube_exit"].contains(&id) {
             geometry::taper(&mut p.path, width, entry, exit);
         }
     }
@@ -1176,10 +1166,6 @@ fn materialize(p: &Piece) -> Piece {
             }
         }
     }
-    if out.id != "finish_plaza" {
-        geometry::refine(&mut out.path);
-        geometry::refine(&mut out.alternate_path);
-    }
     out.chain_id = p.chain_id;
     out.chain_index = p.chain_index;
     out.chain_count = p.chain_count;
@@ -1197,6 +1183,7 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
         );
         v.forward = geometry::rotate3(v.forward, p.rotation_mdeg);
         v.normal = geometry::rotate3(v.normal, p.rotation_mdeg);
+        v.ribbon_cm=v.ribbon_cm.map(|edges|edges.map(|e|add(geometry::rotate3(e,p.rotation_mdeg),p.origin_cm)));
     }
     out.reserved_min_cm = std::array::from_fn(|j| {
         out.path
@@ -1352,6 +1339,7 @@ impl Assembly {
                 || p.path.len() < 2
                 || *p != materialize(p)
                 || geometry::self_intersects(p)
+                || !geometry::ordinary_grade_valid(p)
             {
                 return Err(fail());
             }
@@ -2058,7 +2046,6 @@ fn emit_shape(shape: &CollisionConvex, id: &str, b: &mut impl TrackGeometry) -> 
 /// Common public line sampling, independent of road instances.
 pub fn grind_path(points: &[Vertex], width: u32) -> Vec<Sample> {
     let mut p=geometry::bezier(points,width,width,width);
-    geometry::refine(&mut p);
     let mut out=vec![];
     for w in p.windows(2) {
         let steps=(distance(w[0].position_cm,w[1].position_cm).div_ceil(35)).max(1);

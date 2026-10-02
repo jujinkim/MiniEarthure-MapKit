@@ -994,6 +994,7 @@ mod spatial;
 pub use prepared::PreparedMap;
 mod cost;
 mod generation;
+mod curve_sampling;
 mod occupancy;
 mod query;
 pub use occupancy::{GeneratedOccupancy, OccupiedSolid, SolidShape, MAX_OCCUPIED_SOLIDS};

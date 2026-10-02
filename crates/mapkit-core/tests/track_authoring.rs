@@ -76,7 +76,7 @@ fn widths_curves_helices_and_continuous_jump() {
             } else if preset.starts_with("right") {
                 400.max(w / 2 + 200)
             } else if preset.starts_with("spiral") {
-                800.max(w / 2 + 200)
+                800.max(w / 2 + 700)
             } else {
                 300.max(w / 2 + 100)
             };

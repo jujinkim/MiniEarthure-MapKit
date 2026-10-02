@@ -78,6 +78,7 @@ fn sample(path: &[Sample], station: u64) -> Sample {
         if station <= at + len {
             let t = (station - at) as f64 / len.max(1) as f64;
             let mut out = w[0].clone();
+            out.ribbon_cm=None;
             out.position_cm = std::array::from_fn(|i| {
                 round(w[0].position_cm[i] as f64 * (1.0 - t) + w[1].position_cm[i] as f64 * t)
             });

@@ -244,6 +244,9 @@ pub fn piece(instance: &Instance) -> Result<Piece> {
     p.quarter_turns = (instance.rotation_mdeg[1].rem_euclid(360000) / 90000) as u8;
     p.control_points = instance.control_points.clone();
     let p = materialize(&p);
+    if p.path.len()+p.alternate_path.len()>MAX_SAMPLES {
+        return Err(error("E_TRACK_BUDGET", "curve exceeds final sample budget"));
+    }
     if p.path
         .iter()
         .any(|s| distance(s.forward, [0; 3]) < 999990 || distance(s.normal, [0; 3]) < 999990)

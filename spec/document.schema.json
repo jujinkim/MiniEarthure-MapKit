@@ -2156,6 +2156,24 @@
           "maxItems": 3,
           "minItems": 3
         },
+        "ribbon_cm": {
+          "description": "Final analytic lane edges, quantized directly rather than offset from an already rounded centre. Dedicated structure frames use their own mesh.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
         "safe": {
           "type": "boolean"
         },
