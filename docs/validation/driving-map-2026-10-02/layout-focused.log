@@ -1,0 +1,13 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.05s
+     Running unittests src/lib.rs (target/debug/deps/mapkit_core-47b25b0992e68373)
+
+running 5 tests
+test assembled_track::layout::tests::return_search_failure_and_cancellation_preserve_input ... ok
+test assembled_track::layout::tests::return_route_uses_modules_and_only_short_seams ... ok
+test assembled_track::layout::tests::difficulty_distribution_preserves_variants_and_increases_complexity ... ok
+test assembled_track::layout::tests::automatic_composition_is_a_graph_candidate ... ok
+difficulty route complexity: [70, 139, 175]
+test assembled_track::layout::tests::difficulty_seed_routes_reproduce_with_bounded_geometry ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 34 filtered out; finished in 12.84s
+

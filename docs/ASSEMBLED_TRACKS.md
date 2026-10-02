@@ -506,3 +506,27 @@ five special-track units, eight authoring units excluding the unrelated category
 combination matrix, all twelve assembled-package units and native/CLI build pass.
 Two implementation failures were corrected: vertical endpoint side vectors and
 loop-crown miter noise under adaptive sampling. Detailed driving is a user check.
+
+## Difficulty-weighted routes — 2026-10-02 replacement
+
+Difficulty now selects a driving family before a uniform left/right/up/down
+variant. This replaces the uniform 26-ID driving pool; enabled category tickets
+retain 26:9:5 for driving/gimmick/action. Family weights (easy/normal/hard) are:
+straight 34/16/8, grade 12/10/6, gentle corner 34/24/14, right angle 16/18/18,
+zigzag 4/8/12, sharp135 0/8/12, hairpin 0/6/12, spiral90 0/6/8,
+spiral180 0/3/6, spiral360 0/1/4. Ordinary width weights for 2/4/6/8/12m are
+0/20/40/30/10, 10/30/30/20/10 and 30/40/20/8/2. Supported widths only; required
+connections and fixed gimmick geometry retain their dimensions. Obstacle spacing
+remains 64/32/16m. Existing files, API default seed1, v1 formats, cancellation,
+24 candidates and all search/geometry budgets remain unchanged. Source fingerprints
+identify new generated layouts. No weather field is added to generation settings.
+
+Focused verification in `validation/driving-map-2026-10-02/`: five layout units
+pass, including distribution/uniform variants, seed17 repeatability in both modes,
+category exclusion and bounded geometry. Aggregate route-family complexity is
+70/139/175 for easy/normal/hard. All 42 category/mode/duration cases, package
+roundtrip/tamper rejection, cancellation/invalid requests and native/CLI build pass.
+The first unscoped core command failed to compile the unrelated existing
+`tests/water.rs` fixture (missing `contact_class`/`snow_retention_percent`); the
+affected `--lib` and named integration targets pass. Detailed driving remains
+user verification.

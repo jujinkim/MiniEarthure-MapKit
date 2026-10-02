@@ -221,36 +221,53 @@ pub(super) fn finish(pieces: Vec<Piece>, s: &Settings) -> Assembly {
         floor: stats.4,
     }
 }
+// Category tickets retain the original 26:9:5 ratio. Within driving, select a
+// family before its uniformly distributed handedness/elevation variants.
+const DRIVING_FAMILIES: [&[&str]; 10] = [
+    &["straight"],
+    &["slope_up", "slope_down"],
+    &["gentle45", "gentle45_left", "gentle90", "gentle90_left"],
+    &["right90", "right90_left"],
+    &["zigzag"],
+    &["sharp135", "sharp135_left"],
+    &["hairpin", "hairpin_left"],
+    &["spiral90_right_down", "spiral90_left_up", "spiral90_right_up", "spiral90_left_down"],
+    &["spiral180_right_up", "spiral180_left_down", "spiral180_right_down", "spiral180_left_up"],
+    &["spiral360_right_down", "spiral360_left_up", "spiral360_right_up", "spiral360_left_down"],
+];
+const FAMILY_WEIGHTS: [[u32; 10]; 3] = [
+    [34, 12, 34, 16, 4, 0, 0, 0, 0, 0],
+    [16, 10, 24, 18, 8, 8, 6, 6, 3, 1],
+    [8, 6, 14, 18, 12, 12, 12, 8, 6, 4],
+];
+const WIDTH_WEIGHTS: [[u32; 5]; 3] = [
+    [0, 20, 40, 30, 10],
+    [10, 30, 30, 20, 10],
+    [30, 40, 20, 8, 2],
+];
+fn difficulty_index(difficulty: &str) -> usize {
+    match difficulty { "easy" => 0, "hard" => 2, _ => 1 }
+}
+fn weighted_index(rng: &mut u64, weights: &[u32]) -> usize {
+    let mut ticket = (next(rng) % u64::from(weights.iter().sum::<u32>())) as u32;
+    for (index, weight) in weights.iter().enumerate() {
+        if ticket < *weight { return index; }
+        ticket -= weight;
+    }
+    unreachable!("nonempty positive weight distribution")
+}
+fn driving_choice(rng: &mut u64, difficulty: usize) -> &'static str {
+    let family = DRIVING_FAMILIES[weighted_index(rng, &FAMILY_WEIGHTS[difficulty])];
+    family[next(rng) as usize % family.len()]
+}
+fn road_width(rng: &mut u64, id: &str, difficulty: usize) -> u32 {
+    let widths = supported_widths(id);
+    let weights: Vec<_> = widths.iter().map(|w| WIDTH_WEIGHTS[difficulty][WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
+    widths[weighted_index(rng, &weights)]
+}
 fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     let mut rng = s.seed ^ attempt.wrapping_mul(0xa0761d6478bd642f);
-    let driving = [
-        "straight",
-        "slope_up",
-        "slope_down",
-        "zigzag",
-        "gentle45",
-        "gentle45_left",
-        "gentle90",
-        "gentle90_left",
-        "right90",
-        "right90_left",
-        "sharp135",
-        "sharp135_left",
-        "hairpin",
-        "hairpin_left",
-        "spiral90_right_down",
-        "spiral90_left_up",
-        "spiral90_right_up",
-        "spiral90_left_down",
-        "spiral180_right_up",
-        "spiral180_left_down",
-        "spiral180_right_down",
-        "spiral180_left_up",
-        "spiral360_right_down",
-        "spiral360_left_up",
-        "spiral360_right_up",
-        "spiral360_left_down",
-    ];
+    let difficulty = difficulty_index(&s.difficulty);
     let gimmicks = [
         "cylinder",
         "cylinder_curve",
@@ -271,7 +288,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     ];
     let mut choices = vec![];
     for (category, ids) in [
-        ("driving", driving.as_slice()),
+        ("driving", ["driving"; 26].as_slice()),
         ("gimmick", gimmicks.as_slice()),
         ("action", actions.as_slice()),
     ] {
@@ -322,9 +339,11 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         }
         let mut added = false;
         for _ in 0..12 {
-            let id = choices[next(&mut rng) as usize % choices.len()];
+            let choice = choices[next(&mut rng) as usize % choices.len()];
+            let id = if choice == "driving" { driving_choice(&mut rng, difficulty) } else { choice };
             let widths = supported_widths(id);
-            let w = widths[next(&mut rng) as usize % widths.len()];
+            let w = if choice == "driving" { road_width(&mut rng, id, difficulty) }
+                else { widths[next(&mut rng) as usize % widths.len()] };
             if add_block(&mut pieces, id, w) {
                 added = true;
                 break;
@@ -400,6 +419,62 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn difficulty_distribution_preserves_variants_and_increases_complexity() {
+        let mut scores = vec![];
+        let mut widths = vec![];
+        for difficulty in 0..3 {
+            let mut rng = 42;
+            let mut family_counts = [0u32; 10];
+            let mut variant_counts = std::collections::BTreeMap::new();
+            let mut width_counts = [0u32; 5];
+            let mut score = 0u64;
+            let mut width_sum = 0u64;
+            for _ in 0..100_000 {
+                let id = driving_choice(&mut rng, difficulty);
+                let family = DRIVING_FAMILIES.iter().position(|v| v.contains(&id)).unwrap();
+                family_counts[family] += 1;
+                *variant_counts.entry(id).or_insert(0u32) += 1;
+                score += family as u64;
+                let width = road_width(&mut rng, id, difficulty);
+                assert!(supported_widths(id).contains(&width));
+                width_counts[WIDTHS.iter().position(|w| *w == width).unwrap()] += 1;
+                width_sum += u64::from(width);
+            }
+            for (i, count) in family_counts.iter().enumerate() {
+                assert!(count.abs_diff(FAMILY_WEIGHTS[difficulty][i]*1000) < 700, "family {difficulty}/{i}: {count}");
+                if FAMILY_WEIGHTS[difficulty][i] == 0 { assert_eq!(*count, 0); }
+                for id in DRIVING_FAMILIES[i] {
+                    assert!(variant_counts.get(id).copied().unwrap_or(0).abs_diff(count / DRIVING_FAMILIES[i].len() as u32) < 400);
+                }
+            }
+            for (i, count) in width_counts.iter().enumerate() {
+                assert!(count.abs_diff(WIDTH_WEIGHTS[difficulty][i]*1000) < 700);
+            }
+            scores.push(score);
+            widths.push(width_sum);
+        }
+        assert!(scores.windows(2).all(|s| s[0] < s[1]));
+        assert!(widths.windows(2).all(|s| s[0] > s[1]));
+    }
+    #[test]
+    fn difficulty_seed_routes_reproduce_with_bounded_geometry() {
+        let mut complexity = [0usize; 3];
+        for (index, difficulty) in ["easy", "normal", "hard"].iter().enumerate() {
+            for circuit in [false, true] {
+                let s = Settings { seed: 17, circuit, difficulty: (*difficulty).into(), categories: vec!["driving".into()], ..Default::default() };
+                let a = assemble(&s).unwrap();
+                assert_eq!(a, assemble(&s).unwrap());
+                a.validate().unwrap();
+                assert!(a.pieces.iter().all(|p| category(&p.id)=="driving"));
+                assert!(a.pieces.len() <= MAX_PIECES);
+                assert!(a.pieces.iter().map(|p|p.path.len()).sum::<usize>() <= MAX_SAMPLES);
+                complexity[index] += a.pieces.iter().filter_map(|p|DRIVING_FAMILIES.iter().position(|v|v.contains(&p.id.as_str()))).sum::<usize>();
+            }
+        }
+        eprintln!("difficulty route complexity: {complexity:?}");
+        assert!(complexity[0] < complexity[1] && complexity[1] < complexity[2]);
+    }
     #[test]
     fn return_route_uses_modules_and_only_short_seams() {
         let mut pieces=vec![];
