@@ -19,7 +19,10 @@ pub(super) fn neighbors(a: &Assembly, index: usize) -> Vec<&Piece> {
 
 // Clip against the actual rendered/colliding road triangles. Chord-aligned
 // rectangles leave a wedge at every curved/tapered join (the barcode walls).
-fn triangle_interval(rings: [[Vertex; 4]; 2], triangle: [Vertex; 3]) -> Option<(f64,f64)> {
+type Plane = ([f64; 3], Vertex, f64);
+struct TrianglePlanes([Plane; 5]);
+
+fn triangle_planes(triangle: [Vertex; 3]) -> Option<TrianglePlanes> {
     let sub = |a: Vertex,b: Vertex| std::array::from_fn::<_,3,_>(|j| (a[j]-b[j]) as f64);
     let cross = |a: [f64;3],b: [f64;3]| [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
     let dot = |a: [f64;3],b: [f64;3]| (0..3).map(|j| a[j]*b[j]).sum::<f64>();
@@ -27,14 +30,21 @@ fn triangle_interval(rings: [[Vertex; 4]; 2], triangle: [Vertex; 3]) -> Option<(
     let length = libm::sqrt(dot(raw,raw));
     if length<1e-9 { return None; }
     let normal = raw.map(|v|v/length);
-    let mut planes = vec![(normal,triangle[0],-5.0),(normal.map(|v|-v),triangle[0],-5.0)];
+    let mut planes = [(normal,triangle[0],-5.0); 5];
+    planes[1] = (normal.map(|v|-v),triangle[0],-5.0);
     for i in 0..3 {
         let edge = sub(triangle[(i+1)%3],triangle[i]);
-        planes.push((cross(normal,edge),triangle[i],0.0));
+        planes[i+2] = (cross(normal,edge),triangle[i],0.0);
     }
+    Some(TrianglePlanes(planes))
+}
+
+fn triangle_interval(rings: [[Vertex; 4]; 2], triangle: &TrianglePlanes) -> Option<(f64,f64)> {
+    let sub = |a: Vertex,b: Vertex| std::array::from_fn::<_,3,_>(|j| (a[j]-b[j]) as f64);
+    let dot = |a: [f64;3],b: [f64;3]| (0..3).map(|j| a[j]*b[j]).sum::<f64>();
     let mut lo: f64=0.0;
     let mut hi: f64=1.0;
-    for (axis,origin,min) in planes {
+    for &(axis,origin,min) in &triangle.0 {
         // The interpolated support bounds every corner of the entire section.
         // This is conservative for twisted sections; no outer/top corner can
         // remain inside a connected lane when the inner edge misses it.
@@ -49,17 +59,42 @@ fn triangle_interval(rings: [[Vertex; 4]; 2], triangle: [Vertex; 3]) -> Option<(
     Some((lo,hi))
 }
 
-pub(super) fn visible_volume(rings: [[Vertex;4];2], neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(f64,f64)> {
-    let mut hidden = vec![];
-    for path in neighbors.iter().flat_map(|p| [&p.path[..],&p.alternate_path[..]]).chain(std::iter::once(alternate)) {
-        for w in path.windows(2) {
-            if w.iter().any(|s| ["flight","loop","cylinder","halfpipe"].contains(&s.mode.as_str())) { continue; }
-            let [al,ar]=geometry::ribbon_edges(&w[0],2);
-            let [bl,br]=geometry::ribbon_edges(&w[1],2);
-            for triangle in [[al,bl,br],[al,br,ar]] {
-                if let Some(range)=triangle_interval(rings,triangle) { hidden.push(range); }
+/// Ephemeral, piece-local clipping input. Neighbors retain source order and
+/// each opposite branch is appended after them, exactly as in the tessellator.
+#[derive(Default)]
+pub(super) struct Prepared { triangles: Vec<TrianglePlanes> }
+impl Prepared {
+    pub fn new<'a>(paths: impl Iterator<Item=&'a [Sample]> + Clone) -> Result<Self> {
+        cancellation::checkpoint()?;
+        let capacity=paths.clone().map(|p|p.len().saturating_sub(1)*2).sum();
+        let mut triangles=Vec::with_capacity(capacity);
+        for path in paths {
+            for w in path.windows(2) {
+                cancellation::checkpoint()?;
+                if w.iter().any(|s| ["flight","loop","cylinder","halfpipe"].contains(&s.mode.as_str())) { continue; }
+                let [al,ar]=geometry::ribbon_edges(&w[0],2);
+                let [bl,br]=geometry::ribbon_edges(&w[1],2);
+                for triangle in [[al,bl,br],[al,br,ar]] {
+                    if let Some(planes)=triangle_planes(triangle) { triangles.push(planes); }
+                }
             }
         }
+        Ok(Self { triangles })
+    }
+}
+
+// Includes allocated (even skipped/degenerate) triangles, interval vector
+// growth, stable-sort scratch and visible intervals; not a process RSS figure.
+pub(super) fn scratch_bytes(samples: usize) -> u64 {
+    samples as u64 * 2 * (std::mem::size_of::<TrianglePlanes>() as u64 + 96)
+}
+
+pub(super) fn visible_volume(rings: [[Vertex;4];2], neighbors: &Prepared, alternate: &Prepared) -> Result<Vec<(f64,f64)>> {
+    cancellation::checkpoint()?;
+    let mut hidden = vec![];
+    for (i,triangle) in neighbors.triangles.iter().chain(&alternate.triangles).enumerate() {
+        if i%64==0 { cancellation::checkpoint()?; }
+        if let Some(range)=triangle_interval(rings,triangle) { hidden.push(range); }
     }
     hidden.sort_by(|a,b|a.0.total_cmp(&b.0));
     let mut out=vec![];
@@ -70,26 +105,53 @@ pub(super) fn visible_volume(rings: [[Vertex;4];2], neighbors: &[&Piece], altern
     }
     if cursor<1.0 { out.push((cursor,1.0)); }
 
-    out
+    Ok(out)
+}
+
+#[cfg(test)]
+fn unprepared_visible(rings: [[Vertex;4];2], neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(f64,f64)> {
+    visible_volume(rings,
+        &Prepared::new(neighbors.iter().flat_map(|p|[&p.path[..],&p.alternate_path[..]])).unwrap(),
+        &Prepared::new(std::iter::once(alternate)).unwrap()).unwrap()
 }
 
 #[cfg(test)]
 fn visible(a: Vertex, b: Vertex, neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(Vertex,Vertex)> {
     let at = |t: f64| std::array::from_fn(|j|round(a[j] as f64+(b[j]-a[j]) as f64*t));
-    visible_volume([[a;4],[b;4]],neighbors,alternate).into_iter().map(|(a,b)|(at(a),at(b))).filter(|(a,b)|distance(*a,*b)>0).collect()
+    unprepared_visible([[a;4],[b;4]],neighbors,alternate).into_iter().map(|(a,b)|(at(a),at(b))).filter(|(a,b)|distance(*a,*b)>0).collect()
 }
 
 #[cfg(test)] mod tests {
     use super::*;
+    #[test]
+    fn preparation_workspace_and_cancellation_are_bounded() {
+        let p=materialize(&variant("overpass",600,400,600));
+        let prepared=Prepared::new([&p.path[..],&p.alternate_path[..]].into_iter()).unwrap();
+        let samples=p.path.len()+p.alternate_path.len();
+        let capacity=prepared.triangles.capacity();
+        assert!(capacity<=samples*2);
+        // Both interval vectors can grow to twice the triangle count, plus
+        // stable-sort scratch. Degenerate triangles still reserve plane space.
+        assert!(scratch_bytes(samples)>=capacity as u64*std::mem::size_of::<TrianglePlanes>() as u64
+            + (prepared.triangles.len() as u64*5+1)*16);
+        assert!(triangle_planes([[0;3];3]).is_none());
+        let token=cancellation::CancellationToken::default();
+        let result=token.run(|| {token.cancel(); Prepared::new(std::iter::once(&p.path[..])).map(|_|())});
+        assert_eq!(result.unwrap_err().code,"E_CANCELLED");
+        let token=cancellation::CancellationToken::default();
+        let result=token.run(|| {token.cancel(); visible_volume([[[0;3];4];2],&prepared,&Prepared::default())});
+        assert_eq!(result.unwrap_err().code,"E_CANCELLED");
+        assert!(visible_volume([[[0;3];4];2],&Prepared::default(),&Prepared::default()).is_ok());
+    }
     #[test] fn full_volume_cuts_outer_and_top_intrusions() {
         let p=variant("straight",400,400,400);
         let rings=[[240,0,100],[240,0,600]].map(|v| walls::ring(v,[-50,0,0],[0,120,0],false));
         assert!(visible([240,0,100],[240,0,600],&[&p],&[]).len()==1);
-        assert!(visible_volume(rings,&[&p],&[]).is_empty());
+        assert!(unprepared_visible(rings,&[&p],&[]).is_empty());
         let rings=[[0,-80,100],[0,-80,600]].map(|v| walls::ring(v,[50,0,0],[0,120,0],false));
-        assert!(visible_volume(rings,&[&p],&[]).is_empty());
+        assert!(unprepared_visible(rings,&[&p],&[]).is_empty());
         let rings=[[250,0,100],[250,0,600]].map(|v| walls::ring(v,[50,0,0],[0,120,0],false));
-        assert_eq!(visible_volume(rings,&[&p],&[]),vec![(0.0,1.0)]);
+        assert_eq!(unprepared_visible(rings,&[&p],&[]),vec![(0.0,1.0)]);
     }
     #[test] fn trims_interior_preserves_outer_and_grade_separation() {
         let p=variant("straight",400,400,400);

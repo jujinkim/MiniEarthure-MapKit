@@ -33,15 +33,51 @@ impl WallSink for Cost<'_> {
     }
 }
 
-pub(super) fn edges(s: &Sample, rotation: [i32;3]) -> [Vertex;2] {
+fn edges_with_right(s: &Sample, right: Vertex) -> [Vertex;2] {
     if s.mode != "loop" { return geometry::ribbon_edges(s,0); }
-    let right=geometry::rotate3([1_000_000,0,0],rotation);
     [-1,1].map(|side|std::array::from_fn(|j|
         s.position_cm[j]+right[j]*i64::from(s.lateral_cm)*side/1_000_000))
 }
 
+/// Only lives while one path is tessellated. Adjacent segments share quantized
+/// edges and offsets; lazy offsets skip the same non-wall samples as before.
+pub(super) struct PreparedPath {
+    pub edges: Vec<[Vertex; 2]>,
+    outward: Vec<[Option<Vertex>; 2]>,
+}
+impl PreparedPath {
+    pub fn new(path: &[Sample], rotation: [i32; 3]) -> Result<Self> {
+        cancellation::checkpoint()?;
+        let right=geometry::rotate3([1_000_000,0,0],rotation);
+        let mut edges=Vec::with_capacity(path.len());
+        for s in path {
+            cancellation::checkpoint()?;
+            edges.push(edges_with_right(s,right));
+        }
+        Ok(Self { edges, outward: vec![[None; 2]; path.len()] })
+    }
+    pub fn outward_at(&mut self, path: &[Sample], at: usize, side: i64) -> Vertex {
+        let index=usize::from(side>0);
+        if let Some(value)=self.outward[at][index] { return value; }
+        let value=outward_from_edges(path,at,side,|i|self.edges[i][index]);
+        self.outward[at][index]=Some(value);
+        value
+    }
+    pub fn scratch_bytes(samples: usize) -> u64 {
+        samples as u64 * (std::mem::size_of::<[Vertex;2]>() + std::mem::size_of::<[Option<Vertex>;2]>()) as u64
+    }
+}
+
+#[cfg(test)]
+pub(super) fn edges(s: &Sample, rotation: [i32;3]) -> [Vertex;2] {
+    edges_with_right(s,geometry::rotate3([1_000_000,0,0],rotation))
+}
+#[cfg(test)]
 pub(super) fn outward_at(path: &[Sample], at: usize, side: i64, rotation: [i32;3]) -> Vertex {
-    let edge = |i: usize| edges(&path[i],rotation)[usize::from(side > 0)];
+    outward_from_edges(path,at,side,|i|edges(&path[i],rotation)[usize::from(side>0)])
+}
+
+fn outward_from_edges(path: &[Sample], at: usize, side: i64, edge: impl Fn(usize) -> Vertex) -> Vertex {
     let here=edge(at);
     let n=path[at].normal.map(|v|v as f64/1e6);
     // A one-centimetre ordinary-ribbon perturbation must not turn a 50cm offset
@@ -97,13 +133,14 @@ pub(super) fn ring(base: Vertex, outward: Vertex, up: Vertex, reverse: bool) -> 
     result
 }
 
-pub(super) fn cut(rings: [Ring; 2], neighbors: &[&Piece], alternate: &[Sample], id: &str, out: &mut impl WallSink) {
-    for (lo, hi) in junction::visible_volume(rings, neighbors, alternate) {
+pub(super) fn cut(rings: [Ring; 2], neighbors: &junction::Prepared, alternate: &junction::Prepared, id: &str, out: &mut impl WallSink) -> Result<()> {
+    for (lo, hi) in junction::visible_volume(rings, neighbors, alternate)? {
         let at = |t: f64| std::array::from_fn(|i| std::array::from_fn(|j|
             round(rings[0][i][j] as f64 + (rings[1][i][j]-rings[0][i][j]) as f64*t)));
         let clipped = [at(lo), at(hi)];
         if clipped[0] != clipped[1] { out.push(Volume { rings: clipped, id: id.into() }); }
     }
+    Ok(())
 }
 
 // Pull each boundary triangle to the least visible quantized vertex. A
@@ -203,6 +240,71 @@ pub(super) fn emit(volumes: &[Volume], b: &mut impl TrackGeometry) -> Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn path_preparation_preserves_offsets_budget_and_cancellation() {
+        for id in ["straight","gentle90","loop","overpass"] {
+            let mut source=variant(id,600,400,600);
+            source.rotation_mdeg=[12000,35000,7000];
+            let p=materialize(&source);
+            for path in [&p.path,&p.alternate_path] {
+                let mut prepared=PreparedPath::new(path,p.rotation_mdeg).unwrap();
+                assert!(PreparedPath::scratch_bytes(path.len()) >=
+                    (prepared.edges.capacity()*std::mem::size_of::<[Vertex;2]>()
+                    +prepared.outward.capacity()*std::mem::size_of::<[Option<Vertex>;2]>()) as u64);
+                for at in 0..path.len() {
+                    assert_eq!(prepared.edges[at],edges(&path[at],p.rotation_mdeg));
+                    for side in [-1,1] {
+                        let expected=outward_at(path,at,side,p.rotation_mdeg);
+                        assert_eq!(prepared.outward_at(path,at,side),expected);
+                        assert_eq!(prepared.outward_at(path,at,side),expected);
+                    }
+                }
+            }
+            let token=cancellation::CancellationToken::default();
+            let result=token.run(|| { token.cancel(); PreparedPath::new(&p.path,p.rotation_mdeg).map(|_|()) });
+            assert_eq!(result.unwrap_err().code,"E_CANCELLED");
+        }
+    }
+    #[test]
+    fn ordered_geometry_matches_preparation_baseline() {
+        use sha2::{Digest, Sha256};
+        #[derive(Default)]
+        struct Transcript(Vec<serde_json::Value>);
+        impl TrackGeometry for Transcript {
+            fn triangle(&mut self, v: [Vertex;3], surface: Surface, id: &str, spawnable: bool) -> Result<()> {
+                self.0.push(serde_json::json!([v,surface,id,spawnable])); Ok(())
+            }
+            fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()> {
+                self.0.push(match shape {
+                    SolidShape::Convex(c) => serde_json::json!([id,"convex",c]),
+                    SolidShape::Box { min, max } => serde_json::json!([id,"box",min,max]),
+                    _ => panic!("unexpected track solid"),
+                }); Ok(())
+            }
+        }
+        // Synthetic fixtures captured before per-piece preparation. Includes
+        // exact triangle/solid order, IDs, materials and spawn eligibility.
+        let mut transcript=Transcript::default();
+        for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","loop","overpass","finish_plaza","cylinder"] {
+            for rotation in [[0,0,0],[12000,35000,7000]] {
+                let mut source=variant(id,600,400,600);
+                source.rotation_mdeg=rotation;
+                let p=materialize(&source);
+                let mut other=variant("gentle90",600,400,600);
+                other.rotation_mdeg=rotation;
+                other.origin_cm=[150,0,300];
+                let neighbor=materialize(&other);
+                for neighbors in [vec![],vec![&neighbor]] {
+                    let mut volumes=vec![];
+                    generate_piece(&p,0,&mut transcript,&neighbors,&mut volumes).unwrap();
+                    emit(&volumes,&mut transcript).unwrap();
+                }
+            }
+        }
+        let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
+        assert_eq!(transcript.0.len(),115902);
+        assert_eq!(digest,"1a847ea6ef087f15ebb75dd7d72d225874bede0851b4ad4c8664c7ff3b8b617b");
+    }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
     impl TrackGeometry for Mesh {

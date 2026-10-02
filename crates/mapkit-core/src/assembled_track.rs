@@ -1761,17 +1761,26 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
 }
 
 fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut impl walls::WallSink) -> Result<()> {
+    let neighbors=junction::Prepared::new(neighbors.iter().flat_map(|p|[&p.path[..],&p.alternate_path[..]]))?;
     if p.id == "finish_plaza" {
-        return generate_plaza(p, index, b, neighbors, walls);
+        return generate_plaza(p, index, b, &neighbors, walls);
     }
+    let forward=geometry::rotate3([0, 0, 1_000_000], p.rotation_mdeg);
+    let station = |s: &Sample| (0..3)
+        .map(|j| (s.position_cm[j] - p.origin_cm[j]) * forward[j] / 1_000_000)
+        .sum::<i64>();
     for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
+        if path.len()<2 { continue; }
+        let alternate=if branch { &p.path } else { &p.alternate_path };
+        let alternate=junction::Prepared::new(std::iter::once(alternate.as_slice()))?;
+        let mut prepared=walls::PreparedPath::new(path,p.rotation_mdeg)?;
         for (segment, w) in path.windows(2).enumerate() {
             cancellation::checkpoint()?;
             let special = w.iter().any(|s| s.mode == "flight")
                 || w.iter()
                     .all(|s| ["loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()));
-            let [al, ar] = walls::edges(&w[0],p.rotation_mdeg);
-            let [bl, br] = walls::edges(&w[1],p.rotation_mdeg);
+            let [al, ar] = prepared.edges[segment];
+            let [bl, br] = prepared.edges[segment+1];
             let id = format!(
                 "assembled-road-{index}{}",
                 if branch { "-bridge" } else { "" }
@@ -1821,19 +1830,12 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
             {
                 continue;
             }
-            let station = |s: &Sample| {
-                let f = geometry::rotate3([0, 0, 1_000_000], p.rotation_mdeg);
-                (0..3)
-                    .map(|j| (s.position_cm[j] - p.origin_cm[j]) * f[j] / 1_000_000)
-                    .sum::<i64>()
-            };
             if p.id == "overpass" && (station(&w[0]) < 400 || station(&w[1]) > 2800) {
                 continue;
             }
             for (side, edge_a, edge_b) in [(-1, al, bl), (1, ar, br)] {
-                let alternate = if branch { &p.path } else { &p.alternate_path };
                 let rings = [(edge_a, &w[0], segment), (edge_b, &w[1], segment+1)].map(|(edge, sample, at)| {
-                    let outward = walls::outward_at(path, at, side, p.rotation_mdeg);
+                    let outward = prepared.outward_at(path, at, side);
                     let height = if branch { 30 }
                     else if p.id.starts_with("cylinder") || p.id == "banked_chicane" {
                         25 + 30 * station(sample).clamp(0, 400) / 400
@@ -1841,7 +1843,7 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
                     let up = sample.normal.map(|n| n * height / 1_000_000);
                     walls::ring(edge, outward, up, side == 1)
                 });
-                walls::cut(rings, neighbors, alternate, &format!("assembled-wall-{index}"), walls);
+                walls::cut(rings, &neighbors, &alternate, &format!("assembled-wall-{index}"), walls)?;
             }
         }
     }
@@ -1862,7 +1864,8 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> Result<(u64, u64, u64)> {
         let neighbors=junction::neighbors(a,index);
         let intervals=neighbors.iter().map(|p|p.path.len()+p.alternate_path.len()).sum::<usize>()
             + p.path.len()+p.alternate_path.len();
-        clipping_scratch=clipping_scratch.max(intervals as u64*2*32);
+        clipping_scratch=clipping_scratch.max(junction::scratch_bytes(intervals)
+            + walls::PreparedPath::scratch_bytes(p.path.len().max(p.alternate_path.len())));
         generate_piece(p,index,&mut Discard,&neighbors,&mut walls)?;
     }
     let segments = a
@@ -1898,7 +1901,7 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> Result<(u64, u64, u64)> {
     ))
 }
 
-fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut impl walls::WallSink) -> Result<()> {
+fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &junction::Prepared, walls: &mut impl walls::WallSink) -> Result<()> {
     let center = plaza_center(p);
     let half = i64::from(p.width_cm) / 2;
     let transform = |v| add(p.origin_cm, geometry::rotate3(v, p.rotation_mdeg));
@@ -1992,11 +1995,12 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
         };
         offset
     }).collect();
+    let alternate=junction::Prepared::default();
     for i in 0..ring_points.len()-1 {
         walls::cut([
             walls::ring(ring_points[i], outer[i], up, false),
             walls::ring(ring_points[i+1], outer[i+1], up, false)
-        ], neighbors, &[], &wall, walls);
+        ], neighbors, &alternate, &wall, walls)?;
     }
     Ok(())
 }

@@ -139,6 +139,41 @@ records measurements and the 49-piece seed-derived 500 ms commit target miss.
 Detailed interactive/platform acceptance remains user verification.
 
 
+## Piece-local wall preparation — 2026-10-03
+
+Connected-road triangles and their five clipping planes are now prepared once per
+piece traversal. The opposite branch is prepared once per path. Quantized ribbon
+edges, lazy outward offsets and the rotation basis are reused by adjacent wall
+sections. These are private temporary values, discarded after the piece/path;
+there is no new request-spanning cache or public API. Rendering, collision,
+grounding and cost estimation still call the same tessellator.
+
+Triangle traversal, support arithmetic, plane order, interval sorting, tolerances,
+rounding and emitted triangle/solid order are unchanged. Cancellation is checked
+during preparation and every 64 clipping triangles, in addition to existing
+segment checks. Generation workspace now reserves the plane capacity (including
+skipped triangles), interval/sort scratch and prepared edge/offset arrays. No
+budget limit or validation requirement is relaxed; all own formats remain v1.
+
+Scoped macOS arm64 validation: 20 core library tests (walls, junctions, grounding,
+compiler-cache equivalence/tamper/cancellation), ten `track_authoring` tests
+(excluding duration/category searches), five affected package tests and optimized
+debug CLI/Godot native builds pass. The new pre-change golden covers 40 synthetic
+shape/orientation/neighbor combinations and **115,902** ordered surface/solid
+records, SHA256 `1a847ea6ef087f15ebb75dd7d72d225874bede0851b4ad4c8664c7ff3b8b617b`.
+It matches exactly after preparation. Added allocation-capacity and cancellation
+regressions pass, as do existing curved/tapered/grade-separated joins, loops,
+branch walls, support caps/clearance, occupancy and generation budgets.
+
+The affected package cases are `generated_walls_have_no_reverse_coplanar_duplicates`,
+`cancellation_and_invalid_requests`, `venue_floor_is_collision_only_and_budgeted`,
+`authored_source_roundtrip_draft_export_and_tampering` and
+`manual_flight_and_static_shapes_survive_both_containers`. No full suite, category
+matrix or platform acceptance was run. Consumer timing and native-load results
+are in the public [Editor report](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md).
+Build fingerprints change, so active bundled packages must be re-exported from
+their preserved sources; no old loader or automatic conversion is introduced.
+
 ## Independent grind lines and RC attachments (2026-10-01)
 
 Current v1 adds optional `grind_lines` to both the map and authored source. A line
