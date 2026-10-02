@@ -344,11 +344,12 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         a.obstacle_eligible_length_cm = eligible;
         a.obstacle_target_count = target;
         grounding::apply(&mut a)?;
+        authoring::checkpoint_budget(&a)?;
         if a.validate().is_ok() {
             if shortcut {
                 return match authoring::seed_shortcut(&a) {
                     Ok(graph) => Ok(Some(graph)),
-                    Err(e) if e.code == "E_CANCELLED" || e.code == "E_TRACK_SUPPORT" => Err(e),
+                    Err(e) if e.code == "E_CANCELLED" || e.code == "E_TRACK_SUPPORT" || e.code == "E_TRACK_CHECKPOINT_LIMIT" => Err(e),
                     Err(_) => Ok(None),
                 };
             }
@@ -362,9 +363,11 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
     let target = u32::from(s.duration_seconds) * 1000;
     let mut best: Option<Assembly> = None;
     let mut support_failure = None;
+    let mut checkpoint_failure = None;
     for attempt in 0..24 {
         cancellation::checkpoint()?;
         let candidate = match candidate(&s, attempt) {
+            Err(e) if e.code == "E_TRACK_CHECKPOINT_LIMIT" => { checkpoint_failure=Some(e); continue; }
             Err(e) if e.code == "E_TRACK_SUPPORT" => { support_failure = Some(e); continue; }
             other => other?,
         };
@@ -378,6 +381,7 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
             if best.as_ref().is_some_and(|a|a.estimated_msec.abs_diff(target)<=target/100) {break;}
         }
     }
+    if best.is_none() { if let Some(e)=checkpoint_failure {return Err(e);} }
     if best.is_none() { if let Some(e) = support_failure { return Err(error("E_TRACK_SUPPORT", format!("Requested {} s; no valid result in 24 layout candidates: {}", s.duration_seconds, e.message))); } }
     let a=best.ok_or_else(||error("E_TRACK_DURATION",format!("Requested {} s; closest unavailable: no connected layout within search/resource budget",s.duration_seconds)))?;
     if a.estimated_msec.abs_diff(target) > target / 10 {

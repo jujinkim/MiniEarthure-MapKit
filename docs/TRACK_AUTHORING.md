@@ -241,3 +241,17 @@ written-byte/source-preservation unit, native/CLI build and isolated Godot
 existing unrelated `tests/water.rs` Triangle initializer missing contact fields;
 focused units use `--lib` or an explicit integration target. Detailed consumer
 interaction remains user verification; consumer wiring is delivered separately.
+
+## Automatic checkpoint spacing — 2026-10-02 replacement
+
+Final generated routes select an ordinary checkpoint every four pieces. Straight,
+gentle corner and simple grade sections count toward spacing; narrow sections,
+obstacles and other special pieces require both boundaries. Splits and merges
+use shared samples before and after the entire branch. Selection is ordered on
+every route, merges coincident seams, and preserves the exact start and plaza
+finish. Manual authored lists bypass this automatic policy. Candidates needing
+more than 64 shared checkpoints are retried within the existing search bound or
+fail explicitly with E_TRACK_CHECKPOINT_LIMIT.
+
+Three focused units cover spacing, hazards, deduplication, limits, branch order
+and manual preservation; the generated alternate-route regression also passes.

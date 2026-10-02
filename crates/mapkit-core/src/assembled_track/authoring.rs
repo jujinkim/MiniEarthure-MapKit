@@ -707,36 +707,81 @@ pub fn common_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
             })
             .collect();
     }
-    let Some(base) = a.routes.first() else {
-        return vec![];
-    };
-    let mut out = vec![];
-    for &i in &base.pieces {
-        if i < 2 || !a.routes.iter().all(|r| r.pieces.contains(&i)) {
-            continue;
+    automatic_checkpoints(a)
+}
+
+/// Select only after every branch and obstacle is known. Authored checkpoints
+/// never enter this selector. All selected samples have the same route order.
+pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
+    let Some(base) = a.routes.first() else { return vec![]; };
+    let mut common = vec![];
+    let mut previous = vec![0; a.routes.len()];
+    for (order, &piece) in base.pieces.iter().enumerate() {
+        let positions: Option<Vec<_>> = a.routes.iter().map(|r|r.pieces.iter().position(|p|*p==piece)).collect();
+        if let Some(positions) = positions {
+            if !common.is_empty() && positions.iter().zip(&previous).any(|(n,p)|n<=p) {continue;}
+            previous=positions;
+            common.push((order,piece));
         }
-        out.push((
-            i,
-            if i == 2 {
-                a.pieces[i].path.len() / 2
-            } else {
-                0
-            },
-        ));
     }
-    if !a.settings.circuit {
-        if let Some(last) = out.last_mut() {
-            if a.pieces[last.0].id == "finish_plaza" {
-                last.1 = a.pieces[last.0]
-                    .path
-                    .iter()
-                    .position(|s| s.position_cm == a.finish_plaza.as_ref().unwrap().checkpoint_cm)
-                    .unwrap_or(0);
+    let Some(start)=common.iter().position(|(_,p)|*p==2) else {return vec![];};
+    let common=&common[start..];
+    let mut selected=BTreeSet::new();
+    let start_key=(common[0].0,a.pieces[2].path.len()/2);
+    selected.insert(start_key);
+    let ordinary=|i:usize| {
+        let p=&a.pieces[i];
+        p.width_cm>=400 && p.entry_width_cm>=400 && p.exit_width_cm>=400
+            && ["straight","approach","finish_plaza","curve","curve_left","gentle45","gentle45_left",
+                "slope","slope_up","slope_down","curve_up","curve_down","curve_left_up","curve_left_down"].contains(&p.id.as_str())
+            && !a.obstacles.iter().any(|o|o.piece_index==i)
+    };
+    let mut run=0;
+    for (n,&(order,i)) in common.iter().enumerate() {
+        let piece=&a.pieces[i];
+        if run==4 {selected.insert((order,0));run=0;}
+        if ordinary(i) {run+=1;} else {
+            selected.insert((order,0));
+            selected.insert((order,piece.path.len()-1));
+            run=0;
+        }
+        if let Some(&(next_order,next))=common.get(n+1) {
+            // Every split and merge brackets the complete non-common section,
+            // including hazards that exist only on an alternate route.
+            let divergent=a.routes.iter().any(|r| {
+                let here=r.pieces.iter().position(|p|*p==i).unwrap();
+                r.pieces.get(here+1)!=Some(&next)
+            });
+            if divergent {
+                selected.insert((order,piece.path.len()-1));
+                selected.insert((next_order,0));
+                run=0;
             }
+        }
+    }
+    if let Some(&(order,i))=common.last() {
+        let piece=&a.pieces[i];
+        let sample=if let Some(plaza)=&a.finish_plaza {
+            piece.path.iter().position(|p|p.position_cm==plaza.checkpoint_cm).unwrap_or(piece.path.len()-1)
+        } else {piece.path.len()-1};
+        selected.insert((order,sample));
+    }
+    let mut out:Vec<(usize,usize)>=vec![];
+    for (order,sample) in selected.into_iter().filter(|v|*v>=start_key) {
+        let i=base.pieces[order];
+        let position=a.pieces[i].path[sample].position_cm;
+        if out.last().is_none_or(|(p,s)|a.pieces[*p].path[*s].position_cm!=position) {
+            out.push((i,sample));
         }
     }
     out
 }
+pub(super) fn checkpoint_budget(a: &Assembly) -> Result<()> {
+    let count=common_checkpoints(a).len();
+    if count<2 || count>64 {return Err(error("E_TRACK_CHECKPOINT_LIMIT",format!("Final routes need {count} shared checkpoints; allowed 2..64")));}
+    Ok(())
+}
+
 pub fn executable(a: &Assembly) -> Result<()> {
     if !a.issues.is_empty() {
         return Err(error("E_TRACK_DRAFT", a.issues.join("; ")));
@@ -1006,8 +1051,11 @@ pub(super) fn seed_shortcut(a: &Assembly) -> Result<Assembly> {
     source.paths.push(route);
     source.checkpoints.retain(|cp| cp.piece != "piece-3");
     source.actions.push(example.actions[0].clone());
+    let compiled = compile(&source)?;
+    source.checkpoints=automatic_checkpoints(&compiled).into_iter().map(|(piece,sample)|Checkpoint{piece:source.instances[piece].id.clone(),sample}).collect();
     let mut out = compile(&source)?;
     executable(&out)?;
+    checkpoint_budget(&out)?;
     out.authoring = None;
     out.seed_source = Some(source);
     Ok(out)
@@ -1094,5 +1142,54 @@ mod practice_tests {
         source.structures.clear();
         source.actions=vec![source.actions[0].clone();65];
         assert_eq!(compile(&source).unwrap_err().code,"E_TRACK_BUDGET");
+    }
+}
+
+#[cfg(test)]
+mod checkpoint_tests {
+    use super::*;
+    fn road(count:usize)->Assembly {
+        let mut pieces=vec![];let mut origin=[0;3];
+        for _ in 0..count {push_piece(&mut pieces,&mut origin,0,"straight",400,true,[0;3]);}
+        layout::finish(pieces,&Settings{circuit:false,..Default::default()})
+    }
+    #[test]
+    fn ordinary_four_pieces_and_exact_endpoints() {
+        let a=road(16);
+        let cps=common_checkpoints(&a);
+        assert_eq!(cps.iter().map(|p|p.0).collect::<Vec<_>>(),[2,6,10,14,15]);
+        assert_eq!(cps[0].1,a.pieces[2].path.len()/2);
+        assert_eq!(cps.last().unwrap().1,a.pieces[15].path.len()-1);
+        let mut pieces=a.pieces;let mut origin=pieces.last().unwrap().path.last().unwrap().position_cm;
+        push_piece(&mut pieces,&mut origin,0,"finish_plaza",400,true,[0;3]);
+        let sprint=layout::finish(pieces,&a.settings);
+        let end=*common_checkpoints(&sprint).last().unwrap();
+        assert_eq!(sprint.pieces[end.0].path[end.1].position_cm,sprint.finish_plaza.unwrap().checkpoint_cm);
+    }
+    #[test]
+    fn mandatory_hazards_deduplicate_seams_and_limit() {
+        let mut a=road(12);
+        a.pieces[4].id="sharp_curve".into();
+        a.pieces[5].width_cm=200;
+        let cps=common_checkpoints(&a);
+        let points:Vec<_>=cps.iter().map(|(p,s)|a.pieces[*p].path[*s].position_cm).collect();
+        for p in [4,5] {for s in [0,a.pieces[p].path.len()-1] {assert!(points.contains(&a.pieces[p].path[s].position_cm));}}
+        assert!(!points.windows(2).any(|p|p[0]==p[1]));
+        assert_eq!(checkpoint_budget(&road(280)).unwrap_err().code,"E_TRACK_CHECKPOINT_LIMIT");
+    }
+    #[test]
+    fn final_branch_order_and_authored_preservation() {
+        let source=shortcut_source();let a=compile(&source).unwrap();
+        let manual=common_checkpoints(&a);
+        assert_eq!(manual.len(),source.checkpoints.len());
+        let selected=automatic_checkpoints(&a);
+        assert_ne!(selected,manual);
+        for route in &a.routes {
+            let keys:Vec<_>=selected.iter().map(|(piece,sample)|(route.pieces.iter().position(|i|i==piece).unwrap(),*sample)).collect();
+            assert!(keys.windows(2).all(|w|w[0]<w[1]));
+        }
+        assert!(selected.contains(&(2,a.pieces[2].path.len()-1))); // before split
+        assert!(selected.iter().any(|(p,s)|*p==4 && *s==0)); // after merge
+        assert_eq!(common_checkpoints(&a),manual);
     }
 }
