@@ -12,4 +12,3 @@ test flight_export_needs_declared_approach_landing_and_supported_progress ... ok
 test widths_curves_helices_and_continuous_jump ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.06s
-

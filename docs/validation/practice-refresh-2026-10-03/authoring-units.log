@@ -9,4 +9,3 @@ test assembled_track::authoring::practice_tests::manual_flight_keeps_landings_bu
 test assembled_track::authoring::preparation_tests::compiler_owned_reuse_keeps_full_external_validation ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.11s
-

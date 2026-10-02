@@ -28,3 +28,5 @@ detector. No passing result is claimed for the original offset fixture.
 
 No format increment, schema/public API addition, safety margin reduction or
 course-specific exception. Detailed driving and device acceptance are user work.
+
+Tracked logs omit trailing whitespace/blank EOF lines; raw local logs are retained.
