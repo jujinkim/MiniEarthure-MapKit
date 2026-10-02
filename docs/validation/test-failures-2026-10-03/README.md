@@ -16,11 +16,13 @@ rtk proxy env PATH=/opt/homebrew/opt/rustup/bin:$PATH cargo test --locked --mani
 
 | Run | Result |
 | --- | --- |
-| [Before](water-before/output.log) | Reproduced E0063 at line 22; exit 101 |
-| [After](water-after/output.log) | All 3 tests passed; exit 0; incremental test build 16.07 s |
+| [Before](water-before/output.log.gz) | Reproduced E0063 at line 22; exit 101 |
+| [After](water-after/output.log.gz) | All 3 tests passed; exit 0; incremental test build 16.07 s |
 
 The passing scope retains non-solid water, submerged/dry-island/bridge spawn
 queries, bounds, deterministic seams/hash/cost/archive round trips and invalid
 water input rejection. No unrelated Rust target or consumer suite was run.
 Existing native libraries were reused because native source/dependencies did not
 change. Earlier failed discovery records remain historical evidence.
+
+Raw logs are gzip-compressed without altering their bytes; original local run logs remain retained.
