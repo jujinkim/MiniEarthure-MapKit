@@ -1780,27 +1780,8 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
             let special = w.iter().any(|s| s.mode == "flight")
                 || w.iter()
                     .all(|s| ["loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()));
-            let edges = |s: &Sample| {
-                if s.mode != "loop" { return geometry::ribbon_edges(s,0); }
-                let n = s.normal.map(|v| v as f64 / 1e6);
-                let f = s.forward.map(|v| v as f64 / 1e6);
-                let right = if s.mode == "loop" {
-                    geometry::rotate3([1_000_000, 0, 0], p.rotation_mdeg)
-                } else {
-                    unit([
-                        n[1] * f[2] - n[2] * f[1],
-                        n[2] * f[0] - n[0] * f[2],
-                        n[0] * f[1] - n[1] * f[0],
-                    ])
-                };
-                [-1, 1].map(|side| {
-                    std::array::from_fn(|j| {
-                        s.position_cm[j] + right[j] * i64::from(s.lateral_cm) * side / 1_000_000
-                    })
-                })
-            };
-            let [al, ar] = edges(&w[0]);
-            let [bl, br] = edges(&w[1]);
+            let [al, ar] = walls::edges(&w[0],p.rotation_mdeg);
+            let [bl, br] = walls::edges(&w[1],p.rotation_mdeg);
             let id = format!(
                 "assembled-road-{index}{}",
                 if branch { "-bridge" } else { "" }
@@ -1859,24 +1840,14 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
             if p.id == "overpass" && (station(&w[0]) < 400 || station(&w[1]) > 2800) {
                 continue;
             }
-            let wall = if branch {
-                30
-            } else if p.id.starts_with("cylinder") || p.id == "banked_chicane" {
-                25 + 30 * station(&w[0]).clamp(0, 400) / 400
-            } else if w[0].mode == "loop" {
-                120
-            } else {
-                WALL
-            };
             for (side, edge_a, edge_b) in [(-1, al, bl), (1, ar, br)] {
                 let alternate = if branch { &p.path } else { &p.alternate_path };
                 let rings = [(edge_a, &w[0], segment), (edge_b, &w[1], segment+1)].map(|(edge, sample, at)| {
-                    let outward = if sample.mode == "loop" {
-                        geometry::rotate3([side * WALL_THICKNESS_CM, 0, 0], p.rotation_mdeg)
-                    } else { walls::outward_at(path, at, side) };
-                    let height = if !branch && (p.id.starts_with("cylinder") || p.id == "banked_chicane") {
+                    let outward = walls::outward_at(path, at, side, p.rotation_mdeg);
+                    let height = if branch { 30 }
+                    else if p.id.starts_with("cylinder") || p.id == "banked_chicane" {
                         25 + 30 * station(sample).clamp(0, 400) / 400
-                    } else { wall };
+                    } else if sample.mode == "loop" { 120 } else { WALL };
                     let up = sample.normal.map(|n| n * height / 1_000_000);
                     walls::ring(edge, outward, up, side == 1)
                 });

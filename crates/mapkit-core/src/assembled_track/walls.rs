@@ -3,11 +3,33 @@ use super::*;
 type Ring = [Vertex; 4];
 pub(super) struct Volume { pub rings: [Ring; 2], pub id: String }
 
-pub(super) fn outward_at(path: &[Sample], at: usize, side: i64) -> Vertex {
-    let edge = |i: usize| geometry::ribbon_edges(&path[i],0)[usize::from(side > 0)];
+pub(super) fn edges(s: &Sample, rotation: [i32;3]) -> [Vertex;2] {
+    if s.mode != "loop" { return geometry::ribbon_edges(s,0); }
+    let right=geometry::rotate3([1_000_000,0,0],rotation);
+    [-1,1].map(|side|std::array::from_fn(|j|
+        s.position_cm[j]+right[j]*i64::from(s.lateral_cm)*side/1_000_000))
+}
+
+pub(super) fn outward_at(path: &[Sample], at: usize, side: i64, rotation: [i32;3]) -> Vertex {
+    let edge = |i: usize| edges(&path[i],rotation)[usize::from(side > 0)];
     let here=edge(at);
     let n=path[at].normal.map(|v|v as f64/1e6);
-    let directions = [if at>0 { at-1 } else { at }, if at+1<path.len() { at+1 } else { at }];
+    // A one-centimetre ordinary-ribbon perturbation must not turn a 50cm offset
+    // back on itself. Estimate its tangents over one barrier thickness. Loops
+    // have a fixed ribbon axis and retain their local three-dimensional miters.
+    // Positions and lane widths remain the original quantized ribbon vertices.
+    let tangent_span=if path[at].mode=="loop" {1} else {WALL_THICKNESS_CM as u64};
+    let mut before=at;
+    while before>0 {
+        before-=1;
+        if distance(edge(before),here)>=tangent_span {break;}
+    }
+    let mut after=at;
+    while after+1<path.len() {
+        after+=1;
+        if distance(edge(after),here)>=tangent_span {break;}
+    }
+    let directions = [before,after];
     let mut normals=vec![];
     for (j,i) in directions.into_iter().enumerate() {
         if i==at {continue;}
@@ -40,6 +62,24 @@ pub(super) fn emit(volumes: &[Volume], b: &mut impl TrackGeometry) -> Result<()>
     // duplicate sheet or internal cap reaches native CCD edge classification.
     let mut caps = std::collections::BTreeMap::<Ring, usize>::new();
     for v in volumes { for mut ring in v.rings { ring.sort(); *caps.entry(ring).or_default() += 1; } }
+    // At a tight loop crown, centimetre quantization can collapse an edge or
+    // fold a sub-centimetre face onto its neighbour. Cancel those internal
+    // opposing faces too; they must not become reversed native CCD features.
+    let mut triangles = std::collections::BTreeMap::<[Vertex;3], (i32, &str)>::new();
+    let mut quad = |mut ring: Ring, id| {
+        let first=(0..4).min_by_key(|&i|ring[i]).unwrap();
+        ring.rotate_left(first);
+        for mut face in [[ring[0],ring[1],ring[2]],[ring[0],ring[2],ring[3]]] {
+            let u=std::array::from_fn::<_,3,_>(|j|i128::from(face[1][j]-face[0][j]));
+            let v=std::array::from_fn::<_,3,_>(|j|i128::from(face[2][j]-face[0][j]));
+            if [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]] == [0;3] {continue;}
+            let index=(0..3).min_by_key(|&i|face[i]).unwrap();
+            face.rotate_left(index);
+            let orientation=if face[1]<face[2] {1} else {-1};
+            face.sort();
+            triangles.entry(face).or_insert((0,id)).0 += orientation;
+        }
+    };
     for v in volumes {
         cancellation::checkpoint()?;
         let [a, c] = v.rings;
@@ -48,17 +88,22 @@ pub(super) fn emit(volumes: &[Volume], b: &mut impl TrackGeometry) -> Result<()>
             let j = (i+1)%4;
             let q = [i as u8, j as u8, (j+4) as u8, (i+4) as u8];
             faces.extend([[q[0],q[1],q[2]],[q[0],q[2],q[3]]]);
-            b.quad([a[i],a[j],c[j],c[i]], Surface::Concrete, &v.id, false)?;
+            quad([a[i],a[j],c[j],c[i]], v.id.as_str());
         }
         for (index, mut ring) in [a,c].into_iter().enumerate() {
             let mut key = ring; key.sort();
             if index == 0 { ring.reverse(); }
-            if caps[&key] == 1 { b.quad(ring, Surface::Concrete, &v.id, false)?; }
+            if caps[&key] == 1 { quad(ring, v.id.as_str()); }
         }
         faces.extend([[3,2,1],[3,1,0],[4,5,6],[4,6,7]]);
         b.solid(&v.id, SolidShape::Convex(CollisionConvex {
             vertices: a.into_iter().chain(c).collect(), faces,
         }))?;
+    }
+    for (mut face, (orientation,id)) in triangles {
+        if orientation==0 {continue;}
+        if orientation<0 {face.swap(1,2);}
+        b.triangle(face, Surface::Concrete, id, false)?;
     }
     Ok(())
 }
@@ -76,7 +121,7 @@ mod tests {
     }
     #[test]
     fn closed_outward_walls_on_straight_curve_slope_taper_and_plaza() {
-        for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","finish_plaza"] {
+        for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","loop","finish_plaza"] {
             let p=materialize(&variant(id,600,400,600));
             let mut discarded=Mesh::default(); let mut volumes=vec![];
             generate_piece(&p,0,&mut discarded,&[],&mut volumes).unwrap();
@@ -89,7 +134,8 @@ mod tests {
                 let mut edge=[face[i],face[(i+1)%3]]; edge.sort();
                 *edges.entry(edge).or_insert(0)+=1;
             }}
-            assert!(edges.values().all(|count|*count==2),"{id}: closed manifold walls");
+            let invalid: Vec<_> = edges.iter().filter(|(_,count)|**count!=2).take(12).collect();
+            assert!(invalid.is_empty(),"{id}: closed manifold walls: {invalid:?}");
             for volume in &volumes { for ring in volume.rings {
                 let width=distance(ring[0],ring[3]);
                 assert!((48..=72).contains(&width),"{id}: quantized width {width}");
@@ -101,6 +147,46 @@ mod tests {
         let s=Settings {seed:42,circuit:false,duration_seconds:90,categories:vec!["gimmick".into()],..Default::default()};
         let a=assemble(&s).unwrap();
         assert!(a.estimated_msec.abs_diff(90000)<=9000);
+    }
+    #[test]
+    fn loop_wall_normal_thickness_is_fifty_cm() {
+        let mut piece=variant("loop",LOOP_WIDTH,400,400);
+        for rotation in [[0,0,0],[12000,35000,7000]] {
+            piece.rotation_mdeg=rotation;
+            let p=materialize(&piece);
+            for at in 1..p.path.len()-1 {
+                let s=&p.path[at];
+                if s.mode!="loop" {continue;}
+                for side in [-1,1] {
+                    let outward=outward_at(&p.path,at,side,rotation);
+                    let a=edges(s,rotation)[usize::from(side>0)];
+                    for neighbor in [at-1,at+1] {
+                        let b=edges(&p.path[neighbor],rotation)[usize::from(side>0)];
+                        let d=std::array::from_fn::<_,3,_>(|j|(b[j]-a[j]) as f64);
+                        let up=s.normal.map(|v|v as f64/1e6);
+                        let normal=unit([d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]]);
+                        let thickness=(0..3).map(|j|normal[j] as f64/1e6*outward[j] as f64).sum::<f64>().abs();
+                        assert!((49.0..=51.0).contains(&thickness),"rotation={rotation:?} at={at} thickness={thickness}");
+                    }
+                }
+            }
+        }
+    }
+    #[test]
+    fn ordinary_wall_face_normal_thickness_stays_within_centimetre_quantization() {
+        for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","spiral180_right_up","straight_narrow"] {
+            let p=materialize(&variant(id,600,400,600));
+            for at in 0..p.path.len()-1 { for side in [-1,1] {
+                let a=edges(&p.path[at],p.rotation_mdeg)[usize::from(side>0)];
+                let b=edges(&p.path[at+1],p.rotation_mdeg)[usize::from(side>0)];
+                let d=std::array::from_fn::<_,3,_>(|j|(b[j]-a[j]) as f64);
+                let up=p.path[at].normal.map(|v|v as f64/1e6);
+                let normal=unit([d[1]*up[2]-d[2]*up[1],d[2]*up[0]-d[0]*up[2],d[0]*up[1]-d[1]*up[0]]);
+                let outward=outward_at(&p.path,at,side,p.rotation_mdeg);
+                let thickness=(0..3).map(|j|normal[j] as f64/1e6*outward[j] as f64).sum::<f64>().abs();
+                assert!((48.0..=52.0).contains(&thickness),"{id} at={at} thickness={thickness}");
+            }}
+        }
     }
     #[test]
     fn full_volume_bounds_include_wall_and_adjacent_piece_caps_cancel() {

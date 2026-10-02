@@ -465,7 +465,16 @@ adds 50cm on each side to avoid new barrier overlap, preserving the 220cm lane.
 The same loop offset is shared with special-track generation. No format changes:
 current v1 source/catalogue fingerprints identify the new geometry.
 
-Affected verification passed: 23 assembled-track unit tests, all category/time
+Loop miters use the actual fixed-axis ribbon edges, including rotated pieces,
+to keep 50cm normal thickness. Endpoint heights are shared across segments.
+Canonical quad diagonals and cancellation remove opposing faces collapsed by
+centimetre quantization at the loop crown; emitted walls remain closed.
+Ordinary edge tangents use a 50cm neighborhood so centimetre noise cannot fold
+the outer wall backward. The original lane vertices stay fixed; tested normal
+thickness stays within the two-centimetre endpoint quantization allowance.
+
+Affected verification passed: 25 assembled-track unit tests, the generated-wall
+opposing-face regression, all category/time
 combinations (including the initially failing 90-second gimmick-only seed),
 occupancy regressions and native bridge build. Runtime's generated-wall fixture
 reports four supported wheels on the 60cm wall top (chassis height 0.71879m),
