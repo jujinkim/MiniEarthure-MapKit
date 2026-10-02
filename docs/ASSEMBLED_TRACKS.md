@@ -447,3 +447,28 @@ The Godot bridge caches successful deterministic document verification only for 
 current immutable open package. Candidate identity/world/bounds/course equality
 checks still run each time; all reopen paths reset it. CLI full verification remains
 unchanged. [Measured regression and invalidation evidence](validation/playtest-performance-2026-10-02/README.md).
+
+## Closed outward barriers — 2026-10-02, root §44.262
+
+This replaces single-sheet boundary walls with 50cm outward volumes on seed and
+authored tracks, alternate routes and the finish plaza. Lane edges and wall
+heights stay fixed. Quantized inner/outer/top/bottom/end faces drive rendering and
+collision; matching section caps cancel across piece seams. Convex occupancy uses
+the same vertices. Wall tops are physical support, never spawn/recovery candidates.
+
+Edge miters preserve thickness on bends and width changes; each endpoint uses its
+own surface normal and height. Connected-road clipping tests the full four-corner
+section, including the outer face and top, against the existing road triangles.
+It retains the 2cm edge inset and 5cm height tolerance. Bounds, sample-volume
+clearance and cell costs include both barriers. Loop entry/exit lateral offset
+adds 50cm on each side to avoid new barrier overlap, preserving the 220cm lane.
+The same loop offset is shared with special-track generation. No format changes:
+current v1 source/catalogue fingerprints identify the new geometry.
+
+Affected verification passed: 23 assembled-track unit tests, all category/time
+combinations (including the initially failing 90-second gimmick-only seed),
+occupancy regressions and native bridge build. Runtime's generated-wall fixture
+reports four supported wheels on the 60cm wall top (chassis height 0.71879m),
+20m/s impact rejection from both sides, and both-seed/both-side scrape regressions
+without relocation or ghost impulses. Actual course driving and platform acceptance
+remain user checks.

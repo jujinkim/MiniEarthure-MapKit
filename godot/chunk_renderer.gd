@@ -6,6 +6,7 @@ const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
 const URBAN_SURFACE := preload("./urban_surface.gdshader")
 const PLAN := preload("./render_memory.gd")
+const QUALITY := preload("./display_quality.gd")
 const INSTANCES := preload("./render_instances.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 # Triple the lit ground width at the same mounting height (tan of the cone angle).
@@ -38,6 +39,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 				"error": {"code": "E_MEMORY_BUDGET", "message": "Display allocation exceeds memory allowance"}}
 	var root := Node3D.new()
 	root.set_meta("mapkit_render_root", true)
+	root.add_to_group("mapkit_quality_targets")
 	if lease != null: lease.track(root)
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
@@ -60,7 +62,8 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 			return job
 		for object: Dictionary in view.objects:
 			var id := str(object.asset_id)
-			job.counts[id] = int(job.counts.get(id, 0)) + 1
+			var group := _object_group(object)
+			job.counts[group] = int(job.counts.get(group, 0)) + 1
 	return job
 
 static func advance(job: Dictionary) -> bool:
@@ -146,10 +149,11 @@ static func _advance(job: Dictionary) -> bool:
 				material.albedo_color = ground_color(key, presentation)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
-				material.resource_name = "mk_"+{"dirt":"earth","gravel":"stone"}.get(key,key)
+				material.resource_name = "mk_"+detail_kind(key)
 			material = _environment_surface(job, material)
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
+		mesh.set_meta("mapkit_occluder", occluding_surface(key))
 		track_resources(job, mesh)
 		job.root.add_child(mesh)
 		job.triangle = offset
@@ -168,6 +172,7 @@ static func _advance(job: Dictionary) -> bool:
 			var object: Dictionary = chunk.objects[job.object]
 			job.object += 1
 			var id := str(object.asset_id)
+			var group := _object_group(object)
 			if not id.begins_with("builtin:"):
 				if not sources.has(id): return fail(job, "E_RENDER_ASSET", "Presentation bytes are missing")
 				if not str(sources[id].path).ends_with(".glb"): continue # textured proxy faces
@@ -180,20 +185,24 @@ static func _advance(job: Dictionary) -> bool:
 					job.object -= 1
 					return false
 				if job.get("resources") != null:
-					if not job.instances.has(id):
-						job.instances[id] = INSTANCES.begin(job.templates[id], int(job.counts.get(id, 0)), job.root, job.lease)
+					if not job.instances.has(group):
+						job.instances[group] = INSTANCES.begin(job.templates[id], int(job.counts.get(group, 0)), job.root, job.lease)
 						job.object -= 1
 						return false
-					if not job.instances[id].is_empty():
+					if not job.instances[group].is_empty():
 						var transform := Transform3D(Basis(Vector3.UP, float(object.quarter_turns) * PI / 2.0), scene_position(object.position))
-						INSTANCES.append(job.instances[id], transform, str(object.id), str(presentation.get("map_id","")))
+						INSTANCES.append(job.instances[group], transform, str(object.id), str(presentation.get("map_id","")))
 						_environment_lamp(job,id,object,presentation)
 						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
 				var pending: Array = [instance]
 				while not pending.is_empty():
 					var piece: Node3D = pending.pop_back()
-					if piece is MeshInstance3D: piece.set_instance_shader_parameter("building_seed",float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0)
+					if piece is MeshInstance3D:
+						piece.set_instance_shader_parameter("building_seed",float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0)
+						if piece.get_meta("mapkit_occluder",false):
+							var occluder := QUALITY.occluder(piece.mesh,job.lease)
+							if occluder != null: piece.add_child(occluder)
 					pending.append_array(piece.get_children())
 				_environment_lamp(job,id,object,presentation)
 				var anchor := Node3D.new()
@@ -203,6 +212,7 @@ static func _advance(job: Dictionary) -> bool:
 				# glTF metres: x-right, y-up, z-back; local map y points forward.
 				anchor.rotation.y = float(object.quarter_turns) * PI / 2.0
 				anchor.scale = Vector3.ONE
+				QUALITY.apply_tree(instance, QUALITY.active())
 				anchor.add_child(instance)
 				job.root.add_child(anchor)
 				track_instance_nodes(job.lease, anchor)
@@ -214,11 +224,15 @@ static func _advance(job: Dictionary) -> bool:
 			var shape := SphereMesh.new()
 			shape.radius = 1.84
 			shape.height = 4.0
-			canopy.mesh = shape
+			shape.radial_segments = 16
+			shape.rings = 8
+			canopy.mesh = QUALITY.prepare_lods(shape)
+			canopy.set_meta("mapkit_decoration",true)
 			canopy.position = scene_position(object.position) + Vector3.UP * 4.8
 			var leaf := StandardMaterial3D.new()
 			leaf.albedo_color = Color("486447")
-			canopy.material_override = leaf
+			leaf.resource_name = "mk_leaf"
+			canopy.material_override = _environment_surface(job,leaf)
 			track_resources(job, canopy)
 			job.root.add_child(canopy)
 	else:
@@ -256,13 +270,14 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 				material.albedo_color = ground_color(key, presentation)
 				material.roughness = 0.9
 				material.cull_mode = BaseMaterial3D.CULL_DISABLED
-				material.resource_name = "mk_"+{"dirt":"earth","gravel":"stone"}.get(key,key)
+				material.resource_name = "mk_"+detail_kind(key)
 		if material == null:
 			mesh.free()
 			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
 		material = _environment_surface(job, material)
 		job.materials[key] = material
 	mesh.material_override = job.materials[key]
+	mesh.set_meta("mapkit_occluder", occluding_surface(key))
 	track_resources(job, mesh)
 	job.root.add_child(mesh)
 	job.triangle += 1
@@ -280,6 +295,10 @@ static func track_instance_nodes(lease: RefCounted, node: Node) -> void:
 	for child: Node in node.get_children(): track_instance_nodes(lease, child)
 
 static func track_resources(job: Dictionary, node: Node) -> void:
+	QUALITY.apply_node(node, QUALITY.active())
+	if node is MeshInstance3D and node.get_meta("mapkit_occluder", false) and node.get_child_count() == 0:
+		var occluder := QUALITY.occluder(node.mesh, job.get("lease"))
+		if occluder != null: node.add_child(occluder)
 	if job.get("lease") == null: return
 	if node is MeshInstance3D:
 		job.lease.track(node.mesh)
@@ -406,6 +425,9 @@ static func _environment_surface(job: Dictionary, material: Material) -> Materia
 	if job.get("resources") == null: return material
 	var context: RefCounted = job.resources.environment_context()
 	if context == null: return material
+	if material is ShaderMaterial and material.shader == preload("./rc_surface.gdshader"):
+		context.bind_detail(material,"concrete" if material.get_shader_parameter("wall") else "asphalt")
+		return material
 	if material is ShaderMaterial and material.shader == job.get("urban_shader"):
 		material.set_shader_parameter("environment_enabled",true)
 		material.set_shader_parameter("environment_data",context.texture)
@@ -418,3 +440,13 @@ static func wet_urban_shader() -> Shader:
 	result.code = URBAN_SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
 	result.code = result.code.replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
 	return result
+
+static func _object_group(object: Dictionary) -> String:
+	var p := scene_position(object.position)
+	return "%s/%d,%d,%d" % [object.asset_id,floori(p.x/32.0),floori(p.y/32.0),floori(p.z/32.0)]
+
+static func detail_kind(key: String) -> String:
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","safety:metal":"metal"}.get(key,key.get_slice(":",0))
+
+static func occluding_surface(key: String) -> bool:
+	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])

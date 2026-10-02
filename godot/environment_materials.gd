@@ -2,16 +2,16 @@ extends RefCounted
 const SURFACE := preload("./atmosphere_surface.gdshader")
 const PROFILE := preload("./environment_profile.gd")
 const DETAIL := preload("./material_detail.gdshaderinc")
-const TILE_KINDS := ["brick","plaster","wood","stone","asphalt","concrete","earth","grass"]
+const TILE_KINDS := ["brick","plaster","wood","stone","asphalt","concrete","earth","grass","metal","leaf"]
 # Same conservative CPU/GPU/import allowance as validated package bitmaps.
-const MEMORY_BYTES := 1048576 + 8 * 256 * 256 * 24
+const MEMORY_BYTES := 1048576 + 10 * 256 * 256 * 24
 var tiles: Dictionary = {}
 var pixels: Image
 var texture: ImageTexture
 var materials: Dictionary = {}
 var shader: Shader
 
-func _init() -> void:
+func _init(size := 256) -> void:
 	pixels = Image.create(2,1,false,Image.FORMAT_RGBAF)
 	pixels.set_pixel(0,0,Color(0,0,0,0))
 	pixels.set_pixel(1,0,Color(43200,0,1,64800))
@@ -20,7 +20,7 @@ func _init() -> void:
 	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
 	shader.code = shader.code.replace('#include "material_detail.gdshaderinc"',DETAIL.code)
 	for kind: String in TILE_KINDS:
-		var path: String = get_script().resource_path.get_base_dir().path_join("textures/"+kind+".png")
+		var path: String = get_script().resource_path.get_base_dir().path_join("textures/"+(str(size)+"/" if size != 256 else "")+kind+".png")
 		# Trusted library resources use Godot's import remap in exported packages.
 		# Load only after the context lease; never pin bitmaps with script preloads.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
@@ -84,7 +84,7 @@ func bind_detail(material: ShaderMaterial, kind: String) -> void:
 	if not tiles.has(kind): return
 	material.set_shader_parameter("detail_enabled",true)
 	material.set_shader_parameter("detail_tile",tiles[kind])
-	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass"] else 1.0)
+	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass","metal","leaf"] else 1.0)
 
 func style_mesh(mesh: Mesh, binding: Dictionary, instances := false) -> Mesh:
 	# Own surface bindings; vertex/index buffers and texture resources remain shared.

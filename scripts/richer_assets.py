@@ -170,11 +170,16 @@ def library():
             m.solid((0,.025,z),(w-.3,.05,.28),(.47,.51,.28,1))
         m.material_roles={(.39,.43,.24,1):'earth',(.47,.51,.28,1):'grass'}
         result['crop-'+str(v)]=m
-    m=new();mass(m,2.2,1.05,1.2,COLORS['metal']);result['container']=m
+    m=new();mass(m,2.2,1.05,1.2,COLORS['metal'])
+    for x in [-1.06,1.06]:mass(m,.08,1.12,.09,COLORS['stone'],.02,x)
+    for x in [-.92,-.69,-.46,-.23,0,.23,.46,.69,.92]:
+        for z in [-.538,.538]:mass(m,.035,.028,1.08,COLORS['metal'],.06,x,z)
+    for x in [-.045,.045]:mass(m,.025,.035,.94,COLORS['stone'],.13,x,-.56)
+    result['container']=m
     m=new();mass(m,1.3,.4,.12,COLORS['wood'],.32)
     for x in [-.5,.5]:mass(m,.1,.35,.32,COLORS['metal'],0,x)
     result['bench']=m
-    m=new();mass(m,.07,.07,2.8,COLORS['metal']);mass(m,.45,.24,.1,COLORS['glass'],2.7,0,-.16);result['lamp']=m
+    m=new();mass(m,.07,.07,2.8,COLORS['metal']);mass(m,.45,.24,.1,COLORS['glass'],2.7,0,-.16);mass(m,.50,.28,.06,COLORS['metal'],2.80,0,-.16);mass(m,.14,.14,.16,COLORS['stone']);result['lamp']=m
     m=new()
     for x in [-1.6,1.6]:mass(m,.35,.4,6.5,COLORS['metal'],0,x)
     mass(m,8,.35,.35,COLORS['metal'],6.3,1.7)
@@ -184,23 +189,40 @@ def library():
     return result
 
 def textures(destination):
+    """Packed shaded luminance/AO, roughness and baked normal XY at three sizes."""
     destination.mkdir(parents=True,exist_ok=True)
-    for index,kind in enumerate(['brick','plaster','wood','stone','asphalt','concrete','earth','grass']):
-        rng=random.Random(624+index);pixels=[]
-        for y in range(256):
-            for x in range(256):
-                noise=rng.random()-.5
-                broad=math.sin(x*math.tau/256)*math.cos(y*math.tau/256)
+    kinds=['brick','plaster','wood','stone','asphalt','concrete','earth','grass','metal','leaf']
+    for index,kind in enumerate(kinds):
+        size=512;rng=random.Random(624+index);heights=[];base=[]
+        for y in range(size):
+            for x in range(size):
+                u=x*.5;v=y*.5;noise=rng.random()-.5
+                broad=math.sin(u*math.tau/256)*math.cos(v*math.tau/256)
                 seam=0
-                if kind=='brick':seam=float(y%32<2 or (x+(32 if (y//32)%2 else 0))%64<2)
-                if kind=='concrete':seam=float(x%128<2 or y%128<2)
-                grain=math.sin(x*.28+2*math.sin(y*math.tau/256)) if kind=='wood' else 0
-                strata=math.sin(y*.13+math.sin(x*math.tau/128)) if kind=='stone' else 0
-                height=.5+noise*.18+broad*.045+grain*.075+strata*.04-seam*.24
-                light=.90+noise*.09+broad*.035+grain*.035+strata*.025-seam*.12
-                rough=.78+noise*.12+seam*.1
-                pixels.append(tuple(round(max(0,min(1,v))*255) for v in [light,rough,height,1-seam*.12]))
-        image=Image.new('RGBA',(256,256));image.putdata(pixels);image.save(destination/(kind+'.png'),compress_level=9)
+                if kind=='brick':seam=float(v%32<2 or (u+(32 if (v//32)%2 else 0))%64<2)
+                if kind=='concrete':seam=float(u%128<1 or v%128<1)
+                grain=math.sin(u*.28+2*math.sin(v*math.tau/256)) if kind=='wood' else 0
+                strata=math.sin(v*.13+math.sin(u*math.tau/128)) if kind=='stone' else 0
+                streak=math.sin(u*.37+math.sin(v*.04))*.5+.5
+                wear=max(0,broad*.7+streak*.3-.48)
+                if kind=='metal':grain=math.sin(v*.5)*.35
+                if kind=='leaf':grain=math.sin(u*.2+v*.3)*.45
+                heights.append(.5+noise*.12+broad*.06+grain*.075+strata*.04-seam*.24)
+                light=.88+noise*.07+broad*.055+grain*.035+strata*.025-seam*.15-wear*.13
+                rough=(.52 if kind=='metal' else .82)+noise*.09+seam*.08+wear*.15
+                base.append((light,rough))
+        pixels=[]
+        for y in range(size):
+            for x in range(size):
+                dx=(heights[y*size+(x+1)%size]-heights[y*size+(x-1)%size])*2.0
+                dy=(heights[((y+1)%size)*size+x]-heights[((y-1)%size)*size+x])*2.0
+                light,rough=base[y*size+x]
+                pixels.append(tuple(round(max(0,min(1,v))*255) for v in [light,rough,.5+dx*.5,.5+dy*.5]))
+        image=Image.new('RGBA',(size,size));image.putdata(pixels)
+        for resolution in [128,256,512]:
+            target=destination if resolution==256 else destination/str(resolution)
+            target.mkdir(exist_ok=True)
+            image.resize((resolution,resolution),Image.Resampling.LANCZOS).save(target/(kind+'.png'),compress_level=9)
 
 def create(destination):
     destination.mkdir(parents=True,exist_ok=False);(destination/'.gdignore').write_text('')

@@ -28,7 +28,9 @@ impl TrackGeometry for Mesh {
 }
 fn mesh(p: &Piece, index: usize, objects: &[Gimmick]) -> Result<Mesh> {
     let mut out = Mesh::default();
-    generate_piece(p, index, &mut out, &[])?;
+    let mut walls = vec![];
+    generate_piece(p, index, &mut out, &[], &mut walls)?;
+    super::walls::emit(&walls, &mut out)?;
     for g in objects
         .iter()
         .filter(|g| g.id.starts_with(&format!("track-{index}-")))

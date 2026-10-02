@@ -35,6 +35,11 @@ pub struct TrackMesh {
     pub tiles: Vec<(Vertex, Vertex)>,
 }
 const STEPS: usize = 256;
+pub(crate) const fn loop_offset_cm(width_cm: u32) -> i64 {
+    // Preserve lane width while leaving clearance for both 50 cm barriers.
+    width_cm as i64 * 65 / 100 + crate::assembled_track::WALL_THICKNESS_CM
+}
+
 impl SpecialTrack {
     pub fn valid(&self) -> bool {
         if matches!(
@@ -139,7 +144,7 @@ impl SpecialTrack {
                         u * u * (3.0 - 2.0 * u)
                     };
                     let shift = -1.0 + smooth((t - 0.85) / 1.60) + smooth((t - 3.83) / 1.60);
-                    let x = w * 0.65 * shift + (j as f64 - 0.5) * w;
+                    let x = loop_offset_cm(self.width_cm) as f64 * shift + (j as f64 - 0.5) * w;
                     [
                         x,
                         r * (1.0 - cs) + 0.30 * r * sn * sn - thickness * cs,

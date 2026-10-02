@@ -50,11 +50,11 @@ void fragment() {
     if(roughness_enabled) surface_roughness*=dot(texture(roughness_texture,UV),roughness_channel);
     if(normal_enabled) { NORMAL_MAP=texture(normal_texture,UV).rgb; NORMAL_MAP_DEPTH=normal_strength; }
     if(ao_enabled) { AO=dot(texture(ao_texture,ao_uv2 ? UV2 : UV),ao_channel); AO_LIGHT_AFFECT=ao_light_affect; }
-    if(detail_enabled) {
+    if(detail_enabled && length(VERTEX)<48.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
         color*=detail.r;
         surface_roughness*=detail.g;
-        AO=detail.a;
+        AO=mix(1.0,detail.r,0.5);
         NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
     }
     // Large, restrained variation remains stable when the camera moves.
@@ -72,7 +72,8 @@ void fragment() {
     float snow_cover = weather.y * facing_up;
     color *= 1.0 - weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),snow_cover*0.92);
-    ALBEDO = color;
+    color = mix(vec3(dot(color,vec3(.2126,.7152,.0722))),color,.88);
+    ALBEDO = color * vec3(1.015,1.002,.975);
     ROUGHNESS = mix(surface_roughness,0.28,weather.x*facing_up);
     ROUGHNESS = mix(ROUGHNESS,0.92,snow_cover);
     float puddle = distant ? 0.0 : puddle_mask(world_position,world_normal.y,weather.x,weather.y);

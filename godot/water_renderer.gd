@@ -20,6 +20,8 @@ static func mesh(record: Dictionary, first: int, count: int) -> MeshInstance3D:
 	result.mesh = geometry
 	var material := ShaderMaterial.new()
 	material.shader = SHADER
+	material.set_meta("mapkit_water", true)
+	preload("./display_quality.gd").apply_material(material,preload("./display_quality.gd").active())
 	material.set_shader_parameter("flow",Vector2(record.body.flow_cm_s[0],-record.body.flow_cm_s[1])*.01)
 	result.material_override = material
 	result.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

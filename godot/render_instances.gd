@@ -35,17 +35,29 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 		node.multimesh = multi
 		node.material_override = piece.material
 		node.cast_shadow = piece.shadow
+		node.set_meta("mapkit_decoration", piece.mesh.get_aabb().size.length() <= 6.0)
+		preload("./display_quality.gd").apply_node(node,preload("./display_quality.gd").active())
 		parent.add_child(node)
 		if lease != null:
 			lease.track(multi)
 			lease.track(node)
-		groups.append({"multi": multi, "transform": piece.transform})
-	return {"groups": groups, "next": 0, "ids": PackedStringArray(), "count": count}
+		groups.append({"multi": multi, "node":node, "transform": piece.transform, "bounds":AABB(), "bounded":false})
+	return {"groups": groups, "next": 0, "ids": PackedStringArray(), "count": count, "lease":lease}
 
 static func append(group: Dictionary, transform: Transform3D, object_id: String, map_id := "") -> void:
 	var index := int(group.next)
 	for part: Dictionary in group.groups:
-		part.multi.set_instance_transform(index, transform * part.transform)
+		var pose: Transform3D = transform * part.transform
+		part.multi.set_instance_transform(index, pose)
+		var bounds: AABB = pose * part.multi.mesh.get_aabb()
+		part.bounds = part.bounds.merge(bounds) if part.bounded else bounds
+		part.bounded = true
+		part.multi.custom_aabb = part.bounds
+		if bounds.size.length() > 6.0:
+			var occluder := preload("./display_quality.gd").occluder(part.multi.mesh,group.lease)
+			if occluder != null:
+				occluder.transform = pose
+				part.node.add_child(occluder)
 		part.multi.set_instance_color(index,Color.WHITE)
 		part.multi.set_instance_custom_data(index,Color(float((map_id+"/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0,0,0,1))
 		part.multi.visible_instance_count = index + 1

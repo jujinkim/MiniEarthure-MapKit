@@ -11,16 +11,19 @@ pub const START_PIECES: usize = 3;
 pub const FINISH_ENTRY_CM: i64 = 800;
 pub const FINISH_RADIUS_CM: i64 = 800;
 pub const FINISH_WALL_CM: i64 = 120;
+/// Outward only: authored lane width and barrier height do not change.
+pub const WALL_THICKNESS_CM: i64 = 50;
 const SLOT: i64 = TILE_CM * 4;
 const LOOP_RADIUS: u32 = 350;
 const LOOP_WIDTH: u32 = 220;
-const LOOP_OFFSET: i64 = 143;
+const LOOP_OFFSET: i64 = crate::special_track::loop_offset_cm(LOOP_WIDTH);
 const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
 mod geometry;
 mod junction;
+mod walls;
 mod layout;
 pub const WIDTHS: &[u32] = &[200, 400, 600, 800, 1200];
 mod grounding;
@@ -385,6 +388,7 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/junction.rs").as_slice(),
+            include_bytes!("assembled_track/walls.rs").as_slice(),
             include_bytes!("assembled_track/authoring.rs").as_slice(),
             include_bytes!("assembled_track/obstacles.rs").as_slice(),
             include_bytes!("assembled_track/grounding.rs").as_slice(),
@@ -399,7 +403,7 @@ pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
     value
 }
 pub fn catalogue() -> serde_json::Value {
-    serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,
+    serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,"wall_thickness_cm":WALL_THICKNESS_CM,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
         "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
         "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
@@ -1204,7 +1208,7 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
             - if j == 1 {
                 p.width_cm as i64
             } else {
-                p.width_cm as i64 / 2 + 60
+                p.width_cm.max(p.entry_width_cm).max(p.exit_width_cm) as i64 / 2 + WALL_THICKNESS_CM + 60
             }
     });
     out.reserved_max_cm = std::array::from_fn(|j| {
@@ -1217,14 +1221,14 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
             + if j == 1 {
                 1600
             } else {
-                p.width_cm as i64 / 2 + 60
+                p.width_cm.max(p.entry_width_cm).max(p.exit_width_cm) as i64 / 2 + WALL_THICKNESS_CM + 60
             }
     });
     if out.id == "finish_plaza" {
         let center = plaza_center(&out);
         for j in [0, 2] {
-            out.reserved_min_cm[j] = out.reserved_min_cm[j].min(center[j] - FINISH_RADIUS_CM - 60);
-            out.reserved_max_cm[j] = out.reserved_max_cm[j].max(center[j] + FINISH_RADIUS_CM + 60);
+            out.reserved_min_cm[j] = out.reserved_min_cm[j].min(center[j] - FINISH_RADIUS_CM - WALL_THICKNESS_CM - 60);
+            out.reserved_max_cm[j] = out.reserved_max_cm[j].max(center[j] + FINISH_RADIUS_CM + WALL_THICKNESS_CM + 60);
         }
     }
     out.reference_msec = (race_length(&out) * 1000 / SPEED as u64) as u32;
@@ -1759,18 +1763,19 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
         let id = format!("assembled-support-{}", support.piece_index);
         emit_shape(&support.shape, &id, b)?;
     }
+    let mut walls = vec![];
     for (index, p) in a.pieces.iter().enumerate() {
-        generate_piece(p, index, b, &junction::neighbors(a, index))?;
+        generate_piece(p, index, b, &junction::neighbors(a, index), &mut walls)?;
     }
-    Ok(())
+    walls::emit(&walls, b)
 }
 
-fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece]) -> Result<()> {
+fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut Vec<walls::Volume>) -> Result<()> {
     if p.id == "finish_plaza" {
-        return generate_plaza(p, index, b);
+        return generate_plaza(p, index, b, neighbors, walls);
     }
     for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
-        for w in path.windows(2) {
+        for (segment, w) in path.windows(2).enumerate() {
             cancellation::checkpoint()?;
             let special = w.iter().any(|s| s.mode == "flight")
                 || w.iter()
@@ -1863,31 +1868,19 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
             } else {
                 WALL
             };
-            for (edge_a, edge_b) in [(al, bl), (ar, br)] {
-              let alternate = if branch { &p.path } else { &p.alternate_path };
-              for (a0, b0) in junction::visible(edge_a, edge_b, neighbors, alternate) {
-                let a1 = std::array::from_fn(|j| a0[j] + w[0].normal[j] * wall / 1_000_000);
-                let b1 = std::array::from_fn(|j| b0[j] + w[1].normal[j] * wall / 1_000_000);
-                b.quad(
-                    [a0, a1, b1, b0],
-                    Surface::Concrete,
-                    &format!("assembled-wall-{index}"),
-                    false,
-                )?;
-                // One geometric sheet: renderers/colliders handle both
-                // sides. A reversed duplicate makes every shared edge
-                // non-manifold and defeats native CCD edge suppression.
-                let min = std::array::from_fn(|j| {
-                    [a0, b0, a1, b1].iter().map(|v| v[j]).min().unwrap() - 2
+            for (side, edge_a, edge_b) in [(-1, al, bl), (1, ar, br)] {
+                let alternate = if branch { &p.path } else { &p.alternate_path };
+                let rings = [(edge_a, &w[0], segment), (edge_b, &w[1], segment+1)].map(|(edge, sample, at)| {
+                    let outward = if sample.mode == "loop" {
+                        geometry::rotate3([side * WALL_THICKNESS_CM, 0, 0], p.rotation_mdeg)
+                    } else { walls::outward_at(path, at, side) };
+                    let height = if !branch && (p.id.starts_with("cylinder") || p.id == "banked_chicane") {
+                        25 + 30 * station(sample).clamp(0, 400) / 400
+                    } else { wall };
+                    let up = sample.normal.map(|n| n * height / 1_000_000);
+                    walls::ring(edge, outward, up, side == 1)
                 });
-                let max = std::array::from_fn(|j| {
-                    [a0, b0, a1, b1].iter().map(|v| v[j]).max().unwrap() + 2
-                });
-                b.solid(
-                    &format!("assembled-wall-{index}"),
-                    SolidShape::Box { min, max },
-                )?;
-              }
+                walls::cut(rings, neighbors, alternate, &format!("assembled-wall-{index}"), walls);
             }
         }
     }
@@ -1921,12 +1914,12 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
         })
         .count() as u64;
     (
-        segments * 200 + 10 + supports * 60,
+        segments * 256 + 10 + supports * 60,
         segments * 3 + 1 + supports,
     )
 }
 
-fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result<()> {
+fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut Vec<walls::Volume>) -> Result<()> {
     let center = plaza_center(p);
     let half = i64::from(p.width_cm) / 2;
     let transform = |v| add(p.origin_cm, geometry::rotate3(v, p.rotation_mdeg));
@@ -2004,39 +1997,27 @@ fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry) -> Result
             max: std::array::from_fn(|j| entry.iter().map(|v| v[j]).max().unwrap()),
         },
     )?;
-    for (a, c) in boundary
-        .windows(2)
-        .map(|w| (w[0], w[1]))
-        .chain([(entry[0], entry[1]), (entry[2], entry[3])])
-    {
-        let up = geometry::rotate3([0, FINISH_WALL_CM, 0], p.rotation_mdeg);
-        b.quad(
-            [a, add(a, up), add(c, up), c],
-            Surface::Concrete,
-            &wall,
-            false,
-        )?;
-        b.solid(
-            &wall,
-            SolidShape::Box {
-                min: std::array::from_fn(|j| {
-                    [a, c, add(a, up), add(c, up)]
-                        .iter()
-                        .map(|v| v[j])
-                        .min()
-                        .unwrap()
-                        - 2
-                }),
-                max: std::array::from_fn(|j| {
-                    [a, c, add(a, up), add(c, up)]
-                        .iter()
-                        .map(|v| v[j])
-                        .max()
-                        .unwrap()
-                        + 2
-                }),
-            },
-        )?;
+    // Shared corner offsets close the circular wall and entry rails exactly.
+    let up = geometry::rotate3([0, FINISH_WALL_CM, 0], p.rotation_mdeg);
+    let mut ring_points = vec![entry[0]];
+    ring_points.extend(&boundary);
+    ring_points.push(entry[3]);
+    let outer: Vec<Vertex> = ring_points.iter().enumerate().map(|(i, v)| {
+        let offset = if i <= 1 {
+            geometry::rotate3([-WALL_THICKNESS_CM, 0, 0], p.rotation_mdeg)
+        } else if i >= ring_points.len()-2 {
+            geometry::rotate3([WALL_THICKNESS_CM, 0, 0], p.rotation_mdeg)
+        } else {
+            let radial = unit(std::array::from_fn(|j| (v[j]-center[j]) as f64));
+            radial.map(|n| n * WALL_THICKNESS_CM / 1_000_000)
+        };
+        offset
+    }).collect();
+    for i in 0..ring_points.len()-1 {
+        walls::cut([
+            walls::ring(ring_points[i], outer[i], up, false),
+            walls::ring(ring_points[i+1], outer[i+1], up, false)
+        ], neighbors, &[], &wall, walls);
     }
     Ok(())
 }

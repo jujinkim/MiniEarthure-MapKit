@@ -308,7 +308,7 @@ pub(super) fn volume(s: &Sample) -> (Vertex, i64, i64, i64) {
         return (c, radius + 15, c[1] - radius - 15, c[1] + radius + 15);
     }
     let edge_y = ((s.normal[2] * s.forward[0] - s.normal[0] * s.forward[2]).abs()
-        * i64::from(s.lateral_cm)
+        * (i64::from(s.lateral_cm) + WALL_THICKNESS_CM)
         + 999_999_999_999)
         / 1_000_000_000_000;
     let height = if s.mode == "flight" { 120 } else { 235 };
@@ -316,7 +316,7 @@ pub(super) fn volume(s: &Sample) -> (Vertex, i64, i64, i64) {
     let side = ((s.normal[0].abs() + s.normal[2].abs()) * height + 999_999) / 1_000_000;
     (
         s.position_cm,
-        i64::from(s.lateral_cm) + 30 + side,
+        i64::from(s.lateral_cm) + WALL_THICKNESS_CM + 30 + side,
         s.position_cm[1] - edge_y + up_y.min(0) - 15,
         s.position_cm[1] + edge_y + up_y.max(0),
     )
@@ -341,7 +341,7 @@ pub(super) fn self_intersects(p: &Piece) -> bool {
                 continue;
             }
             if (a.position_cm[1] - b.position_cm[1]).abs() < 235
-                && distance(a.position_cm, b.position_cm) < width + 30
+                && distance(a.position_cm, b.position_cm) < width + 2 * WALL_THICKNESS_CM as u64 + 30
             {
                 return true;
             }

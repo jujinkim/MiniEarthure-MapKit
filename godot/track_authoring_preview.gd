@@ -21,7 +21,8 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		if vertices.is_empty(): continue
 		var owner := -1
 		if id.begins_with("assembled-road-") or id.begins_with("assembled-wall-"): owner = int(id.get_slice("-", 2))
-		objects[id] = {"vertices":vertices, "owner":owner, "color":Color("b9c9d0") if id.begins_with("assembled-wall") else Color("448fac"), "pose":Transform3D.IDENTITY}
+		var key := "rc:wall" if id.begins_with("assembled-wall") or id.begins_with("assembled-shell") or id.begins_with("assembled-support") else "rc:floor" if id == "assembled-venue-floor" else "rc:road:"+str(maxi(0,owner)%4)
+		objects[id] = {"vertices":vertices, "owner":owner, "color":Color("b9c9d0") if key=="rc:wall" else Color("448fac"), "lit":true, "material_key":key, "seed":int(assembly.get("settings",{}).get("seed",0)), "pose":Transform3D.IDENTITY}
 	for raw: Dictionary in result.data.gimmicks:
 		if token != null and token.is_cancelled(): return {"error":"Track preview cancelled."}
 		var owner := _gimmick_owner(raw.id, assembly)
@@ -95,6 +96,7 @@ static func _gimmick_owner(id: String, assembly: Dictionary) -> int:
 
 static func apply(root: Node3D, prepared: Dictionary, selected := -1) -> void:
 	if prepared.has("error"): return
+	if not root.has_meta("material_context"): root.set_meta("material_context",preload("./environment_materials.gd").new())
 	var existing: Dictionary = root.get_meta("objects", {})
 	for id: String in existing.keys():
 		if not prepared.objects.has(id):
@@ -127,6 +129,11 @@ static func apply(root: Node3D, prepared: Dictionary, selected := -1) -> void:
 			material.emission = entry.color * 0.35
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		view.material_override = material
+		if entry.has("material_key"):
+			var rc := preload("./rc_venue.gd").material(entry.material_key,entry.seed)
+			root.get_meta("material_context").bind_detail(rc,"concrete" if entry.material_key=="rc:wall" else "asphalt")
+			view.material_override = rc
+			view.set_meta("color",rc.get_shader_parameter("base_color"))
 		root.add_child(view)
 		existing[id] = view
 	root.set_meta("objects", existing)
@@ -135,7 +142,9 @@ static func apply(root: Node3D, prepared: Dictionary, selected := -1) -> void:
 static func select(root: Node3D, selected: int) -> void:
 	if not is_instance_valid(root): return
 	for view: MeshInstance3D in root.get_meta("objects", {}).values():
-		view.material_override.albedo_color = Color("f5ce5f") if view.get_meta("road") and view.get_meta("owner") == selected else view.get_meta("color")
+		var color: Color = Color("f5ce5f") if view.get_meta("road") and view.get_meta("owner") == selected else view.get_meta("color")
+		if view.material_override is ShaderMaterial: view.material_override.set_shader_parameter("base_color",color)
+		else: view.material_override.albedo_color = color
 
 static func create(document: Dictionary, selected := -1) -> Node3D:
 	var root := Node3D.new()

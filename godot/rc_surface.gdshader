@@ -5,9 +5,11 @@ uniform vec4 accent : source_color = vec4(1.0,0.7,0.1,1.0);
 uniform int theme = 0;
 uniform bool wall = false;
 uniform bool floor_surface = false;
+#include "material_detail.gdshaderinc"
 varying vec3 position_world;
+varying vec3 normal_world;
 
-void vertex() { position_world = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; }
+void vertex() { position_world = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; normal_world = normalize(MODEL_NORMAL_MATRIX*NORMAL); }
 
 void fragment() {
 	vec3 color = base_color.rgb;
@@ -31,6 +33,14 @@ void fragment() {
 		float join = max(step(0.986,fract(p.x/4.0)),step(0.986,fract(p.z/4.0)));
 		color *= 1.0-join*0.16;
 	}
-	ALBEDO = color;
+	float worn = .5+.5*sin(p.x*.81+sin(p.z*.43)+p.y*.7);
+	if(wall) color *= .91+.09*worn;
+	if(detail_enabled && length(VERTEX)<48.0) {
+		vec4 detail=texture(detail_tile,detail_uv(p,normal_world));
+		color*=detail.r;
+		NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(p,normal_world),0.0)).xyz);
+	}
+	color = mix(vec3(dot(color,vec3(.2126,.7152,.0722))),color,.72);
+	ALBEDO = color*vec3(1.015,1.0,.97);
 	ROUGHNESS = (theme==2 && !wall && !floor_surface) ? 0.48 : 0.92;
 }

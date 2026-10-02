@@ -18,6 +18,7 @@ var closed := false
 var _environment: RefCounted
 var _environment_lease: RefCounted
 var environment_profile: Dictionary = {}
+var quality_profile: Dictionary = preload("./display_quality.gd").active()
 
 
 func _init(admission: Callable = Callable()) -> void: reserve = admission
@@ -28,7 +29,7 @@ func bytes() -> int:
 	if _shader_lease != null: total += int(_shader_lease.bytes)
 	elif _shader != null: total += 65536
 	if _environment_lease != null: total += int(_environment_lease.bytes)
-	elif _environment != null: total += CONTEXT_BYTES
+	elif _environment != null: total += _context_bytes()
 	for item: Dictionary in entries.values(): total += int(item.bytes)
 	for lease: RefCounted in retiring: total += int(lease.bytes)
 	return total
@@ -68,7 +69,7 @@ func claim(id: String, sources: Dictionary) -> String:
 	# The native import profile already includes CPU/GPU overlap (256 bytes per
 	# vertex, 32 per index, 24 per image pixel). Replacing template meshes shares
 	# textures and releases the old mesh; add a material/clock binding allowance.
-	var amount := int(sources[id].memory_bytes) + 65536
+	var amount := int(sources[id].memory_bytes) * 2 + 131072 # LOD generation, retained indices and occluders, including import overlap.
 	if bytes() + amount > limit_bytes or entries.size() >= 256: trim()
 	if bytes() + amount > limit_bytes or entries.size() >= 256: return ""
 	var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null
@@ -96,6 +97,9 @@ func template(key: String, id: String, sources: Dictionary) -> Node3D:
 				while not pending.is_empty():
 					var node: Node3D = pending.pop_back()
 					if node is MeshInstance3D:
+						node.set_meta("mapkit_decoration",node.mesh.get_aabb().size.length() <= 6.0)
+						node.set_meta("mapkit_occluder",node.mesh.get_aabb().size.length() > 6.0)
+						node.mesh = preload("./display_quality.gd").prepare_lods(node.mesh)
 						node.mesh = context.style_mesh(node.mesh,binding)
 						var water: bool = node.mesh.get_surface_count() > 0
 						for index in node.mesh.get_surface_count():
@@ -188,11 +192,11 @@ func diagnostics() -> Dictionary:
 func environment_context() -> RefCounted:
 	if closed or environment_profile.is_empty(): return null
 	if _environment == null:
-		if bytes() + CONTEXT_BYTES > limit_bytes: trim()
-		if bytes() + CONTEXT_BYTES > limit_bytes: return null
-		_environment_lease = reserve.call(CONTEXT_BYTES) if reserve.is_valid() else null
+		if bytes() + _context_bytes() > limit_bytes: trim()
+		if bytes() + _context_bytes() > limit_bytes: return null
+		_environment_lease = reserve.call(_context_bytes()) if reserve.is_valid() else null
 		if reserve.is_valid() and _environment_lease == null: return null
-		_environment = ENVIRONMENT.new()
+		_environment = ENVIRONMENT.new(int(quality_profile.texture_size))
 		_environment.track(_environment_lease)
 		if _environment.tiles.size() != ENVIRONMENT.TILE_KINDS.size():
 			_environment = null
@@ -208,3 +212,6 @@ static func wet_urban_shader() -> Shader:
 	result.code = URBAN.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
 	result.code = result.code.replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
 	return result
+
+func _context_bytes() -> int:
+	return preload("./display_quality.gd").tile_bytes(int(quality_profile.texture_size), ENVIRONMENT.TILE_KINDS.size())

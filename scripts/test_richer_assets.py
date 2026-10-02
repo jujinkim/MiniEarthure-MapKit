@@ -28,8 +28,9 @@ class RicherAssets(unittest.TestCase):
                 d,_=unpack(data);self.assertNotIn('images',d)
                 self.assertTrue(record['collision'] or record['convex_collision'])
                 for prim in d['meshes'][0]['primitives']:self.assertIn('TEXCOORD_0',prim['attributes'])
-            for tile in tiles.glob('*.png'):
-                self.assertEqual(tile.read_bytes(),(ROOT/'godot/textures'/tile.name).read_bytes())
-                with Image.open(tile) as image:self.assertEqual(image.size,(256,256))
+            for tile in tiles.rglob('*.png'):
+                self.assertEqual(tile.read_bytes(),(ROOT/'godot/textures'/tile.relative_to(tiles)).read_bytes())
+                size=256 if tile.parent==tiles else int(tile.parent.name)
+                with Image.open(tile) as image:self.assertEqual(image.size,(size,size))
 
 if __name__=='__main__':unittest.main()

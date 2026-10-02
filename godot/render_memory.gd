@@ -2,6 +2,7 @@ extends RefCounted
 ## Pure worker-side planning; no display resources or game policy.
 const DATA := preload("./chunk_data.gd")
 const TRIANGLES_PER_BATCH := 512
+const SPATIAL_METRES := 32.0
 
 static func shared_bytes(chunk: Dictionary) -> int:
 	var total := 0
@@ -12,7 +13,7 @@ static func shared_bytes(chunk: Dictionary) -> int:
 
 ## Admission bound before generation. A material can change on every triangle.
 static func upper_bound(cost: Dictionary) -> int:
-	return 131072 + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (512 + 8192) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
+	return 131072 + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (768 + 12288) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
 
 ## Worker-only opaque surface grouping. Native source/collision order is untouched.
 ## 96 bytes per visible triangle fits the existing 128-byte presentation allowance.
@@ -29,7 +30,8 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 	for triangle in DATA.count(chunk):
 		if triangle % TRIANGLES_PER_BATCH == 0 and cancelled.is_valid() and cancelled.call(): return []
 		if DATA.object_id(chunk, triangle) in hidden: continue
-		var key := material_key(chunk, triangle)
+		var point: Vector3 = chunk.scene_vertices[triangle * 3]
+		var key := material_key(chunk, triangle) + "|%d,%d,%d" % [floori(point.x/SPATIAL_METRES),floori(point.y/SPATIAL_METRES),floori(point.z/SPATIAL_METRES)]
 		if not groups.has(key): groups[key] = PackedInt32Array()
 		groups[key].append(triangle)
 	var result: Array = []
@@ -48,7 +50,7 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 				vertices[index] = chunk.scene_vertices[source]
 				normals[index] = chunk.scene_normals[source]
 				uv[index] = source_uv[source]
-			result.append({"key": key, "vertices": vertices, "normals": normals, "uv": uv})
+			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv})
 	return result
 
 static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
@@ -78,7 +80,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
 	var grind_bytes := 0
 	for line: Dictionary in preload("./grind_geometry.gd").records(chunk): grind_bytes += 32768 + line.get("samples",[]).size()*8192
-	return grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 512 + batches * 8192 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	return grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:

@@ -19,7 +19,7 @@ pub(super) fn neighbors(a: &Assembly, index: usize) -> Vec<&Piece> {
 
 // Clip against the actual rendered/colliding road triangles. Chord-aligned
 // rectangles leave a wedge at every curved/tapered join (the barcode walls).
-fn triangle_interval(a: Vertex, b: Vertex, triangle: [Vertex; 3]) -> Option<(f64,f64)> {
+fn triangle_interval(rings: [[Vertex; 4]; 2], triangle: [Vertex; 3]) -> Option<(f64,f64)> {
     let sub = |a: Vertex,b: Vertex| std::array::from_fn::<_,3,_>(|j| (a[j]-b[j]) as f64);
     let cross = |a: [f64;3],b: [f64;3]| [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
     let dot = |a: [f64;3],b: [f64;3]| (0..3).map(|j| a[j]*b[j]).sum::<f64>();
@@ -35,8 +35,12 @@ fn triangle_interval(a: Vertex, b: Vertex, triangle: [Vertex; 3]) -> Option<(f64
     let mut lo: f64=0.0;
     let mut hi: f64=1.0;
     for (axis,origin,min) in planes {
-        let start=dot(sub(a,origin),axis)-min;
-        let delta=dot(sub(b,a),axis);
+        // The interpolated support bounds every corner of the entire section.
+        // This is conservative for twisted sections; no outer/top corner can
+        // remain inside a connected lane when the inner edge misses it.
+        let support = |ring: [Vertex;4]| ring.into_iter().map(|v|dot(sub(v,origin),axis)-min).fold(f64::NEG_INFINITY,f64::max);
+        let start=support(rings[0]);
+        let delta=support(rings[1])-start;
         if delta.abs()<1e-9 { if start< -1e-7 { return None; } }
         else if delta>0.0 { lo=lo.max(-start/delta); }
         else { hi=hi.min(-start/delta); }
@@ -45,7 +49,7 @@ fn triangle_interval(a: Vertex, b: Vertex, triangle: [Vertex; 3]) -> Option<(f64
     Some((lo,hi))
 }
 
-pub(super) fn visible(a: Vertex, b: Vertex, neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(Vertex,Vertex)> {
+pub(super) fn visible_volume(rings: [[Vertex;4];2], neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(f64,f64)> {
     let mut hidden = vec![];
     for path in neighbors.iter().flat_map(|p| [&p.path[..],&p.alternate_path[..]]).chain(std::iter::once(alternate)) {
         for w in path.windows(2) {
@@ -53,25 +57,40 @@ pub(super) fn visible(a: Vertex, b: Vertex, neighbors: &[&Piece], alternate: &[S
             let [al,ar]=geometry::ribbon_edges(&w[0],2);
             let [bl,br]=geometry::ribbon_edges(&w[1],2);
             for triangle in [[al,bl,br],[al,br,ar]] {
-                if let Some(range)=triangle_interval(a,b,triangle) { hidden.push(range); }
+                if let Some(range)=triangle_interval(rings,triangle) { hidden.push(range); }
             }
         }
     }
     hidden.sort_by(|a,b|a.0.total_cmp(&b.0));
-    let at = |t: f64| std::array::from_fn(|j|round(a[j] as f64+(b[j]-a[j]) as f64*t));
     let mut out=vec![];
     let mut cursor: f64=0.0;
     for (lo,hi) in hidden {
-        if lo>cursor { out.push((at(cursor),at(lo))); }
+        if lo>cursor { out.push((cursor,lo)); }
         cursor=cursor.max(hi);
     }
-    if cursor<1.0 { out.push((at(cursor),b)); }
-    out.retain(|(a,b)|distance(*a,*b)>0);
+    if cursor<1.0 { out.push((cursor,1.0)); }
+
     out
+}
+
+#[cfg(test)]
+fn visible(a: Vertex, b: Vertex, neighbors: &[&Piece], alternate: &[Sample]) -> Vec<(Vertex,Vertex)> {
+    let at = |t: f64| std::array::from_fn(|j|round(a[j] as f64+(b[j]-a[j]) as f64*t));
+    visible_volume([[a;4],[b;4]],neighbors,alternate).into_iter().map(|(a,b)|(at(a),at(b))).filter(|(a,b)|distance(*a,*b)>0).collect()
 }
 
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn full_volume_cuts_outer_and_top_intrusions() {
+        let p=variant("straight",400,400,400);
+        let rings=[[240,0,100],[240,0,600]].map(|v| walls::ring(v,[-50,0,0],[0,120,0],false));
+        assert!(visible([240,0,100],[240,0,600],&[&p],&[]).len()==1);
+        assert!(visible_volume(rings,&[&p],&[]).is_empty());
+        let rings=[[0,-80,100],[0,-80,600]].map(|v| walls::ring(v,[50,0,0],[0,120,0],false));
+        assert!(visible_volume(rings,&[&p],&[]).is_empty());
+        let rings=[[250,0,100],[250,0,600]].map(|v| walls::ring(v,[50,0,0],[0,120,0],false));
+        assert_eq!(visible_volume(rings,&[&p],&[]),vec![(0.0,1.0)]);
+    }
     #[test] fn trims_interior_preserves_outer_and_grade_separation() {
         let p=variant("straight",400,400,400);
         assert!(visible([0,0,100],[0,0,600],&[&p],&[]).is_empty());

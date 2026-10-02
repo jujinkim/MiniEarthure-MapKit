@@ -1,32 +1,46 @@
-# Modest miniature material detail
+# Shared world materials and display quality
 
-Original MIT assets in `assets/richer-library` keep simplified miniature forms.
-`scripts/richer_assets.py` authors 256px packed tiles (luminance, roughness,
-height, occlusion), metre UVs, framed recessed panes, foundations, eaves,
-solid signboards with abstract marks, roofs, groves, rocks and water geometry.
-No fonts, photographs or duplicate embedded bitmap payloads are required.
-Every projecting canopy, sill, signboard and roof has a box/convex proxy.
+The 2026-10-02 implementation (root §44.262) replaces the previous eight 256px
+luminance/roughness/height/AO tiles and single water shader. All current formats
+remain v1. Original MIT library assets use metre UVs, framed panes, foundations,
+eaves, signs, groves and faceted rocks. Containers now have corrugations and door
+hardware; lamps have a cap and base, with corresponding collision proxies.
+Built-in fences/trunks/lights use wood/metal detail and the canopy uses a bounded
+LOD mesh with a leaf material. Existing user assets and generated packages survive.
 
-Eight shared tiles are owned by the admitted environment context, loaded through
-Godot resource remapping and given mipmaps. They are never script preloads.
-The context reserves `1 MiB + 8 × 256 × 256 × 24 = 13 MiB` before loading.
-The existing 128 MiB/256-entry shared cache and consumer limits remain unchanged.
-Missing/denied tile contexts fail rendering admission. Shutdown/cancellation
-seals the charge; borrowed shaders or textures keep it until their last release.
+`scripts/richer_assets.py` generates ten shared tiles (brick, plaster, wood, stone,
+asphalt, concrete, earth, grass, metal, leaf) at 128/256/512px. Channels contain
+shaded luminance/AO, roughness, and baked normal XY; a normal costs one texture
+sample instead of neighboring height fetches. Near detail stops at 48m. Muted
+material colours and subtle warm grading preserve vehicle colours, hazards and
+weather/night distinctions; Control/HUD rendering is unaffected.
 
-The weather wrapper retains imported GLB albedo, tangent normal/scale, AO/channel/
-UV2, roughness/channel and metallic/channel textures and the source UV1 transform.
-All five bitmap slots are tracked by the original asset lease. Surface weather,
-night window roles and opaque instancing remain shared. Broad ground tint and
-subtle packed relief complement the texture without changing collision physics.
+The weather wrapper retains imported albedo, normal/scale, AO/channel/UV2,
+roughness/channel, metallic/channel and UV1 transforms. Night-window/light roles
+and opaque instancing survive. All five bitmap slots stay tracked by the asset
+lease. Textures load after admission through Godot resource remapping with mipmaps,
+never script preloads. Shared context reservations are 4.75/16/61MiB respectively
+(`1MiB + 10 × size² × 24`), including CPU/GPU/mipmap/retirement overlap. Cache and
+consumer limits still govern admission; borrowers retain charges after shutdown.
 
-Water uses continuous cell-sized authored triangles, depth vertex tint, mild
-flowing/still ripples and highlights. Water meshes do not cast opaque shadows.
-The static 2cm proxies are inset 3cm because current placement validation excludes
-touching neighbours; visible surfaces stay continuous. This is decorative water,
-without fluid simulation or buoyancy. Existing format 2/v1 contracts remain.
+`godot/display_quality.gd` provides `profile(level)`, `active()`, and
+`apply(viewport, profile)`. Low/medium/high use 75/100/100% 3D scale, 256/512/768
+combined vehicle particle slots, 48/96/160m directional shadows, 4/6/8 selected
+local lights, and progressively stronger water. Client owns preferences and
+automatic adaptation. Profiles never enter map files or authoritative race state.
+The texture tier is captured by each new map resource cache; live changes update
+resolution, water, effects, shadows, LOD and optional low-tier occlusion.
 
-Validation: `scripts/test_richer_assets.py` reproduces every GLB and tile;
-`godot/tests/richer_material_validator.gd` covers channel forwarding, real GLB
-import, real shader compilation, sharing, denial and last-borrower retirement.
-The consuming Client also runs display/cache regressions and actual-map budgets.
+Water preserves the authoritative flat surface. Low uses one flowing wave and
+simple foam; medium adds a second normal, depth colour/alpha and Fresnel sky tint;
+high adds a guarded screen refraction. Shore foam softens shallow boundaries.
+Depth reconstruction supports Mobile and Compatibility NDC conventions. No
+cosmetic ripple alters buoyancy, water entry or surface height.
+
+`test_richer_assets.py` reproduces all library bytes and three texture tiers.
+`richer_material_validator` covers actual GLB import, retained channels, denied
+admission, shared identity and last-borrower retirement. `display_quality_validator`
+covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
+batches, tight MultiMesh bounds and actual-face occluders. Real Mobile and
+Compatibility shader/preview checks passed. Detailed Editor interaction,
+weather appearance and target-device acceptance remain user checks.

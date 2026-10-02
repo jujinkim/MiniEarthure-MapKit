@@ -22,7 +22,7 @@ func run() -> void:
 	cache.environment_profile={"lights":[]}
 	var context: RefCounted=cache.environment_context()
 	check(context!=null and cache.bytes()==MATERIALS.MEMORY_BYTES,"shared texture charge before materialization")
-	check(context.tiles.size()==8,"eight common 256px packed tiles")
+	check(context.tiles.size()==10,"ten common 256px packed tiles")
 	var source:=StandardMaterial3D.new()
 	var picture:=Image.create(128,128,false,Image.FORMAT_RGBA8);picture.fill(Color(.5,.5,1,1))
 	var bitmap:=ImageTexture.create_from_image(picture)

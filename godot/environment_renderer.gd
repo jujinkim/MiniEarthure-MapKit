@@ -26,6 +26,7 @@ var _context: RefCounted
 var _light_candidates: Array = []
 var _scan_at := 0
 var low := false
+var quality := preload("./display_quality.gd").active()
 var _night_lights := false
 var display_distance := 0.0 # Opt-in scene metres; zero preserves Editor/default weather fog.
 var _weather_fog_density := 0.0008
@@ -66,11 +67,15 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	settings.fog_enabled = true
 	settings.fog_density = 0.0008
 	settings.glow_enabled = false
+	settings.adjustment_enabled = true
+	settings.adjustment_saturation = .92
+	settings.adjustment_contrast = 1.02
+	add_to_group("mapkit_quality_targets")
 	sun.directional_shadow_max_distance = 96.0 if low else 160.0
 	moon = DirectionalLight3D.new()
 	moon.light_color = Color(0.49,0.62,0.83)
 	add_child(moon)
-	for index in (4 if low else 8):
+	for index in 8:
 		var light := SpotLight3D.new()
 		# Callers submit world poses from this render frame, already interpolated.
 		light.top_level = true
@@ -124,6 +129,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	_splash_age.resize(splashes.multimesh.instance_count)
 	_splash_positions.resize(splashes.multimesh.instance_count)
 	_clear_splashes()
+	apply_display_quality(quality)
 
 func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: Array, resources: RefCounted = null, immediate := false) -> void:
 	if state == null or state.config.is_empty(): return
@@ -186,7 +192,7 @@ func _update_precipitation(state: RefCounted, camera_position: Vector3) -> void:
 	_sheltered = sheltered
 	precipitation.emitting = strength > 0.01 and not sheltered
 	precipitation.visible = not sheltered and strength > 0.01
-	precipitation.amount_ratio = maxf(0.01,strength)
+	precipitation.amount_ratio = maxf(0.01,strength) * (.4 if low else 1.0)
 	var snowing: bool = (state.previous_weather if state.blend()<0.5 else state.weather) == "snow"
 	particle_material.initial_velocity_min = 1.0 if snowing else 10.0
 	particle_material.initial_velocity_max = 2.5 if snowing else 14.0
@@ -255,12 +261,12 @@ func update_dynamic_lights(camera_position: Vector3, groups: Array) -> void:
 		return a.position.distance_squared_to(camera_position) < b.position.distance_squared_to(camera_position))
 	var selected: Array = []
 	for group: Dictionary in ordered:
-		if group.lights.is_empty() or selected.size() + group.lights.size() > lights.size(): continue
+		if group.lights.is_empty() or selected.size() + group.lights.size() > int(quality.light_count): continue
 		if group.position.distance_squared_to(camera_position) > float(group.get("distance", 45.0)) ** 2: continue
 		selected.append_array(group.lights)
 	if _night_lights:
 		for candidate: Dictionary in _light_candidates:
-			if selected.size() >= lights.size(): break
+			if selected.size() >= int(quality.light_count): break
 			selected.append(candidate)
 	for index in lights.size():
 		var light := lights[index]
@@ -275,3 +281,10 @@ func update_dynamic_lights(camera_position: Vector3, groups: Array) -> void:
 		light.spot_angle = float(candidate.get("angle", 48.0))
 		light.spot_attenuation = float(candidate.get("attenuation", 1.0))
 		light.spot_angle_attenuation = float(candidate.get("angle_attenuation", 1.0))
+
+func apply_display_quality(value: Dictionary) -> void:
+	quality = value.duplicate()
+	low = int(value.level) == 0
+	if sun != null: sun.directional_shadow_max_distance = float(value.shadow_distance)
+	if moon != null: moon.directional_shadow_max_distance = float(value.shadow_distance)
+	if precipitation != null: precipitation.amount_ratio = minf(precipitation.amount_ratio,.4 if low else 1.0)
