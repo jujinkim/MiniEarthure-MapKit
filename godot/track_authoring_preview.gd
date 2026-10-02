@@ -9,13 +9,18 @@ static func point(v: Array) -> Vector3:
 
 static func prepare(document: Dictionary, bridge: RefCounted = null, previous: Dictionary = {}, token: RefCounted = null) -> Dictionary:
 	if bridge == null: bridge = ClassDB.instantiate("MapKitBridge")
+	if token != null: token.report_progress("preview",0,0,"objects")
 	var result: Dictionary = JSON.parse_string(bridge.track_preview(JSON.stringify(document)))
 	if not result.ok: return {"error":result.error.message}
 	var objects := {}
 	var gimmicks := {}
 	var assembly: Dictionary = document.get("assembled_track", {})
+	var completed := 0
+	var total: int = result.data.meshes.size()+result.data.gimmicks.size()+result.data.get("grind_lines",[]).size()
 	for id: String in result.data.meshes:
 		if token != null and token.is_cancelled(): return {"error":"Track preview cancelled."}
+		if token != null: token.report_progress("preview",completed,total,"objects")
+		completed += 1 # Published when the next object starts, after this work finishes.
 		var vertices := PackedVector3Array()
 		for v: Array in result.data.meshes[id]: vertices.append(point(v))
 		if vertices.is_empty(): continue
@@ -25,6 +30,8 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		objects[id] = {"vertices":vertices, "owner":owner, "color":Color("b9c9d0") if key=="rc:wall" else Color("448fac"), "lit":true, "material_key":key, "seed":int(assembly.get("settings",{}).get("seed",0)), "pose":Transform3D.IDENTITY}
 	for raw: Dictionary in result.data.gimmicks:
 		if token != null and token.is_cancelled(): return {"error":"Track preview cancelled."}
+		if token != null: token.report_progress("preview",completed,total,"objects")
+		completed += 1
 		var owner := _gimmick_owner(raw.id, assembly)
 		var cached: Dictionary = previous.get("gimmicks", {}).get(raw.id, {})
 		if cached.get("source") == raw and cached.get("owner") == owner:
@@ -58,8 +65,15 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		gimmicks[raw.id] = {"source":raw, "owner":owner, "rows":rows}
 	for line: Dictionary in result.data.get("grind_lines", []):
 		objects.merge(preload("./grind_geometry.gd").rows(line))
+		completed += 1
+		if token != null: token.report_progress("preview",completed,total,"objects")
+	if token != null: token.report_progress("preview",completed,total,"objects")
+	completed = 0
+	if token != null: token.report_progress("preview_meshes",0,objects.size(),"objects")
 	for id: String in objects:
 		if token != null and token.is_cancelled(): return {"error":"Track preview cancelled."}
+		if token != null: token.report_progress("preview_meshes",completed,objects.size(),"objects")
+		completed += 1
 		var entry: Dictionary = objects[id]
 		if entry.has("signature"): continue # Immutable prior worker result.
 		var arrays := []
@@ -74,6 +88,7 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		entry.arrays = arrays
 		entry.erase("vertices")
 		entry.signature = var_to_bytes(entry).hex_encode().sha256_text()
+	if token != null: token.report_progress("preview_meshes",completed,objects.size(),"objects")
 	return {"objects":objects, "gimmicks":gimmicks}
 
 static func _gimmick_owner(id: String, assembly: Dictionary) -> int:

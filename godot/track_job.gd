@@ -1,11 +1,13 @@
 extends Node
 ## One immutable worker at a time; cancellation never publishes a late result.
 signal completed(request: int, result: Dictionary)
+signal progressed(request: int, progress: Dictionary)
 var generation := 0
 var _thread: Thread
 var _token: RefCounted
 var _running := 0
 var _pending := {}
+var _progress_revision := -1
 
 func begin(settings: Dictionary, destination: String) -> int:
 	cancel()
@@ -22,6 +24,7 @@ func busy() -> bool:
 
 func _process(_delta: float) -> void:
 	if _thread != null:
+		_poll_progress()
 		if _thread.is_alive(): return
 		var result: Dictionary = _thread.wait_to_finish()
 		_thread = null
@@ -33,10 +36,19 @@ func _process(_delta: float) -> void:
 	_pending = {}
 	_running = request.request
 	_token = ClassDB.instantiate("MapKitWorkToken")
+	_progress_revision = -1
+	_poll_progress()
 	_thread = Thread.new()
 	if _thread.start(_generate.bind(request, _token)) != OK:
 		_thread = null
 		completed.emit(_running, {"ok":false,"error":{"code":"E_THREAD","message":"Cannot start track generation"}})
+
+func _poll_progress() -> void:
+	if _token == null or _running != generation or _token.is_cancelled(): return
+	var value: Dictionary = JSON.parse_string(_token.progress_json())
+	if int(value.revision) == _progress_revision: return
+	_progress_revision = int(value.revision)
+	progressed.emit(_running, value)
 
 static func _generate(request: Dictionary, token: RefCounted) -> Dictionary:
 	token.enter()

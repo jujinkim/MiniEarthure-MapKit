@@ -425,8 +425,10 @@ pub fn pack_bytes(
     mut files: BTreeMap<String, Vec<u8>>,
 ) -> Result<Vec<u8>> {
     let mut d = document.into();
+    mapkit_core::cancellation::progress("package_validation", 0, Some(5), "checks");
     d.normalize();
     d.validate()?;
+    mapkit_core::cancellation::progress("package_validation", 1, Some(5), "checks");
     if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; }
     files.insert("document.json".into(), canonical(&d)?);
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
@@ -435,8 +437,11 @@ pub fn pack_bytes(
     let payload_size =
         export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
     validate_course_files(&d, &files)?;
+    mapkit_core::cancellation::progress("package_validation", 2, Some(5), "checks");
     validate_assets(&d, &files)?;
+    mapkit_core::cancellation::progress("package_validation", 3, Some(5), "checks");
     validate_heightmaps(&d, &files)?;
+    mapkit_core::cancellation::progress("package_validation", 4, Some(5), "checks");
     let manifest = PackageManifest {
         format: "memap".into(),
         format_version: PACKAGE_VERSION,
@@ -464,6 +469,10 @@ pub fn pack_bytes(
     };
     let manifest_bytes = canonical(&manifest)?;
     export_limits::including_manifest(payload_size, manifest_bytes.len() as u64)?;
+    mapkit_core::cancellation::progress("package_validation", 5, Some(5), "checks");
+    let total_bytes = manifest_bytes.len() as u64 + files.values().map(|v| v.len() as u64).sum::<u64>();
+    let mut completed_bytes = 0;
+    mapkit_core::cancellation::progress("packing", 0, Some(total_bytes), "bytes");
     let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     let options = FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
@@ -474,9 +483,15 @@ pub fn pack_bytes(
         .start_file("manifest.json", options)
         .map_err(zip_error)?;
     writer.write_all(&manifest_bytes).map_err(io)?;
+    completed_bytes += manifest_bytes.len() as u64;
     for (path, bytes) in files {
         writer.start_file(path, options).map_err(zip_error)?;
-        writer.write_all(&bytes).map_err(io)?;
+        for chunk in bytes.chunks(64 * 1024) {
+            mapkit_core::cancellation::checkpoint()?;
+            writer.write_all(chunk).map_err(io)?;
+            completed_bytes += chunk.len() as u64;
+            mapkit_core::cancellation::progress("packing", completed_bytes, Some(total_bytes), "bytes");
+        }
     }
     let bytes = writer.finish().map_err(zip_error)?.into_inner();
     if bytes.len() as u64 > MAX_PACKAGE_BYTES {
@@ -723,8 +738,16 @@ pub fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
         .open(&temp)
         .map_err(io)?;
     let result = (|| {
-        f.write_all(bytes).map_err(io)?;
+        mapkit_core::cancellation::progress("saving", 0, Some(bytes.len() as u64), "bytes");
+        let mut completed = 0;
+        for chunk in bytes.chunks(64 * 1024) {
+            mapkit_core::cancellation::checkpoint()?;
+            f.write_all(chunk).map_err(io)?;
+            completed += chunk.len() as u64;
+            mapkit_core::cancellation::progress("saving", completed, Some(bytes.len() as u64), "bytes");
+        }
         f.sync_all().map_err(io)?;
+        mapkit_core::cancellation::checkpoint()?;
         // A hard link installs atomically and cannot replace an existing destination.
         fs::hard_link(&temp, path).map_err(io)?;
         Ok(())

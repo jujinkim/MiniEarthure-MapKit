@@ -52,10 +52,15 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
     )
 }
 pub fn generate(settings: &track::Settings) -> Result<MapDocument> {
+    mapkit_core::cancellation::progress("searching", 0, None, "candidates");
     let mut d = track::document(settings)?;
+    mapkit_core::cancellation::progress("validating", 0, Some(3), "checks");
     let world = super::content_hash(&d, &BTreeMap::new())?;
+    mapkit_core::cancellation::progress("validating", 1, Some(3), "checks");
     d.courses = vec![course(&d, &world)?];
+    mapkit_core::cancellation::progress("validating", 2, Some(3), "checks");
     d.validate()?;
+    mapkit_core::cancellation::progress("validating", 3, Some(3), "checks");
     Ok(d)
 }
 /// Rebind the generated course after an allowed metadata edit. Exact geometry

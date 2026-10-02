@@ -172,6 +172,21 @@ fn save_failure_never_replaces_original() {
 }
 
 #[test]
+fn saving_progress_counts_written_bytes_and_cancellation_preserves_destination() {
+    let token = mapkit_core::cancellation::CancellationToken::default();
+    let path = std::env::temp_dir().join(format!("mapkit-progress-{}-{}.bin", std::process::id(), token.progress().job_id));
+    let bytes = vec![7; 150_000];
+    token.run(|| write_new(&path, &bytes)).unwrap();
+    let progress = token.progress();
+    assert_eq!(progress.stage, "saving");
+    assert_eq!((progress.completed, progress.total, progress.unit.as_str()), (150_000, Some(150_000), "bytes"));
+    token.cancel();
+    assert!(token.run(|| write_new(&path, b"replacement")).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), bytes);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn venue_floor_is_collision_only_and_budgeted() {
     let d = document(&Settings {
         categories: vec!["driving".into()],

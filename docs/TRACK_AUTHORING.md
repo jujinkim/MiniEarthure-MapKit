@@ -223,3 +223,21 @@ attempted after another four reference seconds of growth. A candidate within
 one percent of the target stops the deterministic search early. No wall-clock
 cutoff, long-curve fallback, reduced category or manufactured success is used.
 All own formats stay v1; current source fingerprints identify regenerated data.
+
+## Stage progress — 2026-10-02
+
+`MapKitWorkToken` exposes an atomic snapshot with job ID, revision, stage,
+completed count, nullable total and unit. Candidate search has no total; attempts
+never stand in for completion. Validation counts completed checks, compression
+and atomic new-file writes count bytes, and authoring preview counts objects.
+Percentages describe only the current stage. Saving a package is not consumer
+readiness. `track_job.gd` emits progress with its request ID and drops cancelled,
+superseded and duplicate revisions. The shared progress ring supports determinate,
+indeterminate and reduced-motion display; consumers translate stage labels.
+
+Validation: four Rust cancellation/progress units, generated-request cancellation,
+written-byte/source-preservation unit, native/CLI build and isolated Godot
+`work_progress_validator` pass. An initial unfiltered test invocation exposed the
+existing unrelated `tests/water.rs` Triangle initializer missing contact fields;
+focused units use `--lib` or an explicit integration target. Detailed consumer
+interaction remains user verification; consumer wiring is delivered separately.
