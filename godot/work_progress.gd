@@ -34,3 +34,6 @@ func _draw() -> void:
 	var font := get_theme_default_font()
 	var width := font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
 	draw_string(font,center+Vector2(-width*.5,6),text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color.WHITE)
+
+static func stage_key(stage: String) -> String:
+	return {"preparing":"Preparing generation", "searching":"Searching for a track", "geometry":"Building track surfaces", "validation":"Validating track", "package_validation":"Validating package", "packing":"Packing map", "saving":"Saving map", "reading":"Reading map", "copying":"Copying map", "validating":"Validating package", "preview":"Preparing preview", "preview_meshes":"Preparing preview", "ready":"Ready"}.get(stage,"Preparing generation")

@@ -255,3 +255,9 @@ fail explicitly with E_TRACK_CHECKPOINT_LIMIT.
 
 Three focused units cover spacing, hazards, deduplication, limits, branch order
 and manual preservation; the generated alternate-route regression also passes.
+
+Generation consumers now keep the same work token through optional prepared
+authoring preview output. Geometry reports completed pieces; the common ring
+also exposes stage keys for consumer localization. Editor's worker test observed
+unknown search, counted work and preview stages before adoption. Client progress
+filter units and Editor preview adoption pass with the current native build.

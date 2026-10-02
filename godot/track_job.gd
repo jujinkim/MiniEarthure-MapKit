@@ -9,9 +9,9 @@ var _running := 0
 var _pending := {}
 var _progress_revision := -1
 
-func begin(settings: Dictionary, destination: String) -> int:
+func begin(settings: Dictionary, destination: String, with_preview := false) -> int:
 	cancel()
-	_pending = {"settings": settings.duplicate(true), "destination": destination, "request": generation}
+	_pending = {"settings": settings.duplicate(true), "destination": destination, "request": generation, "preview":with_preview}
 	return generation
 
 func cancel() -> void:
@@ -54,6 +54,10 @@ static func _generate(request: Dictionary, token: RefCounted) -> Dictionary:
 	token.enter()
 	var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
 	var result: Dictionary = JSON.parse_string(bridge.generate_track(JSON.stringify(request.settings), request.destination))
+	if result.get("ok",false) and request.get("preview",false) and not token.is_cancelled():
+		var prepared:Dictionary=preload("./track_authoring_preview.gd").prepare(result.data.document,bridge,{},token)
+		if prepared.has("error"): result={"ok":false,"error":{"code":"E_PREVIEW","message":prepared.error}}
+		else: result.data.preview=prepared
 	token.leave()
 	return result
 

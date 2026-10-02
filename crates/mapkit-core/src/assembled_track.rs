@@ -1752,8 +1752,10 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
         emit_shape(&support.shape, &id, b)?;
     }
     let mut walls = vec![];
+    cancellation::progress("geometry",0,Some(a.pieces.len() as u64),"pieces");
     for (index, p) in a.pieces.iter().enumerate() {
         generate_piece(p, index, b, &junction::neighbors(a, index), &mut walls)?;
+        cancellation::progress("geometry",(index+1) as u64,Some(a.pieces.len() as u64),"pieces");
     }
     walls::emit(&walls, b)
 }
