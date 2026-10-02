@@ -80,7 +80,8 @@ pub(crate) fn estimate_validated(
         max_object_id_bytes: d.gimmicks.iter().map(|g| g.id.len() as u64).max().unwrap_or(7).max(7),
     };
     if let Some(track) = &d.assembled_track {
-        let (triangles, solids) = crate::assembled_track::cost(track, &area);
+        let (triangles, solids, scratch) = crate::assembled_track::cost(track, &area)?;
+        cost.generation_scratch_bytes += scratch;
         cost.triangles += triangles;
         cost.occupied_solids += solids;
         cost.max_object_id_bytes = cost.max_object_id_bytes.max(32);

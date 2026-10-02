@@ -1760,7 +1760,7 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
     walls::emit(&walls, b)
 }
 
-fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut Vec<walls::Volume>) -> Result<()> {
+fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut impl walls::WallSink) -> Result<()> {
     if p.id == "finish_plaza" {
         return generate_plaza(p, index, b, neighbors, walls);
     }
@@ -1847,7 +1847,24 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
     }
     Ok(())
 }
-pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
+pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> Result<(u64, u64, u64)> {
+    // Trace the common clipping plan without retaining surfaces or convex parts.
+    // A segment can split at connected lanes; segment counts alone undercount it.
+    struct Discard;
+    impl TrackGeometry for Discard {
+        fn triangle(&mut self, _: [Vertex;3], _: Surface, _: &str, _: bool) -> Result<()> { Ok(()) }
+        fn solid(&mut self, _: &str, _: SolidShape) -> Result<()> { Ok(()) }
+    }
+    let mut walls=walls::Cost { bounds, all:0, triangles:0, solids:0 };
+    let mut clipping_scratch=0;
+    for (index,p) in a.pieces.iter().enumerate() {
+        cancellation::checkpoint()?;
+        let neighbors=junction::neighbors(a,index);
+        let intervals=neighbors.iter().map(|p|p.path.len()+p.alternate_path.len()).sum::<usize>()
+            + p.path.len()+p.alternate_path.len();
+        clipping_scratch=clipping_scratch.max(intervals as u64*2*32);
+        generate_piece(p,index,&mut Discard,&neighbors,&mut walls)?;
+    }
     let segments = a
         .pieces
         .iter()
@@ -1874,13 +1891,14 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> (u64, u64) {
             })
         })
         .count() as u64;
-    (
-        segments * 256 + 10 + supports * 60,
-        segments * 3 + 1 + supports,
-    )
+    Ok((
+        segments * 256 + walls.triangles * 5 + 10 + supports * 60,
+        segments + walls.solids + 1 + supports,
+        walls.all * walls::SCRATCH_PER_VOLUME + clipping_scratch + 4096,
+    ))
 }
 
-fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut Vec<walls::Volume>) -> Result<()> {
+fn generate_plaza(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut impl walls::WallSink) -> Result<()> {
     let center = plaza_center(p);
     let half = i64::from(p.width_cm) / 2;
     let transform = |v| add(p.origin_cm, geometry::rotate3(v, p.rotation_mdeg));

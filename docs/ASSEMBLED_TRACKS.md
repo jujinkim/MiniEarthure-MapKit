@@ -530,3 +530,34 @@ The first unscoped core command failed to compile the unrelated existing
 `tests/water.rs` fixture (missing `contact_class`/`snow_retention_percent`); the
 affected `--lib` and named integration targets pass. Detailed driving remains
 user verification.
+
+## Quantized wall occupancy — 2026-10-03
+
+The former eight-vertex wall proxy could contain repeated vertices, nonplanar
+faces or concave corners while claiming to be convex. Walls now emit deterministic
+outward tetrahedra. Canonical quad diagonals handle concave corners, shared section
+diagonals remain stable, and exact i128 determinants remove only zero-volume
+parts. Repeated quantized vertices and duplicate tetrahedra are deduplicated.
+Nonzero wedges at folded centimetre sections remain occupied. The displayed and
+colliding triangles come from these same parts, with opposing shared faces
+cancelled across parts and piece seams. Width, height, clipping and spawn policy
+are unchanged; no consumer validation is relaxed.
+
+Cost estimation traces the common clipping plan and counts the resulting parts
+and local boundary faces, including split sections. It also reserves the complete
+wall-vector/face-map and clipping workspace, even for geometry outside the output
+cell. Existing triangle, occupancy and consumer memory limits remain unchanged;
+exceeding them fails explicitly. All formats and public APIs stay v1. Source-based
+fingerprints identify new generation; existing input files are not converted.
+
+Scoped results in [validation/grid-input-2026-10-03](validation/grid-input-2026-10-03/):
+33 assembled units, six occupancy tests and twelve assembled-package tests pass.
+After the final cost refinement, seven wall tests and the cell-seam cost test pass.
+Fixtures cover duplicate vertices, a concave plaza corner, nonzero folded wedges,
+exactly flat sections, straight/curve/grade/spiral/loop/taper/plaza exterior parity,
+closed representative meshes, wall thickness, cap cancellation and explicit budget
+failure. Seed 7, 60-second one-way start cell (0,0) contains 6,802 solids, including
+6,195 convexes; every convex passes strict validation. Branch composition and the
+existing difficulty distribution are retained. Native bridge and CLI builds pass.
+The unrelated earlier water-fixture compile failure above remains historical;
+detailed application driving and platform acceptance remain user checks.

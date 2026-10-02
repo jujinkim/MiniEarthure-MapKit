@@ -2,6 +2,36 @@
 use super::*;
 type Ring = [Vertex; 4];
 pub(super) struct Volume { pub rings: [Ring; 2], pub id: String }
+pub(super) const MAX_TETRAHEDRA: u64 = 12;
+// Vec growth, IDs, all tetrahedron faces in the cancellation BTreeMap, and
+// per-section triangulation/convex workspace. This is a reservation, not RSS.
+pub(super) const SCRATCH_PER_VOLUME: u64 = 512 + MAX_TETRAHEDRA * 4 * 256;
+pub(super) trait WallSink { fn push(&mut self, volume: Volume); }
+impl WallSink for Vec<Volume> { fn push(&mut self, v: Volume) { Vec::push(self,v); } }
+pub(super) struct Cost<'a> { pub bounds: &'a Bounds, pub all: u64, pub triangles: u64, pub solids: u64 }
+impl WallSink for Cost<'_> {
+    fn push(&mut self, volume: Volume) {
+        self.all += 1;
+        if (0..2).all(|j| {
+            let points=volume.rings.iter().flatten();
+            points.clone().map(|v|v[j*2]).min().unwrap()<=self.bounds.max[j]
+                && points.map(|v|v[j*2]).max().unwrap()>=self.bounds.min[j]
+        }) {
+            // Only one bounded section is materialized for the estimate. Folded
+            // sections can expose more than the usual twelve boundary triangles.
+            let parts=tetrahedra(volume.rings);
+            self.solids += parts.len() as u64;
+            let mut faces=std::collections::BTreeMap::<[Vertex;3],i32>::new();
+            for part in parts { for indices in part.faces {
+                let mut face=indices.map(|i|part.vertices[i as usize]);
+                let first=(0..3).min_by_key(|&i|face[i]).unwrap();face.rotate_left(first);
+                let sign=if face[1]<face[2] {1} else {-1};face.sort();
+                *faces.entry(face).or_default()+=sign;
+            }}
+            self.triangles += faces.values().filter(|&&n|n!=0).count() as u64;
+        }
+    }
+}
 
 pub(super) fn edges(s: &Sample, rotation: [i32;3]) -> [Vertex;2] {
     if s.mode != "loop" { return geometry::ribbon_edges(s,0); }
@@ -67,7 +97,7 @@ pub(super) fn ring(base: Vertex, outward: Vertex, up: Vertex, reverse: bool) -> 
     result
 }
 
-pub(super) fn cut(rings: [Ring; 2], neighbors: &[&Piece], alternate: &[Sample], id: &str, out: &mut Vec<Volume>) {
+pub(super) fn cut(rings: [Ring; 2], neighbors: &[&Piece], alternate: &[Sample], id: &str, out: &mut impl WallSink) {
     for (lo, hi) in junction::visible_volume(rings, neighbors, alternate) {
         let at = |t: f64| std::array::from_fn(|i| std::array::from_fn(|j|
             round(rings[0][i][j] as f64 + (rings[1][i][j]-rings[0][i][j]) as f64*t)));
@@ -76,52 +106,95 @@ pub(super) fn cut(rings: [Ring; 2], neighbors: &[&Piece], alternate: &[Sample], 
     }
 }
 
-pub(super) fn emit(volumes: &[Volume], b: &mut impl TrackGeometry) -> Result<()> {
-    // Cancel matching internal end faces, including piece seams. No reversed
-    // duplicate sheet or internal cap reaches native CCD edge classification.
-    let mut caps = std::collections::BTreeMap::<Ring, usize>::new();
-    for v in volumes { for mut ring in v.rings { ring.sort(); *caps.entry(ring).or_default() += 1; } }
-    // At a tight loop crown, centimetre quantization can collapse an edge or
-    // fold a sub-centimetre face onto its neighbour. Cancel those internal
-    // opposing faces too; they must not become reversed native CCD features.
-    let mut triangles = std::collections::BTreeMap::<[Vertex;3], (i32, &str)>::new();
-    let mut quad = |mut ring: Ring, id| {
-        let first=(0..4).min_by_key(|&i|ring[i]).unwrap();
-        ring.rotate_left(first);
-        for mut face in [[ring[0],ring[1],ring[2]],[ring[0],ring[2],ring[3]]] {
-            let u=std::array::from_fn::<_,3,_>(|j|i128::from(face[1][j]-face[0][j]));
-            let v=std::array::from_fn::<_,3,_>(|j|i128::from(face[2][j]-face[0][j]));
-            if [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]] == [0;3] {continue;}
-            let index=(0..3).min_by_key(|&i|face[i]).unwrap();
-            face.rotate_left(index);
-            let orientation=if face[1]<face[2] {1} else {-1};
-            face.sort();
-            triangles.entry(face).or_insert((0,id)).0 += orientation;
+// Pull each boundary triangle to the least visible quantized vertex. A
+// warped eight-vertex strip is not necessarily convex; each nonzero tetrahedron
+// is. Exact integer volume, never an epsilon, decides whether a part disappears.
+fn tetrahedra(rings: [Ring; 2]) -> Vec<CollisionConvex> {
+    let [a, b] = rings;
+    let mut quads = vec![[a[3], a[2], a[1], a[0]], b];
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        quads.push([a[i], a[j], b[j], b[i]]);
+    }
+    let mut boundary = vec![];
+    for quad in quads { boundary.extend(triangulate(quad)); }
+    let points: std::collections::BTreeSet<_> = a.into_iter().chain(b).collect();
+    if boundary.iter().all(|&[a,b,c]| points.iter().all(|&p|determinant([a,b,c,p])==0)) {
+        return vec![];
+    }
+    let visible = |p| boundary.iter().all(|&[a,b,c]| determinant([a,b,c,p]) <= 0);
+    let pivot = points.iter().copied().find(|p|
+        rings.iter().all(|r| !r.contains(p) || triangulate(*r).iter().all(|t| t.contains(p) || normal(*t)==[0;3]))
+        && visible(*p))
+        .or_else(|| {
+            // A twisted section may have an interior kernel but no visible
+            // corner. Quantize once, then require exact containment in it.
+            let center=std::array::from_fn(|j| (points.iter().map(|p|i128::from(p[j])).sum::<i128>() / points.len() as i128) as i64);
+            visible(center).then_some(center)
+        })
+        // Folded centimetre sections still contain nonzero occupied wedges.
+        // Keep their independently outward-oriented tetrahedra as well; never
+        // drop occupied material because the unsplit strip has no kernel.
+        .unwrap_or_else(|| *points.first().unwrap());
+    let mut parts = std::collections::BTreeSet::new();
+    for face in boundary {
+        let mut vertices = [pivot, face[0], face[1], face[2]];
+        vertices.sort();
+        if determinant(vertices) != 0 { parts.insert(vertices); }
+    }
+    parts.into_iter().map(|vertices| {
+        let mut faces = vec![[0, 1, 2], [0, 3, 1], [0, 2, 3], [1, 3, 2]];
+        if determinant(vertices) > 0 {
+            for f in &mut faces { f.swap(1, 2); }
         }
-    };
+        CollisionConvex { vertices: vertices.to_vec(), faces }
+    }).collect()
+}
+
+fn normal([a,b,c]: [Vertex;3]) -> [i128;3] {
+    let u=std::array::from_fn::<_,3,_>(|j|i128::from(b[j])-i128::from(a[j]));
+    let v=std::array::from_fn::<_,3,_>(|j|i128::from(c[j])-i128::from(a[j]));
+    [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
+}
+
+fn triangulate(mut quad: Ring) -> [[Vertex;3];2] {
+    let first=(0..4).min_by_key(|&i|quad[i]).unwrap();
+    quad.rotate_left(first);
+    let [a,b,c,d]=quad;
+    let (n0,n1)=(normal([a,b,c]),normal([a,c,d]));
+    let n: [i128;3]=std::array::from_fn(|j|n0[j]+n1[j]);
+    if [n0,n1].iter().any(|v|(0..3).map(|j|v[j]*n[j]).sum::<i128>()<0) {
+        [[a,b,d],[b,c,d]]
+    } else { [[a,b,c],[a,c,d]] }
+}
+
+fn determinant([a, b, c, d]: [Vertex; 4]) -> i128 {
+    let delta = |p: Vertex| std::array::from_fn::<_, 3, _>(|i| i128::from(p[i]) - i128::from(a[i]));
+    let (u, v, w) = (delta(b), delta(c), delta(d));
+    (u[1]*v[2]-u[2]*v[1])*w[0] + (u[2]*v[0]-u[0]*v[2])*w[1] + (u[0]*v[1]-u[1]*v[0])*w[2]
+}
+
+pub(super) fn emit(volumes: &[Volume], b: &mut impl TrackGeometry) -> Result<()> {
+    // Derive the exterior from exactly the occupancy parts. Cancelling opposing
+    // faces removes tetrahedron interiors and shared section/piece caps alike.
+    let mut triangles = std::collections::BTreeMap::<[Vertex; 3], (i32, &str)>::new();
     for v in volumes {
         cancellation::checkpoint()?;
-        let [a, c] = v.rings;
-        let mut faces = vec![];
-        for i in 0..4 {
-            let j = (i+1)%4;
-            let q = [i as u8, j as u8, (j+4) as u8, (i+4) as u8];
-            faces.extend([[q[0],q[1],q[2]],[q[0],q[2],q[3]]]);
-            quad([a[i],a[j],c[j],c[i]], v.id.as_str());
+        for shape in tetrahedra(v.rings) {
+            for indices in &shape.faces {
+                let mut face = indices.map(|i| shape.vertices[i as usize]);
+                let first = (0..3).min_by_key(|&i| face[i]).unwrap();
+                face.rotate_left(first);
+                let orientation = if face[1] < face[2] { 1 } else { -1 };
+                face.sort();
+                triangles.entry(face).or_insert((0, &v.id)).0 += orientation;
+            }
+            b.solid(&v.id, SolidShape::Convex(shape))?;
         }
-        for (index, mut ring) in [a,c].into_iter().enumerate() {
-            let mut key = ring; key.sort();
-            if index == 0 { ring.reverse(); }
-            if caps[&key] == 1 { quad(ring, v.id.as_str()); }
-        }
-        faces.extend([[3,2,1],[3,1,0],[4,5,6],[4,6,7]]);
-        b.solid(&v.id, SolidShape::Convex(CollisionConvex {
-            vertices: a.into_iter().chain(c).collect(), faces,
-        }))?;
     }
-    for (mut face, (orientation,id)) in triangles {
-        if orientation==0 {continue;}
-        if orientation<0 {face.swap(1,2);}
+    for (mut face, (orientation, id)) in triangles {
+        if orientation == 0 { continue; }
+        if orientation < 0 { face.swap(1, 2); }
         b.triangle(face, Surface::Concrete, id, false)?;
     }
     Ok(())
@@ -131,12 +204,12 @@ pub(super) fn emit(volumes: &[Volume], b: &mut impl TrackGeometry) -> Result<()>
 mod tests {
     use super::*;
     #[derive(Default)]
-    struct Mesh { triangles: Vec<[Vertex;3]>, solids: usize, spawnable: bool }
+    struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
     impl TrackGeometry for Mesh {
         fn triangle(&mut self, v: [Vertex;3], _: Surface, _: &str, spawnable: bool) -> Result<()> {
             self.triangles.push(v); self.spawnable |= spawnable; Ok(())
         }
-        fn solid(&mut self, _: &str, _: SolidShape) -> Result<()> { self.solids+=1; Ok(()) }
+        fn solid(&mut self, _: &str, shape: SolidShape) -> Result<()> { if let SolidShape::Convex(c)=shape { self.solids.push(c); } Ok(()) }
     }
     #[test]
     fn closed_outward_walls_on_straight_curve_slope_taper_and_plaza() {
@@ -146,7 +219,19 @@ mod tests {
             generate_piece(&p,0,&mut discarded,&[],&mut volumes).unwrap();
             assert!(!volumes.is_empty(),"{id}");
             let mut out=Mesh::default(); emit(&volumes,&mut out).unwrap();
-            assert_eq!(out.solids,volumes.len());
+            assert!(!out.solids.is_empty());
+            assert!(out.solids.iter().all(|c| c.valid(100_000_000)), "{id}: valid occupancy");
+            let mut exterior=std::collections::BTreeMap::<[Vertex;3],i32>::new();
+            for c in &out.solids { for indices in &c.faces {
+                let mut face=indices.map(|i|c.vertices[i as usize]);
+                let first=(0..3).min_by_key(|&i|face[i]).unwrap();face.rotate_left(first);
+                let sign=if face[1]<face[2] {1} else {-1};face.sort();
+                *exterior.entry(face).or_default()+=sign;
+            }}
+            exterior.retain(|_,sign|*sign!=0);
+            assert!(exterior.values().all(|sign|sign.abs()==1), "{id}: overlapping boundary faces");
+            let rendered: std::collections::BTreeSet<_>=out.triangles.iter().map(|face|{let mut f=*face;f.sort();f}).collect();
+            assert_eq!(rendered,exterior.keys().copied().collect(),"{id}: render/collision and occupied exterior");
             assert!(!out.spawnable,"wall tops must never add spawn candidates");
             let mut edges=std::collections::BTreeMap::new();
             for face in &out.triangles { for i in 0..3 {
@@ -160,6 +245,54 @@ mod tests {
                 assert!((48..=72).contains(&width),"{id}: quantized width {width}");
             }}
         }
+    }
+    #[test]
+    fn duplicate_vertices_concave_corner_and_exact_zero_volume() {
+        let duplicate=[
+            [[0,0,0],[0,60,0],[-50,60,0],[-50,0,0]],
+            [[0,0,0],[0,60,0],[-49,60,1],[-49,0,1]],
+        ];
+        let concave=[
+            [[-300,0,800],[-300,120,800],[-350,120,800],[-350,0,800]],
+            [[-363,0,829],[-363,120,829],[-385,120,785],[-385,0,785]],
+        ];
+        let small=[[0,0,0],[0,1,0]].map(|base|ring(base,[1,0,0],[0,0,1],false));
+        for rings in [duplicate,concave,small] {
+            let parts=tetrahedra(rings);
+            assert!(!parts.is_empty());
+            assert!(parts.len() as u64<=MAX_TETRAHEDRA);
+            assert!(parts.iter().all(|p|p.valid(100_000_000)));
+            assert_eq!(parts,tetrahedra(rings),"stable ordering");
+        }
+        assert!(tetrahedra([duplicate[0];2]).is_empty());
+        let folded=[
+            [[-201,0,2402],[-201,60,2402],[-232,60,2351],[-232,0,2351]],
+            [[-203,0,2403],[-203,60,2403],[-222,60,2352],[-222,0,2352]],
+        ];
+        let parts=tetrahedra(folded);
+        assert!(!parts.is_empty(),"nonzero quantized wedges remain occupied");
+        assert!(parts.iter().all(|p|p.valid(100_000_000)));
+    }
+    #[test]
+    fn seed7_start_cell_occupancy_is_valid() {
+        let d=document(&Settings {seed:7,duration_seconds:60,circuit:false,..Default::default()}).unwrap();
+        let a=d.assembled_track.as_ref().unwrap();
+        let p=a.pieces[0].path[0].position_cm;
+        let cell=d.cell_at([p[0],p[2]]).unwrap();
+        let cost=crate::estimate_generation(&d,cell,500_000).unwrap();
+        let generated=crate::generate_with_occupancy(crate::GenerationInput {
+            document:&d,cell,heightgrid:None,max_triangles:500_000,
+        },crate::MAX_OCCUPIED_SOLIDS).unwrap();
+        assert!(generated.solids.len() as u64<=cost.occupied_solids);
+        assert!(generated.chunk.triangles.len() as u64<=cost.triangles);
+        assert!(cost.generation_scratch_bytes>SCRATCH_PER_VOLUME);
+        assert_eq!(crate::generate_with_occupancy(crate::GenerationInput {
+            document:&d,cell,heightgrid:None,max_triangles:500_000,
+        },generated.solids.len()-1).unwrap_err().code,"E_BUDGET");
+        let convexes: Vec<_>=generated.solids.iter().filter_map(|s|if let SolidShape::Convex(c)=&s.shape {Some((&s.object_id,c))} else {None}).collect();
+        assert!(!convexes.is_empty());
+        for (id,c) in &convexes { assert!(c.valid(100_000_000), "{id}: {c:?}"); }
+        println!("seed7 start {cell:?}: {} solids, {} convexes",generated.solids.len(),convexes.len());
     }
     #[test]
     fn wide_walls_keep_gimmick_layout_duration() {
