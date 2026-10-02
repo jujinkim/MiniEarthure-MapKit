@@ -1,0 +1,11 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 16.07s
+     Running tests/water.rs (map-kit/target/debug/deps/water-067836eaa4b3c432)
+
+running 3 tests
+test water_rejects_invalid_islands_heights_flow_and_shared_ids ... ok
+test water_is_non_solid_and_spawn_query_respects_islands_bridge_and_bottom ... ok
+test water_seams_region_cost_archive_and_hash_are_deterministic ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

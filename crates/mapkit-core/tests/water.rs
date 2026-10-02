@@ -19,7 +19,7 @@ fn water_is_non_solid_and_spawn_query_respects_islands_bridge_and_bottom() {
     assert!(water::sample(&d.water_bodies,[500,-1001,500]).is_none());
     assert!(water::sample(&d.water_bodies,[500,201,500]).is_none());
     assert!(water::sample(&d.water_bodies,[100,200,500]).is_some());
-    c.triangles.push(Triangle{vertices:[[100,400,100],[900,400,100],[100,400,900]],surface:Surface::Concrete,object_id:"bridge".into(),spawnable:true});
+    c.triangles.push(Triangle{contact_class:3,snow_retention_percent:100,vertices:[[100,400,100],[900,400,100],[100,400,900]],surface:Surface::Concrete,object_id:"bridge".into(),spawnable:true});
     assert_eq!(c.spawn_options([200,200]).unwrap()[0].surface_id,"bridge");
     assert_eq!(c.hash().unwrap(),sha256(&canonical(&c).unwrap()));
 }

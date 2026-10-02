@@ -45,3 +45,8 @@ Focused core water, cost, query, surface-probe and archive tests, package/schema
 indexed audits, and the Godot consumer's compatibility-renderer load passed.
 See `crates/mapkit-core/tests/water.rs` and
 `crates/mapkit-package/tests/water_contract.rs` for the contract fixtures.
+
+On 2026-10-03 the stale bridge fixture's missing contact/snow fields were repaired;
+all three core water tests passed. Production water code did not change.
+[Reproduction, source revision and final logs](validation/test-failures-2026-10-03/README.md)
+supersede the earlier compile failure for this target only.
