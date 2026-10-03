@@ -396,6 +396,19 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
         action_tamper.validate().is_err(),
         "action source and derived trigger must match"
     );
+    let mut width_tamper=d.clone();
+    width_tamper.assembled_track.as_mut().unwrap().authoring.as_mut().unwrap().actions[0].panel_width_percent=25;
+    assert!(width_tamper.validate().is_err(), "width source and panel products must match");
+    let mut shape_tamper=d.clone();
+    let panel=shape_tamper.gimmicks.iter_mut().find(|g|g.id.starts_with("action-")).unwrap();
+    panel.parts[0].vertices[0][0]+=1;
+    assert!(shape_tamper.validate().is_err(), "derived panel geometry cannot be edited");
+    let mut partial=source.clone();partial.actions[0].panel_width_percent=25;
+    partial.actions[0].panel_alignment=authoring::PanelAlignment::Right;
+    let partial=package::compile_source(&partial).unwrap();
+    let reopened=read_bytes(&pack_bytes(partial.clone(), BTreeMap::new()).unwrap()).unwrap();
+    assert_eq!(reopened.document.gimmicks,partial.gimmicks);
+    assert_eq!(reopened.document.assembled_track,partial.assembled_track);
     let mut corrupt = d.clone();
     corrupt.assembled_track.as_mut().unwrap().pieces[0].path[0].position_cm[0] += 1;
     assert!(pack_bytes(corrupt, BTreeMap::new()).is_err());

@@ -17,7 +17,7 @@ fn clip(mut poly: Vec<Point>, axis: usize, limit: f64, lower: bool) -> Vec<Point
     }
     poly
 }
-struct PanelSurface<'a> { g: &'a mut Gimmick, basis: [[f64;3];3], half: f64, area: f64 }
+struct PanelSurface<'a> { g: &'a mut Gimmick, basis: [[f64;3];3], left: f64, right: f64, area: f64 }
 impl TrackGeometry for PanelSurface<'_> {
     fn triangle(&mut self, v: [Vertex;3], _: Surface, _: &str, driving: bool) -> Result<()> {
         if !driving {return Ok(());}
@@ -27,7 +27,7 @@ impl TrackGeometry for PanelSurface<'_> {
         let normal=norm(cross(sub(points[1],points[0]),sub(points[2],points[0])));
         if normal[1]<0.5 || points.iter().all(|p|p[1]>50.0) || points.iter().all(|p|p[1]< -50.0) {return Ok(());}
         let mut poly=points.to_vec();
-        for (axis,limit,lower) in [(0,-self.half,true),(0,self.half,false),(2,-100.0,true),(2,100.0,false)] {
+        for (axis,limit,lower) in [(0,self.left,true),(0,self.right,false),(2,-100.0,true),(2,100.0,false)] {
             poly=clip(poly,axis,limit,lower);
         }
         if poly.len()<3 {return Ok(());}
@@ -55,7 +55,11 @@ impl TrackGeometry for PanelSurface<'_> {
 struct Discard;
 impl walls::WallSink for Discard {fn push(&mut self, _: walls::Volume) {}}
 
-pub(super) fn fit(a: &Assembly, index: usize, g: &mut Gimmick, lateral: u32) -> Result<()> {
+pub(super) fn fit(a: &Assembly, index: usize, g: &mut Gimmick, lateral: u32, width: u8, alignment: authoring::PanelAlignment) -> Result<()> {
+    if ![25,50,75,100].contains(&width) {return Err(error("E_TRACK_SOURCE","invalid panel width"));}
+    let half=(lateral as f64-25.0).max(0.0);
+    let span=half*2.0*width as f64/100.0;
+    let left=match alignment {authoring::PanelAlignment::Left=>-half,authoring::PanelAlignment::Center=>-span/2.0,authoring::PanelAlignment::Right=>half-span};
     // Use the actual encoded Euler basis, so display and geometry agree exactly.
     let basis: [[f64;3];3]=std::array::from_fn(|j| {
         geometry::rotate3(std::array::from_fn(|k|if j==k {1_000_000} else {0}),g.rotation_mdeg).map(|v|v as f64/1e6)
@@ -63,7 +67,7 @@ pub(super) fn fit(a: &Assembly, index: usize, g: &mut Gimmick, lateral: u32) -> 
     let basis=std::array::from_fn(|i|std::array::from_fn(|j|basis[j][i]));
     g.scale_per_mille=[100;3];
     g.parts.clear();
-    let mut surface=PanelSurface {g,basis,half:(lateral as f64-25.0).max(0.0),area:0.0};
+    let mut surface=PanelSurface {g,basis,left,right:left+span,area:0.0};
     generate_piece(&a.pieces[index],index,&mut surface,&[],&mut Discard)?;
     // Connected seams share the same source triangles. Unrelated stacked roads
     // cannot supply a missing panel surface.
@@ -93,14 +97,14 @@ mod tests {
         for id in ["straight","slope_up","gentle90","curve_up","spiral90_left_up"] {
             let a=assembly(id); let at=a.pieces[0].path.len()/2;
             let mut g=panel(&a,at);
-            fit(&a,0,&mut g,200).unwrap_or_else(|e|panic!("{id}: {e:?}"));
+            fit(&a,0,&mut g,200,100,authoring::PanelAlignment::Center).unwrap_or_else(|e|panic!("{id}: {e:?}"));
             assert!(g.valid(),"{id}");
             assert!(g.parts.len()<=32);
-            let mut repeated=panel(&a,at); fit(&a,0,&mut repeated,200).unwrap(); assert_eq!(g,repeated);
+            let mut repeated=panel(&a,at); fit(&a,0,&mut repeated,200,100,authoring::PanelAlignment::Center).unwrap(); assert_eq!(g,repeated);
         }
         let a=assembly("straight");let mut g=panel(&a,2);g.position[1]+=100;
-        assert_eq!(fit(&a,0,&mut g,200).unwrap_err().code,"E_TRACK_PANEL_SUPPORT");
-        let mut g=panel(&a,2);let mut sink=PanelSurface {g:&mut g,basis:[[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]],half:175.0,area:0.0};
+        assert_eq!(fit(&a,0,&mut g,200,100,authoring::PanelAlignment::Center).unwrap_err().code,"E_TRACK_PANEL_SUPPORT");
+        let mut g=panel(&a,2);let mut sink=PanelSurface {g:&mut g,basis:[[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]],left:-175.0,right:175.0,area:0.0};
         let v=[[-100,0,0],[0,0,100],[100,0,0]].map(|p|add(p,sink.g.position));
         for _ in 0..32 {sink.triangle(v,Surface::Asphalt,"road",true).unwrap();}
         assert_eq!(sink.triangle(v,Surface::Asphalt,"road",true).unwrap_err().code,"E_TRACK_PANEL_BUDGET");
@@ -115,17 +119,42 @@ mod tests {
         source.connections.push(authoring::Connection {from:"a".into(),to:"b".into()});
         let a=authoring::compile(&source).unwrap();
         let last=a.pieces[0].path.len()-1;
-        let mut g=panel(&a,last);fit(&a,0,&mut g,300).unwrap();
+        let mut g=panel(&a,last);fit(&a,0,&mut g,300,100,authoring::PanelAlignment::Center).unwrap();
         let z:Vec<_>=g.parts.iter().flat_map(|p|&p.vertices).map(|v|v[2]).collect();
         assert_eq!((*z.iter().min().unwrap(),*z.iter().max().unwrap()),(-1000,1000));
         let mut shifted=a.clone();for s in &mut shifted.pieces[1].path {s.position_cm[1]+=500;if let Some(edges)=&mut s.ribbon_cm {for v in edges {v[1]+=500;}}}
-        fit(&shifted,0,&mut g,300).unwrap();
+        fit(&shifted,0,&mut g,300,100,authoring::PanelAlignment::Center).unwrap();
         assert!(g.parts.iter().flat_map(|p|&p.vertices).all(|v|v[2]<=0));
-        let mut g=panel(&a,1);fit(&a,0,&mut g,200).unwrap();assert!(g.valid());
+        let mut g=panel(&a,1);fit(&a,0,&mut g,200,100,authoring::PanelAlignment::Center).unwrap();assert!(g.valid());
+    }
+    #[test]
+    fn panel_width_alignment_defaults_validation_and_chain() {
+        use authoring::PanelAlignment::{Left,Center,Right};
+        let a=assembly("straight");
+        for width in [25,50,75,100] {for alignment in [Left,Center,Right] {
+            let mut g=panel(&a,3);fit(&a,0,&mut g,200,width,alignment).unwrap();
+            let x: Vec<_>=g.parts.iter().flat_map(|p|&p.vertices).map(|v|v[0]).collect();
+            let span=3500.0*width as f64/100.0;
+            let left=match alignment {Left=>-1750.0,Center=>-span/2.0,Right=>1750.0-span};
+            assert_eq!((*x.iter().min().unwrap(),*x.iter().max().unwrap()),(round(left),round(left+span)));
+            assert!(g.valid());
+        }}
+        let mut source=authoring::Source::empty();source.instances.push(authoring::instance("road","boost_chain",400));
+        let assembly=authoring::compile(&source).unwrap();
+        let seeded=road_gimmicks(&assembly).unwrap();assert_eq!(seeded.len(),3);
+        for g in seeded {let max=g.parts.iter().flat_map(|p|&p.vertices).map(|v|v[0].abs()).max().unwrap();assert_eq!(max,875);}
+        let mut action=authoring::shortcut_source().actions.remove(0);
+        action.id="chain".into();action.kind="boost_chain".into();action.piece="road".into();action.sample=2;action.landing=None;
+        action.panel_width_percent=25;action.panel_alignment=Right;source.actions.push(action);
+        let a=authoring::compile(&source).unwrap();let chain=authoring::action_gimmicks(&a).unwrap();assert_eq!(chain.len(),3);
+        for g in chain {let x:Vec<_>=g.parts.iter().flat_map(|p|&p.vertices).map(|v|v[0]).collect();assert_eq!((*x.iter().min().unwrap(),*x.iter().max().unwrap()),(875,1750));}
+        for width in [0,24,51,101] {source.actions[0].panel_width_percent=width;assert!(authoring::compile(&source).is_err());}
+        let mut value=serde_json::to_value(&source).unwrap();value["actions"][0]["panel_alignment"]=serde_json::json!("outside");
+        assert!(serde_json::from_value::<authoring::Source>(value).is_err());
     }
     #[test]
     fn flat_panel_is_three_centimetres_above_real_surface() {
-        let a=assembly("straight");let mut g=panel(&a,2);fit(&a,0,&mut g,200).unwrap();
+        let a=assembly("straight");let mut g=panel(&a,2);fit(&a,0,&mut g,200,100,authoring::PanelAlignment::Center).unwrap();
         for part in g.parts {for v in &part.vertices[..3] {assert_eq!(v[1],30);}}
     }
 }

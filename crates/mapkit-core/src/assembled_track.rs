@@ -1556,12 +1556,12 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 _ => {
                     // The preset station chooses a supported frame; the common
                     // tessellator supplies the actual clipped, raised surface.
-                    let sample = p.path.iter().filter(|s| s.safe)
+                    let sample = p.path.iter().filter(|s| !["flight","loop","cylinder","halfpipe"].contains(&s.mode.as_str()))
                         .min_by_key(|s| distance(s.position_cm, g.position))
                         .ok_or_else(|| error("E_TRACK_PANEL_SUPPORT", "panel has no supported frame"))?;
                     g.position = sample.position_cm;
                     g.rotation_mdeg = geometry::euler(geometry::basis(sample));
-                    panels::fit(a, index, &mut g, sample.lateral_cm)?;
+                    panels::fit(a, index, &mut g, sample.lateral_cm, 50, authoring::PanelAlignment::Center)?;
                     g.motion.kind = if *id == "jump" {
                         MotionKind::JumpHeight
                     } else {

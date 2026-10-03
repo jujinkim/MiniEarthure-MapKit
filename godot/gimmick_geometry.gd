@@ -56,7 +56,7 @@ static func panel_style(g: Dictionary) -> Dictionary:
 
 static func panel_material(style: Dictionary) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	material.shader = preload("./panel_marking.gdshader")
+	material.shader = load((new().get_script() as Script).resource_path.get_base_dir() + "/panel_marking.gdshader")
 	material.set_shader_parameter("panel_rect", style.rect)
 	material.set_shader_parameter("jump_panel", style.jump)
 	material.set_shader_parameter("panel_color", Color8(30,220,210) if style.jump else Color8(255,113,35))

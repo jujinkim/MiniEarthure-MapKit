@@ -38,6 +38,14 @@ pub struct Checkpoint {
     pub piece: String,
     pub sample: usize,
 }
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PanelAlignment { Left, Center, Right }
+fn panel_width_schema(_: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    let mut schema=schemars::schema_for!(u8).schema;
+    schema.enum_values=Some([25,50,75,100].map(|v|serde_json::json!(v)).to_vec());
+    schema.into()
+}
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Action {
@@ -46,6 +54,9 @@ pub struct Action {
     pub piece: String,
     pub sample: usize,
     pub height_cm: u32,
+    #[schemars(schema_with = "panel_width_schema")]
+    pub panel_width_percent: u8,
+    pub panel_alignment: PanelAlignment,
     pub landing: Option<Checkpoint>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
@@ -474,8 +485,13 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
             ]
             .contains(&action.kind.as_str())
             || !(50..=1000).contains(&action.height_cm)
+            || ![25,50,75,100].contains(&action.panel_width_percent)
         {
             return Err(error("E_TRACK_SOURCE", "invalid action"));
+        }
+        if ["jump_panel","acceleration_panel","boost_chain"].contains(&action.kind.as_str())
+            && ["flight","loop","cylinder","halfpipe"].contains(&pieces[i].path[action.sample].mode.as_str()) {
+            return Err(error("E_TRACK_PANEL_SUPPORT","panel anchor needs an ordinary supporting road surface"));
         }
         if action.kind == "manual_flight" && (action.landing.is_none() || !pieces[i].path[action.sample].safe) {
             return Err(error("E_TRACK_SOURCE", "manual flight requires supported takeoff and landing references"));
@@ -865,7 +881,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 panel.id = format!("{}-{next}", panel.id);
                 panel.position = path[n].position_cm;
                 panel.rotation_mdeg = geometry::euler(geometry::basis(&path[n]));
-                panels::fit(a, i, &mut panel, path[n].lateral_cm)?;
+                panels::fit(a, i, &mut panel, path[n].lateral_cm, action.panel_width_percent, action.panel_alignment)?;
                 panel.safety_min_cm = panel.position.map(|v| v - 5000);
                 panel.safety_max_cm = panel.position.map(|v| v + 5000);
                 out.push(panel);
@@ -875,7 +891,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 }
             }
         } else {
-            if action.kind != "air_ring" { panels::fit(a, i, &mut g, sample.lateral_cm)?; }
+            if action.kind != "air_ring" { panels::fit(a, i, &mut g, sample.lateral_cm, action.panel_width_percent, action.panel_alignment)?; }
             out.push(g);
         }
     }
@@ -1007,6 +1023,8 @@ pub fn shortcut_source() -> Source {
         piece: "jump-approach".into(),
         sample: piece(&s.instances[6]).unwrap().path.len() - 2,
         height_cm: 900,
+        panel_width_percent: 50,
+        panel_alignment: PanelAlignment::Center,
         landing: Some(Checkpoint {
             piece: "upper-shortcut".into(),
             sample: 0,

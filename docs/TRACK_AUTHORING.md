@@ -339,3 +339,20 @@ Three focused Rust units pass: flat lift, slope/curve/helix deterministic convex
 geometry and limits, connected/tapered seam and stacked-road exclusion. Final
 consumer native/load/render checks are grouped with the width/trigger delivery;
 detailed editing, driving and device readability remain user verification.
+
+## Partial-width panel contract (07, 2026-10-04)
+
+Current-v1 `Action` requires `panel_width_percent` (25, 50, 75 or 100) and
+`panel_alignment` (`left`, `center`, `right`). New Editor actions and generated
+panels use 50/center. Width uses the anchor's available road width after the
+existing 25cm margin on each side; chains apply the same policy at each station.
+Actual supported triangles clip the footprint at road ends. Unsupported flight/
+special-surface anchors and over-limit geometry fail explicitly. Air rings and
+manual-flight actions retain their geometry/effects; their panel fields are inert.
+No missing-field fallback, historical reader or converter is added. Schema and
+source fingerprints change while every format number remains v1.
+
+[Scoped tests and synthetic render](validation/panels-2026-10-04/README.md) cover
+all layout combinations, exact road-top exposure, chains, bounds, deterministic
+generation, serialization and source/derived-product tampering. The marking is
+loaded only by display consumers, not the headless geometry path.

@@ -1,0 +1,6 @@
+validation project=editor script=panel_geometry_validator installed_addons=False port=59948
+Initialize godot-rust (API v4.7.stable.official, runtime v4.7.2.stable.mono.official, safeguards strict)
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+OpenGL API 4.1 Metal - 90.5 - Compatibility - Using Device: Apple - Apple M1
+
+panel_geometry_validator: PASS

@@ -182,6 +182,8 @@
         "height_cm",
         "id",
         "kind",
+        "panel_alignment",
+        "panel_width_percent",
         "piece",
         "sample"
       ],
@@ -206,6 +208,21 @@
               "type": "null"
             }
           ]
+        },
+        "panel_alignment": {
+          "$ref": "#/definitions/PanelAlignment"
+        },
+        "panel_width_percent": {
+          "title": "uint8",
+          "type": "integer",
+          "format": "uint8",
+          "enum": [
+            25,
+            50,
+            75,
+            100
+          ],
+          "minimum": 0.0
         },
         "piece": {
           "type": "string"
@@ -1604,6 +1621,14 @@
         }
       },
       "additionalProperties": false
+    },
+    "PanelAlignment": {
+      "type": "string",
+      "enum": [
+        "left",
+        "center",
+        "right"
+      ]
     },
     "Path": {
       "type": "object",

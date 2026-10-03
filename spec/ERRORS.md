@@ -57,3 +57,8 @@ Consumers must reject readiness and retain any already committed driving region.
 
 Current v1 also reports `E_INDEX` for malformed regional directories or identities,
 `E_CANCELLED` when an owning request is retired, and `E_ENVIRONMENT` for invalid map environment profiles.
+
+Panel authoring errors: `E_TRACK_PANEL_SUPPORT` means no supported production road
+triangles (or an unrepresentable convex surface); `E_TRACK_PANEL_BUDGET` means
+the panel exceeds the existing 32-part cap. Invalid width/alignment is
+`E_TRACK_SOURCE`. No partial panel replaces the current document on failure.
