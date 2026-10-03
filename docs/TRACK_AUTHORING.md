@@ -321,3 +321,21 @@ real track/workbench/history/recovery/export/grind regressions pass; the rendere
 Editor initial screen was inspected. [Consumer evidence](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/validation/continuous-edit-2026-10-03/README.md)
 records the scope and fixed 49-piece measurement. Completion p95 532.745 ms still
 misses the 500 ms goal. Detailed interactions/platform acceptance remain user work.
+
+## Surface-conforming panels (02, 2026-10-04)
+
+Seed and source actions now use one panel fitter over the production road
+triangles, including connected seams. The clipped triangular prisms lift the
+driving face 3cm along its actual normal (millimetre local quantization), with
+4cm vertical thickness. Unsupported areas are clipped; no supporting triangles
+or more than the existing 32 convex parts is an explicit error. The existing
+per-part memory/occupancy accounting and all v1 numbers remain unchanged.
+Panels use one shared procedural material: orange forward chevrons for speed,
+cyan launch arrow/bars for jump. The pattern scales over the whole footprint
+and follows its top faces in both prepared Editor meshes and Client visuals.
+Air rings retain their existing rendering and geometry.
+
+Three focused Rust units pass: flat lift, slope/curve/helix deterministic convex
+geometry and limits, connected/tapered seam and stacked-road exclusion. Final
+consumer native/load/render checks are grouped with the width/trigger delivery;
+detailed editing, driving and device readability remain user verification.

@@ -303,7 +303,7 @@ pub(super) fn apply(a: &mut Assembly) -> Result<()> {
         a.supports.clear();
         return Ok(());
     }
-    let road_objects = road_gimmicks(a);
+    let road_objects = road_gimmicks(a)?;
     let mut low = [i64::MAX; 3];
     let mut high = [i64::MIN; 3];
     for (i, p) in a.pieces.iter().enumerate() {
@@ -332,7 +332,7 @@ pub(super) fn apply(a: &mut Assembly) -> Result<()> {
             high[2].div_euclid(100) + 1601,
         ],
     };
-    let mut objects = gimmicks(a);
+    let mut objects = gimmicks(a)?;
     objects.extend(authoring::action_gimmicks(a)?);
     let mut supports = vec![];
     for (index, p) in a.pieces.iter().enumerate() {
@@ -448,7 +448,7 @@ mod tests {
                 a.pieces, before,
                 "grounding never translates track/start/finish"
             );
-            let objects = road_gimmicks(&a);
+            let objects = road_gimmicks(&a).unwrap();
             let lowest = a
                 .pieces
                 .iter()

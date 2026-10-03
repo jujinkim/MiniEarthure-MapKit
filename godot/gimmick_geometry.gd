@@ -44,6 +44,24 @@ static func triangles(faces: Array) -> PackedVector3Array:
 		for v: Array in face: result.append(track_point(v))
 	return result
 
+static func panel_style(g: Dictionary) -> Dictionary:
+	if g.motion.kind not in ["target_speed", "jump_height"]: return {}
+	var low := Vector2(INF, INF)
+	var high := Vector2(-INF, -INF)
+	for part: Dictionary in g.parts:
+		for v: Array in part.vertices:
+			var p := Vector2(float(v[0]), -float(v[2])) * 0.01
+			low = low.min(p); high = high.max(p)
+	return {"rect":Vector4(low.x,low.y,high.x-low.x,high.y-low.y), "jump":g.motion.kind == "jump_height"}
+
+static func panel_material(style: Dictionary) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = preload("./panel_marking.gdshader")
+	material.set_shader_parameter("panel_rect", style.rect)
+	material.set_shader_parameter("jump_panel", style.jump)
+	material.set_shader_parameter("panel_color", Color8(30,220,210) if style.jump else Color8(255,113,35))
+	return material
+
 static func visual(g: Dictionary) -> Node3D:
 	g = resolved(g)
 	var root := Node3D.new()
@@ -54,6 +72,8 @@ static func visual(g: Dictionary) -> Node3D:
 	if g.motion.kind in ["boost", "launch", "target_speed", "jump_height", "air_ring"]:
 		material.emission_enabled = true
 		material.emission = material.albedo_color * 0.35
+	var panel := panel_style(g)
+	var display_material: Material = panel_material(panel) if not panel.is_empty() else material
 	if g.has("track_mesh"):
 		for role: String in ["inner","shell"]:
 			var tool := SurfaceTool.new()
@@ -64,7 +84,7 @@ static func visual(g: Dictionary) -> Node3D:
 				for j in 3: tool.add_vertex(vertices[i+j])
 			var mesh := MeshInstance3D.new()
 			mesh.mesh = tool.commit()
-			mesh.material_override = material
+			mesh.material_override = display_material
 			mesh.set_meta("curved_driving_surface",role == "inner")
 			root.add_child(mesh)
 	for part: Dictionary in g.parts:
@@ -78,9 +98,9 @@ static func visual(g: Dictionary) -> Node3D:
 			for i in [0, 1, 2]: tool.add_vertex(vertices[face[i]])
 		var mesh := MeshInstance3D.new()
 		mesh.mesh = tool.commit()
-		mesh.material_override = material
+		mesh.material_override = display_material
 		root.add_child(mesh)
-	if g.motion.kind in ["target_speed","jump_height","air_ring"]:
+	if g.motion.kind == "air_ring":
 		# Local +Z is the declared direction; +Y is the launch normal.
 		var arrow := MeshInstance3D.new()
 		var top := 0.0

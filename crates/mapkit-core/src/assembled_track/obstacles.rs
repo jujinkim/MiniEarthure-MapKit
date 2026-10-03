@@ -369,7 +369,7 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
         _ => 3200,
     };
     let target = ((eligible + spacing / 2) / spacing).max(1) as u32;
-    let road_objects = road_gimmicks(a);
+    let road_objects = road_gimmicks(a)?;
     let available = crate::gimmick::MAX_GIMMICKS.saturating_sub(road_objects.len());
     let count = (target as usize).min(available).min(sites.len());
     let mut rng = a.settings.seed ^ 0xd1b54a32d192ed03;
@@ -668,7 +668,7 @@ mod tests {
         }
         let (o, _, target) = place(&budget).unwrap();
         assert!(o.len() < target as usize);
-        assert!(o.len() + road_gimmicks(&budget).len() <= crate::gimmick::MAX_GIMMICKS);
+        assert!(o.len() + road_gimmicks(&budget).unwrap().len() <= crate::gimmick::MAX_GIMMICKS);
         for _ in 0..3 {
             push_piece(
                 &mut budget.pieces,

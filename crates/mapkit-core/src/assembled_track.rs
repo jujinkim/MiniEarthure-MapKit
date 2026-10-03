@@ -22,6 +22,7 @@ const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
 mod geometry;
+mod panels;
 mod junction;
 mod walls;
 mod layout;
@@ -1445,7 +1446,7 @@ fn box_part(center: Vertex, size: Vertex) -> CollisionConvex {
         ],
     }
 }
-fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
+fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
     let mut out = vec![];
     for (index, p) in a.pieces.iter().enumerate() {
         let specs: Vec<(&str, i64)> = match p.id.as_str() {
@@ -1553,8 +1554,14 @@ fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
                     });
                 }
                 _ => {
-                    g.parts
-                        .push(box_part([0, -2, 0], [p.width_cm as i64 - 50, 4, 200]));
+                    // The preset station chooses a supported frame; the common
+                    // tessellator supplies the actual clipped, raised surface.
+                    let sample = p.path.iter().filter(|s| s.safe)
+                        .min_by_key(|s| distance(s.position_cm, g.position))
+                        .ok_or_else(|| error("E_TRACK_PANEL_SUPPORT", "panel has no supported frame"))?;
+                    g.position = sample.position_cm;
+                    g.rotation_mdeg = geometry::euler(geometry::basis(sample));
+                    panels::fit(a, index, &mut g, sample.lateral_cm)?;
                     g.motion.kind = if *id == "jump" {
                         MotionKind::JumpHeight
                     } else {
@@ -1567,26 +1574,28 @@ fn road_gimmicks(a: &Assembly) -> Vec<Gimmick> {
                     });
                 }
             }
+            if g.motion.kind == MotionKind::TargetSpeed { g.color = [255, 113, 35, 255]; }
+            if g.motion.kind == MotionKind::JumpHeight { g.color = [30, 220, 210, 255]; }
             let radius = g.track.as_ref().map_or(2500, |t| t.bound_radius());
             g.safety_min_cm = g.position.map(|v| v - radius);
             g.safety_max_cm = g.position.map(|v| v + radius);
             out.push(g);
         }
     }
-    out
+    Ok(out)
 }
-fn gimmicks(a: &Assembly) -> Vec<Gimmick> {
-    let mut out = road_gimmicks(a);
+fn gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
+    let mut out = road_gimmicks(a)?;
     out.extend(
         a.obstacles
             .iter()
             .enumerate()
             .map(|(i, o)| obstacles::gimmick(a, o, i)),
     );
-    out
+    Ok(out)
 }
 pub fn verify_products(d: &MapDocument, a: &Assembly) -> Result<()> {
-    let mut expected = gimmicks(a);
+    let mut expected = gimmicks(a)?;
     expected.extend(authoring::action_gimmicks(a)?);
     expected.sort_by(|a, b| a.id.cmp(&b.id));
     let mut actual = d.gimmicks.clone();
@@ -1629,7 +1638,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
             max: [3200, 3200],
         };
     }
-    let mut objects = gimmicks(&a);
+    let mut objects = gimmicks(&a)?;
     objects.extend(authoring::action_gimmicks(&a)?);
     for g in &objects {
         for j in 0..2 {

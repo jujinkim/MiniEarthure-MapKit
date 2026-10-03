@@ -814,10 +814,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
             position: sample.position_cm,
             rotation_mdeg: geometry::euler(geometry::basis(sample)),
             scale_per_mille: [1000; 3],
-            parts: vec![box_part(
-                [0, -2, 0],
-                [i64::from(sample.lateral_cm) * 2 - 50, 4, 200],
-            )],
+            parts: vec![],
             track: None,
             curved_faces: vec![],
             effect: Some(Effect {
@@ -826,7 +823,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 ring_radius_cm: 250,
             }),
             surface: Surface::Asphalt,
-            color: [60, 160, 230, 255],
+            color: if action.kind == "jump_panel" { [30, 220, 210, 255] } else { [255, 113, 35, 255] },
             motion: Motion {
                 kind: if action.kind == "jump_panel" {
                     MotionKind::JumpHeight
@@ -868,6 +865,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 panel.id = format!("{}-{next}", panel.id);
                 panel.position = path[n].position_cm;
                 panel.rotation_mdeg = geometry::euler(geometry::basis(&path[n]));
+                panels::fit(a, i, &mut panel, path[n].lateral_cm)?;
                 panel.safety_min_cm = panel.position.map(|v| v - 5000);
                 panel.safety_max_cm = panel.position.map(|v| v + 5000);
                 out.push(panel);
@@ -877,6 +875,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 }
             }
         } else {
+            if action.kind != "air_ring" { panels::fit(a, i, &mut g, sample.lateral_cm)?; }
             out.push(g);
         }
     }

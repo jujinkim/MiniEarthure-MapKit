@@ -52,9 +52,11 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 			groups.append(vertices)
 		var color := Color8(g.color[0], g.color[1], g.color[2], g.color[3])
 		var emission: bool = g.motion.kind in ["boost", "launch", "target_speed", "jump_height", "air_ring"]
+		var panel := GIMMICK.panel_style(g)
 		for i in groups.size():
 			rows[g.id + ":%d" % i] = {"vertices":groups[i], "owner":owner, "color":color, "emission":emission, "lit":true, "pose":GIMMICK.pose(g, 0)}
-		if g.motion.kind in ["target_speed", "jump_height", "air_ring"]:
+			if not panel.is_empty(): rows[g.id + ":%d" % i]["panel"] = panel
+		if g.motion.kind == "air_ring":
 			var top := 0.0
 			for part: Dictionary in g.parts:
 				for v: Array in part.vertices: top = maxf(top, float(v[1])*0.01)
@@ -148,7 +150,7 @@ static func apply(root: Node3D, prepared: Dictionary, selected := -1) -> void:
 			material.emission_enabled = true
 			material.emission = entry.color * 0.35
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		view.material_override = material
+		view.material_override = GIMMICK.panel_material(entry.panel) if entry.has("panel") else material
 		if entry.has("material_key"):
 			var rc := preload("./rc_venue.gd").material(entry.material_key,entry.seed)
 			root.get_meta("material_context").bind_detail(rc,"concrete" if entry.material_key=="rc:wall" else "asphalt")
@@ -163,7 +165,8 @@ static func select(root: Node3D, selected: int) -> void:
 	if not is_instance_valid(root): return
 	for view: MeshInstance3D in root.get_meta("objects", {}).values() + root.get_meta("draft_objects", {}).values():
 		var color: Color = Color("f5ce5f") if view.get_meta("road") and view.get_meta("owner") == selected else view.get_meta("color")
-		if view.material_override is ShaderMaterial: view.material_override.set_shader_parameter("base_color",color)
+		if view.material_override is ShaderMaterial:
+			if view.get_meta("road", false): view.material_override.set_shader_parameter("base_color",color)
 		else: view.material_override.albedo_color = color
 
 static func create(document: Dictionary, selected := -1) -> Node3D:
