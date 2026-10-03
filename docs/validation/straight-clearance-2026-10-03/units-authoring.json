@@ -1,0 +1,15 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "map-kit/Cargo.toml",
+    "-p",
+    "mapkit-core",
+    "--lib",
+    "assembled_track::authoring::"
+  ],
+  "elapsed_seconds": 0.162,
+  "exit_code": 0
+}

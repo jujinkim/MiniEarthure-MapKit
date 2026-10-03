@@ -654,12 +654,6 @@ pub(super) fn joined(a: &Sample, b: &Sample) -> bool {
         && a.lateral_cm.abs_diff(b.lateral_cm) <= 1
 }
 pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
-    if !layout::overlaps(a, b) {
-        return false;
-    }
-    if geometry::separated_straights(a, b) {
-        return false;
-    }
     let mut joints: Vec<_> = [&a.path[0], a.path.last().unwrap()]
         .into_iter()
         .flat_map(|s| {
@@ -683,6 +677,16 @@ pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
             joints.push(end);
             joints.push(start);
         }
+    }
+    let straight_overlap = geometry::straight_overlap(a, b);
+    if joints.is_empty() {
+        if let Some(overlap) = straight_overlap {
+            // Sample phase must not gate continuous straight-road clearance.
+            return overlap;
+        }
+    }
+    if !layout::overlaps(a, b) || straight_overlap == Some(false) {
+        return false;
     }
     a.path.iter().step_by(2).any(|s| {
         b.path.iter().step_by(2).any(|t| {

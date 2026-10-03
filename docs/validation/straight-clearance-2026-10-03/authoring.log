@@ -1,0 +1,20 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 6.85s
+     Running tests/track_authoring.rs (map-kit/target/debug/deps/track_authoring-21af07f4600ba1b0)
+
+running 13 tests
+test free_curve_vertical_frame_and_degenerate_rejection ... ok
+test free_placement_and_draft_source ... ok
+test straight_clearance_detects_phase_shifted_one_centimetre_overlap ... ok
+test composed_shortcut_is_connected_with_shared_progress ... ok
+test tilted_ribbon_edges_reserve_vertical_clearance ... ok
+test invalid_action_and_landing_sample_still_rejected ... ok
+test flight_export_needs_declared_approach_landing_and_supported_progress ... ok
+test full_orientation_snap_and_pipe_portals ... ok
+test finite_straight_clearance_keeps_crossings_overlaps_margins_and_height ... ok
+test finite_straight_clearance_allows_eight_metre_six_radius_corners ... ok
+test widths_curves_helices_and_continuous_jump ... ok
+test straight_clearance_rotations_translations_and_vertical_intervals ... ok
+test straight_clearance_is_independent_of_sample_phase_and_piece_order ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.19s

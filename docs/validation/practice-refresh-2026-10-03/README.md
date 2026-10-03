@@ -30,3 +30,7 @@ No format increment, schema/public API addition, safety margin reduction or
 course-specific exception. Detailed driving and device acceptance are user work.
 
 Tracked logs omit trailing whitespace/blank EOF lines; raw local logs are retained.
+
+Follow-up: the original offset fixture is restored and fixed for unjoined level,
+constant-width straight pairs by the [continuous-clearance correction](../straight-clearance-2026-10-03/README.md).
+The results and limited implementation described above remain historical evidence.

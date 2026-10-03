@@ -1,0 +1,15 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "map-kit/Cargo.toml",
+    "-p",
+    "mapkit-core",
+    "--lib",
+    "straight_clearance_tests"
+  ],
+  "elapsed_seconds": 0.056,
+  "exit_code": 0
+}

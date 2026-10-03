@@ -584,3 +584,22 @@ ribbons, invalid action/landing samples, source identity/tampering and cancellat
 The existing sampled broad phase is unchanged; its pre-existing near-tangent
 sample-phase limitation is recorded with the initial fixture failure. Detailed
 application driving and platform acceptance remain user verification.
+
+
+## Continuous unjoined straight-road clearance — 2026-10-03 replacement
+
+For level, constant-width straight drive ribbons without a shared port, the
+finite footprint now decides horizontal overlap before any discrete sample gate.
+This replaces the separation-only rule above for that limited pair class. Bounds
+still enclose every actual ribbon edge plus the same 50cm wall and 30cm vehicle
+margin at sides and ends. Horizontal boundary contact counts as overlap; vertical
+clearance uses the unchanged open sample-volume interval. The result no longer
+depends on longitudinal sample phase, including the 959cm/100cm missed case.
+
+Shared ports (including the existing portal-drop recognition) retain the sampled
+exclusions and straight separation correction. Curves, grades, banks, tapers,
+tubes, flights and alternate paths retain the existing sampled path. No public
+API, schema, own format, margin or connection exception changes. Invalid placements
+remain draft issues and both execution containers reject them with E_TRACK_DRAFT.
+[Twenty-five affected tests and native/CLI build pass](validation/straight-clearance-2026-10-03/README.md).
+Earlier failures remain recorded; detailed consumer acceptance is separate.

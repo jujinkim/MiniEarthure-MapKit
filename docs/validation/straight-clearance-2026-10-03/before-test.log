@@ -1,0 +1,22 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 9.38s
+     Running tests/track_authoring.rs (map-kit/target/debug/deps/track_authoring-21af07f4600ba1b0)
+
+running 1 test
+test straight_clearance_detects_phase_shifted_one_centimetre_overlap ... FAILED
+
+failures:
+
+---- straight_clearance_detects_phase_shifted_one_centimetre_overlap stdout ----
+
+thread 'straight_clearance_detects_phase_shifted_one_centimetre_overlap' (22283149) panicked at crates/mapkit-core/tests/track_authoring.rs:324:5:
+959cm lateral / 100cm longitudinal offset: ["Every road must belong to a base or alternative route", "Set a base route, start and finish", "Set shared start and finish checkpoints"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    straight_clearance_detects_phase_shifted_one_centimetre_overlap
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p mapkit-core --test track_authoring`

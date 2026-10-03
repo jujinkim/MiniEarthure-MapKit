@@ -1,0 +1,14 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+   Compiling mapkit-package v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-package)
+    Finished `test` profile [optimized + debuginfo] target(s) in 14.49s
+     Running tests/assembled_track.rs (map-kit/target/debug/deps/assembled_track-976b3b36942aa8df)
+
+running 6 tests
+test saving_progress_counts_written_bytes_and_cancellation_preserves_destination ... ok
+test phase_shifted_straight_clearance_blocks_both_execution_containers ... ok
+test authored_source_roundtrip_draft_export_and_tampering ... ok
+test manual_flight_and_static_shapes_survive_both_containers ... ok
+test cancellation_and_invalid_requests ... ok
+test save_failure_never_replaces_original ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 8.43s

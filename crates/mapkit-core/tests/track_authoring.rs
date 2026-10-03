@@ -301,15 +301,85 @@ fn finite_straight_clearance_keeps_crossings_overlaps_margins_and_height() {
         ("corner separated", straight("other", [562, 0, 562], [2962, 0, 562]), false),
         ("parallel clearance", straight("other", [959, 0, -3000], [959, 0, 0]), true),
         ("end clearance", straight("other", [0, 0, 159], [0, 0, 2559]), true),
+        ("end touching", straight("other", [0, 0, 160], [0, 0, 2560]), true),
         ("end separated", straight("other", [0, 0, 161], [0, 0, 2561]), false),
         ("shared port", straight("other", [0, 0, 0], [0, 0, 2400]), false),
         ("low overpass", straight("other", [-1500, 249, -1500], [1500, 249, -1500]), true),
+        ("vertical boundary", straight("other", [-1500, 250, -1500], [1500, 250, -1500]), false),
         ("clear overpass", straight("other", [-1500, 251, -1500], [1500, 251, -1500]), false),
     ] {
         let mut source = Source::empty();
         source.instances = vec![approach.clone(), other];
         let assembly = compile(&source).unwrap();
         assert_eq!(assembly.issues.iter().any(|i| i.contains("road clearance collision")), collision, "{label}: {:?}", assembly.issues);
+    }
+}
+
+#[test]
+fn straight_clearance_detects_phase_shifted_one_centimetre_overlap() {
+    let mut source = Source::empty();
+    source.instances = vec![
+        straight("approach", [0, 0, -3000], [0, 0, 0]),
+        straight("other", [959, 0, -2900], [959, 0, 100]),
+    ];
+    let assembly = compile(&source).unwrap();
+    assert!(assembly.issues.iter().any(|i| i.contains("road clearance collision")),
+        "959cm lateral / 100cm longitudinal offset: {:?}", assembly.issues);
+}
+
+fn assert_road_collision(roads: Vec<Instance>, expected: bool, context: &str) {
+    let mut source = Source::empty();
+    source.instances = roads;
+    let assembly = compile(&source).unwrap();
+    assert_eq!(assembly.issues.iter().any(|i| i.contains("road clearance collision")),
+        expected, "{context}: {:?}", assembly.issues);
+}
+
+#[test]
+fn straight_clearance_is_independent_of_sample_phase_and_piece_order() {
+    for width in [400, 800, 1200] {
+        // Include unequal widths: each ribbon keeps its own wall/vehicle margin.
+        let boundary = (800 + width) / 2 + 160;
+        for offset in [-199, -100, -1, 0, 1, 50, 99, 100, 199] {
+            for (gap, expected) in [(-1, true), (0, true), (1, false)] {
+                let a = straight("a", [0, 0, -3000], [0, 0, 0]);
+                let x = i64::from(boundary) + gap;
+                let mut b = straight("b", [x, 0, -3000 + offset], [x, 0, offset]);
+                b.width_cm = width;
+                b.entry_width_cm = width;
+                b.exit_width_cm = width;
+                let context = format!("width={width} offset={offset} gap={gap}");
+                assert_road_collision(vec![a.clone(), b.clone()], expected, &context);
+                assert_road_collision(vec![b, a], expected, &context);
+            }
+        }
+    }
+}
+
+#[test]
+fn straight_clearance_rotations_translations_and_vertical_intervals() {
+    for yaw in [0, 17300, 45000, 90000, 137250, 180000, 270000] {
+        for origin in [[113, 437, -251], [-90000, -500, 70000]] {
+            for (label, mut b, expected) in [
+                ("phase shifted overlap", straight("b", [959, 0, -2900], [959, 0, 100]), true),
+                // Leave room for conservative integer ribbon rounding after rotation.
+                ("separated", straight("b", [965, 0, -2900], [965, 0, 100]), false),
+                ("crossing", straight("b", [-1500, 0, -1500], [1500, 0, -1500]), true),
+                ("low overpass", straight("b", [959, 249, -2900], [959, 249, 100]), true),
+                ("vertical boundary", straight("b", [959, 250, -2900], [959, 250, 100]), false),
+                ("underpass boundary", straight("b", [959, -250, -2900], [959, -250, 100]), false),
+            ] {
+                let mut a = straight("a", [0, 0, -3000], [0, 0, 0]);
+                let angle = f64::from(yaw).to_radians() / 1000.0;
+                for road in [&mut a, &mut b] {
+                    let [x, y, z] = road.position_cm;
+                    road.position_cm = [origin[0] + (x as f64 * angle.cos() + z as f64 * angle.sin()).round() as i64,
+                        origin[1] + y, origin[2] + (-x as f64 * angle.sin() + z as f64 * angle.cos()).round() as i64];
+                    road.rotation_mdeg = [0, yaw, 0];
+                }
+                assert_road_collision(vec![a, b], expected, &format!("{label} yaw={yaw} origin={origin:?}"));
+            }
+        }
     }
 }
 

@@ -409,10 +409,18 @@ fn straight_footprint(p: &Piece) -> Option<[[f64; 2]; 4]> {
         .map(|v| std::array::from_fn(|j| origin[j] + forward[j] * v[0] + side[j] * v[1])))
 }
 
-/// SAT may only disprove a broad-phase collision. Touching or uncertain bounds
-/// retain the previous conservative result and the existing shared-port rules.
-pub(super) fn separated_straights(a: &Piece, b: &Piece) -> bool {
-    let (Some(a), Some(b)) = (straight_footprint(a), straight_footprint(b)) else { return false; };
+/// Continuous clearance for eligible straight ribbons. The caller retains the
+/// shared-port exclusions. Horizontal touching is conservative overlap; vertical
+/// clearance keeps the same open intervals as the sample-volume predicate.
+/// None leaves unsupported geometry on the existing sampled path.
+pub(super) fn straight_overlap(a: &Piece, b: &Piece) -> Option<bool> {
+    let (af, bf) = (straight_footprint(a)?, straight_footprint(b)?);
+    let (_, _, alo, ahi) = volume(&a.path[0]);
+    let (_, _, blo, bhi) = volume(&b.path[0]);
+    Some(alo < bhi && blo < ahi && !footprints_separated(af, bf))
+}
+
+fn footprints_separated(a: [[f64; 2]; 4], b: [[f64; 2]; 4]) -> bool {
     [a, b].iter().any(|corners| {
         corners.windows(2).take(2).any(|edge| {
             let delta = [edge[1][0] - edge[0][0], edge[1][1] - edge[0][1]];
@@ -510,9 +518,9 @@ mod straight_clearance_tests {
         let a = road("a", [0, 0, -3000], vec![[0, 0, 0], [0, 0, 1000], [0, 0, 2000], [0, 0, 3000]]);
         let b = road("b", [600, 0, 600], vec![[0, 0, 0], [800, 0, 0], [1600, 0, 0], [2400, 0, 0]]);
         assert!(volume_overlap(a.path.last().unwrap(), &b.path[0]));
-        assert!(separated_straights(&a, &b));
-        assert!(separated_straights(&b, &a));
-        for case in 0..8 {
+        assert_eq!(straight_overlap(&a, &b), Some(false));
+        assert_eq!(straight_overlap(&b, &a), Some(false));
+        for case in 0..11 {
             let mut uncertain = a.clone();
             match case {
                 0 => uncertain.path[1].normal = [0, 999999, 1000],
@@ -522,14 +530,19 @@ mod straight_clearance_tests {
                 4 => uncertain.path[1].tube_radius_cm = 400,
                 5 => uncertain.path[1].mode = "flight".into(),
                 6 => uncertain.alternate_path = uncertain.path.clone(),
-                _ => uncertain.path[1].position_cm[0] += 10,
+                7 => uncertain.path[1].position_cm[0] += 10,
+                8 => uncertain.entry_width_cm = 400,
+                9 => uncertain.path[1].safe = false,
+                _ => uncertain.path[1].position_cm[2] = -3100,
             }
-            assert!(!separated_straights(&uncertain, &b), "fallback case {case}");
+            assert_eq!(straight_overlap(&uncertain, &b), None, "fallback case {case}");
+            assert_eq!(straight_overlap(&b, &uncertain), None, "reverse fallback case {case}");
+            assert!(authoring::conflict(&uncertain, &b), "sample collision retained: {case}");
         }
         let mut edges = a;
         // Bounds must enclose the delivered ribbon, not just width metadata.
         edges.path.last_mut().unwrap().ribbon_cm = Some([[-600, 0, 200], [600, 0, 200]]);
-        assert!(!separated_straights(&edges, &b));
+        assert_eq!(straight_overlap(&edges, &b), Some(true));
     }
 }
 

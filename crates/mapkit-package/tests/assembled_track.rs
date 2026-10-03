@@ -427,6 +427,26 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
     assert!(geometry_edit.validate().is_err());
 }
 #[test]
+fn phase_shifted_straight_clearance_blocks_both_execution_containers() {
+    let mut source = authoring::Source::empty();
+    for (id, position) in [("a", [0, 0, -3000]), ("b", [959, 0, -2900])] {
+        let mut road = authoring::instance(id, "free_curve", 800);
+        road.position_cm = position;
+        road.control_points = vec![[0, 0, 0], [0, 0, 1000], [0, 0, 2000], [0, 0, 3000]];
+        source.instances.push(road);
+    }
+    let draft = package::compile_source(&source).unwrap();
+    assert!(draft.assembled_track.as_ref().unwrap().issues.iter()
+        .any(|issue| issue == "b / a: road clearance collision"));
+    draft.validate().unwrap();
+    for failure in [pack_bytes(draft.clone(), BTreeMap::new()).unwrap_err(),
+        indexed::pack_source(draft, BTreeMap::new(), 1).unwrap_err()] {
+        assert_eq!(failure.code, "E_TRACK_DRAFT");
+        assert!(failure.message.contains("road clearance collision"));
+    }
+}
+
+#[test]
 fn source_mode_and_course_progress_remain_distinct() {
     let seed = package::generate(&Settings::default()).unwrap();
     let source = authoring::from_assembly(seed.assembled_track.as_ref().unwrap());
