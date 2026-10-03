@@ -45,3 +45,28 @@ Focused validation (2026-09-26): special-track shape/range/cost/archive/order,
 package/region/schema contracts and Godot native build. The consumer separately
 verifies physical driving and effects. Detailed application acceptance is not
 claimed here.
+
+## Pipe material (03, 2026-10-04 replacement)
+
+New assembled cylinders and the standalone straight-cylinder template use
+`#596168`. Shared `gimmick_geometry.pipe_material` sets roughness 0.82, metallic
+0.65 and emission off in both production display and prepared Editor previews.
+Explicit stored colours are authoritative; loading/rendering never recolours a
+saved object. Loops, halfpipes and panels retain their existing materials.
+Geometry, collision and contact/friction properties are unchanged. Pipe selection
+highlights the private preview material and restores its stored colour on deselect.
+
+Scoped macOS arm64 / Godot 4.7.2 checks passed: native/CLI build, five special-track
+Rust tests and `pipe_material_validator` with strict diagnostics. The validator
+compares production/preview vertices and material properties, custom saved colour,
+selection/restoration, resource reuse and weak-reference release after node disposal.
+Fixed-camera/light synthetic comparison: [previous colour/material](validation/pipes-2026-10-04/material-before.png)
+and [matte metal](validation/pipes-2026-10-04/material-after.png). The prior material
+is recreated on the same geometry for comparison. Detailed art preference and
+real driving remain user verification. Development-only validator errors (panel
+shader treated as StandardMaterial, JSON numeric array equality) were corrected;
+final validation is clean. Execution logs stay in root local `docs/tasks/pipes-03-08/`.
+
+All formats stay v1. The assembly source fingerprint changes with its generated
+default colour; active generated packages are refreshed with the 08 delivery
+while preserving original artifacts.

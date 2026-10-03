@@ -1489,7 +1489,7 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 track: None,
                 effect: None,
                 surface: Surface::Asphalt,
-                color: [60, 160, 230, 255],
+                color: if *id == "cylinder" { [89, 97, 104, 255] } else { [60, 160, 230, 255] },
                 motion: Motion {
                     kind: MotionKind::Static,
                     delta_cm: [0; 3],

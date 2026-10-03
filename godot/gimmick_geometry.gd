@@ -62,6 +62,18 @@ static func panel_material(style: Dictionary) -> ShaderMaterial:
 	material.set_shader_parameter("panel_color", Color8(30,220,210) if style.jump else Color8(255,113,35))
 	return material
 
+static func is_pipe(g: Dictionary) -> bool:
+	return g.get("track", {}).get("kind", "") in ["cylinder", "swept_cylinder"]
+
+## Shared display/authoring material. Stored colours remain authoritative.
+static func pipe_material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.82
+	material.metallic = 0.65
+	material.emission_enabled = false
+	return material
+
 static func visual(g: Dictionary) -> Node3D:
 	g = resolved(g)
 	var root := Node3D.new()
@@ -73,7 +85,7 @@ static func visual(g: Dictionary) -> Node3D:
 		material.emission_enabled = true
 		material.emission = material.albedo_color * 0.35
 	var panel := panel_style(g)
-	var display_material: Material = panel_material(panel) if not panel.is_empty() else material
+	var display_material: Material = pipe_material(material.albedo_color) if is_pipe(g) else panel_material(panel) if not panel.is_empty() else material
 	if g.has("track_mesh"):
 		for role: String in ["inner","shell"]:
 			var tool := SurfaceTool.new()
