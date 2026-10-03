@@ -22,8 +22,9 @@ These are reference-speed estimates, not vehicle performance certification.
 
 Ordinary width choices are 200/400/600/800/1200cm with eased entry/exit widths.
 The public catalogue reports category, supported dimensions and entry/exit ports.
-Dedicated loops, halfpipes and the compact overpass use 400cm; pipe bores support
-200/400/600cm. Internal profiles remain catalogue-owned.
+Dedicated loops, halfpipes and the compact overpass use 400cm; authored pipe bores
+support 100/200/300/400/600cm. Generated pipes choose 100/200/300cm. Internal
+profiles remain catalogue-owned.
 
 For width w in metres, gentle 45°/90° radius is max(16,4w), right-angle 90° radius
 max(4,w/2+2), and sharp 135°/180° radius max(3,w/2+1). Width transitions use the
@@ -361,3 +362,37 @@ The assembly fingerprint explicitly includes the shared `panels.rs` fitter,
 so future fitter edits invalidate compiled assembly products as well as cell
 cache fingerprints. Preserved packages must be recompiled by their authoring
 workflow; this is not a loader fallback.
+
+## Pipe bore reduction (08, 2026-10-04 replacement)
+
+This explicitly replaces the earlier generated 2/4/6m bores with 1/2/3m. The
+existing pipe draw is uniform at each difficulty: the identical seeded draw now
+selects half its previous bore. Difficulty-dependent ordinary-road weights and
+road width choices are unchanged. Authoring keeps 1/2/3/4/6m, including existing
+4/6m sources without dimensional conversion. General cylinder catalogue defaults
+are 2m; explicitly named wide presets retain their 4m defaults. Catalogue entries
+expose `default_width_cm` and `min_port_width_cm` for consumers.
+
+The cylinder body keeps its centreline bends, end poses and length. Only bore
+radius and its dependent tessellation/clearances change. Outer ramps retain the
+diameter/3 portal drop and maximum 12% analytic grade. Generated exit ramps taper
+back to the former road-side width, so no 1m ordinary road/port is introduced.
+Tube/ramp authoring admits 1m ports; ordinary-road ports still start at 2m.
+Internal connected pipes retain matching open rings without internal funnels.
+
+Straight-cylinder authoring now defaults to radius 125cm (2.5m bore), length
+1600cm. Cylinder and swept-cylinder minimum radii are 50cm. Loop minimum radius
+150cm and swept-halfpipe minimum 100cm are unchanged. Loop, halfpipe, panel and
+ordinary-road dimensions stay unchanged. Current v1 and explicit stored values
+remain; source fingerprints change, with no historical loader or converter.
+
+Scoped macOS arm64 tests passed: three `pipe_dimensions` tests, five
+`special_tracks` tests, seeded pipe-draw/budget and retained road-distribution
+units, package tests `small_and_existing_authored_pipe_sizes_roundtrip_without_conversion`
+and `reproducible_roundtrip_and_modified_source_rejected`, plus native/CLI build.
+These cover all 12 cylinder presets at all five authored sizes, unchanged body
+endpoints/length (under 3cm sampling difference), actual circular/hollow geometry,
+portal frames/grade, internal open sections, shape/source tampering, deterministic
+bytes, old 4/6m roundtrip and unchanged rejection budgets. Shared Godot material/
+preview and Editor history verification are reported by the consumers. Runtime
+passage observations are separate from geometric admission and user acceptance.

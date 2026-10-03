@@ -1,6 +1,7 @@
 # Seeded modular tracks (current v1)
 
-Current behavior is defined by [category generation and free authoring](TRACK_AUTHORING.md)
+Current behavior, including the 2026-10-04 pipe material/bore replacement (03/08),
+is defined by [category generation and free authoring](TRACK_AUTHORING.md)
 (2026-09-30 replacement). The dated sections below preserve implementation/test
 history; mandatory selections, old dimensions, lattice placement and duration
 overrun rules are superseded.

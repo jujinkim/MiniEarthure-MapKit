@@ -236,3 +236,10 @@ Current v1 permits `manual_flight` approach/landing declarations and bounded
 explicit static `Source.structures`. See the [manual airborne link
 contract](../docs/TRACK_AUTHORING.md#manual-airborne-links-and-static-authored-structures-2026-10-01).
 No automatic action or player completion proof is implied.
+
+Current pipe authoring (2026-10-04): assembled bores 100/200/300/400/600cm,
+generated bores 100/200/300cm, standalone default radius 125cm and length 1600cm.
+Cylinder-only minimum radius is 50cm; tube/ramp minimum port width is 100cm.
+Road/loop/halfpipe ranges are unchanged. These are current-v1 value/domain and
+generation-default changes, not a format bump or automatic conversion. See
+[track authoring](../docs/TRACK_AUTHORING.md#pipe-bore-reduction-08-2026-10-04-replacement).

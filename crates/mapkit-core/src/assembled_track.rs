@@ -413,7 +413,7 @@ pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,"wall_thickness_cm":WALL_THICKNESS_CM,
         "tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
         "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
-        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
+        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
@@ -439,10 +439,15 @@ pub fn supported_widths(id: &str) -> &'static [u32] {
     if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
         &[400]
     } else if id.starts_with("cylinder") {
-        &[200, 400, 600]
+        &[100, 200, 300, 400, 600]
+    } else if ["tube_entry", "tube_exit"].contains(&id) {
+        &[100, 200, 300, 400, 600, 800, 1200]
     } else {
         WIDTHS
     }
+}
+pub fn minimum_port_width(id: &str) -> u32 {
+    if id.starts_with("cylinder") || ["tube_entry", "tube_exit"].contains(&id) { 100 } else { 200 }
 }
 fn catalogue_width(id: &str) -> u32 {
     if id.ends_with("_narrow") || (id.starts_with("cylinder") && !id.starts_with("cylinder_wide")) {

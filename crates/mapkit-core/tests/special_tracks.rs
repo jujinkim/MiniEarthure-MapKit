@@ -104,7 +104,7 @@ fn special_track_cost_archive_order_and_hollow_occupancy() {
         hash
     );
     let tube = d.gimmicks.iter().find(|g| g.id == "cylinder").unwrap();
-    let center = [tube.position[0], tube.position[1] + 250, tube.position[2]];
+    let center = [tube.position[0], tube.position[1] + i64::from(tube.track.as_ref().unwrap().radius_cm), tube.position[2]];
     assert!(
         !tube
             .occupancy_bounds()
@@ -128,7 +128,7 @@ fn quantized_surface_direction_changes_stay_below_five_degrees() {
         n.map(|v| v / length)
     }
     for id in ["loop", "cylinder"] {
-        for radius in [150, 250, 600] {
+        for radius in if id == "cylinder" { vec![50, 100, 125, 150, 250, 600] } else { vec![150, 250, 600] } {
             for length in [600, 1600, 3200] {
                 let mut t = templates()[id].track.clone().unwrap();
                 t.radius_cm = radius;

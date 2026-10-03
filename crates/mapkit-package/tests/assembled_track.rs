@@ -440,6 +440,34 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
     assert!(geometry_edit.validate().is_err());
 }
 #[test]
+fn small_and_existing_authored_pipe_sizes_roundtrip_without_conversion() {
+    for width in [100,200,300,400,600] {
+        let mut source=authoring::Source::empty();source.settings.circuit=false;
+        for (i,preset) in ["straight","tube_entry","cylinder_curve","tube_exit","straight"].iter().enumerate() {
+            let mut item=authoring::instance(&format!("p-{i}"),preset,if *preset=="straight" {400} else {width});
+            if *preset=="tube_exit" {item.exit_width_cm=400;}
+            if let Some(previous)=source.instances.last() {
+                item=authoring::snap(&item,previous).unwrap();
+                source.connections.push(authoring::Connection {from:previous.id.clone(),to:item.id.clone()});
+            }
+            source.instances.push(item);
+        }
+        source.paths.push(authoring::Path {id:"base".into(),pieces:source.instances.iter().map(|p|p.id.clone()).collect()});
+        let last=authoring::piece(source.instances.last().unwrap()).unwrap();
+        source.checkpoints=vec![authoring::Checkpoint {piece:"p-0".into(),sample:0},authoring::Checkpoint {piece:"p-4".into(),sample:last.path.len()-1}];
+        let d=package::compile_source(&source).unwrap();
+        assert!(d.assembled_track.as_ref().unwrap().issues.is_empty(),"{width}: {:?}",d.assembled_track.as_ref().unwrap().issues);
+        let bytes=pack_bytes(d.clone(),BTreeMap::new()).unwrap();
+        assert_eq!(bytes,pack_bytes(package::compile_source(&source).unwrap(),BTreeMap::new()).unwrap());
+        let reopened=read_bytes(&bytes).unwrap();
+        assert_eq!(reopened.document.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap(),&source);
+        assert_eq!(reopened.document.gimmicks,d.gimmicks);
+        let mut tampered=d.clone();tampered.gimmicks.iter_mut().find(|g|g.track.is_some()).unwrap().track.as_mut().unwrap().radius_cm+=1;
+        assert!(tampered.validate().is_err());
+    }
+}
+
+#[test]
 fn phase_shifted_straight_clearance_blocks_both_execution_containers() {
     let mut source = authoring::Source::empty();
     for (id, position) in [("a", [0, 0, -3000]), ("b", [959, 0, -2900])] {

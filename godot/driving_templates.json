@@ -8197,7 +8197,7 @@
     ],
     "track": {
       "kind": "cylinder",
-      "radius_cm": 250,
+      "radius_cm": 125,
       "width_cm": 220,
       "length_cm": 1600
     }

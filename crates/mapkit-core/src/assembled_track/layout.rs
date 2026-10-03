@@ -47,7 +47,9 @@ fn append(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
         libm::atan2(last.forward[0] as f64, last.forward[2] as f64) * 180000.0
             / std::f64::consts::PI,
     ) as i32;
-    let mut p = variant(id, w, last.lateral_cm * 2, w);
+    // Preserve ordinary-road port sizes while narrowing the generated tube.
+    let exit = if id == "tube_exit" && pieces.last().is_some_and(|p| p.id.starts_with("cylinder")) { w * 2 } else { w };
+    let mut p = variant(id, w, last.lateral_cm * 2, exit);
     p.rotation_mdeg = [0, yaw, 0];
     p.quarter_turns = (yaw.rem_euclid(360000) / 90000) as u8;
     p.origin_cm = last.position_cm;
@@ -265,6 +267,12 @@ fn road_width(rng: &mut u64, id: &str, difficulty: usize) -> u32 {
     let weights: Vec<_> = widths.iter().map(|w| WIDTH_WEIGHTS[difficulty][WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
     widths[weighted_index(rng, &weights)]
 }
+fn special_width(rng: &mut u64, id: &str) -> u32 {
+    // Tubes were uniformly selected from 2/4/6m at every difficulty. Keep the
+    // same draw/weights mapped to half bores; authored 4/6m remain available.
+    let widths = if id.starts_with("cylinder") { &[100, 200, 300] } else { supported_widths(id) };
+    widths[next(rng) as usize % widths.len()]
+}
 fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     let mut rng = s.seed ^ attempt.wrapping_mul(0xa0761d6478bd642f);
     let difficulty = difficulty_index(&s.difficulty);
@@ -341,9 +349,8 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         for _ in 0..12 {
             let choice = choices[next(&mut rng) as usize % choices.len()];
             let id = if choice == "driving" { driving_choice(&mut rng, difficulty) } else { choice };
-            let widths = supported_widths(id);
             let w = if choice == "driving" { road_width(&mut rng, id, difficulty) }
-                else { widths[next(&mut rng) as usize % widths.len()] };
+                else { special_width(&mut rng, id) };
             if add_block(&mut pieces, id, w) {
                 added = true;
                 break;
@@ -419,6 +426,30 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pipe_draws_halve_only_bores_and_preserve_road_ports_and_budgets() {
+        for difficulty in 0..3 {
+            let mut old_rng=42+difficulty;
+            let mut new_rng=old_rng;
+            for _ in 0..300 {
+                let old=[200,400,600][next(&mut old_rng) as usize%3];
+                assert_eq!(special_width(&mut new_rng,"cylinder_curve")*2,old);
+            }
+        }
+        for width in [100,200,300] {
+            let mut pieces=vec![];let mut origin=[0;3];
+            for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
+            assert!(add_block(&mut pieces,"cylinder_curve",width));
+            assert_eq!(pieces.last().unwrap().path.last().unwrap().lateral_cm,width);
+            assert!(append(&mut pieces,"straight",400));
+            assert!(pieces.last().unwrap().entry_width_cm>=200);
+            let snapshot=pieces.clone();
+            pieces.resize(MAX_PIECES,pieces[0].clone());
+            assert!(!add_block(&mut pieces,"cylinder_curve",width));
+            assert_eq!(&pieces[..snapshot.len()],&snapshot);
+            assert_eq!(pieces.len(),MAX_PIECES);
+        }
+    }
     #[test]
     fn difficulty_distribution_preserves_variants_and_increases_complexity() {
         let mut scores = vec![];

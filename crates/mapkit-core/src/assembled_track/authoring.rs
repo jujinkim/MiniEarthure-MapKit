@@ -206,8 +206,8 @@ pub fn instance(id: &str, preset: &str, width: u32) -> Instance {
 pub fn piece(instance: &Instance) -> Result<Piece> {
     if !catalogue_ids().contains(&instance.preset.as_str())
         || !supported_widths(&instance.preset).contains(&instance.width_cm)
-        || !(200..=1200).contains(&instance.entry_width_cm)
-        || !(200..=1200).contains(&instance.exit_width_cm)
+        || !(minimum_port_width(&instance.preset)..=1200).contains(&instance.entry_width_cm)
+        || !(minimum_port_width(&instance.preset)..=1200).contains(&instance.exit_width_cm)
         || instance
             .position_cm
             .iter()
