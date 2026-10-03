@@ -356,3 +356,8 @@ source fingerprints change while every format number remains v1.
 all layout combinations, exact road-top exposure, chains, bounds, deterministic
 generation, serialization and source/derived-product tampering. The marking is
 loaded only by display consumers, not the headless geometry path.
+
+The assembly fingerprint explicitly includes the shared `panels.rs` fitter,
+so future fitter edits invalidate compiled assembly products as well as cell
+cache fingerprints. Preserved packages must be recompiled by their authoring
+workflow; this is not a loader fallback.

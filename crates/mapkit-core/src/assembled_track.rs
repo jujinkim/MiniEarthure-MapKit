@@ -393,6 +393,7 @@ pub fn fingerprint() -> String {
             include_bytes!("curve_sampling.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
+            include_bytes!("assembled_track/panels.rs").as_slice(),
             include_bytes!("assembled_track/junction.rs").as_slice(),
             include_bytes!("assembled_track/walls.rs").as_slice(),
             include_bytes!("assembled_track/authoring.rs").as_slice(),
