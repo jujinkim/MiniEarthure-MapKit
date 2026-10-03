@@ -296,3 +296,28 @@ authoring preview output. Geometry reports completed pieces; the common ring
 also exposes stage keys for consumer localization. Editor's worker test observed
 unknown search, counted work and preview stages before adoption. Client progress
 filter units and Editor preview adoption pass with the current native build.
+
+
+## Continuous draft preview — 2026-10-03
+
+`track_authoring_preview.apply_draft` consumes current `track_instance` paths plus
+the validated source represented by its existing nodes. Stable piece IDs map old
+owners to current indices. Rigid changes retain meshes and transform their owned
+visuals; additions/shape changes use lightweight path lines. Changed attachments
+use path-based markers and changed independent grind lines use authored control
+polygon guides. These are explicitly pending guides, not validated surfaces.
+Obsolete junction/support/ground geometry is hidden until preparation is ready,
+so previous and draft geometry do not overlap. `clear_draft`/`apply` restore poses
+and retire guides before adopting prepared data; unchanged mesh nodes are reused.
+The consumer defers final replacement during a drag or active text input.
+
+`work_progress` retains its default 72 px stage indicator and also supports a
+28 px, text-free indeterminate indicator. Reduced motion keeps a static arc.
+The Editor shows it after 500 ms of continuous unconfirmed work without dim;
+explicit Save/export uses its workspace dim and input lock.
+
+No native source, dependency or ABI changed. Shared progress plus Editor held-worker,
+real track/workbench/history/recovery/export/grind regressions pass; the rendered
+Editor initial screen was inspected. [Consumer evidence](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/validation/continuous-edit-2026-10-03/README.md)
+records the scope and fixed 49-piece measurement. Completion p95 532.745 ms still
+misses the 500 ms goal. Detailed interactions/platform acceptance remain user work.
