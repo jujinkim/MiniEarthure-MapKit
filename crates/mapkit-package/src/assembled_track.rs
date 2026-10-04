@@ -14,7 +14,9 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
             let sample = &a.pieces[i].path[n];
             Checkpoint {
                 position_cm: sample.position_cm,
-                radius_cm: sample.lateral_cm + 30,
+                // Narrow one-metre bores still use the current course contract's
+                // minimum one-metre spherical gate. Never change its sample.
+                radius_cm: (sample.lateral_cm + 30).max(100),
                 shape: CheckpointShape::Sphere,
                 placement_mode: PlacementMode::RoadSnap,
                 surface_id: format!("assembled-road-{i}"),

@@ -479,8 +479,10 @@ fn small_and_existing_authored_pipe_sizes_roundtrip_without_conversion() {
         }
         source.paths.push(authoring::Path {id:"base".into(),pieces:source.instances.iter().map(|p|p.id.clone()).collect()});
         let last=authoring::piece(source.instances.last().unwrap()).unwrap();
-        source.checkpoints=vec![authoring::Checkpoint {piece:"p-0".into(),sample:0},authoring::Checkpoint {piece:"p-4".into(),sample:last.path.len()-1}];
+        source.checkpoints=vec![authoring::Checkpoint {piece:"p-0".into(),sample:0},authoring::Checkpoint {piece:"p-2".into(),sample:0},authoring::Checkpoint {piece:"p-4".into(),sample:last.path.len()-1}];
         let d=package::compile_source(&source).unwrap();
+        assert_eq!(d.courses[0].definition.checkpoints[1].radius_cm,(width/2+30).max(100));
+        assert_eq!(d.courses[0].definition.checkpoints[1].position_cm,d.assembled_track.as_ref().unwrap().pieces[2].path[0].position_cm);
         assert!(d.assembled_track.as_ref().unwrap().issues.is_empty(),"{width}: {:?}",d.assembled_track.as_ref().unwrap().issues);
         let bytes=pack_bytes(d.clone(),BTreeMap::new()).unwrap();
         assert_eq!(bytes,pack_bytes(package::compile_source(&source).unwrap(),BTreeMap::new()).unwrap());

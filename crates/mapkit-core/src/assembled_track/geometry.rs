@@ -25,13 +25,20 @@ fn analytical_raw(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: 
         let n=norm(cross(f,side));
         (p,f,n,side)
     };
-    let ts=sampling::parameters(|t| {
+    let probe=|t| {
         let (p,f,n,side)=frame(t); let w=half_width(t);
         Probe {points:[p,
             std::array::from_fn(|j|p[j]-side[j]*w),std::array::from_fn(|j|p[j]+side[j]*w),
             std::array::from_fn(|j|p[j]-side[j]*(w+WALL_THICKNESS_CM as f64)+n[j]*WALL as f64),
             std::array::from_fn(|j|p[j]+side[j]*(w+WALL_THICKNESS_CM as f64)+n[j]*WALL as f64)],tangent:f,normal:n}
-    }, breaks,150.0,if mode=="spiral" {0.6} else {0.75},if mode=="spiral" {3.5f64.to_radians()} else {4.0f64.to_radians()});
+    };
+    let tolerance=if mode=="spiral" {0.6} else {0.75};
+    let angle=if mode=="spiral" {3.5f64.to_radians()} else {4.0f64.to_radians()};
+    let ts=if ["cylinder","halfpipe","loop"].contains(&mode) {
+        sampling::parameters(probe,breaks,150.0,tolerance,angle)
+    } else {
+        sampling::ordinary_parameters(probe,breaks,tolerance,angle)
+    };
     ts.into_iter().map(|mut t| {
         if mode=="spiral" && (0.125..=0.875).contains(&t) {
             // Choose stations on integer height contours of the original helix.
@@ -559,11 +566,14 @@ mod playtest_surface_tests {
                     (0..2).any(|i| {let dx=(b[i][0]-a[i][0]) as f64;let dz=(b[i][2]-a[i][2]) as f64;(b[i][1]-a[i][1]).abs() as f64>0.23*libm::sqrt(dx*dx+dz*dz)})
                 }).map(|w|(ribbon_edges(&w[0],0),ribbon_edges(&w[1],0))).collect::<Vec<_>>());
                 for pair in p.path.windows(2) {
-                    assert!(distance(pair[0].position_cm,pair[1].position_cm)<=152,"{id}: spacing");
-                    for vectors in [[pair[0].forward,pair[1].forward],[pair[0].normal,pair[1].normal]] {
+                    assert!(distance(pair[0].position_cm,pair[1].position_cm)<=252,"{id}: spacing");
+                    for vectors in [[pair[0].normal,pair[1].normal]] {
                         let dot=(0..3).map(|j|vectors[0][j] as f64*vectors[1][j] as f64/1e12).sum::<f64>().clamp(-1.0,1.0);
                         assert!(libm::acos(dot).to_degrees()<=4.01,"{id}: frame turn");
                     }
+                    let heading=|v: Vertex| libm::atan2(v[0] as f64,v[2] as f64);
+                    let delta=heading(pair[1].forward)-heading(pair[0].forward);
+                    assert!(libm::atan2(libm::sin(delta),libm::cos(delta)).abs().to_degrees()<=6.68,"{id}: horizontal turn");
                     if ["slope","slope_up","slope_down","gentle45","hairpin"].contains(&id) {
                         assert_eq!(strips(&pair[0],&pair[1]),1,"planar trapezoids need two triangles");
                     }

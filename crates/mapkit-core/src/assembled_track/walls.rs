@@ -302,8 +302,9 @@ mod tests {
             }
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
-        assert_eq!(transcript.0.len(),115902);
-        assert_eq!(digest,"1a847ea6ef087f15ebb75dd7d72d225874bede0851b4ad4c8664c7ff3b8b617b");
+        println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
+        assert_eq!(transcript.0.len(),100718);
+        assert_eq!(digest,"a6ab88eb77963c0e15b4fc7190f966865dad60c4b5592138963befaab54c1085");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
@@ -346,6 +347,36 @@ mod tests {
                 let width=distance(ring[0],ring[3]);
                 assert!((48..=72).contains(&width),"{id}: quantized width {width}");
             }}
+        }
+    }
+    #[test]
+    fn ordinary_curve_costs_and_connected_ports() {
+        for id in ["gentle90", "hairpin", "curve_up", "spiral90_left_up", "spiral_up", "spiral_down", "free_curve", "loop", "cylinder_curve"] {
+            let mut instance = authoring::instance("cost", id, if id=="loop" {400} else {600});
+            if id == "free_curve" {
+                instance.control_points = vec![[0,0,0], [0,0,1800], [1800,0,3600], [3600,0,3600]];
+            }
+            let p = authoring::piece(&instance).unwrap();
+            if let Some(old) = match id {
+                "gentle90"|"curve_up" => Some(36), "hairpin" => Some(46),
+                "spiral90_left_up" => Some(30), "spiral_up"|"spiral_down" => Some(108),
+                "free_curve" => Some(45), _ => None,
+            } {
+                let ceiling=if id=="spiral90_left_up" {0.70} else {0.65};
+                assert!((p.path.len()-1) as f64 <= old as f64*ceiling,"{id}: simplification budget");
+            }
+            let mut road = Mesh::default(); let mut volumes = vec![];
+            generate_piece(&p,0,&mut road,&[],&mut volumes).unwrap();
+            let mut wall = Mesh::default(); emit(&volumes,&mut wall).unwrap();
+            assert!(geometry::ordinary_grade_valid(&p));
+            assert!(wall.solids.iter().all(|c| c.valid(100_000_000)));
+            let next = authoring::snap(&authoring::instance("next", "straight", 600), &instance).unwrap();
+            let next = authoring::piece(&next).unwrap();
+            if !["loop","cylinder_curve"].contains(&id) {
+                assert_eq!(p.path.last().unwrap().position_cm, next.path[0].position_cm, "{id}: shared port");
+            }
+            println!("CURVE_COST {id} segments={} road_triangles={} wall_triangles={} wall_volumes={} collision_solids={}",
+                p.path.len()-1, road.triangles.len(), wall.triangles.len(), volumes.len(), wall.solids.len());
         }
     }
     #[test]

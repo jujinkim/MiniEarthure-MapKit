@@ -407,6 +407,14 @@ Focused results: [playtest geometry verification](validation/playtest-2026-10-02
 
 ## Quantized curved-road sampling — 2026-10-02 replacement
 
+The [2026-10-05 [18] replacement](validation/curves-18-2026-10-05/README.md)
+separates horizontal limits from height/pitch/full-normal limits. Ordinary spans
+are now2.5m, horizontal angle/error limits are×5/3 and×25/9; vertical limits,
+23% grades, final shared vertices and loop/pipe precision remain. Representative
+segments fall38.88%; safety-limited short helices fall33.33%. Narrow generated
+gates retain their exact samples and the existing100cm minimum course radius.
+The following measurements describe the prior revisions.
+
 Ordinary analytic curves and authored cubics start with 80cm spans. Shared
 refinement limits tangent changes to two degrees while retaining the existing
 outer-edge/twist error bound. This replaces 35cm/one-degree refinement, whose
