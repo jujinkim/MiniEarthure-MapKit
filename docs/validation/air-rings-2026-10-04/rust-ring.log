@@ -18,4 +18,3 @@ test quantized_surface_direction_changes_stay_below_five_degrees ... ok
 test swept_tubes_share_hollow_geometry_frames_and_bounds ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
-
