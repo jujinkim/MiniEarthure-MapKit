@@ -396,3 +396,9 @@ portal frames/grade, internal open sections, shape/source tampering, determinist
 bytes, old 4/6m roundtrip and unchanged rejection budgets. Shared Godot material/
 preview and Editor history verification are reported by the consumers. Runtime
 passage observations are separate from geometric admission and user acceptance.
+
+## Air ring defaults 09 — 2026-10-04
+
+Automatic and manual action rings now have a 3m opening and strength100.
+Square rim thickness, action height and placement are unchanged; explicit standalone
+source values are preserved. [Contract and scoped results](SPECIAL_DRIVING.md#air-ring-defaults-09--2026-10-04-replacement).

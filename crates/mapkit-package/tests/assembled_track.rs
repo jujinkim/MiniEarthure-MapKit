@@ -3,6 +3,31 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn air_ring_action_and_explicit_dimensions_roundtrip() {
+    let mut source=authoring::shortcut_source();
+    source.actions.push(authoring::Action {id:"ring".into(),kind:"air_ring".into(),piece:source.instances[0].id.clone(),sample:4,height_cm:370,panel_width_percent:50,panel_alignment:authoring::PanelAlignment::Center,landing:None});
+    let d=package::compile_source(&source).unwrap();
+    let bytes=pack_bytes(d.clone(),BTreeMap::new()).unwrap();
+    let reopened=read_bytes(&bytes).unwrap();
+    assert_eq!(reopened.document.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap(),&source);
+    assert_eq!(reopened.document.gimmicks,d.gimmicks);
+    let ring=d.gimmicks.iter().find(|g|g.id=="action-ring").unwrap();
+    assert_eq!(ring.effect.as_ref().unwrap().ring_radius_cm,150);
+    let mut corrupt=d.clone();
+    corrupt.gimmicks.iter_mut().find(|g|g.id=="action-ring").unwrap().effect.as_mut().unwrap().ring_radius_cm=250;
+    assert!(corrupt.validate().is_err());
+    let all:BTreeMap<String,mapkit_core::gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
+    let mut d:mapkit_core::MapDocument=serde_json::from_str(include_str!("../../../examples/placement/document.json")).unwrap();
+    let mut explicit=all["air_ring"].clone();
+    explicit.effect.as_mut().unwrap().strength_percent=37;
+    explicit.effect.as_mut().unwrap().ring_radius_cm=300;
+    for p in &mut explicit.parts {for v in &mut p.vertices {v[0]*=2;v[1]*=2;}}
+    d.gimmicks=vec![explicit.clone()];d.normalize();
+    let bytes=pack_bytes(d,BTreeMap::new()).unwrap();
+    assert_eq!(read_bytes(&bytes).unwrap().document.gimmicks,vec![explicit]);
+}
+
+#[test]
 fn generated_walls_have_no_reverse_coplanar_duplicates() {
     let d = document(&Settings {
         seed: 1,

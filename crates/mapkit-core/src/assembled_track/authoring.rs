@@ -836,7 +836,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
             effect: Some(Effect {
                 strength_percent: 100,
                 jump_height_cm: action.height_cm,
-                ring_radius_cm: 250,
+                ring_radius_cm: if action.kind == "air_ring" { 150 } else { 250 },
             }),
             surface: Surface::Asphalt,
             color: if action.kind == "jump_panel" { [30, 220, 210, 255] } else { [255, 113, 35, 255] },
@@ -862,8 +862,8 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
             g.position[1] += i64::from(action.height_cm);
             g.parts.clear();
             for side in [-1, 1] {
-                g.parts.push(box_part([side * 275, 0, 0], [50, 600, 30]));
-                g.parts.push(box_part([0, side * 275, 0], [500, 50, 30]));
+                g.parts.push(box_part([side * 175, 0, 0], [50, 400, 30]));
+                g.parts.push(box_part([0, side * 175, 0], [300, 50, 30]));
             }
         }
         if action.kind == "boost_chain" {

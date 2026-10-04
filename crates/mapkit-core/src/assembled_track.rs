@@ -1549,14 +1549,14 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                 "air_ring" => {
                     g.position[1] += 200;
                     for side in [-1, 1] {
-                        g.parts.push(box_part([side * 275, 0, 0], [50, 600, 30]));
-                        g.parts.push(box_part([0, side * 275, 0], [500, 50, 30]));
+                        g.parts.push(box_part([side * 175, 0, 0], [50, 400, 30]));
+                        g.parts.push(box_part([0, side * 175, 0], [300, 50, 30]));
                     }
                     g.motion.kind = MotionKind::AirRing;
                     g.effect = Some(Effect {
-                        strength_percent: 50,
+                        strength_percent: 100,
                         jump_height_cm: 200,
-                        ring_radius_cm: 250,
+                        ring_radius_cm: 150,
                     });
                 }
                 _ => {

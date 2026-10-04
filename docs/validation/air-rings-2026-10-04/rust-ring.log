@@ -1,0 +1,21 @@
+   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
+    Finished `test` profile [optimized + debuginfo] target(s) in 20.59s
+     Running tests/air_rings.rs (map-kit/target/debug/deps/air_rings-d258daa7a5420717)
+
+running 2 tests
+test standalone_ring_has_three_metre_aperture_and_original_twenty_cm_rim ... ok
+test generated_and_manual_ring_defaults_keep_pose_and_rim ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/special_tracks.rs (map-kit/target/debug/deps/special_tracks-3d3120ae2030106c)
+
+running 5 tests
+test bounded_templates_effects_meshes_and_spawn_exclusion ... ok
+test special_track_cost_archive_order_and_hollow_occupancy ... ok
+test curved_halfpipe_has_open_crown_and_real_solid_sidewalls ... ok
+test quantized_surface_direction_changes_stay_below_five_degrees ... ok
+test swept_tubes_share_hollow_geometry_frames_and_bounds ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+

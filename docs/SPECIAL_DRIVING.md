@@ -70,3 +70,20 @@ final validation is clean. Execution logs stay in root local `docs/tasks/pipes-0
 All formats stay v1. The assembly source fingerprint changes with its generated
 default colour; active generated packages are refreshed with the 08 delivery
 while preserving original artifacts.
+
+## Air ring defaults 09 — 2026-10-04 replacement
+
+New automatic track rings, manual air-ring actions and the standalone template
+use a 150cm inner radius (3m opening) and 100% target speed. The square track
+rim retains 50cm width / 30cm depth; the standalone 24-sector round rim retains
+20cm width / depth. Placement, rotation, colour and 1500ms cooldown are unchanged.
+The existing declared vertices drive display, authoring preview and collision.
+Explicit saved dimensions and strengths are preserved; no conversion, new fields
+or format change is introduced (all own formats remain v1).
+
+[Scoped Rust/native results](validation/air-rings-2026-10-04/) pass seven core cases
+and one package case: automatic/manual geometry and pose, standalone quantization,
+effect limits, costs/occupancy, deterministic compilation, source/package roundtrip,
+explicit 6m/37% preservation and derived-radius tamper rejection. CLI and Godot
+extension builds pass on macOS arm64. Consumer trigger/preview and standalone
+startup are recorded by their owning repositories. Detailed driving is user verification.
