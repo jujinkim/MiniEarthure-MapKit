@@ -472,9 +472,6 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
             }
         }
     }
-    if source.checkpoints.len() < 2 {
-        issues.push("Set shared start and finish checkpoints".into());
-    }
     for action in &source.actions {
         let Some(&i) = names.get(&action.piece) else {
             return Err(error("E_TRACK_SOURCE", "action references missing road"));
@@ -805,7 +802,7 @@ pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
 }
 pub(super) fn checkpoint_budget(a: &Assembly) -> Result<()> {
     let count=common_checkpoints(a).len();
-    if count<2 || count>64 {return Err(error("E_TRACK_CHECKPOINT_LIMIT",format!("Final routes need {count} shared checkpoints; allowed 2..64")));}
+    if count>64 {return Err(error("E_TRACK_CHECKPOINT_LIMIT",format!("Final routes need {count} shared checkpoints; allowed 0..64")));}
     Ok(())
 }
 

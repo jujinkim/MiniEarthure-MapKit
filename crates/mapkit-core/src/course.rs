@@ -99,6 +99,10 @@ pub struct Course {
     pub validation: Option<ValidationReference>,
 }
 impl Checkpoint {
+    pub fn from_track_sample(sample:&crate::assembled_track::Sample, surface_id:String)->Self {
+        Self {position_cm:sample.position_cm,radius_cm:(sample.lateral_cm+30).max(100),
+            shape:CheckpointShape::Sphere,placement_mode:PlacementMode::RoadSnap,surface_id}
+    }
     /// Intersection of closed spheres/upward hemispheres. At a fixed height the
     /// horizontal radii are concave; their maximum occurs at the weighted centre.
     pub fn overlaps(&self, other: &Self) -> bool {
@@ -312,11 +316,18 @@ fn separation(a: [f64;3], b: [f64;3], radius: f64, cp: &Checkpoint) -> f64 {
 pub fn capsule_entry(from: Capsule, to: Capsule, cp: &Checkpoint) -> Option<f64> {
     if from==to || from.separation(cp)<=0.001 {return None;}
     let length=|a:Vertex,b:Vertex| (0..3).map(|i|(a[i]-b[i]) as f64).map(|v|v*v).sum::<f64>().sqrt();
-    let speed=length(from.a,to.a).max(length(from.b,to.b))+(from.radius_cm as f64-to.radius_cm as f64).abs();
+    let axis_a:[f64;3]=std::array::from_fn(|i|(from.b[i]-from.a[i]) as f64);
+    let axis_b:[f64;3]=std::array::from_fn(|i|(to.b[i]-to.a[i]) as f64);
+    let la=length(from.a,from.b);let lb=length(to.a,to.b);
+    let angle=if la*lb>0.0 {(axis_a.iter().zip(axis_b).map(|(a,b)|a*b).sum::<f64>()/(la*lb)).clamp(-1.0,1.0).acos()} else {0.0};
+    // Interpolation error of a rotating endpoint is <= L*angle²*t*(1-t)/2.
+    // The full axis length conservatively bounds either endpoint's pivot radius.
+    let rotation=la.max(lb)*angle*angle*0.5;
+    let speed=length(from.a,to.a).max(length(from.b,to.b))+(from.radius_cm as f64-to.radius_cm as f64).abs()+rotation;
     if speed<=0.001 {return None;}
     let distance=|t:f64| separation(std::array::from_fn(|i|from.a[i] as f64+(to.a[i]-from.a[i]) as f64*t),
         std::array::from_fn(|i|from.b[i] as f64+(to.b[i]-from.b[i]) as f64*t),
-        from.radius_cm as f64+(to.radius_cm as f64-from.radius_cm as f64)*t,cp);
+        from.radius_cm as f64+(to.radius_cm as f64-from.radius_cm as f64)*t+rotation*t*(1.0-t),cp);
     fn search(f:&impl Fn(f64)->f64, speed:f64, lo:f64, hi:f64, depth:u8, budget:&mut usize)->Option<f64> {
         if *budget==0 {return None;} *budget-=1;
         let mid=(lo+hi)*0.5;

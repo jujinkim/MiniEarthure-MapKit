@@ -359,6 +359,11 @@ impl MapKitBridge {
             .map(|c| serde_json::to_value(c.effective()).unwrap()))
     }
     #[func]
+    fn track_checkpoint(&self, sample: GString) -> GString {
+        response(mapkit_core::course::decode::<mapkit_core::assembled_track::Sample>(sample.to_string().as_bytes())
+            .map(|s| serde_json::to_value(mapkit_core::course::Checkpoint::from_track_sample(&s,String::new())).unwrap()))
+    }
+    #[func]
     fn checkpoint_edit_allowed(&self, checkpoints: GString, candidate: GString, replace: i64) -> GString {
         response((|| {
             let points: Vec<mapkit_core::course::Checkpoint> = mapkit_package::parse_resource_json(checkpoints.to_string().as_bytes())

@@ -565,3 +565,11 @@ fn manual_flight_and_static_shapes_survive_both_containers() {
     reader.audit(u64::MAX,&indexed::ReadEpoch::default().begin()).unwrap();
     assert_eq!(reader.index().world_content_hash,read.inspection.world_content_hash);
 }
+
+#[test]
+fn connected_authored_map_without_checkpoints_still_opens() {
+    let mut source=authoring::shortcut_source();source.checkpoints.clear();
+    let d=package::compile_source(&source).unwrap();
+    let reopened=read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
+    assert!(reopened.document.courses[0].definition.checkpoints.is_empty());
+}
