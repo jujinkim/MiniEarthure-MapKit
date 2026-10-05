@@ -128,7 +128,7 @@ fn quantized_surface_direction_changes_stay_below_five_degrees() {
         n.map(|v| v / length)
     }
     for id in ["loop", "cylinder"] {
-        for radius in if id == "cylinder" { vec![50, 100, 125, 150, 250, 600] } else { vec![150, 250, 600] } {
+        for radius in if id == "cylinder" { vec![100, 125, 150, 250, 600] } else { vec![150, 250, 600] } {
             for length in [600, 1600, 3200] {
                 let mut t = templates()[id].track.clone().unwrap();
                 t.radius_cm = radius;

@@ -176,6 +176,7 @@ impl MapKitBridge {
         response((|| {
             let track: mapkit_core::special_track::SpecialTrack = serde_json::from_value(engine_value(&text.to_string())?)
                 .map_err(|e|mapkit_core::error("E_GIMMICK",e.to_string()))?;
+            if track.pipe_dimension_error() {return Err(mapkit_core::error("E_PIPE_DIMENSIONS","Pipe radius must be at least 100 cm (bore 200 cm)"));}
             if !track.valid() {return Err(mapkit_core::error("E_GIMMICK","invalid special track"));}
             Ok(serde_json::json!({"radius_cm":track.bound_radius()}))
         })())

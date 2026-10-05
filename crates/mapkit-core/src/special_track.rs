@@ -40,12 +40,16 @@ pub(crate) const fn loop_offset_cm(width_cm: u32) -> i64 {
 }
 
 impl SpecialTrack {
+    pub const MIN_PIPE_RADIUS_CM: u32 = 100;
+    pub fn pipe_dimension_error(&self) -> bool {
+        matches!(self.kind, TrackKind::Cylinder | TrackKind::SweptCylinder) && self.radius_cm < Self::MIN_PIPE_RADIUS_CM
+    }
     pub fn valid(&self) -> bool {
         if matches!(
             self.kind,
             TrackKind::SweptCylinder | TrackKind::SweptHalfPipe
         ) {
-            return (if self.kind == TrackKind::SweptCylinder { 50 } else { 100 }..=600).contains(&self.radius_cm)
+            return (if self.kind == TrackKind::SweptCylinder { Self::MIN_PIPE_RADIUS_CM } else { 100 }..=600).contains(&self.radius_cm)
                 && (140..=600).contains(&self.width_cm)
                 && (2..=512).contains(&self.centerline.len())
                 && self.centerline.iter().all(|f| {
@@ -70,7 +74,7 @@ impl SpecialTrack {
                 });
         }
         self.centerline.is_empty()
-            && (if self.kind == TrackKind::Cylinder { 50 } else { 150 }..=600).contains(&self.radius_cm)
+            && (if self.kind == TrackKind::Cylinder { Self::MIN_PIPE_RADIUS_CM } else { 150 }..=600).contains(&self.radius_cm)
             && (140..=600).contains(&self.width_cm)
             && (600..=3200).contains(&self.length_cm)
     }

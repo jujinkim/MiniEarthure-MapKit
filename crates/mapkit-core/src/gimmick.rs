@@ -174,6 +174,9 @@ pub fn validate(d: &MapDocument) -> Result<()> {
     let mut ids = BTreeSet::new();
     if d.gimmicks.len() > MAX_GIMMICKS { return Err(error("E_GIMMICK", "too many driving objects")); }
     for g in &d.gimmicks {
+        if g.track.as_ref().is_some_and(|t| t.pipe_dimension_error()) {
+            return Err(error("E_PIPE_DIMENSIONS", "Pipe radius must be at least 100 cm (bore 200 cm); source was not modified"));
+        }
         if !g.valid() || !ids.insert(&g.id) || d.placements.iter().any(|p| p.id == g.id)
             || !(0..2).all(|a| g.safety_min_cm[a*2] >= d.bounds.min[a] && g.safety_max_cm[a*2] <= d.bounds.max[a]) {
             return Err(error("E_GIMMICK", format!("invalid motion, proxy or swept/landing bounds: {}", g.id)));

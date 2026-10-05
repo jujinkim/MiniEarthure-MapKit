@@ -466,7 +466,7 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
 }
 #[test]
 fn small_and_existing_authored_pipe_sizes_roundtrip_without_conversion() {
-    for width in [100,200,300,400,600] {
+    for width in [200,300,400,600] {
         let mut source=authoring::Source::empty();source.settings.circuit=false;
         for (i,preset) in ["straight","tube_entry","cylinder_curve","tube_exit","straight"].iter().enumerate() {
             let mut item=authoring::instance(&format!("p-{i}"),preset,if *preset=="straight" {400} else {width});

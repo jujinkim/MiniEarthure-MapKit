@@ -13,9 +13,9 @@ fn all_pipe_variants_keep_body_paths_and_share_small_bores() {
     let catalogue = track::catalogue();
     for entry in catalogue["entries"].as_array().unwrap().iter().filter(|e| e["id"].as_str().unwrap().starts_with("cylinder")) {
         let id=entry["id"].as_str().unwrap();
-        assert_eq!(entry["widths_cm"], serde_json::json!([100,200,300,400,600]));
+        assert_eq!(entry["widths_cm"], serde_json::json!([200,300,400,600]));
         let reference=piece(&instance("pipe",id,600)).unwrap();
-        for width in [100,200,300,400,600] {
+        for width in [200,300,400,600] {
             let p=piece(&instance("pipe",id,width)).unwrap();
             assert_eq!(p.path.first().unwrap().position_cm,reference.path.first().unwrap().position_cm);
             assert_eq!(p.path.last().unwrap().position_cm,reference.path.last().unwrap().position_cm);
@@ -43,7 +43,7 @@ fn all_pipe_variants_keep_body_paths_and_share_small_bores() {
 
 #[test]
 fn small_pipe_portals_and_internal_connections_preserve_grade_and_section() {
-    for width in [100,200,300,400,600] {
+    for width in [200,300,400,600] {
         let mut previous=instance("road","straight",400);
         for (id,preset) in [("entry","tube_entry"),("pipe-a","cylinder_curve"),("pipe-b","cylinder_curve"),("exit","tube_exit"),("road-end","straight")] {
             let mut next=instance(id,preset,if preset=="straight" {400} else {width});
@@ -78,8 +78,21 @@ fn standalone_radius_limits_do_not_relax_loop_or_halfpipe() {
     let templates: std::collections::BTreeMap<String,gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
     let t=templates["cylinder"].track.as_ref().unwrap();
     assert_eq!((t.radius_cm,t.length_cm),(125,1600));
-    let mut t=t.clone();t.radius_cm=50;assert!(t.valid());t.radius_cm=49;assert!(!t.valid());
+    let mut t=t.clone();t.radius_cm=100;assert!(t.valid());t.radius_cm=99;assert!(!t.valid());
     let mut l=templates["loop"].track.clone().unwrap();l.radius_cm=149;assert!(!l.valid());
     let p=piece(&instance("half","banked_chicane",400)).unwrap();
     let mut h=tube(&p);h.kind=TrackKind::SweptHalfPipe;h.radius_cm=99;assert!(!h.valid());
+}
+
+#[test]
+fn undersize_authoring_reports_dimensions_without_conversion() {
+    let old=instance("old","cylinder",100);
+    let snapshot=serde_json::to_value(&old).unwrap();
+    let failure=piece(&old).unwrap_err();
+    assert_eq!(failure.code,"E_PIPE_DIMENSIONS");
+    assert!(failure.message.contains("200 cm"));
+    assert_eq!(serde_json::to_value(&old).unwrap(),snapshot);
+    let templates: std::collections::BTreeMap<String,gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
+    let mut g=templates["cylinder"].clone();g.track.as_mut().unwrap().radius_cm=99;
+    assert!(g.track.as_ref().unwrap().pipe_dimension_error());
 }

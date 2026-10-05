@@ -402,3 +402,20 @@ passage observations are separate from geometric admission and user acceptance.
 Automatic and manual action rings now have a 3m opening and strength100.
 Square rim thickness, action height and placement are unchanged; explicit standalone
 source values are preserved. [Contract and scoped results](SPECIAL_DRIVING.md#air-ring-defaults-09--2026-10-04-replacement).
+
+
+## Pipe minimum — 2026-10-05 replacement
+
+This replaces the 2026-10-04 1m bore option: minimum radius 1m/bore 2m applies to
+new generation and authored cylinders, swept cylinders and their portals. Manual
+bores are 2/3/4/6m, automatic bores are uniform 2/3/4m. Standalone 2.5m/16m defaults,
+wide presets, internal open sections, portal grade and road ranges stay intact.
+The catalogue owns the Editor minimum. Old source files remain untouched and fail
+with `E_PIPE_DIMENSIONS` rather than being upgraded.
+
+Scoped Rust tests pass: four `pipe_dimensions` cases (including unchanged invalid
+source), five `special_tracks` cases, the uniform RNG/portal/budget unit case,
+and the package authored-pipe roundtrip. They cover all twelve pipe variants,
+2/3/4/6m sections, connected portals, open shell/occupancy and serialized source.
+The native Godot library and CLI were built on macOS arm64. Current own formats
+remain v1; source-derived generation fingerprints change automatically.

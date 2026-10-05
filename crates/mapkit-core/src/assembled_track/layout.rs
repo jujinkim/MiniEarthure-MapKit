@@ -268,9 +268,8 @@ fn road_width(rng: &mut u64, id: &str, difficulty: usize) -> u32 {
     widths[weighted_index(rng, &weights)]
 }
 fn special_width(rng: &mut u64, id: &str) -> u32 {
-    // Tubes were uniformly selected from 2/4/6m at every difficulty. Keep the
-    // same draw/weights mapped to half bores; authored 4/6m remain available.
-    let widths = if id.starts_with("cylinder") { &[100, 200, 300] } else { supported_widths(id) };
+    // One uniform draw at every difficulty; manual 6m bores remain available.
+    let widths = if id.starts_with("cylinder") { &[200, 300, 400] } else { supported_widths(id) };
     widths[next(rng) as usize % widths.len()]
 }
 fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
@@ -427,16 +426,16 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
 mod tests {
     use super::*;
     #[test]
-    fn pipe_draws_halve_only_bores_and_preserve_road_ports_and_budgets() {
+    fn pipe_draws_uniform_bores_and_preserve_road_ports_and_budgets() {
         for difficulty in 0..3 {
             let mut old_rng=42+difficulty;
             let mut new_rng=old_rng;
             for _ in 0..300 {
-                let old=[200,400,600][next(&mut old_rng) as usize%3];
-                assert_eq!(special_width(&mut new_rng,"cylinder_curve")*2,old);
+                let old=[200,300,400][next(&mut old_rng) as usize%3];
+                assert_eq!(special_width(&mut new_rng,"cylinder_curve"),old);
             }
         }
-        for width in [100,200,300] {
+        for width in [200,300,400] {
             let mut pieces=vec![];let mut origin=[0;3];
             for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
             assert!(add_block(&mut pieces,"cylinder_curve",width));

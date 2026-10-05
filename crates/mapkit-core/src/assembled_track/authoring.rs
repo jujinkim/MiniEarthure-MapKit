@@ -204,6 +204,10 @@ pub fn instance(id: &str, preset: &str, width: u32) -> Instance {
     }
 }
 pub fn piece(instance: &Instance) -> Result<Piece> {
+    if (instance.preset.starts_with("cylinder") || ["tube_entry", "tube_exit"].contains(&instance.preset.as_str()))
+        && [instance.width_cm, instance.entry_width_cm, instance.exit_width_cm].iter().any(|v| *v < 200) {
+        return Err(error("E_PIPE_DIMENSIONS", "Pipe bore and port width must be at least 200 cm (radius 100 cm); source was not modified"));
+    }
     if !catalogue_ids().contains(&instance.preset.as_str())
         || !supported_widths(&instance.preset).contains(&instance.width_cm)
         || !(minimum_port_width(&instance.preset)..=1200).contains(&instance.entry_width_cm)

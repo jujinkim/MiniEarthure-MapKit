@@ -243,3 +243,12 @@ Cylinder-only minimum radius is 50cm; tube/ramp minimum port width is 100cm.
 Road/loop/halfpipe ranges are unchanged. These are current-v1 value/domain and
 generation-default changes, not a format bump or automatic conversion. See
 [track authoring](../docs/TRACK_AUTHORING.md#pipe-bore-reduction-08-2026-10-04-replacement).
+
+
+2026-10-05 pipe minimum replacement: cylinder/swept-cylinder radius is at least
+100cm (2m bore); assembled sizes are 200/300/400/600cm. Generated pipes uniformly
+select 200/300/400cm, with the same one RNG draw at all difficulties. Tube ports
+are at least 200cm; road/loop/halfpipe domains are unchanged. The catalogue exposes
+`pipe_min_radius_cm` for Editor controls. Undersize source data is rejected with
+`E_PIPE_DIMENSIONS`; there is no conversion or source mutation. Standalone default
+radius remains 125cm. These are current v1 constraints, not a format increment.
