@@ -744,7 +744,7 @@ impl MapDocument {
         if self.grind_lines.iter().flat_map(|l|&l.control_points).any(|p|!self.bounds.contains([p[0],p[2]])) {
             return Err(error("E_GRIND_SOURCE","grind path leaves document bounds"));
         }
-        if let Some(track) = &self.assembled_track { track.validate()?; assembled_track::verify_products(self,track)?; }
+        if let Some(track) = &self.assembled_track { track.validate_stored()?; }
         placement::validate(self)?;
         Ok(())
     }

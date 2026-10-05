@@ -15,7 +15,7 @@ fn air_ring_action_and_explicit_dimensions_roundtrip() {
     assert_eq!(ring.effect.as_ref().unwrap().ring_radius_cm,150);
     let mut corrupt=d.clone();
     corrupt.gimmicks.iter_mut().find(|g|g.id=="action-ring").unwrap().effect.as_mut().unwrap().ring_radius_cm=250;
-    assert!(corrupt.validate().is_err());
+    assert!(verify_document(&corrupt).is_err());
     let all:BTreeMap<String,mapkit_core::gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
     let mut d:mapkit_core::MapDocument=serde_json::from_str(include_str!("../../../examples/placement/document.json")).unwrap();
     let mut explicit=all["air_ring"].clone();
@@ -418,16 +418,16 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
         .actions[0]
         .height_cm -= 50;
     assert!(
-        action_tamper.validate().is_err(),
+        verify_document(&action_tamper).is_err(),
         "action source and derived trigger must match"
     );
     let mut width_tamper=d.clone();
     width_tamper.assembled_track.as_mut().unwrap().authoring.as_mut().unwrap().actions[0].panel_width_percent=25;
-    assert!(width_tamper.validate().is_err(), "width source and panel products must match");
+    assert!(verify_document(&width_tamper).is_err(), "width source and panel products must match");
     let mut shape_tamper=d.clone();
     let panel=shape_tamper.gimmicks.iter_mut().find(|g|g.id.starts_with("action-")).unwrap();
     panel.parts[0].vertices[0][0]+=1;
-    assert!(shape_tamper.validate().is_err(), "derived panel geometry cannot be edited");
+    assert!(verify_document(&shape_tamper).is_err(), "derived panel geometry cannot be edited");
     let mut partial=source.clone();partial.actions[0].panel_width_percent=25;
     partial.actions[0].panel_alignment=authoring::PanelAlignment::Right;
     let partial=package::compile_source(&partial).unwrap();
@@ -462,7 +462,7 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
         .unwrap()
         .instances[0]
         .position_cm[0] += 1;
-    assert!(geometry_edit.validate().is_err());
+    assert!(verify_document(&geometry_edit).is_err());
 }
 #[test]
 fn small_and_existing_authored_pipe_sizes_roundtrip_without_conversion() {
@@ -490,7 +490,7 @@ fn small_and_existing_authored_pipe_sizes_roundtrip_without_conversion() {
         assert_eq!(reopened.document.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap(),&source);
         assert_eq!(reopened.document.gimmicks,d.gimmicks);
         let mut tampered=d.clone();tampered.gimmicks.iter_mut().find(|g|g.track.is_some()).unwrap().track.as_mut().unwrap().radius_cm+=1;
-        assert!(tampered.validate().is_err());
+        assert!(verify_document(&tampered).is_err());
     }
 }
 

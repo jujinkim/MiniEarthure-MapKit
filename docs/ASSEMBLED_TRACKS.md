@@ -74,7 +74,7 @@ No whole-course physical simulation runs during generation.
 catalogue fingerprints, resolved pieces, reference length and time. Each piece
 contains its cube span, origin/orientation, connection width, entry speed range,
 3D path, local normal/forward, safe-anchor eligibility, drive/flight clearances,
-tube radius and reserved bounds. Validation checks exact current presets,
+tube radius and reserved bounds. Authoring/export validation checks exact current presets,
 connections, closure, repetition, overlap and bounded sample/piece work. Existing
 package/cell/memory budgets still apply. Same settings, seed and fingerprints
 produce identical placement, content hash and package bytes.
@@ -84,8 +84,8 @@ gimmicks and their occupancy are generated; the toy stage in
 `godot/track_stage.gd` is render-only. It contributes no collider, occupancy or
 spawn point. Overview rendering includes assembly paths.
 
-`verify_document` regenerates and compares the complete current source. Package
-`verify` also compares the expected course against its actual driving-content
+`verify_document` regenerates and compares the complete current source for authoring/export. Package
+`verify` validates the saved geometry and compares the saved course against its driving-content
 hash. Mutable provenance and attribution do not certify geometry. No completion
 record or successful-generator flag is manufactured. Edited content loses this
 verification eligibility.
@@ -111,7 +111,7 @@ straight runs, unique outlines, determinism and exact position/tangent/normal
 closure. Eight assembly tests pass, including the existing duration, geometry,
 roundtrip, cancellation and source-mutation checks. This replaces the original
 four-sided circuit skeleton within v1; old generated files are preserved, but
-current-generator verification requires regenerating them with their settings.
+loading validates their saved bounded geometry independently of the current generator; it never rewrites them.
 
 The tight-track regression covers 32 seeds × three difficulties × both modes ×
 three candidate selections using measured paths, not preset names alone. It
@@ -454,12 +454,20 @@ The same quantized placement defines the beam/legs and independent grind line
 introduced. Existing files remain intact. Current source regeneration uses v1.
 [Focused results](validation/playtest-2026-10-02/README.md).
 
-## Immutable verification reuse (T14, 2026-10-02)
+## Saved-package verification
 
-The Godot bridge caches successful deterministic document verification only for its
-current immutable open package. Candidate identity/world/bounds/course equality
-checks still run each time; all reopen paths reset it. CLI full verification remains
-unchanged. [Measured regression and invalidation evidence](validation/playtest-performance-2026-10-02/README.md).
+`MapDocument::validate` checks bounded saved assembly coordinates, frames, paths,
+connections, support convexes and references without recompilation. Package reads
+also validate payload hashes, manifest, world identity and resource limits.
+`verify_track` binds the candidate to the saved course; changing a generator or
+catalogue fingerprint does not invalidate a sound package. Fingerprints identify
+compiled caches. `pack_bytes`, `pack_source` and authoring `verify_document` retain
+current-source equality; load never edits a file.
+
+macOS Rust checks: 22 package contract tests include stale-fingerprint/interior
+geometry acceptance, corruption and invalid reference rejection. The 15 assembly
+package cases and compiler reuse tests cover export equality and cancellation.
+
 
 ## Closed outward barriers — 2026-10-02, root §44.262
 

@@ -82,7 +82,7 @@ pub fn reseal(document: &mut MapDocument) -> Result<()> {
     document.validate()
 }
 pub fn verify(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
-    track::verify_document(document)?;
+    document.validate()?;
     verify_course(document, world, candidate)
 }
 /// Association checks for an already deterministically verified immutable document.
@@ -91,7 +91,9 @@ pub fn verify_course(document: &MapDocument, world: &str, candidate: &Course) ->
     candidate.validate(world, &document.bounds)?;
     let mut definition = candidate.clone();
     definition.validation = None;
-    if definition != course(document, world)? {
+    if !document.courses.iter().any(|saved| {
+        let mut saved=saved.clone(); saved.validation=None; saved==definition
+    }) {
         return Err(error(
             "E_TRACK_COURSE",
             "course does not match the assembled course",

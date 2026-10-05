@@ -1115,11 +1115,11 @@ mod preparation_tests {
                 2 => assembly.supports.clear(),
                 _ => assembly.routes[0].estimated_msec += 1,
             }
-            assert!(corrupt.validate().is_err(), "tampering {change} passed");
+            assert!(verify_document(&corrupt).is_err(), "tampering {change} passed");
         }
         let mut corrupt = document.clone();
         corrupt.gimmicks[0].position[0] += 1;
-        assert!(corrupt.validate().is_err());
+        assert!(verify_document(&corrupt).is_err());
         // A caller's mutations cannot affect the cached compiler result.
         let mut changed = actual;
         changed.pieces.clear();

@@ -33,6 +33,44 @@ fn rejected(bytes: &[u8], code: &str) {
     assert_eq!(read_bytes(bytes).err().unwrap().code, code);
 }
 #[test]
+fn stored_track_is_independent_of_generator_but_not_geometry_or_hashes() {
+    let d=mapkit_package::assembled_track::compile_source(&mapkit_core::assembled_track::authoring::shortcut_source()).unwrap();
+    let original=pack_bytes(d.clone(),BTreeMap::new()).unwrap();
+    let stale=rewrite(&original,|entries| {
+        let mut saved=d.clone();
+        let a=saved.assembled_track.as_mut().unwrap();
+        a.generator_fingerprint="previous-build".into();
+        a.catalogue_fingerprint="previous-catalogue".into();
+        // A bounded interior shape from a previous generator is legitimate.
+        a.pieces[0].path[1].position_cm[0]+=1;
+        saved.courses.clear();
+        let mut manifest:PackageManifest=serde_json::from_slice(&entries[0].1).unwrap();
+        let document=canonical(&saved).unwrap();
+        let mut identity=serde_json::to_value(&saved).unwrap();
+        for key in ["provenance","attributions","courses"] {identity.as_object_mut().unwrap().remove(key);}
+        manifest.world_content_hash=sha256(&canonical(&(identity,BTreeMap::<String,String>::new())).unwrap());
+        let record=manifest.files.iter_mut().find(|f|f.path=="document.json").unwrap();
+        record.size=document.len() as u64;record.sha256=sha256(&document);
+        entries.iter_mut().find(|e|e.0=="document.json").unwrap().1=document;
+        entries[0].1=canonical(&manifest).unwrap();
+    });
+    let loaded=read_bytes(&stale).unwrap();
+    assert_eq!(loaded.document.assembled_track.as_ref().unwrap().generator_fingerprint,"previous-build");
+    assert!(pack_bytes(loaded.document.clone(),BTreeMap::new()).is_err(),"export still requires compilation equality");
+    assert!(read_bytes(&rewrite(&stale,|entries|entries[1].1.push(b' '))).is_err());
+    for kind in 0..5 {
+        let mut bad=d.clone();let a=bad.assembled_track.as_mut().unwrap();
+        match kind {
+            0=>a.pieces[0].path[0].position_cm[0]=i64::MAX,
+            1=>a.routes[0].pieces[0]=usize::MAX,
+            2=>a.pieces[0].path.clear(),
+            3=>a.pieces[0].path[0].forward=[0;3],
+            _=>a.authoring.as_mut().unwrap().checkpoints[0].sample=usize::MAX,
+        }
+        assert!(bad.validate().is_err(),"unsafe saved geometry {kind}");
+    }
+}
+#[test]
 fn memap_declares_the_required_mapkit_reader_before_document_decode() {
     let bytes = package(document());
     let current = read_bytes(&bytes).unwrap();

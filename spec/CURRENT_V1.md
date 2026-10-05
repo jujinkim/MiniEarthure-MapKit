@@ -146,7 +146,7 @@ Road snow retention and generated face traits follow [ROAD_CONTACT](../docs/ROAD
 ## Seeded assembly (2026-09-27)
 
 Optional `assembled_track` metadata selects the dedicated, terrain-free modular
-track generator. Catalogue, generation, exact current-source verification,
+track generator. Catalogue, generation, saved-package verification,
 package/Godot/CLI interfaces and cancellation follow
 [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). This extends the current v1 schema;
 it introduces no old reader, automatic conversion or synthetic completion proof.
@@ -168,7 +168,7 @@ mandatory; target time may be exceeded. See the replacement section in
 documents use false; external geographic/terrain imports set true. It participates
 in both container content hashes, regional metadata and inspection responses.
 Generated sources allow this policy edit through `reseal_track_document`, which
-verifies exact current geometry and recomputes the generated course hash.
+verifies exact current geometry for authoring/export and recomputes the generated course hash. Loading independently validates bounded saved geometry, paths/references and hashes; generator/catalogue fingerprints identify caches, never mandatory regeneration.
 
 Sprint assemblies end in one `finish_plaza`: an 8m entrance, 16m circular floor
 and 1.2m wall, open only at the entrance. `Assembly.finish_plaza` supplies the

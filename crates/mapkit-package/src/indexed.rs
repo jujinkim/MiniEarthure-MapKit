@@ -960,7 +960,7 @@ pub fn pack_source(
     side_cells: u32,
 ) -> Result<Vec<u8>> {
     d.normalize();
-    if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; }
+    if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; mapkit_core::assembled_track::verify_document(&d)?; }
     d = d.into_indexed_source()?;
     files.insert("document.json".into(), canonical(&d)?);
     export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;

@@ -429,7 +429,10 @@ pub fn pack_bytes(
     d.normalize();
     d.validate()?;
     mapkit_core::cancellation::progress("package_validation", 1, Some(5), "checks");
-    if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; }
+    if let Some(a)=&d.assembled_track {
+        mapkit_core::assembled_track::authoring::executable(a)?;
+        mapkit_core::assembled_track::verify_document(&d)?;
+    }
     files.insert("document.json".into(), canonical(&d)?);
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
         return Err(error("E_REFERENCE", "unexpected or missing file"));

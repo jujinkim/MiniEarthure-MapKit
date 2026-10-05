@@ -21,6 +21,7 @@ const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
+mod stored;
 mod geometry;
 mod road;
 mod panels;
