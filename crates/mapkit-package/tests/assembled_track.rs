@@ -264,15 +264,10 @@ fn finish_plaza_and_editable_free_roam_keep_exact_source_validation() {
         (800, 800, 120)
     );
     assert_eq!(a.pieces.last().unwrap().id, "finish_plaza");
-    assert_eq!(
-        d.courses[0]
-            .definition
-            .checkpoints
-            .last()
-            .unwrap()
-            .position_cm,
-        plaza.checkpoint_cm
-    );
+    let effective=&d.courses[0].definition;
+    assert_eq!(effective.effective_indices().len(),effective.checkpoints.len());
+    // The final plaza gate overlaps an earlier entry gate; stable first wins.
+    assert!(effective.checkpoints.last().unwrap().position_cm != plaza.center_cm);
     assert!(d.courses[0]
         .definition
         .checkpoints

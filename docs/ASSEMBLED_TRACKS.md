@@ -624,3 +624,5 @@ API, schema, own format, margin or connection exception changes. Invalid placeme
 remain draft issues and both execution containers reject them with E_TRACK_DRAFT.
 [Twenty-five affected tests and native/CLI build pass](validation/straight-clearance-2026-10-03/README.md).
 Earlier failures remain recorded; detailed consumer acceptance is separate.
+
+Course sealing now retains stable non-overlapping checkpoints only. Stored package source is preserved; the public course view derives a new course identity only if overlap removal changes its geometry. Fewer than two effective gates disables racing without rejecting the map. Sphere/hemisphere overlap and continuous chassis-capsule entry tests cover grazing, stationary/initial-inside rejection and separated half volumes.

@@ -70,6 +70,16 @@ creates valid disposable cell archives from a synthetic package for cache tests.
 Definitions include map ID, name, driving-content hash, ordered 3D sphere/upward-hemisphere
 checkpoints (1–1000 m radius), circuit/sprint mode, ground/air start and explicit horizontal
 direction. Circuit finish reuses checkpoint zero. Lap count is a hosting choice, not geometry.
+
+A course may retain 0–64 stored checkpoints so incomplete maps remain readable.
+The stable effective list keeps the first non-overlapping sphere/hemisphere in
+source array order. Generated/sealed courses adopt that list; package reads keep
+source bytes and hashes unchanged and expose a derived effective course. If gates
+are removed its course ID is recalculated and prior completion evidence is omitted.
+Racing requires at least two effective gates. `CourseBody.effective_indices`,
+`Course.effective`, and the Godot course/edit APIs share this contract. Authoring
+rejects new overlaps before modifying a draft. Continuous capsule entry geometry
+is MapKit-owned; consumers own authoritative progress and resets.
 Overlaps are legal. Surface labels are authoring hints, not completion constraints.
 
 Optional completion references identify bounded opaque consumer records by hash, size and
@@ -181,7 +191,7 @@ occupancy and budgets consume MapKit geometry.
 Focused package assembly, both containers, strict schema, audit accounting and
 course tests passed locally. Consumer driving acceptance is separate.
 
-The sprint finish checkpoint is an explicit path sample in the terminal entry, so AI routes use the same exact point as race progression. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.
+The sprint finish candidate is an explicit path sample in the terminal entry; if it overlaps an earlier gate, stable first-wins removal makes that earlier effective gate the finish. AI and progression use the same effective course. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.
 
 ## Random seed extension (2026-09-28 replacement)
 

@@ -119,7 +119,7 @@ fn geometry_excludes_name_and_reference_but_includes_height_shape_direction() {
     let first = body.geometry_hash().unwrap();
     body.display_name = "Renamed".into();
     assert_eq!(first, body.geometry_hash().unwrap());
-    Course::from_definition(body.clone(), &bounds).unwrap(); // overlaps are authored deliberately
+    Course::from_definition(body.clone(), &bounds).unwrap(); // sealing retains only the first overlapping gate
     body.checkpoints[1].position_cm[1] = 100;
     assert_ne!(first, body.geometry_hash().unwrap());
     body.checkpoints[1].position_cm[1] = 0;
@@ -127,4 +127,17 @@ fn geometry_excludes_name_and_reference_but_includes_height_shape_direction() {
     assert_ne!(first, body.geometry_hash().unwrap());
     body.start_direction = [0, 0];
     assert!(Course::from_definition(body, &bounds).is_err());
+}
+
+#[test]
+fn stored_overlap_does_not_rewrite_source_or_prevent_opening() {
+    let mut d:MapDocument=serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+    let body=CourseBody {map_id:d.map_id.clone(),display_name:"overlap".into(),world_content_hash:"a".repeat(64),mode:Mode::Sprint,start_mode:StartMode::Ground,start_direction:[1,0],checkpoints:vec![Checkpoint {position_cm:[1000,0,1000],radius_cm:100,shape:CheckpointShape::Sphere,placement_mode:PlacementMode::Free,surface_id:"terrain".into()};2]};
+    let course=Course {format:"miniearthure-course".into(),format_version:1,course_id:sha256(&canonical(&body).unwrap()),definition:body,validation:None};
+    d.courses=vec![course.clone()];
+    let bytes=pack_bytes(d,BTreeMap::new()).unwrap();
+    let loaded=read_bytes(&bytes).unwrap();
+    assert_eq!(loaded.document.courses[0],course);
+    assert_eq!(loaded.document.courses[0].effective().definition.checkpoints.len(),1);
+    assert_eq!(pack_bytes(loaded.document,loaded.files).unwrap(),bytes);
 }

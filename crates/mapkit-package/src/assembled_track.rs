@@ -92,7 +92,7 @@ pub fn verify_course(document: &MapDocument, world: &str, candidate: &Course) ->
     let mut definition = candidate.clone();
     definition.validation = None;
     if !document.courses.iter().any(|saved| {
-        let mut saved=saved.clone(); saved.validation=None; saved==definition
+        let mut saved=saved.effective(); saved.validation=None; saved==definition
     }) {
         return Err(error(
             "E_TRACK_COURSE",

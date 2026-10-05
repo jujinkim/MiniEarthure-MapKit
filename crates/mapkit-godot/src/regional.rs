@@ -81,7 +81,7 @@ impl MapKitRegionReader {
             self.world
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open index first"))
-                .map(|w| serde_json::json!({"map_id":w.map_id,"courses":w.courses})),
+                .map(|w| serde_json::json!({"map_id":w.map_id,"courses":w.courses.iter().map(|c| c.effective()).collect::<Vec<_>>()})),
         )
     }
     #[func]

@@ -354,9 +354,27 @@ impl MapKitBridge {
             .map(|p| serde_json::json!({"map_id":p.document.map_id,"profile":p.document.environment})))
     }
     #[func]
+    fn effective_course(&self, raw: GString) -> GString {
+        response(mapkit_core::course::decode::<mapkit_core::course::Course>(raw.to_string().as_bytes())
+            .map(|c| serde_json::to_value(c.effective()).unwrap()))
+    }
+    #[func]
+    fn checkpoint_edit_allowed(&self, checkpoints: GString, candidate: GString, replace: i64) -> GString {
+        response((|| {
+            let points: Vec<mapkit_core::course::Checkpoint> = mapkit_package::parse_resource_json(checkpoints.to_string().as_bytes())
+                .and_then(|v| serde_json::from_value(v).map_err(|e| mapkit_core::error("E_CHECKPOINT", e.to_string())))?;
+            let next: mapkit_core::course::Checkpoint = serde_json::from_str(&candidate.to_string())
+                .map_err(|e| mapkit_core::error("E_CHECKPOINT",e.to_string()))?;
+            if points.len()>64 || replace < -1 || replace >= points.len() as i64 {
+                return Err(mapkit_core::error("E_CHECKPOINT","invalid edit index"));
+            }
+            Ok(serde_json::json!(!points.iter().enumerate().any(|(i,p)| i as i64 != replace && next.overlaps(p))))
+        })())
+    }
+    #[func]
     fn courses_json(&self) -> GString {
         response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .map(|p| serde_json::json!({"map_id":p.document.map_id,"courses":p.document.courses})))
+            .map(|p| serde_json::json!({"map_id":p.document.map_id,"courses":p.document.courses.iter().map(|c| c.effective()).collect::<Vec<_>>()})))
     }
     #[func]
     fn course_validation_json(&self, hash: GString) -> GString {
