@@ -21,6 +21,6 @@ generated caches; no format version changes.
 fixed two-cell ground road. It rejects any wall whose two sides both have
 spawnable sidewalk support, checks the shared cell seam, and requires an
 exterior step. Existing bend, prop, sloped-terrain, road and package contract
-tests also pass. The root [diagnosis and handoff](../../docs/SIDEWALK_LANDING.md)
+tests also pass. The root [diagnosis and handoff](../../docs/README.md)
 records the commands and scope. Actual reported driving behavior remains for
 user verification.

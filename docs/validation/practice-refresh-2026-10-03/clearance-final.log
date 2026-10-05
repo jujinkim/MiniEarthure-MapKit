@@ -1,9 +1,0 @@
-   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
-    Finished `test` profile [optimized + debuginfo] target(s) in 2.59s
-     Running tests/track_authoring.rs (map-kit/target/debug/deps/track_authoring-21af07f4600ba1b0)
-
-running 2 tests
-test finite_straight_clearance_keeps_crossings_overlaps_margins_and_height ... ok
-test finite_straight_clearance_allows_eight_metre_six_radius_corners ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.07s

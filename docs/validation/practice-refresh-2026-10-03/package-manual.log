@@ -1,7 +1,0 @@
-    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
-     Running tests/assembled_track.rs (map-kit/target/debug/deps/assembled_track-976b3b36942aa8df)
-
-running 1 test
-test manual_flight_and_static_shapes_survive_both_containers ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.12s

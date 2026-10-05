@@ -1,8 +1,0 @@
-   Compiling mapkit-core v0.1.0 (/Users/jujin/workspace/projects/MiniEarthure/map-kit/crates/mapkit-core)
-    Finished `test` profile [optimized + debuginfo] target(s) in 14.40s
-     Running unittests src/lib.rs (target/debug/deps/mapkit_core-47b25b0992e68373)
-
-running 1 test
-test assembled_track::layout::tests::return_route_uses_modules_and_only_short_seams ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.01s

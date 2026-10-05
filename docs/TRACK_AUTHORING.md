@@ -131,7 +131,7 @@ category/duration matrix was deliberately stopped, so this is not a full suite
 pass. Initial unfiltered test discovery also found an unrelated existing
 `tests/water.rs:22` initializer missing `contact_class` and `snow_retention_percent`;
 it is outside this patch and remains a known unrelated test compilation failure.
-[Native logs](validation/track-preparation-2026-10-01/) retain the actual scope.
+Native logs retain the actual scope.
 
 MapEditor verifies fresh/reused preview equivalence, zero whole-preview/mesh builds
 for selection and existing-piece drag, async history/save/recovery and cancellation.
@@ -319,7 +319,7 @@ explicit Save/export uses its workspace dim and input lock.
 
 No native source, dependency or ABI changed. Shared progress plus Editor held-worker,
 real track/workbench/history/recovery/export/grind regressions pass; the rendered
-Editor initial screen was inspected. [Consumer evidence](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/validation/continuous-edit-2026-10-03/README.md)
+Editor initial screen was inspected. Consumer evidence
 records the scope and fixed 49-piece measurement. Completion p95 532.745 ms still
 misses the 500 ms goal. Detailed interactions/platform acceptance remain user work.
 
@@ -352,7 +352,7 @@ manual-flight actions retain their geometry/effects; their panel fields are iner
 No missing-field fallback, historical reader or converter is added. Schema and
 source fingerprints change while every format number remains v1.
 
-[Scoped tests and synthetic render](validation/panels-2026-10-04/README.md) cover
+Scoped tests and synthetic render cover
 all layout combinations, exact road-top exposure, chains, bounds, deterministic
 generation, serialization and source/derived-product tampering. The marking is
 loaded only by display consumers, not the headless geometry path.

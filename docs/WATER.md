@@ -48,5 +48,5 @@ See `crates/mapkit-core/tests/water.rs` and
 
 On 2026-10-03 the stale bridge fixture's missing contact/snow fields were repaired;
 all three core water tests passed. Production water code did not change.
-[Reproduction, source revision and final logs](validation/test-failures-2026-10-03/README.md)
+Reproduction, source revision and final logs
 supersede the earlier compile failure for this target only.

@@ -1,6 +1,6 @@
 # Seeded modular tracks (current v1)
 
-[Shared spiral surface correction, 2026-10-05](validation/spiral-surface-2026-10-05/README.md)
+Shared spiral surface correction, 2026-10-05
 keeps longitudinal density and uses common sections, final-vertex diagonals and
 bounded local transitions. It supersedes independent per-span strip rounding.
 
@@ -407,7 +407,7 @@ road levels. Only connected roads, split/merge siblings and the alternate branch
 can remove a wall. The same surviving segments emit render/collision faces and
 occupancy. Formats remain v1; derived geometry uses the changed source fingerprint.
 
-Focused results: [playtest geometry verification](validation/playtest-2026-10-02/README.md).
+Focused results: playtest geometry verification.
 
 ## Quantized curved-road sampling — 2026-10-02 replacement
 
@@ -452,7 +452,7 @@ steep, straight, crossing-road or wall-intersecting sites are rejected.
 The same quantized placement defines the beam/legs and independent grind line
 (41cm source height); no inferred collider metadata or checkpoint shortcut is
 introduced. Existing files remain intact. Current source regeneration uses v1.
-[Focused results](validation/playtest-2026-10-02/README.md).
+Focused results.
 
 ## Saved-package verification
 
@@ -571,7 +571,7 @@ cell. Existing triangle, occupancy and consumer memory limits remain unchanged;
 exceeding them fails explicitly. All formats and public APIs stay v1. Source-based
 fingerprints identify new generation; existing input files are not converted.
 
-Scoped results in [validation/grid-input-2026-10-03](validation/grid-input-2026-10-03/):
+Scoped results in validation/grid-input-2026-10-03:
 33 assembled units, six occupancy tests and twelve assembled-package tests pass.
 After the final cost refinement, seven wall tests and the cell-seam cost test pass.
 Fixtures cover duplicate vertices, a concave plaza corner, nonzero folded wedges,
@@ -596,7 +596,7 @@ uncertain bounds retain the old result. No course IDs, smaller margins or larger
 shared-port exclusions are involved. Curves, banks, grades, tapers, tubes, flight
 and alternate paths retain the previous check. No public API/schema/version changes.
 
-[Focused results](validation/practice-refresh-2026-10-03/README.md): two new
+Focused results: two new
 clearance integration tests, one fallback/edge-bound unit, eight other authoring
 tests, five authoring units and three package tests pass; CLI/native build passes.
 Coverage includes both turn directions at seven rotations, crossings/overlap,
@@ -622,7 +622,7 @@ exclusions and straight separation correction. Curves, grades, banks, tapers,
 tubes, flights and alternate paths retain the existing sampled path. No public
 API, schema, own format, margin or connection exception changes. Invalid placements
 remain draft issues and both execution containers reject them with E_TRACK_DRAFT.
-[Twenty-five affected tests and native/CLI build pass](validation/straight-clearance-2026-10-03/README.md).
+Twenty-five affected tests and native/CLI build pass.
 Earlier failures remain recorded; detailed consumer acceptance is separate.
 
 Course sealing now retains stable non-overlapping checkpoints only. Stored package source is preserved; the public course view derives a new course identity only if overlap removal changes its geometry. Fewer than two effective gates disables racing without rejecting the map. Sphere/hemisphere overlap and continuous chassis-capsule entry tests cover grazing, stationary/initial-inside rejection and separated half volumes.

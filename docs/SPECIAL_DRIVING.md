@@ -60,8 +60,8 @@ Scoped macOS arm64 / Godot 4.7.2 checks passed: native/CLI build, five special-t
 Rust tests and `pipe_material_validator` with strict diagnostics. The validator
 compares production/preview vertices and material properties, custom saved colour,
 selection/restoration, resource reuse and weak-reference release after node disposal.
-Fixed-camera/light synthetic comparison: [previous colour/material](validation/pipes-2026-10-04/material-before.png)
-and [matte metal](validation/pipes-2026-10-04/material-after.png). The prior material
+Fixed-camera/light synthetic comparison: previous colour/material
+and matte metal. The prior material
 is recreated on the same geometry for comparison. Detailed art preference and
 real driving remain user verification. Development-only validator errors (panel
 shader treated as StandardMaterial, JSON numeric array equality) were corrected;
@@ -81,7 +81,7 @@ The existing declared vertices drive display, authoring preview and collision.
 Explicit saved dimensions and strengths are preserved; no conversion, new fields
 or format change is introduced (all own formats remain v1).
 
-[Scoped Rust/native results](validation/air-rings-2026-10-04/) pass seven core cases
+Scoped Rust/native results pass seven core cases
 and one package case: automatic/manual geometry and pose, standalone quantization,
 effect limits, costs/occupancy, deterministic compilation, source/package roundtrip,
 explicit 6m/37% preservation and derived-radius tamper rejection. CLI and Godot
