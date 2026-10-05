@@ -15,3 +15,13 @@ separately; do not report unperformed tests as passed. This supersedes earlier
 automatic full-suite/final-acceptance requirements.
 
 Current contract: `spec/CURRENT_V1.md`. The 2026-09-26 arcade-world decision replaces format 2: `.memap` and all other own formats are v1. Only current algorithms are supported. Do not add old readers, automatic upgrades, compatibility fallbacks or increment versions without explicit user instruction. Build fingerprints invalidate disposable generated caches. Keep epochs/revisions for runtime ordering.
+
+Documentation/commit replacement (2026-10-05): update existing owning docs with
+current contracts, open issues and essential validation only. Active task notes
+belong in the root ignored docs/tasks/. At task completion integrate results,
+delete finished notes/raw test logs and clean stale duplicates/links; no archive
+accumulation. Preserve user data/maps, generated artifacts, models and fixtures.
+This supersedes permanent test-log/report retention (training data remain intact).
+Commit each verified task locally on main in dependency order, including consumer
+pins and root lock, before the next task. Push only after all approved tasks and
+required checks finish, in dependency order. Never force-push or rewrite history.
