@@ -8,6 +8,9 @@ fn analytical(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32,
     analytical_raw(eval,breaks,width,entry,exit,mode).into_iter().map(|(s,_,_)|s).collect()
 }
 fn analytical_raw(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32, entry: u32, exit: u32, mode: &str) -> Vec<(Sample,[f64;3],f64)> {
+    analytical_placed(eval,breaks,width,entry,exit,mode,[0;3],[0;3])
+}
+fn analytical_placed(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32, entry: u32, exit: u32, mode: &str, rotation: [i32;3], origin: Vertex) -> Vec<(Sample,[f64;3],f64)> {
     let length: f64 = (0..64).map(|i| {
         let a=eval(i as f64/64.0).0; let b=eval((i+1) as f64/64.0).0;
         sampling::length(std::array::from_fn(|j|b[j]-a[j]))
@@ -39,8 +42,9 @@ fn analytical_raw(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: 
     } else {
         sampling::ordinary_parameters(probe,breaks,tolerance,angle)
     };
-    ts.into_iter().map(|mut t| {
-        if mode=="spiral" && (0.125..=0.875).contains(&t) {
+    let original=ts;
+    let mut ts: Vec<_>=original.iter().copied().map(|mut t| {
+        if mode=="spiral" && t>0.125 && t<0.875 {
             // Choose stations on integer height contours of the original helix.
             // Rounding arbitrary short spans can turn an analytic 20.8% inner
             // grade into >23%. Move the station, never resample rounded points.
@@ -53,15 +57,42 @@ fn analytical_raw(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: 
             }
             t=(lo+hi)*0.5;
         }
+        t
+    }).collect();
+    // A height contour is optional, the existing approximation limits are not.
+    // Reject a move that invalidates either neighbour instead of doubling a
+    // nearly-maximal span merely to retain that rounding optimization.
+    if mode=="spiral" {
+        loop {
+            let mut rejected=vec![];
+            for (i,w) in ts.windows(2).enumerate() {
+                if w[0]>=w[1] || sampling::ordinary_parameters(probe,w,tolerance,angle).len()>2 {
+                    for j in [i,i+1] {if ts[j]!=original[j] {rejected.push(j);}}
+                }
+            }
+            if rejected.is_empty() {break;}
+            for j in rejected {ts[j]=original[j];}
+        }
+    }
+    ts.into_iter().map(|t| {
         let (p,f,n,side)=frame(t);
+        let p=rotate_float(p,rotation);let p=std::array::from_fn(|j|p[j]+origin[j] as f64);
+        let f=rotate_float(f,rotation);let n=rotate_float(n,rotation);let side=rotate_float(side,rotation);
         let mut s=sample(p.map(round),f,width,mode);
         s.ribbon_cm=Some([-1.0,1.0].map(|sign|std::array::from_fn(|j|round(p[j]+side[j]*half_width(t)*sign))));
+        if mode=="spiral" && (t==0.0 || t==1.0) {
+            // A snapped neighbour is positioned at the integer port centre.
+            // Canonical port offsets must use that centre on both pieces.
+            s.ribbon_cm=Some([-1.0,1.0].map(|sign|std::array::from_fn(|j|s.position_cm[j]+round(side[j]*half_width(t)*sign))));
+        }
         s.normal=unit(n);s.lateral_cm=round(half_width(t)) as u32;(s,p,half_width(t))
     }).collect()
 }
 
 pub(super) fn rotate3(v: Vertex, rotation: [i32; 3]) -> Vertex {
-    let mut p = v.map(|v| v as f64);
+    rotate_float(v.map(|v|v as f64),rotation).map(round)
+}
+fn rotate_float(mut p: [f64;3], rotation: [i32;3]) -> [f64;3] {
     // Euler YXZ, matching the public gimmick placement convention.
     for (axis, a, b) in [(2, 0, 1), (0, 1, 2), (1, 2, 0)] {
         let t = f64::from(rotation[axis]) * std::f64::consts::PI / 180000.0;
@@ -70,7 +101,7 @@ pub(super) fn rotate3(v: Vertex, rotation: [i32; 3]) -> Vertex {
         p[a] = c * x - s * y;
         p[b] = s * x + c * y;
     }
-    p.map(round)
+    p
 }
 fn sample(position: Vertex, tangent: [f64; 3], width: u32, mode: &str) -> Sample {
     let f = unit(tangent);
@@ -190,13 +221,10 @@ fn curve_frames(path: &mut [Sample]) {
 
 /// Subdivide twisted quads across their width until diagonal ridge error is
 /// below one centimetre. Flat ribbons need no extra lateral triangles.
+#[cfg(test)]
 pub(super) fn strips(a: &Sample, b: &Sample) -> i64 {
     let [al,ar]=ribbon_edges(a,0);let [bl,br]=ribbon_edges(b,0);
-    let ab=std::array::from_fn(|j|(bl[j]-al[j]) as f64);
-    let ac=std::array::from_fn(|j|(br[j]-al[j]) as f64);
-    let n=norm(cross(ab,ac));
-    let warp=(0..3).map(|j|(ar[j]-al[j]) as f64*n[j]).sum::<f64>().abs()/4.0;
-    warp.ceil().clamp(1.0,32.0) as i64
+    road::strip_count([al,bl,br,ar])
 }
 pub(super) fn ramp(length:f64,rise:f64,width:u32,entry:u32,exit:u32)->Vec<Sample> {
     analytical(|t|([0.0,rise*spiral_rise(t),length*t],[0.0,rise*spiral_pitch(t),length]),
@@ -239,6 +267,23 @@ fn pipe_path(id: &str, width: u32) -> Vec<Sample> {
     }
     path
 }
+fn spiral_curve(p: &Piece) -> impl Fn(f64)->([f64;3],[f64;3]) {
+    let degrees=if p.id.contains("90_") {90.0} else if p.id.contains("180_") {180.0} else {360.0};
+    let width=p.width_cm.max(p.entry_width_cm).max(p.exit_width_cm);
+    let radius=800.max(width/2+700) as f64;
+    let rise=degrees/360.0*800.0*if p.id.ends_with("down") {-1.0} else {1.0};
+    let sign=if p.id.contains("left") {-1.0} else {1.0};
+    let radians=degrees*std::f64::consts::PI/180.0;
+    move |t| {
+        let a=t*radians;
+        ([sign*radius*(1.0-libm::cos(a)),rise*spiral_rise(t),radius*libm::sin(a)],
+         [sign*libm::sin(a),rise*spiral_pitch(t)/(radius*radians),libm::cos(a)])
+    }
+}
+pub(super) fn spiral_path(p: &Piece, rotation: [i32;3], origin: Vertex) -> Vec<Sample> {
+    analytical_placed(spiral_curve(p), &[0.0,0.125,0.875,1.0],p.width_cm,p.entry_width_cm,p.exit_width_cm,"spiral",rotation,origin)
+        .into_iter().map(|(s,_,_)|s).collect()
+}
 pub(super) fn shape(p: &mut Piece, width: u32) -> bool {
     let id = p.id.as_str();
     let left = id.contains("left");
@@ -259,46 +304,22 @@ pub(super) fn shape(p: &mut Piece, width: u32) -> bool {
     } else {
         0.0
     };
-    let spiral = id.starts_with("spiral");
-    if angle > 0.0 || spiral {
-        let degrees = if spiral {
-            if id.contains("90_") {
-                90.0
-            } else if id.contains("180_") {
-                180.0
-            } else {
-                360.0
-            }
-        } else {
-            angle
-        };
-        let radius = if spiral {
-            800.max(width / 2 + 700)
-        } else if id.starts_with("gentle") || id == "curve" || id == "curve_left" || grade_curve {
+    if id.starts_with("spiral") {
+        p.path=spiral_path(p,[0;3],[0;3]);
+    } else if angle > 0.0 {
+        let radius = if id.starts_with("gentle") || id == "curve" || id == "curve_left" || grade_curve {
             1600.max(width * 4)
         } else if id.starts_with("right") || id.starts_with("sharp_curve") {
             400.max(width / 2 + 200)
-        } else {
-            300.max(width / 2 + 100)
-        };
-        let rise = if spiral {
-            degrees / 360.0 * 800.0 * if id.ends_with("down") { -1.0 } else { 1.0 }
-        } else if grade_curve {
-            if id.ends_with("down") {
-                -100.0
-            } else {
-                100.0
-            }
-        } else {
-            0.0
-        };
-        let radians = degrees * std::f64::consts::PI / 180.0;
+        } else {300.max(width / 2 + 100)};
+        let rise = if grade_curve {if id.ends_with("down") {-100.0} else {100.0}} else {0.0};
+        let radians = angle * std::f64::consts::PI / 180.0;
         p.path = analytical(|t| {
             let a = t * radians;
             let dy = rise * spiral_pitch(t) / (radius as f64 * radians);
             ([sign * radius as f64 * (1.0-libm::cos(a)), rise*spiral_rise(t), radius as f64*libm::sin(a)],
              [sign*libm::sin(a),dy,libm::cos(a)])
-        }, &[0.0,0.125,0.875,1.0], p.width_cm,p.entry_width_cm,p.exit_width_cm, if spiral {"spiral"} else {"drift"});
+        }, &[0.0,0.125,0.875,1.0], p.width_cm,p.entry_width_cm,p.exit_width_cm,"drift");
     } else if id == "zigzag" || id == "chicane" || id.ends_with("_narrow") {
         let length = if id.starts_with("straight") {
             1600.0
@@ -556,6 +577,50 @@ mod straight_clearance_tests {
 #[cfg(test)]
 mod playtest_surface_tests {
     use super::*;
+    #[test]
+    fn export_unquantized_spiral_reference_when_requested() {
+        let Ok(directory)=std::env::var("SPIRAL_REFERENCE_DIR") else {return};
+        std::fs::create_dir_all(&directory).unwrap();
+        for degrees in [90,180,360] {for side in ["left","right"] {for direction in ["up","down"] {
+            let id=format!("spiral{degrees}_{side}_{direction}");let p=variant(&id,400,400,400);
+            let eval=spiral_curve(&p);let mut vertices=vec![];
+            let at=|i:usize,j:usize| {let (p,f)=eval(i as f64/1024.0);let side=norm([f[2],0.0,-f[0]]);std::array::from_fn::<_,3,_>(|k|p[k]+side[k]*(-200.0+j as f64*25.0))};
+            for i in 0..1024 {for j in 0..16 {
+                let [a,b,c,d]=[at(i,j),at(i+1,j),at(i+1,j+1),at(i,j+1)];vertices.extend([a,b,c,a,c,d]);
+            }}
+            std::fs::write(std::path::Path::new(&directory).join(format!("{id}.json")),serde_json::to_vec(&vertices).unwrap()).unwrap();
+        }}}
+    }
+    #[test]
+    fn spiral_moved_stations_preserve_bounds_and_mirrored_paths() {
+        for degrees in [90,180,360] {for direction in ["up","down"] {for &width in WIDTHS {for taper in [false,true] {
+            let shape=|side:&str|variant(&format!("spiral{degrees}_{side}_{direction}"),width,if taper {200} else {width},if taper {1200} else {width});
+            let p=shape("right");let left=shape("left");
+            assert!(ordinary_grade_valid(&p),"{} {width}/{taper}: grade",p.id);
+            assert_eq!(p.path.len(),left.path.len());
+            for (r,l) in p.path.iter().zip(&left.path) {assert_eq!(r.position_cm,[-l.position_cm[0],l.position_cm[1],l.position_cm[2]]);}
+            let angle=degrees as f64*std::f64::consts::PI/180.0;
+            let parameter=|i:usize|if i+1==p.path.len() {1.0} else {
+                let f=p.path[i].forward;let mut a=libm::atan2(f[0] as f64,f[2] as f64);if a<0.0 {a+=std::f64::consts::TAU;}a/angle
+            };
+            let rise=degrees as f64/360.0*800.0*if direction=="down" {-1.0} else {1.0};
+            for (i,w) in p.path.windows(2).enumerate() {
+                let (ta,tb)=(parameter(i),parameter(i+1));assert!(tb>ta,"strict station order");
+                assert!(distance(w[0].position_cm,w[1].position_cm)<=252);
+                for (a,b) in [(w[0].normal,w[1].normal)] {
+                    let dot=(0..3).map(|j|a[j] as f64*b[j] as f64/1e12).sum::<f64>();
+                    assert!(libm::acos(dot.clamp(-1.0,1.0)).to_degrees()<3.51,"sample frame bound");
+                }
+                assert!((tb-ta)*degrees as f64<=3.5*5.0/3.0+0.001,"heading bound");
+                for quarter in 0..=4 {
+                    let t=quarter as f64/4.0;
+                    let expected=rise*spiral_rise(ta+(tb-ta)*t);
+                    let chord=w[0].position_cm[1] as f64*(1.0-t)+w[1].position_cm[1] as f64*t;
+                    assert!((expected-chord).abs()<=1.1001,"{} width={width} taper={taper}: analytic .6cm plus .5cm quantization",p.id);
+                }
+            }
+        }}}}
+    }
     #[test]
     fn final_edges_grade_frames_spacing_and_planar_triangles() {
         for id in ["slope","slope_up","slope_down","curve_up","curve_left_down","spiral90_left_up","spiral180_right_down","spiral_up","spiral_down","gentle45","hairpin"] {

@@ -22,6 +22,7 @@ const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
 mod geometry;
+mod road;
 mod panels;
 mod junction;
 mod walls;
@@ -1192,6 +1193,11 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
         v.normal = geometry::rotate3(v.normal, p.rotation_mdeg);
         v.ribbon_cm=v.ribbon_cm.map(|edges|edges.map(|e|add(geometry::rotate3(e,p.rotation_mdeg),p.origin_cm)));
     }
+    if p.id.starts_with("spiral") && p.control_points.is_empty() {
+        // Transform the analytic centre and edges before the one centimetre
+        // quantization, instead of rotating already-rounded local coordinates.
+        out.path=geometry::spiral_path(p,p.rotation_mdeg,p.origin_cm);
+    }
     out.reserved_min_cm = std::array::from_fn(|j| {
         out.path
             .iter()
@@ -1789,6 +1795,7 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
         let alternate=if branch { &p.path } else { &p.alternate_path };
         let alternate=junction::Prepared::new(std::iter::once(alternate.as_slice()))?;
         let mut prepared=walls::PreparedPath::new(path,p.rotation_mdeg)?;
+        let road_sections=road::Sections::new(&prepared.edges,p.id.starts_with("spiral"))?;
         for (segment, w) in path.windows(2).enumerate() {
             cancellation::checkpoint()?;
             let special = w.iter().any(|s| s.mode == "flight")
@@ -1801,35 +1808,11 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
                 if branch { "-bridge" } else { "" }
             );
             if !special {
-                // A wide twisted helix quad creates a diagonal ridge. Subdivide
-                // across the lane so wheel contacts follow the swept surface.
-                let strips = geometry::strips(&w[0], &w[1]);
-                let mix = |a: Vertex, b: Vertex, n: i64| {
-                    std::array::from_fn(|j| a[j] + (b[j] - a[j]) * n / strips)
-                };
-                for strip in 0..strips {
-                    b.quad(
-                        [
-                            mix(al, ar, strip),
-                            mix(bl, br, strip),
-                            mix(bl, br, strip + 1),
-                            mix(al, ar, strip + 1),
-                        ],
-                        Surface::Asphalt,
-                        &id,
-                        true,
-                    )?;
-                    b.quad(
-                        [
-                            lower(mix(ar, al, strips - strip)),
-                            lower(mix(ar, al, strips - strip - 1)),
-                            lower(mix(br, bl, strips - strip - 1)),
-                            lower(mix(br, bl, strips - strip)),
-                        ],
-                        Surface::Concrete,
-                        &format!("assembled-shell-{index}"),
-                        false,
-                    )?;
+                // Both surfaces use the same section vertices and diagonal.
+                for triangle in road_sections.triangles(segment) {
+                    b.triangle(triangle, Surface::Asphalt, &id, true)?;
+                    b.triangle([lower(triangle[2]),lower(triangle[1]),lower(triangle[0])],
+                        Surface::Concrete, &format!("assembled-shell-{index}"), false)?;
                 }
                 slab_sides([al, bl, br, ar], &format!("assembled-shell-{index}"), b)?;
                 let min = std::array::from_fn(|j| {
@@ -1880,7 +1863,8 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> Result<(u64, u64, u64)> {
         let intervals=neighbors.iter().map(|p|p.path.len()+p.alternate_path.len()).sum::<usize>()
             + p.path.len()+p.alternate_path.len();
         clipping_scratch=clipping_scratch.max(junction::scratch_bytes(intervals)
-            + walls::PreparedPath::scratch_bytes(p.path.len().max(p.alternate_path.len())));
+            + walls::PreparedPath::scratch_bytes(p.path.len().max(p.alternate_path.len()))
+            + road::Sections::scratch_bytes(p.path.len().max(p.alternate_path.len())));
         generate_piece(p,index,&mut Discard,&neighbors,&mut walls)?;
     }
     let segments = a

@@ -282,8 +282,8 @@ mod tests {
                 }); Ok(())
             }
         }
-        // Synthetic fixtures captured before per-piece preparation. Includes
-        // exact triangle/solid order, IDs, materials and spawn eligibility.
+        // Synthetic ordered geometry, renewed for shared road sections and
+        // final-vertex diagonals. Includes IDs, materials and spawn eligibility.
         let mut transcript=Transcript::default();
         for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","loop","overpass","finish_plaza","cylinder"] {
             for rotation in [[0,0,0],[12000,35000,7000]] {
@@ -303,8 +303,8 @@ mod tests {
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
         println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
-        assert_eq!(transcript.0.len(),100718);
-        assert_eq!(digest,"a6ab88eb77963c0e15b4fc7190f966865dad60c4b5592138963befaab54c1085");
+        assert_eq!(transcript.0.len(),103638);
+        assert_eq!(digest,"aa6fc0337405887d726ea67c3caa76130b0ab839c03883156427dd94f3e1e20b");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
