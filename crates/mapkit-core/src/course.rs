@@ -120,14 +120,18 @@ impl Checkpoint {
         (a[0]-b[0]).hypot(a[2]-b[2]) <= reach
     }
 }
+/// Stable first-wins view shared by saved courses and generated route metadata.
+/// Source arrays and their hashes remain untouched.
+pub fn effective_checkpoint_indices(checkpoints: &[Checkpoint]) -> Vec<usize> {
+    let mut kept: Vec<usize> = Vec::new();
+    for (i, cp) in checkpoints.iter().enumerate() {
+        if !kept.iter().any(|&j| cp.overlaps(&checkpoints[j])) { kept.push(i); }
+    }
+    kept
+}
 impl CourseBody {
-    /// Stable first-wins indices; source files and their hashes stay untouched.
     pub fn effective_indices(&self) -> Vec<usize> {
-        let mut kept: Vec<usize> = Vec::new();
-        for (i, cp) in self.checkpoints.iter().enumerate() {
-            if !kept.iter().any(|&j| cp.overlaps(&self.checkpoints[j])) { kept.push(i); }
-        }
-        kept
+        effective_checkpoint_indices(&self.checkpoints)
     }
     pub fn validate(&self, bounds: &Bounds) -> Result<()> {
         if !label(&self.map_id, 128)

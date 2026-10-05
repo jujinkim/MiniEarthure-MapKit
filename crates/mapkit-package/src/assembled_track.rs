@@ -8,7 +8,7 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
         .as_ref()
         .ok_or_else(|| error("E_TRACK_REQUIRED", "assembled track required"))?;
     track::authoring::executable(a)?;
-    let checkpoints = track::authoring::common_checkpoints(a)
+    let checkpoints = track::authoring::effective_checkpoints(a)
         .into_iter()
         .map(|(i, n)| {
             let sample = &a.pieces[i].path[n];

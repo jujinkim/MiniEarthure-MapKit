@@ -1,4 +1,5 @@
 use mapkit_core::assembled_track::*;
+use mapkit_core::assembled_track as track;
 use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
@@ -572,4 +573,25 @@ fn connected_authored_map_without_checkpoints_still_opens() {
     let d=package::compile_source(&source).unwrap();
     let reopened=read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
     assert!(reopened.document.courses[0].definition.checkpoints.is_empty());
+}
+#[test]
+fn generated_course_and_recovery_metadata_share_effective_checkpoint_order() {
+    for settings in [
+        track::Settings{seed:42,circuit:false,duration_seconds:120,categories:vec!["gimmick".into()],..Default::default()},
+        track::Settings{seed:1,circuit:false,duration_seconds:60,..Default::default()},
+    ] {
+        let d=package::generate(&settings).unwrap();
+        let assembly=d.assembled_track.as_ref().unwrap();
+        let course=&d.courses[0].definition;
+        let effective=track::authoring::effective_checkpoints(assembly);
+        assert_eq!(course.checkpoints.len(),effective.len());
+        assert!(course.checkpoints.len()<=64);
+        assert_eq!(course.effective_indices().len(),course.checkpoints.len());
+        for (cp,&(piece,sample)) in course.checkpoints.iter().zip(&effective) {
+            assert_eq!(cp.position_cm,assembly.pieces[piece].path[sample].position_cm);
+        }
+        let metadata=track::runtime_metadata(assembly);
+        assert_eq!(metadata["progress_checkpoints"].as_array().unwrap().len(),effective.len());
+        read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
+    }
 }

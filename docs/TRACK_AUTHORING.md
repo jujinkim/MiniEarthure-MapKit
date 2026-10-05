@@ -430,3 +430,11 @@ The focused stored-reader tests pass (3), including independent geometry/hash
 validation. The procedural driving_structures helper no longer overwrites the
 authored driving_templates.json catalogue with its obsolete11-entry subset.
 Three Python geometry/catalogue tests pass; original catalogue bytes are unchanged.
+
+The shared first-wins checkpoint view now feeds generation admission, course
+construction and Runtime progress metadata before the64-gate limit is checked.
+Raw authoring arrays remain unchanged. The original seed42/gimmick/sprint120s
+and seed1/all-category/sprint60s conditions both generate, validate and round-trip.
+Four checkpoint-selection tests, three course-geometry tests and17 assembled
+package tests pass. The earlier72-raw-gates budget refusal is resolved for its
+recorded case without increasing any limit.

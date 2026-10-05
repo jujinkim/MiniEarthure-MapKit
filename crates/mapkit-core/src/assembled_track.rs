@@ -408,7 +408,7 @@ pub fn fingerprint() -> String {
 pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
     let mut value = serde_json::to_value(a).unwrap();
     value["grind_lines"] = serde_json::to_value(obstacles::grind_lines(a).iter().map(|l|l.resolved_json()).collect::<Vec<_>>()).unwrap();
-    value["progress_checkpoints"]=serde_json::json!(authoring::common_checkpoints(a).into_iter().map(|(piece_index,sample_index)|serde_json::json!({"piece_index":piece_index,"sample_index":sample_index})).collect::<Vec<_>>());
+    value["progress_checkpoints"]=serde_json::json!(authoring::effective_checkpoints(a).into_iter().map(|(piece_index,sample_index)|serde_json::json!({"piece_index":piece_index,"sample_index":sample_index})).collect::<Vec<_>>());
     value
 }
 pub fn catalogue() -> serde_json::Value {

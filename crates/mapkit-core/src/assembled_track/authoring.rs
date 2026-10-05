@@ -740,6 +740,13 @@ pub fn common_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
     automatic_checkpoints(a)
 }
 
+pub fn effective_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
+    let raw=common_checkpoints(a);
+    let geometry:Vec<_>=raw.iter().map(|&(p,s)|crate::course::Checkpoint::from_track_sample(
+        &a.pieces[p].path[s],String::new())).collect();
+    crate::course::effective_checkpoint_indices(&geometry).into_iter().map(|i|raw[i]).collect()
+}
+
 /// Select only after every branch and obstacle is known. Authored checkpoints
 /// never enter this selector. All selected samples have the same route order.
 pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
@@ -807,7 +814,7 @@ pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
     out
 }
 pub(super) fn checkpoint_budget(a: &Assembly) -> Result<()> {
-    let count=common_checkpoints(a).len();
+    let count=effective_checkpoints(a).len();
     if count>64 {return Err(error("E_TRACK_CHECKPOINT_LIMIT",format!("Final routes need {count} shared checkpoints; allowed 0..64")));}
     Ok(())
 }
@@ -1183,6 +1190,24 @@ mod checkpoint_tests {
         let mut pieces=vec![];let mut origin=[0;3];
         for _ in 0..count {push_piece(&mut pieces,&mut origin,0,"straight",400,true,[0;3]);}
         layout::finish(pieces,&Settings{circuit:false,..Default::default()})
+    }
+    #[test]
+    fn effective_order_is_shared_by_metadata_and_generation_budget() {
+        let mut a=road(280);
+        let raw=common_checkpoints(&a);
+        assert!(raw.len()>64);
+        // Many candidate gates occupy two disjoint areas. First in saved order
+        // wins; the raw source count must not reject the two effective gates.
+        for (n,&(p,s)) in raw.iter().enumerate() {
+            a.pieces[p].path[s].position_cm=[0,0,(n/40) as i64*800+(n%40) as i64];
+        }
+        let effective=effective_checkpoints(&a);
+        assert_eq!(effective,vec![raw[0],raw[40]]);
+        checkpoint_budget(&a).unwrap();
+        let metadata=runtime_metadata(&a);
+        assert_eq!(metadata["progress_checkpoints"].as_array().unwrap().len(),effective.len());
+        assert_eq!(metadata["progress_checkpoints"][1]["piece_index"],raw[40].0);
+        assert_eq!(common_checkpoints(&a),raw,"raw source order is unchanged");
     }
     #[test]
     fn ordinary_four_pieces_and_exact_endpoints() {
