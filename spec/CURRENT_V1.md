@@ -51,7 +51,8 @@ These APIs do not introduce another format or a migration path.
 ### Immutable source preparation and menu preview
 
 The Godot bridge caches cell cost/archive descriptors on the validated source
-(maximum 16,384 entries, included in the source read allowance). Authored
+(maximum 1,024 entries; the shared 4.25 MiB capacity constant is included in
+both container read allowances). Authored
 placement candidates use the existing spatial index. Asset hashes and costs are
 computed once per source; packed display bytes are created lazily only on the
 presentation path and shared across chunks. Generated geometry and canonical

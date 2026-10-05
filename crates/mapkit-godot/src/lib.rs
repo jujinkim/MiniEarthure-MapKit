@@ -405,7 +405,7 @@ impl MapKitBridge {
                         "key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
                         "max_bytes": mapkit_core::archive_limit(&estimate)});
                     // A bounded cache belongs to this validated snapshot and is reset on open.
-                    if self.prepared.borrow().len() < 16_384 {
+                    if self.prepared.borrow().len() < mapkit_core::PREPARATION_CACHE_ENTRIES {
                         self.prepared.borrow_mut().insert(cell, cost.clone());
                     }
                     Ok(cost)

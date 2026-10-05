@@ -2,6 +2,10 @@
 use crate::*;
 use std::{ops::Deref, sync::RwLock};
 
+/// Bounded metadata caches; package admission charges their full capacity.
+pub const PREPARATION_CACHE_ENTRIES: usize = 1024;
+pub const PREPARATION_CACHE_BYTES: u64 = PREPARATION_CACHE_ENTRIES as u64 * (256 + 4096);
+
 #[derive(Debug, Serialize)]
 #[serde(transparent)]
 pub struct PreparedMap {
@@ -68,7 +72,7 @@ impl PreparedMap {
         let cost = crate::cost::estimate_validated(&self.document, cell, limit)?;
         // Bound metadata independently of caller-selected limits. No generated geometry retained.
         let mut costs = self.costs.write().unwrap();
-        if costs.len() < 16_384 {
+        if costs.len() < PREPARATION_CACHE_ENTRIES {
             costs.insert((cell, limit), cost.clone());
         }
         Ok(cost)

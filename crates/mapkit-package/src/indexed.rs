@@ -376,7 +376,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             + structured * 40
             + 32 * 1024 * 1024
             + (payloads.len() as u64 + 1) * 4096
-            + 16_384 * 256;
+            + mapkit_core::PREPARATION_CACHE_BYTES;
         ReadCost {
             retained_memory_bytes: retained,
             validation_peak_bytes: retained

@@ -33,6 +33,12 @@ fn rejected(bytes: &[u8], code: &str) {
     assert_eq!(read_bytes(bytes).err().unwrap().code, code);
 }
 #[test]
+fn stored_loop_frames_allow_sampled_tangents() {
+    let settings=mapkit_core::assembled_track::Settings {seed:7,circuit:false,..Default::default()};
+    let d=mapkit_package::assembled_track::generate(&settings).unwrap();
+    d.validate().unwrap();
+}
+#[test]
 fn stored_track_is_independent_of_generator_but_not_geometry_or_hashes() {
     let d=mapkit_package::assembled_track::compile_source(&mapkit_core::assembled_track::authoring::shortcut_source()).unwrap();
     let original=pack_bytes(d.clone(),BTreeMap::new()).unwrap();

@@ -991,7 +991,7 @@ mod prepared;
 mod region;
 pub use region::{region_source, source_metadata, CellRegion, RegionSourcePlan};
 mod spatial;
-pub use prepared::PreparedMap;
+pub use prepared::{PreparedMap, PREPARATION_CACHE_BYTES, PREPARATION_CACHE_ENTRIES};
 mod cost;
 mod generation;
 mod curve_sampling;
