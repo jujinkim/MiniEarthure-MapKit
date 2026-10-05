@@ -45,11 +45,7 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		if g.has("track_mesh"):
 			for role: String in ["inner", "shell"]: groups.append(GIMMICK.triangles(g.track_mesh[role]))
 		for part: Dictionary in g.parts:
-			var points := GIMMICK.points(part)
-			var vertices := PackedVector3Array()
-			for face: Array in part.faces:
-				for i in 3: vertices.append(points[face[i]])
-			groups.append(vertices)
+			groups.append(GIMMICK.part_triangles(g,part))
 		var color := Color8(g.color[0], g.color[1], g.color[2], g.color[3])
 		var emission: bool = g.motion.kind in ["boost", "launch", "target_speed", "jump_height", "air_ring"]
 		var panel := GIMMICK.panel_style(g)

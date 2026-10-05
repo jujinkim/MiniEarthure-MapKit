@@ -35,9 +35,9 @@ impl TrackGeometry for PanelSurface<'_> {
             let triangle=[poly[0],poly[i],poly[i+1]];
             let area=cross(sub(triangle[1],triangle[0]),sub(triangle[2],triangle[0]))[1]*0.5;
             if area<0.01 {continue;}
-            // Millimetre local coordinates retain the 3cm normal lift through
-            // rotations. Each triangle prism remains exactly convex after rounding.
-            let top=triangle.map(|p|std::array::from_fn(|j|round((p[j]+normal[j]*3.0)*10.0)));
+            // Store the trigger plane on the road. The display-only submillimetre
+            // offset belongs to rendering; the prism is a bounded trigger envelope.
+            let top=triangle.map(|p|std::array::from_fn(|j|round(p[j]*10.0)));
             let raw=cross(sub(top[1].map(|v|v as f64),top[0].map(|v|v as f64)),sub(top[2].map(|v|v as f64),top[0].map(|v|v as f64)));
             if raw[1]<=0.0 {continue;}
             if self.g.parts.len()==32 {return Err(error("E_TRACK_PANEL_BUDGET","panel exceeds the existing 32-part limit"));}
@@ -153,8 +153,8 @@ mod tests {
         assert!(serde_json::from_value::<authoring::Source>(value).is_err());
     }
     #[test]
-    fn flat_panel_is_three_centimetres_above_real_surface() {
+    fn flat_panel_trigger_is_on_real_surface() {
         let a=assembly("straight");let mut g=panel(&a,2);fit(&a,0,&mut g,200,100,authoring::PanelAlignment::Center).unwrap();
-        for part in g.parts {for v in &part.vertices[..3] {assert_eq!(v[1],30);}}
+        for part in g.parts {for v in &part.vertices[..3] {assert_eq!(v[1],0);}}
     }
 }

@@ -27,8 +27,15 @@ func run() -> void:
 		var part_index:=0
 		for mesh: MeshInstance3D in visual.get_children():
 			var row: Dictionary=prepared.objects[g.id+":%d" % part_index]
-			check(mesh.mesh.get_faces()==row.arrays[Mesh.ARRAY_VERTEX],"Client and Editor share exact top/body vertices")
+			var displayed_vertices:PackedVector3Array=mesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+			check(displayed_vertices==row.arrays[Mesh.ARRAY_VERTEX],"Client and Editor share exact display-only top vertices")
 			check(mesh.material_override is ShaderMaterial and row.panel==GEOMETRY.panel_style(g),"shared procedural marking and footprint")
+			var points:=GEOMETRY.points(g.parts[part_index])
+			var pose:=GEOMETRY.pose(g,0)
+			var original:Vector3=pose*points[0]
+			var displayed:Vector3=pose*displayed_vertices[0]
+			check(absf(displayed.distance_to(original)-.0005)<.000001,"exact half-millimetre display offset: "+str(displayed.distance_to(original)))
+			check(displayed_vertices.size()==3,"panel has no displayed sides or solid volume")
 			part_index+=1
 		visual.free()
 	var camera:=Camera3D.new();world.add_child(camera);camera.position=Vector3(3.25,14,3);camera.look_at(Vector3(3.25,0.5,-4));camera.projection=Camera3D.PROJECTION_ORTHOGONAL;camera.size=13;camera.current=true

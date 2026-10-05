@@ -325,21 +325,20 @@ misses the 500 ms goal. Detailed interactions/platform acceptance remain user wo
 
 ## Surface-conforming panels (02, 2026-10-04)
 
-Seed and source actions now use one panel fitter over the production road
-triangles, including connected seams. The clipped triangular prisms lift the
-driving face 3cm along its actual normal (millimetre local quantization), with
-4cm vertical thickness. Unsupported areas are clipped; no supporting triangles
-or more than the existing 32 convex parts is an explicit error. The existing
-per-part memory/occupancy accounting and all v1 numbers remain unchanged.
-Panels use one shared procedural material: orange forward chevrons for speed,
-cyan launch arrow/bars for jump. The pattern scales over the whole footprint
-and follows its top faces in both prepared Editor meshes and Client visuals.
-Air rings retain their existing rendering and geometry.
+Seed/source actions clip the production road triangles, including connected seams.
+The trigger top lies on that road (millimetre local quantization). A bounded
+four-centimetre underside prism remains only as trigger data; it creates no solid
+occupancy or physics collider. Rendering keeps only the top faces and offsets
+those faces0.5mm along the world normal, including nonuniform scale. Shared
+`gimmick_geometry.part_triangles` serves both Editor and Client. Separate authored
+support structures remain solid. Existing saved geometry is read without rewriting
+source files or recompiling it at load.
 
-Three focused Rust units pass: flat lift, slope/curve/helix deterministic convex
-geometry and limits, connected/tapered seam and stacked-road exclusion. Final
-consumer native/load/render checks are grouped with the width/trigger delivery;
-detailed editing, driving and device readability remain user verification.
+The existing32-part bound, width/alignment rules and unsupported-area rejection
+remain. Speed uses orange chevrons; jump uses cyan arrow/bars. Air rings retain
+physical rims. Rust panel units4, surface/occupancy integration2, gimmick/archive3
+and the shared Editor geometry check pass. Detailed driving/device readability is
+user verification.
 
 ## Partial-width panel contract (07, 2026-10-04)
 

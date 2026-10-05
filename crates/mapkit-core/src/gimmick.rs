@@ -113,7 +113,11 @@ impl Gimmick {
             special_track::TrackKind::Cylinder => z.abs()<=f64::from(t.length_cm)/2.0+50.0 && x*x+(y-r)*(y-r)<=(1.12*r+50.0).powi(2),
         }
     }
+    pub fn is_panel(&self) -> bool {
+        matches!(self.motion.kind, MotionKind::Boost | MotionKind::Launch | MotionKind::TargetSpeed | MotionKind::JumpHeight)
+    }
     pub fn occupied_count(&self) -> u64 {
+        if self.is_panel() { return 0; }
         self.track.as_ref().map_or(self.parts.len() as u64, |t| t.tile_count() as u64)
     }
     /// Expanded geometry is only a bridge representation, never authored source.
@@ -144,6 +148,7 @@ impl Gimmick {
     /// Conservative authoring/grid occupancy. Keep compound parts separate so a
     /// hollow passage never becomes one solid box. Rotation uses its full sweep.
     pub fn occupancy_bounds(&self) -> Vec<(Vertex, Vertex)> {
+        if self.is_panel() { return Vec::new(); }
         if self.motion.kind == MotionKind::Rotate {
             let radius = self.parts.iter().flat_map(|p| &p.vertices).map(|v|
                 (0..3).map(|a| (v[a].unsigned_abs() * u64::from(self.scale_per_mille[a]) + 999) / 1000).sum::<u64>()

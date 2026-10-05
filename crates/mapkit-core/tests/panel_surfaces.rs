@@ -11,7 +11,7 @@ fn world(v:Vertex,g:&mapkit_core::gimmick::Gimmick)->[f64;3] {
     std::array::from_fn(|i|v[i]+g.position[i] as f64)
 }
 #[test]
-fn actual_road_facets_remain_below_all_panel_tops() {
+fn panel_trigger_facets_follow_actual_road_without_solid_occupancy() {
     for preset in ["straight","slope_up","curve_up","gentle90","spiral90_left_up"] {
         let mut source=Source::empty();let mut road=instance("road",preset,600);
         road.entry_width_cm=400;road.exit_width_cm=800;
@@ -22,6 +22,8 @@ fn actual_road_facets_remain_below_all_panel_tops() {
         let document=track::document_from_assembly(compile(&source).unwrap()).unwrap();
         let geometry=assembled_preview(&document).unwrap();
         let g=document.gimmicks.iter().find(|g|g.id=="action-panel").unwrap();
+        assert_eq!(g.occupied_count(),0);
+        assert!(g.occupancy_bounds().is_empty());
         for part in &g.parts {
             let top:[_;3]=std::array::from_fn(|i|world(part.vertices[i],g));
             let centroid=std::array::from_fn(|j|(top[0][j]+top[1][j]+top[2][j])/3.0);
@@ -29,10 +31,10 @@ fn actual_road_facets_remain_below_all_panel_tops() {
                 let v=t.vertices.map(|p|p.map(|x|x as f64));
                 let n=cross(sub(v[1],v[0]),sub(v[2],v[0]));let len=dot(n,n).sqrt();if len<1e-8 {return false;}
                 let n=n.map(|x|x/len);
-                if top.iter().any(|p|(dot(n,sub(*p,v[0]))-3.0).abs()>0.09) {return false;}
+                if top.iter().any(|p|dot(n,sub(*p,v[0])).abs()>0.09) {return false;}
                 (0..3).all(|i|dot(cross(sub(v[(i+1)%3],v[i]),sub(centroid,v[i])),n)>=-0.1)
             });
-            assert!(matched,"{preset}: lifted top has no actual support facet: {top:?}");
+            assert!(matched,"{preset}: trigger has no actual support facet: {top:?}");
         }
     }
 }

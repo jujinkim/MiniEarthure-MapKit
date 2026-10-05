@@ -67,7 +67,7 @@ def parts(kind):
     if kind=='rotate':return [box(280,18,28),box(18,180,28)]
     if kind=='barrier':return [box(25,45,180,y=24)]
     if kind=='platform':return [box(240,25,450,y=0)]
-    if kind in ['boost','launch']:return [box(180,8,260,y=4)]
+    if kind in ['boost','launch']:return [box(180,8,260,y=-4)]
     return [ramp(200,450,45)]
 
 def definition(ident,kind,position,yaw=0,color=(210,130,50,255)):

@@ -44,15 +44,32 @@ static func triangles(faces: Array) -> PackedVector3Array:
 		for v: Array in face: result.append(track_point(v))
 	return result
 
+static func is_panel(g: Dictionary) -> bool:
+	return g.motion.kind in ["boost","launch","target_speed","jump_height"]
+
+static func part_triangles(g: Dictionary, part: Dictionary) -> PackedVector3Array:
+	var vertices:=points(part)
+	var result:=PackedVector3Array()
+	var panel:=is_panel(g)
+	var scale:=Vector3(g.scale_per_mille[0],g.scale_per_mille[1],g.scale_per_mille[2])*.001
+	for face: Array in part.faces:
+		var normal: Vector3=(vertices[face[2]]-vertices[face[0]]).cross(vertices[face[1]]-vertices[face[0]]).normalized()
+		if panel and normal.y<.4: continue
+		# Inverse-transpose normal, then inverse scale: exactly 0.5mm in world
+		# space even on nonuniformly scaled/sloped authoring geometry.
+		var offset:=(normal/scale).normalized()/scale*.0005 if panel else Vector3.ZERO
+		for index in face: result.append(vertices[index]+offset)
+	return result
+
 static func panel_style(g: Dictionary) -> Dictionary:
-	if g.motion.kind not in ["target_speed", "jump_height"]: return {}
+	if not is_panel(g): return {}
 	var low := Vector2(INF, INF)
 	var high := Vector2(-INF, -INF)
 	for part: Dictionary in g.parts:
 		for v: Array in part.vertices:
 			var p := Vector2(float(v[0]), -float(v[2])) * 0.01
 			low = low.min(p); high = high.max(p)
-	return {"rect":Vector4(low.x,low.y,high.x-low.x,high.y-low.y), "jump":g.motion.kind == "jump_height"}
+	return {"rect":Vector4(low.x,low.y,high.x-low.x,high.y-low.y), "jump":g.motion.kind in ["launch","jump_height"]}
 
 static func panel_material(style: Dictionary) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
@@ -100,14 +117,12 @@ static func visual(g: Dictionary) -> Node3D:
 			mesh.set_meta("curved_driving_surface",role == "inner")
 			root.add_child(mesh)
 	for part: Dictionary in g.parts:
-		var vertices := points(part)
+		var vertices := part_triangles(g,part)
 		var tool := SurfaceTool.new()
 		tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-		for face: Array in part.faces:
-			# Convex faces are outward counterclockwise in map coordinates.
-			# point() reflects Z, already producing Godot's clockwise front face.
-			tool.set_normal((vertices[face[2]]-vertices[face[0]]).cross(vertices[face[1]]-vertices[face[0]]).normalized())
-			for i in [0, 1, 2]: tool.add_vertex(vertices[face[i]])
+		for index in range(0,vertices.size(),3):
+			tool.set_normal((vertices[index+2]-vertices[index]).cross(vertices[index+1]-vertices[index]).normalized())
+			for i in 3: tool.add_vertex(vertices[index+i])
 		var mesh := MeshInstance3D.new()
 		mesh.mesh = tool.commit()
 		mesh.material_override = display_material
