@@ -38,3 +38,5 @@ standalone Editor supplies an independent preview state.
 Validation: `cargo test --workspace --locked`; `environment_contract` covers
 recipe gating, canonical identity, roundtrip and invalid authoring. Consumer
 render tests additionally exercise actual GLB materials and the bounded light pool.
+
+Shared Godot time selection presents Morning09, Noon12, Evening17, Sunset18, Night21, Dawn06. Numeric hour/minute values remain v1; nonpreset authored times survive loading and display unchanged. Client and Editor use the same component, with application-owned translations.
