@@ -84,9 +84,9 @@ impl Assembly {
                 || !(1..=100000).contains(&f.radius_cm) {return Err(fail("finish"));}
         }
         for source in [&self.authoring,&self.seed_source].into_iter().flatten() {
-            if source.instances.len()!=self.pieces.len() || source.connections.len()>MAX_PIECES*4
-                || source.paths.len()>64 || source.checkpoints.len()>64 || source.actions.len()>MAX_SAMPLES
-                || source.attachments.len()>MAX_SAMPLES {return Err(fail("source limits"));}
+            if source.instances.len()!=self.pieces.len() || !authoring::within_source_limits(source) {
+                return Err(fail("source limits"));
+            }
             let ids:BTreeMap<_,_>=source.instances.iter().enumerate().map(|(i,p)|(&p.id,i)).collect();
             if ids.len()!=source.instances.len() {return Err(fail("source identities"));}
             let checkpoint=|cp:&authoring::Checkpoint| ids.get(&cp.piece).is_some_and(|&i|cp.sample<self.pieces[i].path.len());

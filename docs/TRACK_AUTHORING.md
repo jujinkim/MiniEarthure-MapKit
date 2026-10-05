@@ -418,3 +418,15 @@ and the package authored-pipe roundtrip. They cover all twelve pipe variants,
 2/3/4/6m sections, connected portals, open shell/occupancy and serialized source.
 The native Godot library and CLI were built on macOS arm64. Current own formats
 remain v1; source-derived generation fingerprints change automatically.
+
+## Shared authoring boundaries
+
+The compiler and stored-assembly reader now share source count limits:128 source
+checkpoints,32 paths,64 actions,128 attachments,32 static structures and1024
+connections. This is distinct from the64 effective driving-course checkpoints.
+An editable128-gate draft round-trips as a saved document;129 rejects on both
+paths and a non-executable draft still cannot export as a playable package.
+The focused stored-reader tests pass (3), including independent geometry/hash
+validation. The procedural driving_structures helper no longer overwrites the
+authored driving_templates.json catalogue with its obsolete11-entry subset.
+Three Python geometry/catalogue tests pass; original catalogue bytes are unchanged.

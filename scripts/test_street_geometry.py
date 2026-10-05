@@ -4,7 +4,7 @@ import math
 import struct
 import unittest
 from pathlib import Path
-from driving_structures import authoring_templates, definition, fit_to_surface, ramp
+from driving_structures import definition, fit_to_surface, ramp
 from world_assets import tree, street_tree
 
 class StreetGeometry(unittest.TestCase):
@@ -28,8 +28,13 @@ class StreetGeometry(unittest.TestCase):
 
     def test_current_authoring_templates(self):
         saved=json.loads((Path(__file__).resolve().parents[1]/'godot/driving_templates.json').read_text())
-        self.assertEqual(saved,authoring_templates())
-        self.assertEqual(len(saved),11)
+        # The authored catalogue is authoritative; this procedural helper only
+        # supplies geometry to callers, and must not regenerate a stale subset.
+        self.assertTrue({'ramp','jump','humps','pipe','boost','launch','target_speed','jump_height'} <= saved.keys())
+        for kind in ['boost','launch','target_speed','jump_height']:
+            self.assertEqual(max(v[1] for part in saved[kind]['parts'] for v in part['vertices']),0)
+        for kind in ['boost','launch']:
+            self.assertEqual(max(v[1] for part in definition(kind,kind,[0,0,0])['parts'] for v in part['vertices']),0)
         for kind in ['ramp','jump','humps']:
             for part in saved[kind]['parts']:
                 z_values=[v[2] for v in part['vertices']]

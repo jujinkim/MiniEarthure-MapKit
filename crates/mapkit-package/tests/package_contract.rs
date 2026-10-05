@@ -33,6 +33,26 @@ fn rejected(bytes: &[u8], code: &str) {
     assert_eq!(read_bytes(bytes).err().unwrap().code, code);
 }
 #[test]
+fn stored_draft_keeps_the_authoring_checkpoint_budget() {
+    let mut source=mapkit_core::assembled_track::authoring::shortcut_source();
+    // Repeated source gates make this an editable draft, not a drivable course.
+    // The source budget is 128; the effective driving course is bounded to 64.
+    let gate=source.checkpoints[0].clone();
+    source.checkpoints=vec![gate.clone();128];
+    let draft=mapkit_package::assembled_track::compile_source(&source).unwrap();
+    assert!(draft.courses.is_empty());
+    let saved=canonical(&draft).unwrap();
+    let loaded: MapDocument=serde_json::from_slice(&saved).unwrap();
+    loaded.validate().unwrap();
+    assert_eq!(loaded.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap().checkpoints.len(),128);
+    assert_eq!(pack_bytes(draft.clone(),BTreeMap::new()).unwrap_err().code,"E_TRACK_DRAFT");
+    source.checkpoints.push(gate.clone());
+    assert_eq!(mapkit_core::assembled_track::authoring::compile(&source).unwrap_err().code,"E_TRACK_BUDGET");
+    let mut oversized=draft;
+    oversized.assembled_track.as_mut().unwrap().authoring.as_mut().unwrap().checkpoints.push(gate);
+    assert!(oversized.validate().is_err());
+}
+#[test]
 fn stored_loop_frames_allow_sampled_tangents() {
     let settings=mapkit_core::assembled_track::Settings {seed:7,circuit:false,..Default::default()};
     let d=mapkit_package::assembled_track::generate(&settings).unwrap();

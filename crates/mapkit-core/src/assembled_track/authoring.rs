@@ -317,18 +317,24 @@ pub fn compile(source: &Source) -> Result<Assembly> {
     Ok(result)
 }
 
+/// The stored authoring snapshot and the compiler share the same bounded input.
+/// This is independent of the smaller effective driving-course checkpoint limit.
+pub(super) fn within_source_limits(source: &Source) -> bool {
+    source.instances.len() <= MAX_PIECES
+        && source.connections.len() <= 1024
+        && source.paths.len() <= 32
+        && source.checkpoints.len() <= 128
+        && source.actions.len() <= 64
+        && source.attachments.len() <= 128
+        && source.structures.len() <= 32
+}
+
 fn compile_uncached(source: &Source) -> Result<Assembly> {
     crate::grind::validate(&source.grind_lines)?;
     if source.structures.len() > 32 || source.structures.iter().any(|g| !g.valid() || g.motion.kind != MotionKind::Static || g.effect.is_some() || !g.id.starts_with("authored-")) {
         return Err(error("E_TRACK_SOURCE", "at most 32 valid authored- static structures required"));
     }
-    if source.instances.len() > MAX_PIECES
-        || source.connections.len() > 1024
-        || source.paths.len() > 32
-        || source.checkpoints.len() > 128
-        || source.actions.len() > 64
-        || source.attachments.len() > 128
-    {
+    if !within_source_limits(source) {
         return Err(error(
             "E_TRACK_BUDGET",
             "authoring source exceeds bounded graph budget",
