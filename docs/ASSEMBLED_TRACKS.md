@@ -6,9 +6,8 @@ bounded local transitions. It supersedes independent per-span strip rounding.
 
 Current behavior, including the 2026-10-04 pipe material/bore replacement (03/08),
 is defined by [category generation and free authoring](TRACK_AUTHORING.md)
-(2026-09-30 replacement). The dated sections below preserve implementation/test
-history; mandatory selections, old dimensions, lattice placement and duration
-overrun rules are superseded.
+(2026-09-30 replacement). The replacement sections below take precedence over earlier dimensions and
+selection rules; historical implementations remain in Git.
 
 `mapkit_core::assembled_track` owns the catalogue, dimensions, seeded selection,
 connections, corridors and collision geometry. `mapkit_package::assembled_track`
@@ -67,7 +66,7 @@ Loop radius (350 cm), tapered 220 cm ribbon and final 4 m aligned approach are
 unchanged. Open jump ports have no blocking end wall; launch panels are flush
 with the road.
 
-Spirals retain the 800 cm radius and 800 cm rise/fall. Their 192 arc samples use
+Spirals retain the 800 cm radius and 800 cm rise/fall. Their common adaptive sections use
 analytic surface normals and eased entry/exit grade, with eight strips across
 the road to reduce twisted-quad ridges. Centerline grades remain below 23%.
 
