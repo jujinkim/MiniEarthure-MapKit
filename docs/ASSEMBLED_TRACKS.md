@@ -27,10 +27,10 @@ Jolt/CCD could shorten actual travel while reported velocity stayed normal and
 excite vertical rocking. `track_winding` checks top/bottom orientation, exact
 shared join vertices and closed wall orientation. Runtime's `vehicle_seam_validator`
 uses actual generated straight/practice joins with both directions, RC sedan and
-monster truck against an identical-material plane. On macOS M1/Godot 4.7.2/Jolt,
-the new native build passes all 72 cases at each of 60/120 Hz. The two Rust
-`track_winding` tests pass. Results and platform limits belong to Runtime's vehicle
-physics document; this does not establish a Windows driving fix.
+monster truck against an identical-material plane. The two Rust `track_winding`
+tests pass. Current driving counts, expanded internal-boundary coverage and
+platform limits belong to Runtime's vehicle physics document; these geometry
+checks do not establish a Windows driving fix.
 
 Settings contain an exactly representable nonnegative JSON integer `seed`,
 `circuit`, `duration_seconds`, `difficulty` (easy/normal/hard), candidate `gimmicks`
