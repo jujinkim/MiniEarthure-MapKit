@@ -429,8 +429,7 @@ Focused results: playtest geometry verification.
 
 ## Quantized curved-road sampling — 2026-10-02 replacement
 
-The [2026-10-05 [18] replacement](validation/curves-18-2026-10-05/README.md)
-separates horizontal limits from height/pitch/full-normal limits. Ordinary spans
+The current sampling policy separates horizontal limits from height/pitch/full-normal limits. Ordinary spans
 are now2.5m, horizontal angle/error limits are×5/3 and×25/9; vertical limits,
 23% grades, final shared vertices and loop/pipe precision remain. Representative
 segments fall38.88%; safety-limited short helices fall33.33%. Narrow generated
@@ -560,7 +559,7 @@ remains 64/32/16m. Existing files, API default seed1, v1 formats, cancellation,
 24 candidates and all search/geometry budgets remain unchanged. Source fingerprints
 identify new generated layouts. No weather field is added to generation settings.
 
-Focused verification in `validation/driving-map-2026-10-02/`: five layout units
+Focused verification: five layout units
 pass, including distribution/uniform variants, seed17 repeatability in both modes,
 category exclusion and bounded geometry. Aggregate route-family complexity is
 70/139/175 for easy/normal/hard. All 42 category/mode/duration cases, package
@@ -589,7 +588,7 @@ cell. Existing triangle, occupancy and consumer memory limits remain unchanged;
 exceeding them fails explicitly. All formats and public APIs stay v1. Source-based
 fingerprints identify new generation; existing input files are not converted.
 
-Scoped results in validation/grid-input-2026-10-03:
+Scoped results:
 33 assembled units, six occupancy tests and twelve assembled-package tests pass.
 After the final cost refinement, seven wall tests and the cell-seam cost test pass.
 Fixtures cover duplicate vertices, a concave plaza corner, nonzero folded wedges,
