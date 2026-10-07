@@ -8,6 +8,20 @@ pub(super) struct Builder {
     occupancy: Option<Occupancy>,
 }
 impl Builder {
+    /// Track tessellation uses outward mathematical normals. Generated package
+    /// faces use the opposite winding, like roads/terrain and box shells. The
+    /// shared Godot adapter reflects map-y to -z and reverses indices once.
+    /// Convert at publication, keeping occupancy and analytic track frames intact.
+    fn assembled(&mut self, track: &crate::assembled_track::Assembly) -> Result<()> {
+        let first = self.chunk.triangles.len();
+        crate::assembled_track::generate(track, self)?;
+        for face in &mut self.chunk.triangles[first..] {
+            crate::cancellation::checkpoint()?;
+            face.vertices.swap(1, 2);
+        }
+        Ok(())
+    }
+
     pub(super) fn solid(&mut self, id: &str, shape: SolidShape) -> Result<()> {
         if let Some(occupancy) = &mut self.occupancy {
             occupancy.push(id, shape, &self.bounds)?;
@@ -302,7 +316,7 @@ fn generate_validated(
         }
     }
     if let Some(track) = &d.assembled_track {
-        crate::assembled_track::generate(track, &mut b)?;
+        b.assembled(track)?;
         for face in &mut b.chunk.triangles {
             if face.object_id.starts_with("assembled-road-") { face.contact_class = 3; }
         }
@@ -348,7 +362,7 @@ pub(crate) fn water_surface(bounds: &Bounds, height: i64, faces: &[[Point; 3]]) 
 pub fn assembled_preview(d:&MapDocument)->Result<GeneratedChunk> {
     let a=d.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","track required"))?;
     let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],grind_lines:d.grind_lines.clone(),gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None};
-    crate::assembled_track::generate(a,&mut b)?;
+    b.assembled(a)?;
     if a.authoring.as_ref().is_some_and(|s| !s.grounded_supports) {
         b.chunk.triangles.retain(|t|t.object_id!="assembled-venue-floor");
     }
