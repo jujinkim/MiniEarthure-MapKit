@@ -93,21 +93,37 @@ impl SpecialTrack {
         let r=f64::from(self.radius_cm)*1.12+10.0;
         (span/2.0f64.to_radians()).max(span/(2.0*libm::acos(1.0-0.25/r))).ceil() as usize
     }
+    // Arc speed per radian. Keep the authored 2r height and 0.6*pi*r port
+    // advance, but distribute that advance without pinching the crown to .4r.
+    // q = .8 + .6*cos(t) + .6*cos(t)^2 has a minimum of .65.
+    fn loop_radius(t:f64) -> f64 {
+        1.1+0.6*libm::cos(t)+0.3*libm::cos(2.0*t)
+    }
+    fn loop_arc_height(&self,t:f64) -> (f64,f64,f64) {
+        let r=f64::from(self.radius_cm);
+        let (sn,cs)=(libm::sin(t),libm::cos(t));
+        let q=Self::loop_radius(t);
+        (r*(1.1*(1.0-cs)+0.3*sn*sn+0.3*(-1.0/3.0+cs-2.0/3.0*cs.powi(3))),
+            r*sn*q,r*(cs*q+sn*(-0.6*sn-0.6*libm::sin(2.0*t))))
+    }
+    fn loop_forward(&self,t:f64) -> (f64,f64) {
+        let r=f64::from(self.radius_cm);
+        (r*(1.25*libm::sin(t)+0.3*t+0.15*libm::sin(2.0*t)+0.05*libm::sin(3.0*t)),
+            r*libm::cos(t)*Self::loop_radius(t))
+    }
     // A circle meets a straight with continuous slope but discontinuous
     // curvature: a supported rigid chassis leaves the exit still pitching.
     // Match height, slope and curvature at the end of a short quintic foot;
     // its entry has zero slope AND curvature. Reflect it at the loop exit.
     fn loop_height(&self,t:f64) -> (f64,f64) {
         const FOOT: f64=0.85;
-        let r=f64::from(self.radius_cm);
         let angle=t.min(std::f64::consts::TAU-t).max(0.0);
         if angle>=FOOT {
-            return (r*(1.0-libm::cos(t))+0.30*r*libm::sin(t).powi(2),r*libm::sin(t)*(1.0+0.6*libm::cos(t)));
+            let (y,d,_)=self.loop_arc_height(t);
+            return (y,d);
         }
-        let (sn,cs)=(libm::sin(FOOT),libm::cos(FOOT));
-        let y=r*(1.0-cs)+0.30*r*sn*sn;
-        let d=FOOT*r*sn*(1.0+0.6*cs);
-        let dd=FOOT*FOOT*r*(cs+0.6*libm::cos(2.0*FOOT));
+        let (y,d,dd)=self.loop_arc_height(FOOT);
+        let (d,dd)=(FOOT*d,FOOT*FOOT*dd);
         let [a,b,c]=[10.0*y-4.0*d+0.5*dd,-15.0*y+7.0*d-dd,6.0*y-3.0*d+0.5*dd];
         let u=angle/FOOT;
         (u.powi(3)*(a+u*(b+u*c)),u*u*(3.0*a+u*(4.0*b+u*5.0*c))/FOOT*if t>std::f64::consts::PI {-1.0} else {1.0})
@@ -117,7 +133,7 @@ impl SpecialTrack {
         let t=u*std::f64::consts::TAU;
         let r=f64::from(self.radius_cm);
         let exit=r*0.60*std::f64::consts::PI;
-        let dz=r*libm::cos(t)*(1.0+0.6*libm::cos(t))+(libm::round(exit)-exit)*6.0*u*(1.0-u)/std::f64::consts::TAU;
+        let dz=self.loop_forward(t).1+(libm::round(exit)-exit)*6.0*u*(1.0-u)/std::f64::consts::TAU;
         crate::curve_sampling::norm([0.0,dz,-self.loop_height(t).1])
     }
     pub fn longitudinal_parameters(&self) -> Vec<f64> {
@@ -133,7 +149,7 @@ impl SpecialTrack {
             let correction=libm::round(exit)-exit;
             Probe { points:[self.point(u,0.5,false),self.point(u,0.0,false),self.point(u,1.0,false),self.point(u,0.0,true),self.point(u,1.0,true)],
                 tangent:[loop_offset_cm(self.width_cm) as f64*(derivative((t-0.85)/1.60)+derivative((t-3.83)/1.60)),
-                    self.loop_height(t).1,r*libm::cos(t)*(1.0+0.6*libm::cos(t))+correction*6.0*u*(1.0-u)/std::f64::consts::TAU],
+                    self.loop_height(t).1,self.loop_forward(t).1+correction*6.0*u*(1.0-u)/std::f64::consts::TAU],
                 normal:self.loop_normal(u) }
         }, &[0.0,0.85/std::f64::consts::TAU,2.45/std::f64::consts::TAU,3.83/std::f64::consts::TAU,5.43/std::f64::consts::TAU,1.0],150.0,0.25,4.0f64.to_radians())
     }
@@ -151,7 +167,7 @@ impl SpecialTrack {
             let normal=self.loop_normal(u);
             [loop_offset_cm(self.width_cm) as f64*shift+(v-0.5)*f64::from(self.width_cm),
                 self.loop_height(t).0-thickness*normal[1],
-                r*(sn+0.60*(t*0.5+libm::sin(2.0*t)*0.25))-thickness*normal[2]+correction]
+                self.loop_forward(t).0-thickness*normal[2]+correction]
         } else {
             let radius=r+0.12*r*(1.0+libm::cos(v*std::f64::consts::TAU))*0.5;
             [(radius+thickness)*sn,radius-(radius+thickness)*cs,(v-0.5)*f64::from(self.length_cm)]

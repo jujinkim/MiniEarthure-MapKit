@@ -4,6 +4,28 @@ fn templates() -> BTreeMap<String, gimmick::Gimmick> {
     serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap()
 }
 #[test]
+fn loop_upper_arc_preserves_height_without_a_tight_crown() {
+    for radius in [150,250,350,600] {
+        let mut t=templates()["loop"].track.clone().unwrap();
+        t.radius_cm=radius;
+        let mesh=t.mesh();
+        let bands=t.tile_count()/(t.longitudinal_parameters().len()-1);
+        let mut points:Vec<_>=mesh.inner.chunks_exact(2*bands).map(|f|f[0][0]).collect();
+        points.push(mesh.inner.last().unwrap()[1]);
+        let r=f64::from(radius)*100.0;
+        let height=points.iter().map(|v|v[1]).max().unwrap() as f64;
+        assert!((height-2.0*r).abs()<30.0,"authored height remains 2r");
+        // Span several facets so 0.1 mm rounding does not dominate the sag.
+        for w in points.windows(15).filter(|w|w[7][1] as f64>r) {
+            let a=[(w[7][1]-w[0][1]) as f64,(w[7][2]-w[0][2]) as f64];
+            let b=[(w[14][1]-w[7][1]) as f64,(w[14][2]-w[7][2]) as f64];
+            let length=|v:[f64;2]|libm::hypot(v[0],v[1]);
+            let measured=length(a)*length(b)*length([a[0]+b[0],a[1]+b[1]])/(2.0*(a[0]*b[1]-a[1]*b[0]).abs());
+            assert!(measured>=0.62*r,"quantized upper radius {measured} for authored {r}");
+        }
+    }
+}
+#[test]
 fn loop_mesh_ends_match_centimetre_road_ports_and_shell_is_closed() {
     for radius in [150,250,350,600] { for width in [140,220,400,600] {
         let mut t=templates()["loop"].track.clone().unwrap();

@@ -44,10 +44,14 @@ Quintic entrance/exit feet match position, slope and curvature to the loop, with
 zero grade and curvature at the flat road. Shell thickness follows that same
 normal; closed end caps remain present. The acceleration panel is on the final
 straight approach, after the lateral entry transition. There is no extra overlap
-or added runway. Seven special-track tests verify ports, manifold orientation,
+or added runway. The upper arc distributes its longitudinal advance with radius
+`r*(1.1 + 0.6*cos(t) + 0.3*cos(2*t))`: the minimum is 0.65r and the crown is
+0.8r, replacing the former 0.4r crown. Height remains 2r and the external ports
+remain identical. Eight special-track tests verify ports, manifold orientation,
+quantized upper curvature,
 occupancy and bounded normals; all ten wall units pass. Ordinary curve wall
 reductions remain 40–44% (the short vertical spiral remains the 29% exception).
-The loop needs 3,464 wall triangles instead of 3,400 for the new foot curvature;
+The loop needs 3,208 wall triangles instead of the earlier 3,400;
 this is a geometry count, not a measured processing-time improvement.
 
 Settings contain an exactly representable nonnegative JSON integer `seed`,

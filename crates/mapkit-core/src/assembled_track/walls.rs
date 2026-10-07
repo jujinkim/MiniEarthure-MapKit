@@ -312,8 +312,8 @@ mod tests {
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
         println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
-        assert_eq!(transcript.0.len(),93818);
-        assert_eq!(digest,"3316dbe4fbd7b02032b60b361fb77dbbd8dc122663e72eaeee5fb7ac11ac546c");
+        assert_eq!(transcript.0.len(),92034);
+        assert_eq!(digest,"6cf878fe1ffe61d31da21c885e611aafd698a1f801ef268c4dabf50f4abf5700");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
