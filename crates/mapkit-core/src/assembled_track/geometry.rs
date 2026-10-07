@@ -606,12 +606,12 @@ mod playtest_surface_tests {
             let rise=degrees as f64/360.0*800.0*if direction=="down" {-1.0} else {1.0};
             for (i,w) in p.path.windows(2).enumerate() {
                 let (ta,tb)=(parameter(i),parameter(i+1));assert!(tb>ta,"strict station order");
-                assert!(distance(w[0].position_cm,w[1].position_cm)<=252);
+                assert!(distance(w[0].position_cm,w[1].position_cm)<=402);
                 for (a,b) in [(w[0].normal,w[1].normal)] {
                     let dot=(0..3).map(|j|a[j] as f64*b[j] as f64/1e12).sum::<f64>();
                     assert!(libm::acos(dot.clamp(-1.0,1.0)).to_degrees()<3.51,"sample frame bound");
                 }
-                assert!((tb-ta)*degrees as f64<=3.5*5.0/3.0+0.001,"heading bound");
+                assert!((tb-ta)*degrees as f64<=12.001,"heading bound");
                 for quarter in 0..=4 {
                     let t=quarter as f64/4.0;
                     let expected=rise*spiral_rise(ta+(tb-ta)*t);
@@ -631,14 +631,14 @@ mod playtest_surface_tests {
                     (0..2).any(|i| {let dx=(b[i][0]-a[i][0]) as f64;let dz=(b[i][2]-a[i][2]) as f64;(b[i][1]-a[i][1]).abs() as f64>0.23*libm::sqrt(dx*dx+dz*dz)})
                 }).map(|w|(ribbon_edges(&w[0],0),ribbon_edges(&w[1],0))).collect::<Vec<_>>());
                 for pair in p.path.windows(2) {
-                    assert!(distance(pair[0].position_cm,pair[1].position_cm)<=252,"{id}: spacing");
+                    assert!(distance(pair[0].position_cm,pair[1].position_cm)<=402,"{id}: spacing");
                     for vectors in [[pair[0].normal,pair[1].normal]] {
                         let dot=(0..3).map(|j|vectors[0][j] as f64*vectors[1][j] as f64/1e12).sum::<f64>().clamp(-1.0,1.0);
                         assert!(libm::acos(dot).to_degrees()<=4.01,"{id}: frame turn");
                     }
                     let heading=|v: Vertex| libm::atan2(v[0] as f64,v[2] as f64);
                     let delta=heading(pair[1].forward)-heading(pair[0].forward);
-                    assert!(libm::atan2(libm::sin(delta),libm::cos(delta)).abs().to_degrees()<=6.68,"{id}: horizontal turn");
+                    assert!(libm::atan2(libm::sin(delta),libm::cos(delta)).abs().to_degrees()<=12.01,"{id}: horizontal turn");
                     if ["slope","slope_up","slope_down","gentle45","hairpin"].contains(&id) {
                         assert_eq!(strips(&pair[0],&pair[1]),1,"planar trapezoids need two triangles");
                     }

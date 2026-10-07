@@ -43,6 +43,7 @@ pub(crate) fn parameters(eval: impl Fn(f64) -> Probe, breaks: &[f64], spacing: f
 
 /// Ordinary ribbons relax only longitudinal/horizontal approximation. Height,
 /// pitch and the complete surface normal retain their previous limits.
+/// Units are centimetres: horizontal error <=8cm, yaw <=12deg, span <=400cm.
 pub(crate) fn ordinary_parameters(eval: impl Fn(f64) -> Probe, breaks: &[f64], tolerance: f64, angle: f64) -> Vec<f64> {
     refine(breaks, |a,b| {
         let samples: Vec<_> = (0..=4).map(|i| eval(a+(b-a)*i as f64/4.0)).collect();
@@ -53,10 +54,10 @@ pub(crate) fn ordinary_parameters(eval: impl Fn(f64) -> Probe, breaks: &[f64], t
                 distance += length(std::array::from_fn(|j| samples[i].points[k][j]-samples[i-1].points[k][j]));
                 let t = i as f64/4.0;
                 let error: V3 = std::array::from_fn(|j| samples[i].points[k][j]-(samples[0].points[k][j]*(1.0-t)+samples[4].points[k][j]*t));
-                ratio = ratio.max(libm::sqrt(libm::hypot(error[0],error[2])/(tolerance*25.0/9.0)))
+                ratio = ratio.max(libm::sqrt(libm::hypot(error[0],error[2])/8.0))
                     .max(libm::sqrt(error[1].abs()/tolerance));
             }
-            ratio = ratio.max(distance/250.0);
+            ratio = ratio.max(distance/400.0);
         }
         let mut yaw = 0.0; let mut pitch = 0.0; let mut normal = 0.0;
         for pair in samples.windows(2) {
@@ -69,7 +70,7 @@ pub(crate) fn ordinary_parameters(eval: impl Fn(f64) -> Probe, breaks: &[f64], t
             let [a,b] = [0,1].map(|i| norm(pair[i].normal));
             normal += libm::acos((0..3).map(|j| a[j]*b[j]).sum::<f64>().clamp(-1.0,1.0));
         }
-        ratio.max(yaw/(angle*5.0/3.0)).max(pitch/angle).max(normal/angle)
+        ratio.max(yaw/12.0f64.to_radians()).max(pitch/angle).max(normal/angle)
     })
 }
 
@@ -104,7 +105,8 @@ mod tests {
         for rise in [0.0,100.0,1200.0] {
             let eval=|t|probe(t,rise);
             let old=parameters(eval,&[0.0,1.0],150.0,0.75,angle);
-            let new=ordinary_parameters(eval,&[0.0,1.0],0.75,angle);
+            let new=ordinary_parameters(eval,&[0.0,0.37,1.0],0.75,angle);
+            assert!(new.contains(&0.37), "authored branch boundary is fixed");
             if rise==0.0 { assert!((new.len()-1) as f64 <= (old.len()-1) as f64*0.65); }
             for w in new.windows(2) {
                 let a=eval(w[0]);let b=eval(w[1]);
@@ -117,12 +119,12 @@ mod tests {
                     for k in 0..5 {
                         let e: V3=std::array::from_fn(|j|p.points[k][j]-a.points[k][j]*(1.0-u)-b.points[k][j]*u);
                         assert!(e[1].abs()<=0.750001);
-                        assert!(libm::hypot(e[0],e[2])<=0.75*25.0/9.0+1e-6);
+                        assert!(libm::hypot(e[0],e[2])<=8.0+1e-6);
                     }
                 }
             }
             assert_eq!(new.first(),Some(&0.0));assert_eq!(new.last(),Some(&1.0));
-            assert_eq!(new,ordinary_parameters(eval,&[0.0,1.0],0.75,angle));
+            assert_eq!(new,ordinary_parameters(eval,&[0.0,0.37,1.0],0.75,angle));
         }
     }
 }

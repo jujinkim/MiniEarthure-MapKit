@@ -427,28 +427,35 @@ occupancy. Formats remain v1; derived geometry uses the changed source fingerpri
 
 Focused results: playtest geometry verification.
 
-## Quantized curved-road sampling — 2026-10-02 replacement
+## Quantized curved-road sampling
 
-The current sampling policy separates horizontal limits from height/pitch/full-normal limits. Ordinary spans
-are now2.5m, horizontal angle/error limits are×5/3 and×25/9; vertical limits,
-23% grades, final shared vertices and loop/pipe precision remain. Representative
-segments fall38.88%; safety-limited short helices fall33.33%. Narrow generated
-gates retain their exact samples and the existing100cm minimum course radius.
-The following measurements describe the prior revisions.
+Ordinary analytic roads and authored cubics share a pre-quantization sampler:
+maximum horizontal error 8cm (centre, ribbon edges and outer wall shell), yaw
+12 degrees and span 4m. Height error remains .75cm, pitch/full-normal change
+4 degrees; spirals retain .6cm/3.5 degrees and the 23% maximum quantized grade.
+Integer-height spiral stations are accepted only when both neighboring spans
+still meet these bounds. Exact endpoints and explicit branch/break parameters
+remain fixed. Rendering, collision, walls and occupancy use the same stations;
+loop/pipe sampling is unchanged. Source fingerprints invalidate generated caches;
+v1 and saved user source/packages are unchanged.
 
-Ordinary analytic curves and authored cubics start with 80cm spans. Shared
-refinement limits tangent changes to two degrees while retaining the existing
-outer-edge/twist error bound. This replaces 35cm/one-degree refinement, whose
-repeated subdivision amplified centimetre height rounding into alternating
-short flat/steep collision faces. End positions, normals, widths, surface strips
-and common display/collision vertices are preserved. No format increment.
+At 6m width, emitted wall triangles compared with 25339aa are:
 
-A 6m-wide curve's maximum centreline grade error falls from 0.03032 to 0.00824;
-spirals fall from 0.10028 to 0.03645. Tests bound error below 0.04 and preserve
-flat endpoint frames. Synthetic held-throttle Runtime checks pass all six
-ordinary grades and both spirals. Downward spiral unsupported ticks fall 12→0
-and road-relative chassis height span 0.1042→0.0329m. These are short fixture
-results, not full-course or platform acceptance.
+| Piece | Before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| gentle90 | 360 | 216 | 40.00% |
+| hairpin | 472 | 264 | 44.07% |
+| curve_up | 360 | 216 | 40.00% |
+| free_curve | 440 | 264 | 40.00% |
+| spiral90_left_up | 328 | 232 | 29.27% |
+| spiral_up / spiral_down | 1,048 | 584 | 44.27% |
+
+The short spiral retains subdivisions required by vertical curvature. Loop wall
+triangles remain 3,400. These are geometry counts, not measured processing-time
+improvements. macOS Rust core checks cover shared ports, manifold closed walls,
+outward winding, matching valid occupancy solids, grade/normal/height limits,
+fixed branch samples, determinism and >=35% ordinary-curve wall reduction.
+Runtime traversal and platform driving remain separate verification.
 
 The 2026-10-02 [modular return policy](TRACK_AUTHORING.md#modular-circuit-returns--2026-10-02-replacement) replaces long direct cubic closure with bounded catalogue-piece routing and a short final seam.
 

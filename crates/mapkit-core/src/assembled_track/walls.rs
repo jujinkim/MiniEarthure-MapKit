@@ -303,8 +303,8 @@ mod tests {
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
         println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
-        assert_eq!(transcript.0.len(),103638);
-        assert_eq!(digest,"aa6fc0337405887d726ea67c3caa76130b0ab839c03883156427dd94f3e1e20b");
+        assert_eq!(transcript.0.len(),93468);
+        assert_eq!(digest,"b7b0a73bd00a669bf66e4816ebc151435538f075e30c83e1c2ccafa992ae8af7");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
@@ -368,6 +368,14 @@ mod tests {
             let mut road = Mesh::default(); let mut volumes = vec![];
             generate_piece(&p,0,&mut road,&[],&mut volumes).unwrap();
             let mut wall = Mesh::default(); emit(&volumes,&mut wall).unwrap();
+            // Actual emitted wall triangles at 25339aa, not longitudinal stations.
+            let baseline = match id { "gentle90"|"curve_up" => 360, "hairpin" => 472,
+                "free_curve" => 440, "spiral90_left_up" => 328,
+                "spiral_up"|"spiral_down" => 1048, _ => 0 };
+            if ["gentle90","hairpin","free_curve"].contains(&id) {
+                assert!(wall.triangles.len() as f64 <= baseline as f64*0.65,"{id}: >=35% wall reduction");
+            }
+            if baseline>0 { println!("WALL_REDUCTION {id} before={baseline} after={} percent={:.2}",wall.triangles.len(),100.0*(1.0-wall.triangles.len() as f64/baseline as f64)); }
             assert!(geometry::ordinary_grade_valid(&p));
             assert!(wall.solids.iter().all(|c| c.valid(100_000_000)));
             let next = authoring::snap(&authoring::instance("next", "straight", 600), &instance).unwrap();
