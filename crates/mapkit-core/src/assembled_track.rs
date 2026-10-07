@@ -759,10 +759,9 @@ fn build_local_piece(original_id: &str) -> Piece {
                     continue;
                 }
                 let pos = std::array::from_fn(|a| (faces[0][0][a] + faces[1][2][a]) / 200);
-                let t = parameters[i] * std::f64::consts::TAU;
                 p.push((
                     add(pos, [0, 0, 1000]),
-                    [0, round(libm::cos(t) * 1e6), round(-libm::sin(t) * 1e6)],
+                    unit(track.loop_normal(parameters[i])),
                     "loop".into(),
                 ));
             }
@@ -1197,6 +1196,14 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
         // quantization, instead of rotating already-rounded local coordinates.
         out.path=geometry::spiral_path(p,p.rotation_mdeg,p.origin_cm);
     }
+    // Connected pieces share an integer port centre and frame. Rotating an
+    // already-quantized ribbon vertex separately rounds its centre twice and
+    // leaves centimetre overlaps/gaps, even when both port centres coincide.
+    // Rebuild both end sections from the final shared frame, for every preset.
+    for index in [0, out.path.len()-1] {
+        out.path[index].ribbon_cm=None;
+        out.path[index].ribbon_cm=Some(geometry::ribbon_edges(&out.path[index],0));
+    }
     out.reserved_min_cm = std::array::from_fn(|j| {
         out.path
             .iter()
@@ -1461,7 +1468,8 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
     let mut out = vec![];
     for (index, p) in a.pieces.iter().enumerate() {
         let specs: Vec<(&str, i64)> = match p.id.as_str() {
-            "loop" => vec![("acceleration_panel", 350), ("loop", 1000)],
+            // Finish the lateral approach before the high-speed launch.
+            "loop" => vec![("acceleration_panel", 800), ("loop", 1000)],
             id if id.starts_with("cylinder") => vec![("cylinder", 0)],
             "banked_chicane" => vec![("halfpipe", 0)],
             "jump" | "offset_jump" | "jump_panel" => {

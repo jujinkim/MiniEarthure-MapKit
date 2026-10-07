@@ -27,10 +27,28 @@ Jolt/CCD could shorten actual travel while reported velocity stayed normal and
 excite vertical rocking. `track_winding` checks top/bottom orientation, exact
 shared join vertices and closed wall orientation. Runtime's `vehicle_seam_validator`
 uses actual generated straight/practice joins with both directions, RC sedan and
-monster truck against an identical-material plane. The two Rust `track_winding`
+monster truck against an identical-material plane. The three Rust `track_winding`
 tests pass. Current driving counts, expanded internal-boundary coverage and
 platform limits belong to Runtime's vehicle physics document; these geometry
 checks do not establish a Windows driving fix.
+
+Snapped pieces rebuild their first/last ribbon from the final integer centre and
+frame, avoiding a second rounding of already rounded local edges. Geometry
+preparation also canonicalizes saved endpoint ribbons, so loading an existing v1
+source benefits without rewriting it. Road, walls, collision and occupancy share
+these sections. The regression covers 420 rotated/pitched/rolled joins, including
+saved endpoint perturbations and published shared edges.
+
+Loop inner and shell endpoints match the ordinary centimetre ports exactly.
+Quintic entrance/exit feet match position, slope and curvature to the loop, with
+zero grade and curvature at the flat road. Shell thickness follows that same
+normal; closed end caps remain present. The acceleration panel is on the final
+straight approach, after the lateral entry transition. There is no extra overlap
+or added runway. Seven special-track tests verify ports, manifold orientation,
+occupancy and bounded normals; all ten wall units pass. Ordinary curve wall
+reductions remain 40–44% (the short vertical spiral remains the 29% exception).
+The loop needs 3,464 wall triangles instead of 3,400 for the new foot curvature;
+this is a geometry count, not a measured processing-time improvement.
 
 Settings contain an exactly representable nonnegative JSON integer `seed`,
 `circuit`, `duration_seconds`, `difficulty` (easy/normal/hard), candidate `gimmicks`

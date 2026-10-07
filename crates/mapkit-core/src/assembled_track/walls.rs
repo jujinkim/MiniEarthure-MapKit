@@ -50,9 +50,17 @@ impl PreparedPath {
         cancellation::checkpoint()?;
         let right=geometry::rotate3([1_000_000,0,0],rotation);
         let mut edges=Vec::with_capacity(path.len());
-        for s in path {
+        for (i,s) in path.iter().enumerate() {
             cancellation::checkpoint()?;
-            edges.push(edges_with_right(s,right));
+            if i==0 || i+1==path.len() {
+                // Saved v1 pieces can contain independently rounded endpoint
+                // ribbons. Tessellate their declared port centre/frame exactly
+                // as a newly compiled neighbour, without rewriting the source.
+                let mut port=s.clone();port.ribbon_cm=None;
+                edges.push(edges_with_right(&port,right));
+            } else {
+                edges.push(edges_with_right(s,right));
+            }
         }
         Ok(Self { edges, outward: vec![[None; 2]; path.len()] })
     }
@@ -283,7 +291,8 @@ mod tests {
             }
         }
         // Synthetic ordered geometry, renewed for shared road sections and
-        // final-vertex diagonals. Includes IDs, materials and spawn eligibility.
+        // final-vertex diagonals, canonical ports and curvature-continuous loop
+        // feet. Includes IDs, materials and spawn eligibility.
         let mut transcript=Transcript::default();
         for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","loop","overpass","finish_plaza","cylinder"] {
             for rotation in [[0,0,0],[12000,35000,7000]] {
@@ -303,8 +312,8 @@ mod tests {
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
         println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
-        assert_eq!(transcript.0.len(),93468);
-        assert_eq!(digest,"b7b0a73bd00a669bf66e4816ebc151435538f075e30c83e1c2ccafa992ae8af7");
+        assert_eq!(transcript.0.len(),93818);
+        assert_eq!(digest,"3316dbe4fbd7b02032b60b361fb77dbbd8dc122663e72eaeee5fb7ac11ac546c");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }

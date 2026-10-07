@@ -52,3 +52,27 @@ fn published_wall_shells_keep_outward_godot_faces() {
         assert!(volume<0, "{preset}: package shell winding encloses negative signed volume");
     }
 }
+
+#[test]
+fn published_rotated_curve_joins_have_one_shared_cross_section() {
+    for preset in ["gentle90","curve_up","slope_up","spiral90_left_up"] {
+        for rotation in [[0,37000,0],[27000,17000,11000]] {
+            let mut source=Source::empty();
+            let mut a=instance("a",preset,600);
+            a.position_cm=[137,211,389];a.rotation_mdeg=rotation;
+            let b=snap(&instance("b","straight",600),&a).unwrap();
+            let end=piece(&a).unwrap().path.pop().unwrap();
+            source.instances=vec![a,b];
+            source.connections.push(Connection{from:"a".into(),to:"b".into()});
+            let document=track::document_from_assembly(compile(&source).unwrap()).unwrap();
+            let geometry=assembled_preview(&document).unwrap();
+            let section=|id:&str| -> std::collections::BTreeSet<Vertex> {
+                geometry.triangles.iter().filter(|f|f.object_id==id).flat_map(|f|f.vertices)
+                    .filter(|v|(0..3).map(|j|(v[j]-end.position_cm[j])*end.forward[j]).sum::<i64>().abs()<1_000_000).collect()
+            };
+            let left=section("assembled-road-0");
+            assert_eq!(left.len(),2,"{preset} {rotation:?}");
+            assert_eq!(left,section("assembled-road-1"),"no gap/overlap in published faces {preset} {rotation:?}");
+        }
+    }
+}

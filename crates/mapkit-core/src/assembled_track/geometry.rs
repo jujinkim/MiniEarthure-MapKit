@@ -536,6 +536,29 @@ pub(super) fn ordinary_grade_valid(p: &Piece) -> bool {
 mod straight_clearance_tests {
     use super::*;
     #[test]
+    fn snapped_rotated_ports_share_exact_road_vertices() {
+        let mut mismatches=vec![];
+        for preset in ["straight","gentle90","hairpin","curve_up","curve_down","slope_up","spiral90_left_up"] {
+            for yaw in [0,17000,37000,90000,123000] {
+              for width in [200,400,600,1200] { for (pitch,roll) in [(0,0),(27000,0),(-17000,11000)] {
+                let mut a=authoring::instance("a",preset,width);
+                a.rotation_mdeg=[pitch,yaw,roll];a.position_cm=[137,211,389];
+                let b=authoring::snap(&authoring::instance("b","straight",width),&a).unwrap();
+                let a=authoring::piece(&a).unwrap();let b=authoring::piece(&b).unwrap();
+                let end=a.path.last().unwrap();let start=&b.path[0];
+                let mut left=ribbon_edges(end,0);left.sort();
+                let mut right=ribbon_edges(start,0);right.sort();
+                if left!=right {mismatches.push((preset,yaw,left,right));}
+                let mut saved=a.path.clone();
+                saved.last_mut().unwrap().ribbon_cm=Some(left.map(|p|add(p,[1,0,-1])));
+                assert_eq!(walls::PreparedPath::new(&saved,a.rotation_mdeg).unwrap().edges.last(),
+                    walls::PreparedPath::new(&b.path,b.rotation_mdeg).unwrap().edges.first(),"saved rounded endpoints use the same declared port");
+              }}
+            }
+        }
+        assert!(mismatches.is_empty(),"snapped road overlap/gaps: {mismatches:?}");
+    }
+    #[test]
     fn uncertain_shapes_keep_broad_phase_and_actual_edges_bound_footprint() {
         let road = |id, start, points| {
             let mut i = authoring::instance(id, "free_curve", 800);

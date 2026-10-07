@@ -4,6 +4,50 @@ fn templates() -> BTreeMap<String, gimmick::Gimmick> {
     serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap()
 }
 #[test]
+fn loop_mesh_ends_match_centimetre_road_ports_and_shell_is_closed() {
+    for radius in [150,250,350,600] { for width in [140,220,400,600] {
+        let mut t=templates()["loop"].track.clone().unwrap();
+        t.radius_cm=radius;t.width_cm=width;
+        let mesh=t.mesh();
+        let offset=i64::from(width)*65/100+50;
+        let end=libm::round(f64::from(radius)*0.6*std::f64::consts::PI) as i64;
+        let first=&mesh.inner[0];let last=&mesh.inner[mesh.inner.len()-1];
+        assert_eq!(first[0],[(-offset-i64::from(width)/2)*100,0,0]);
+        assert_eq!(last[1],[(offset+i64::from(width)/2)*100,0,end*100]);
+        let mut edges=BTreeMap::new();
+        for face in mesh.inner.iter().chain(&mesh.shell) {
+            for i in 0..3 {
+                let a=face[i];let b=face[(i+1)%3];
+                let (key,sign)=if a<b {((a,b),1)} else {((b,a),-1)};
+                let counts=edges.entry(key).or_insert((0,0));counts.0+=1;counts.1+=sign;
+            }
+        }
+        assert!(edges.values().all(|&(count,direction)|count==2 && direction==0),"closed manifold with opposite shared edges r={radius} w={width}");
+    }}
+}
+#[test]
+fn assembled_loop_connectors_share_exact_edges_without_overlap() {
+    use assembled_track::{self as track,authoring::*};
+    let mut source=Source::empty();source.instances.push(instance("loop","loop",400));
+    let document=track::document_from_assembly(compile(&source).unwrap()).unwrap();
+    let g=document.gimmicks.iter().find(|g|g.track.as_ref().is_some_and(|t|t.kind==special_track::TrackKind::Loop)).unwrap();
+    let mesh=g.track.as_ref().unwrap().mesh();
+    let start=std::array::from_fn::<_,3,_>(|j|mesh.inner[0][0][j]/100+g.position[j]);
+    let last=mesh.inner.last().unwrap();
+    let end=std::array::from_fn::<_,3,_>(|j|last[1][j]/100+g.position[j]);
+    let geometry=assembled_preview(&document).unwrap();
+    for face in geometry.triangles.iter().filter(|f|f.object_id=="assembled-road-0") {
+        assert!(face.vertices.iter().all(|v|v[2]<=start[2]) || face.vertices.iter().all(|v|v[2]>=end[2]),"ordinary road must not overlap the loop");
+    }
+    for (z,expected) in [(start[2],[start,[start[0]+220,start[1],start[2]]]),(end[2],[[end[0]-220,end[1],end[2]],end])] {
+        let edge:std::collections::BTreeSet<_>=geometry.triangles.iter().filter(|f|f.object_id=="assembled-road-0").flat_map(|f|f.vertices).filter(|v|v[2]==z).collect();
+        assert_eq!(edge,expected.into_iter().collect(),"ordinary and loop mesh use identical external edges");
+    }
+    let panel=document.gimmicks.iter().find(|g|g.motion.kind==gimmick::MotionKind::TargetSpeed).unwrap();
+    assert!(panel.position[2]>=600 && panel.position[2]<start[2],"launch follows the lateral approach on ordinary road");
+    assert_eq!(panel.rotation_mdeg,[0;3]);
+}
+#[test]
 fn bounded_templates_effects_meshes_and_spawn_exclusion() {
     let all = templates();
     for g in all.values() {
