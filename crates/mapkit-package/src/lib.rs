@@ -7,7 +7,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::{Cursor, Read, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 use zip::{write::FileOptions, ZipArchive, ZipWriter};
 
@@ -28,6 +28,8 @@ mod read_cost;
 pub use read_cost::{inspect_read_cost, ReadCost};
 mod export_limits;
 pub mod indexed;
+mod write;
+pub use write::write_new;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -727,46 +729,6 @@ impl Package {
     }
 }
 
-/// No overwrite: caller must choose a new output. A temporary sibling is never a valid package.
-pub fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    fs::create_dir_all(parent).map_err(io)?;
-    let temp = temporary(parent, "file")?;
-    let mut f = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&temp)
-        .map_err(io)?;
-    let result = (|| {
-        mapkit_core::cancellation::progress("saving", 0, Some(bytes.len() as u64), "bytes");
-        let mut completed = 0;
-        for chunk in bytes.chunks(64 * 1024) {
-            mapkit_core::cancellation::checkpoint()?;
-            f.write_all(chunk).map_err(io)?;
-            completed += chunk.len() as u64;
-            mapkit_core::cancellation::progress("saving", completed, Some(bytes.len() as u64), "bytes");
-        }
-        f.sync_all().map_err(io)?;
-        mapkit_core::cancellation::checkpoint()?;
-        // A hard link installs atomically and cannot replace an existing destination.
-        fs::hard_link(&temp, path).map_err(io)?;
-        Ok(())
-    })();
-    let _ = fs::remove_file(&temp);
-    result
-}
-fn temporary(parent: &Path, kind: &str) -> Result<PathBuf> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    Ok(parent.join(format!(
-        ".mapkit-{kind}-{}-{}",
-        std::process::id(),
-        NEXT.fetch_add(1, Ordering::Relaxed)
-    )))
-}
 pub fn unpack(package: &Package, destination: &Path) -> Result<()> {
     unpack_files(&package.files, destination)
 }

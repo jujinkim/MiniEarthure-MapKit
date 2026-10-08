@@ -142,6 +142,31 @@ cancelled or late result cannot replace a newer request. Save requires a new
 destination and never overwrites an existing file. A finished but cancelled
 package may remain as an unselected artifact.
 
+`write_new` writes and syncs a temporary sibling before publishing the complete
+file. Android uses `renameat2(RENAME_NOREPLACE)` through `libc::syscall`: app
+[SELinux policy forbids hard links](https://android.googlesource.com/platform/system/sepolicy/+/refs/heads/main/private/app_neverallows.te),
+and the direct Bionic `renameat2` symbol requires API 30. The syscall preserves
+API 29 support and rejects existing destinations without an overwriting fallback.
+Other platforms retain hard-link publication. Cancellation is checked during
+writing and immediately before publication; files are closed before temporary
+cleanup. I/O errors retain `E_IO` and include the failed stage, path and OS error;
+cleanup errors preserve the original failure code. Public APIs and v1 stay unchanged.
+
+2026-10-08 scoped verification on macOS ARM64: package library tests passed 26/26,
+including seven save regressions for reopen, existing files/directories/symlinks,
+eight concurrent writers, cancellation before publication and partial-write
+failure cleanup. The existing distant-proxy unit fixture needed its missing
+zero yaw-offset argument to compile. macOS and Android ARM64/API 29 MapKit native
+builds passed; Android imports `syscall`, with no `renameat2` function-symbol
+dependency. This is not Android device execution evidence.
+
+Known existing regression: `--test assembled_track` passed 16/17;
+`finish_plaza_and_editable_free_roam_keep_exact_source_validation` expects the last
+effective gate to differ from the plaza center (line 271), but they coincide.
+The exact test also fails on unchanged `4dae0e5`; this save change does not edit
+generation/checkpoint geometry. Reconcile that fixture with the current finish
+gate contract separately. Save/progress/cancellation regressions passed.
+
 Tests: `cargo test -p mapkit-package --test assembled_track --test courses
 --test package_contract`. Consumer vehicle/race acceptance remains separate.
 

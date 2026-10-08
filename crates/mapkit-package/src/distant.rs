@@ -275,7 +275,7 @@ mod tests {
                 color: [1, 2, 3, 255], role:0,
             },
             [1000, 2000, 3000],
-            1, 0.,
+            1, 0, 0.,
         );
         assert_eq!(mesh.vertices.len(), 36);
         assert!(mesh.vertices.iter().all(|p| (13. ..=14.).contains(&p[0])
