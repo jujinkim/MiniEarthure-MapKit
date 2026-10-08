@@ -290,6 +290,7 @@ fn malformed_paths_reserved_ids_cancel_and_budgets_fail_with_context() {
         asset_id: "builtin:fence".into(),
         position: [500, 600, 500],
         quarter_turns: 0,
+        yaw_offset_mdeg: 0,
     });
     assert_eq!(d.validate().unwrap_err().code, "E_ID");
     d.placements[0].id = "manual-fence".into();

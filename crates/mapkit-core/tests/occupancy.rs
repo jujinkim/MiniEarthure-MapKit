@@ -143,6 +143,7 @@ fn rotated_odd_sized_asset_proxies_keep_exact_extents_across_cells() {
             asset_id: "asset".into(),
             position: [51200, 0, 51200],
             quarter_turns: turn,
+            yaw_offset_mdeg: 0,
         }];
         for cell in [Cell { x: 0, y: 0 }, Cell { x: 1, y: 1 }] {
             let result = generate_with_occupancy(input(&d, cell), 1).unwrap();

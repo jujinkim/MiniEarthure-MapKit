@@ -20,7 +20,7 @@ pub fn archive_limit(cost: &GenerationCost) -> u64 {
         .saturating_add(cost.gimmick_bytes)
         .saturating_add(cost.asset_convexes.saturating_mul(960 + id))
         .saturating_add(cost.triangles.saturating_mul(80 + id))
-        .saturating_add(cost.objects.saturating_mul(33 + 2 * id))
+        .saturating_add(cost.objects.saturating_mul(37 + 2 * id))
         .saturating_add(cost.building_prisms.saturating_mul(92 + 3 * id))
 }
 fn invalid() -> Error {
@@ -62,7 +62,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
         + chunk
             .objects
             .iter()
-            .map(|o| 33 + o.id.len() + o.asset_id.len())
+            .map(|o| 37 + o.id.len() + o.asset_id.len())
             .sum::<usize>()
         + chunk
             .building_prisms
@@ -109,6 +109,7 @@ pub fn encode_archive(chunk: &GeneratedChunk, key: &str, max_bytes: u64) -> Resu
             out.extend_from_slice(&v.to_le_bytes());
         }
         out.push(o.quarter_turns);
+        out.extend_from_slice(&o.yaw_offset_mdeg.to_le_bytes());
     }
     {
         out.extend_from_slice(&(chunk.building_prisms.len() as u32).to_le_bytes());
@@ -250,7 +251,8 @@ pub fn decode_archive(
         let asset_id = r.string(id_limit)?;
         let position = r.vertex()?;
         let quarter_turns = r.take(1)?[0];
-        if quarter_turns > 3 {
+        let yaw_offset_mdeg = i32::from_le_bytes(r.take(4)?.try_into().unwrap());
+        if quarter_turns > 3 || yaw_offset_mdeg.unsigned_abs() > 360_000 {
             return Err(invalid());
         }
         chunk.objects.push(GeneratedObject {
@@ -258,6 +260,7 @@ pub fn decode_archive(
             asset_id,
             position,
             quarter_turns,
+            yaw_offset_mdeg,
         });
     }
     {
@@ -371,6 +374,7 @@ mod tests {
                 asset_id: "builtin.tree".into(),
                 position: [1, 2, 3],
                 quarter_turns: 3,
+                yaw_offset_mdeg: 0,
             }],
         };
         let cost = GenerationCost {

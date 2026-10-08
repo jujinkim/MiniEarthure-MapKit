@@ -57,19 +57,7 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
                 .iter()
                 .any(|c| overlaps(c.placed(v).bounds()))
                 || asset.collision.iter().any(|b| {
-                    let mut center = b.center;
-                    let mut size = b.size_cm;
-                    for _ in 0..v.quarter_turns {
-                        center = [-center[2], center[1], center[0]];
-                        size.swap(0, 2);
-                    }
-                    let min = std::array::from_fn(|a| {
-                        v.position[a * 2] + center[a * 2] - i64::from(size[a * 2] / 2)
-                    });
-                    overlaps(mapkit_core::Bounds {
-                        min,
-                        max: std::array::from_fn(|a| min[a] + i64::from(size[a * 2])),
-                    })
+                    overlaps(b.placed(v).bounds())
                 })
         })
         .filter_map(|v| p.document.asset(&v.asset_id))

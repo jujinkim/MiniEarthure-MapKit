@@ -114,6 +114,7 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
             asset_id: "builtin:streetlight".into(),
             position: [400, 12, 550],
             quarter_turns: 0,
+            yaw_offset_mdeg: 0,
         });
         let c = generate_cell(&d, 0);
         assert!(c.objects.iter().any(|o| o.id == "lamp"));

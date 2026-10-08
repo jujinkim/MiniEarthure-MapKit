@@ -224,7 +224,7 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
         _ => None,
     }
 }
-pub(crate) fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
+fn local_proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
     builtin(&p.asset_id)
         .unwrap_or_else(|| {
             d.assets
@@ -234,7 +234,9 @@ pub(crate) fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
                 .collision
                 .clone()
         })
-        .into_iter()
+}
+pub(crate) fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
+    local_proxies(d,p).into_iter()
         .map(|mut proxy| {
             for _ in 0..p.quarter_turns {
                 proxy.center = [-proxy.center[2], proxy.center[1], proxy.center[0]];
@@ -256,10 +258,8 @@ pub(crate) fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
         .to_vec();
     }
     let mut points = vec![];
-    for b in proxies(d, p) {
-        let min = [b.center[0] - b.size_cm[0] as i64 / 2, b.center[2] - b.size_cm[2] as i64 / 2];
-        let max = [min[0] + b.size_cm[0] as i64, min[1] + b.size_cm[2] as i64];
-        points.extend(rectangle(min, max).map(|p| [p[0], 0, p[1]]));
+    for proxy in local_proxies(d, p) {
+        points.extend(proxy.placed(p).vertices.into_iter().map(|v| [v[0], 0, v[2]]));
     }
     if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
         for c in &asset.convex_collision {
@@ -369,6 +369,7 @@ pub(crate) fn repeated(d: &MapDocument) -> Result<Vec<Placement>> {
                     asset_id: r.asset_id.clone(),
                     position,
                     quarter_turns: if dy.abs() > dx.abs() { 1 } else { 0 },
+                    yaw_offset_mdeg: 0,
                 });
                 index += 1;
                 distance += i64::from(r.spacing_cm);
@@ -629,8 +630,10 @@ fn emit_placement(
     if unclipped {
         b.bounds = d.bounds.clone();
     } // one owner emits the entire small trunk
-    for proxy in proxies(d, p) {
-        b.box_shape(proxy.center, proxy.size_cm, &p.id)?;
+    if p.yaw_offset_mdeg == 0 {
+        for proxy in proxies(d, p) { b.box_shape(proxy.center, proxy.size_cm, &p.id)?; }
+    } else {
+        for proxy in local_proxies(d,p) { b.convex_shape(proxy.placed(p), &p.id)?; }
     }
     if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
         for shape in &asset.convex_collision {
@@ -644,6 +647,7 @@ fn emit_placement(
             asset_id: p.asset_id.clone(),
             position: p.position,
             quarter_turns: p.quarter_turns,
+            yaw_offset_mdeg: p.yaw_offset_mdeg,
         });
     }
     Ok(())
@@ -833,6 +837,7 @@ fn vegetation(
                         .map_or_else(|| "builtin:tree".into(), |t| t.asset_id.clone()),
                     position,
                     quarter_turns: (c.rank % 4) as u8,
+                    yaw_offset_mdeg: 0,
                 };
                 emit_placement(d, cell, &p, b, true)?;
             }

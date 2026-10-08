@@ -402,6 +402,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         asset_id,
         position: _,
         quarter_turns: _,
+        yaw_offset_mdeg: _,
     } in placements
     {
         retained.string(id)?;
@@ -695,6 +696,7 @@ mod tests {
                 asset_id: string(137),
                 position: [0; 3],
                 quarter_turns: 255,
+                yaw_offset_mdeg: 0,
             },
         );
         d.repetitions = vector(

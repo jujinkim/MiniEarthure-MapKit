@@ -92,12 +92,7 @@ impl CollisionConvex {
     pub fn placed(&self, p: &Placement) -> Self {
         let mut shape = self.clone();
         for v in &mut shape.vertices {
-            for _ in 0..p.quarter_turns {
-                *v = [-v[2], v[1], v[0]];
-            }
-            for a in 0..3 {
-                v[a] += p.position[a];
-            }
+            *v = p.transform_point(*v);
         }
         shape
     }
@@ -106,5 +101,38 @@ impl CollisionConvex {
             min: std::array::from_fn(|a| self.vertices.iter().map(|v| v[a * 2]).min().unwrap()),
             max: std::array::from_fn(|a| self.vertices.iter().map(|v| v[a * 2]).max().unwrap()),
         }
+    }
+}
+
+impl Placement {
+    /// Source axes are (x,height,map-y); scene axes reflect map-y.
+    pub fn transform_point(&self, mut v: Vertex) -> Vertex {
+        for _ in 0..self.quarter_turns { v = [-v[2], v[1], v[0]]; }
+        if self.yaw_offset_mdeg != 0 {
+            let angle = f64::from(self.yaw_offset_mdeg).to_radians() / 1000.0;
+            let (s,c) = (libm::sin(angle),libm::cos(angle));
+            v = [libm::round(v[0] as f64*c-v[2] as f64*s) as i64,v[1],
+                 libm::round(v[0] as f64*s+v[2] as f64*c) as i64];
+        }
+        std::array::from_fn(|a| v[a]+self.position[a])
+    }
+}
+impl CollisionBox {
+    pub fn placed(&self, placement: &Placement) -> CollisionConvex {
+        let mut proxy = self.clone();
+        let mut pose = placement.clone();
+        if pose.yaw_offset_mdeg == 0 {
+            // Keep the existing cardinal convention for odd-width boxes.
+            for _ in 0..pose.quarter_turns { proxy.center=[-proxy.center[2],proxy.center[1],proxy.center[0]]; proxy.size_cm.swap(0,2); }
+            pose.quarter_turns=0;
+        }
+        let min: Vertex = std::array::from_fn(|a| proxy.center[a]-i64::from(proxy.size_cm[a]/2));
+        let vertices: Vec<Vertex> = (0..8).map(|i| pose.transform_point(
+            std::array::from_fn(|a| min[a]+if i & (1<<a) != 0 {i64::from(proxy.size_cm[a])} else {0})
+        )).collect();
+        CollisionConvex { vertices, faces: vec![
+            [0,4,6],[0,6,2],[1,3,7],[1,7,5],
+            [0,1,5],[0,5,4],[2,6,7],[2,7,3],
+            [0,2,3],[0,3,1],[4,5,7],[4,7,6]] }
     }
 }

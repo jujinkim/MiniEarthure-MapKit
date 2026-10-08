@@ -263,3 +263,21 @@ are at least 200cm; road/loop/halfpipe domains are unchanged. The catalogue expo
 `pipe_min_radius_cm` for Editor controls. Undersize source data is rejected with
 `E_PIPE_DIMENSIONS`; there is no conversion or source mutation. Standalone default
 radius remains 125cm. These are current v1 constraints, not a format increment.
+# Placement yaw and distribution assets
+
+General `Placement` and generated objects accept `yaw_offset_mdeg` in
+[-360000,360000], default zero, added to `quarter_turns * 90000`. Source axes are
+(x,height,map-y); the common renderer reflects map-y. Collision boxes become
+rotated convexes for nonzero offsets. Occupancy, footprint rejection, cell costs,
+near/distant rendering, lights and disposable archives use the same pose. Integer
+vertices round once after rotation. Zero is omitted from canonical JSON. Own
+format versions remain 1; build fingerprints invalidate generated caches.
+
+Editor owns environment layout and asset distribution derivatives. MapKit owns
+package validation, cell geometry and shared rendering. Authored asset sizes and
+collision proxies use metres via source centimetres; GLB uses metres. Derivative
+bytes have distinct content hashes; originals are never overwritten.
+
+Scoped macOS arm64 validation: placement/assets/occupancy/cost/hash regressions,
+two additive-yaw/convex/archive tests, indexed/region-plan regressions and schema
+agreement pass. Native CLI/binding build and Editor document/asset loading pass.

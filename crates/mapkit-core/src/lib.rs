@@ -245,6 +245,8 @@ pub struct CollisionBox {
     pub center: Vertex,
     pub size_cm: [u32; 3],
 }
+fn zero_yaw(v: &i32) -> bool { *v == 0 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Placement {
@@ -252,6 +254,8 @@ pub struct Placement {
     pub asset_id: String,
     pub position: Vertex,
     pub quarter_turns: u8,
+    #[serde(default, skip_serializing_if = "zero_yaw")]
+    pub yaw_offset_mdeg: i32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -732,6 +736,7 @@ impl MapDocument {
         for p in &self.placements {
             if !(assets.contains(&p.asset_id) || placement::builtin(&p.asset_id).is_some())
                 || p.quarter_turns > 3
+                || p.yaw_offset_mdeg.unsigned_abs() > 360_000
                 || !self.bounds.contains([p.position[0], p.position[2]])
                 || p.position[1].unsigned_abs() > 1_000_000
             {
@@ -804,6 +809,8 @@ pub struct GeneratedObject {
     pub asset_id: String,
     pub position: Vertex,
     pub quarter_turns: u8,
+    #[serde(default, skip_serializing_if = "zero_yaw")]
+    pub yaw_offset_mdeg: i32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct GeneratedChunk {

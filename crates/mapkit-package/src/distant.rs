@@ -190,7 +190,7 @@ impl Package {
                         color: [72, 100, 71, 255], role:0,
                     },
                     object.position,
-                    object.quarter_turns, 0.,
+                    object.quarter_turns, object.yaw_offset_mdeg, 0.,
                 );
                 continue;
             }
@@ -215,14 +215,14 @@ impl Package {
             let hash = mapkit_core::sha256(format!("{}/{}",self.document.map_id,object.id).as_bytes());
             let seed = u32::from_str_radix(&hash[..6],16).unwrap() as f32 / 16777215.;
             for proxy in &templates[&asset.id] {
-                add_box(&mut result, proxy, object.position, object.quarter_turns, seed);
+                add_box(&mut result, proxy, object.position, object.quarter_turns, object.yaw_offset_mdeg, seed);
             }
         }
         Ok(result)
     }
 }
 
-fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_turns: u8, seed: f32) {
+fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_turns: u8, yaw_offset_mdeg: i32, seed: f32) {
     let points: [[f32; 3]; 8] = std::array::from_fn(|i| {
         let mut p = std::array::from_fn(|a| {
             if i & (1 << a) == 0 {
@@ -233,6 +233,11 @@ fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_
         });
         for _ in 0..quarter_turns {
             p = [p[2], p[1], -p[0]];
+        }
+        if yaw_offset_mdeg != 0 {
+            let a=f64::from(yaw_offset_mdeg).to_radians()/1000.0;
+            let (s,c)=(a.sin() as f32,a.cos() as f32);
+            p=[p[0]*c+p[2]*s,p[1],-p[0]*s+p[2]*c];
         }
         [
             p[0] + position[0] as f32 * 0.01,

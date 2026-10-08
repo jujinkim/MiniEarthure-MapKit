@@ -137,6 +137,7 @@ fn courtyard_can_hold_an_island_building_and_manual_asset_but_walls_reject() {
         asset_id: "builtin:tree".into(),
         position: [14000, 0, 14000],
         quarter_turns: 0,
+        yaw_offset_mdeg: 0,
     });
     d.validate().unwrap();
     d.placements[0].position[0] = 8100;

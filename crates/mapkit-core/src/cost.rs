@@ -240,24 +240,10 @@ pub(crate) fn estimate_validated(
             }
         }
         for proxy in collision {
-            let mut center = proxy.center;
-            let mut size = proxy.size_cm;
-            for _ in 0..placement.quarter_turns {
-                center = [-center[2], center[1], center[0]];
-                size.swap(0, 2);
+            let shape = proxy.placed(placement).bounds();
+            if placement.yaw_offset_mdeg != 0 && clip_factor(&shape, &area) != 0 {
+                cost.asset_convexes += 1;
             }
-            let center = [
-                placement.position[0] + center[0],
-                placement.position[2] + center[2],
-            ];
-            let half = [size[0] as i64 / 2, size[2] as i64 / 2];
-            let shape = Bounds {
-                min: [center[0] - half[0], center[1] - half[1]],
-                max: [
-                    center[0] - half[0] + size[0] as i64,
-                    center[1] - half[1] + size[2] as i64,
-                ],
-            };
             if clip_factor(&shape, &area) != 0 {
                 cost.occupied_solids = cost.occupied_solids.saturating_add(1);
             }

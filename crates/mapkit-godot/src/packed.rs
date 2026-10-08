@@ -191,6 +191,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
             "id" => object.id.as_str(), "asset_id" => object.asset_id.as_str(),
             "position" => &varray![object.position[0], object.position[1], object.position[2]],
             "quarter_turns" => object.quarter_turns as i64,
+            "yaw_offset_mdeg" => object.yaw_offset_mdeg as i64,
         });
     }
     let mut prism_vertices = Vec::with_capacity(chunk.building_prisms.len() * 18);

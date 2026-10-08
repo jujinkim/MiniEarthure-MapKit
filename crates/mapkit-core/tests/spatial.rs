@@ -151,6 +151,7 @@ fn anchors_are_owned_once_while_clipped_proxies_keep_the_original_id() {
             asset_id: "marker".into(),
             position,
             quarter_turns: 1,
+            yaw_offset_mdeg: 0,
         });
     }
     let generate_cell = |d: &MapDocument, cell| {

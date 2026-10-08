@@ -142,6 +142,7 @@ fn spatial_pruning_keeps_seam_buildings_manual_proxies_and_vegetation_competitor
         asset_id: "builtin:fence".into(),
         position: [9600, 0, 4500],
         quarter_turns: 0,
+        yaw_offset_mdeg: 0,
     });
     let mut zone = template.zones[0].clone();
     zone.polygon = vec![[100, 100], [12000, 100], [12000, 5900], [100, 5900]];

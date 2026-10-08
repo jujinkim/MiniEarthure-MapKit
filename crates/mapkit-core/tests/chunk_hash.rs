@@ -9,6 +9,7 @@ fn streamed_hash_matches_canonical_v6_for_empty_and_dense_escaped_content() {
             surface: Surface::Gravel, object_id: format!("道路\"\n{i}"), spawnable: i % 2 == 0 });
     }
     chunk.objects.push(GeneratedObject { id: "é\\\"".into(), asset_id: "builtin:tree".into(),
-        position: [i64::MAX, -5, 0], quarter_turns: 3 });
+        position: [i64::MAX, -5, 0], quarter_turns: 3, yaw_offset_mdeg: 0,
+    });
     assert_eq!(chunk.hash().unwrap(), sha256(&canonical(&chunk).unwrap()));
 }

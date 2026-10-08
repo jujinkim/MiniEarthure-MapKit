@@ -332,6 +332,7 @@ record!(AssetMaterial, d, m, {
 });
 record!(Placement, d, m, {
     fields!(m, d, asset_id, id, position, quarter_turns);
+    if d.yaw_offset_mdeg != 0 { fields!(m,d,yaw_offset_mdeg); }
 });
 record!(Repetition, d, m, {
     fields!(m, d, asset_id, id, points, spacing_cm);

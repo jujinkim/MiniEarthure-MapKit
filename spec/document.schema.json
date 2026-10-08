@@ -1830,6 +1830,10 @@
           "type": "integer",
           "format": "uint8",
           "minimum": 0.0
+        },
+        "yaw_offset_mdeg": {
+          "type": "integer",
+          "format": "int32"
         }
       },
       "additionalProperties": false

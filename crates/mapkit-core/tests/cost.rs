@@ -183,6 +183,7 @@ fn rotated_proxies_concave_buildings_and_negative_origin_are_bounded() {
             asset_id: "asset".into(),
             position: [12800 + turn as i64 * 1000, 0, 10000],
             quarter_turns: turn,
+            yaw_offset_mdeg: 0,
         });
     }
     d.normalize();

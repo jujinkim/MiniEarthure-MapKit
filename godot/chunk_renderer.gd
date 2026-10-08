@@ -190,7 +190,7 @@ static func _advance(job: Dictionary) -> bool:
 						job.object -= 1
 						return false
 					if not job.instances[group].is_empty():
-						var transform := Transform3D(Basis(Vector3.UP, float(object.quarter_turns) * PI / 2.0), scene_position(object.position))
+						var transform := Transform3D(Basis(Vector3.UP, (float(object.quarter_turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0))), scene_position(object.position))
 						INSTANCES.append(job.instances[group], transform, str(object.id), str(presentation.get("map_id","")))
 						_environment_lamp(job,id,object,presentation)
 						continue
@@ -210,7 +210,7 @@ static func _advance(job: Dictionary) -> bool:
 				anchor.set_meta("mapkit_object_id", str(object.id))
 				anchor.position = scene_position(object.position)
 				# glTF metres: x-right, y-up, z-back; local map y points forward.
-				anchor.rotation.y = float(object.quarter_turns) * PI / 2.0
+				anchor.rotation.y = (float(object.quarter_turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0))
 				anchor.scale = Vector3.ONE
 				QUALITY.apply_tree(instance, QUALITY.active())
 				anchor.add_child(instance)
@@ -410,7 +410,7 @@ static func _environment_lamp(job: Dictionary, id: String, object: Dictionary, p
 	for binding: Dictionary in resources.environment_profile.get("lights",[]):
 		if binding.asset_id != id or binding.get("bulb_materials",[]).is_empty(): continue
 		var lamps: Array = job.root.get_meta("environment_lamps",[])
-		var rotation := Basis(Vector3.UP,float(object.quarter_turns)*PI/2.0)
+		var rotation := Basis(Vector3.UP,(float(object.quarter_turns)*PI/2.0+deg_to_rad(float(object.get("yaw_offset_mdeg",0))/1000.0)))
 		var point: Array = binding.position_cm
 		var position: Vector3 = scene_position(object.position)+rotation*Vector3(point[0],point[1],-point[2])*0.01
 		var rgb: Array = binding.color

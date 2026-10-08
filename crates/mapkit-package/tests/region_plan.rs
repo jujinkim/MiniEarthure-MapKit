@@ -151,6 +151,7 @@ fn plan_preserves_transformed_convex_footprints_and_separate_placement_anchor() 
             asset_id: "tinted".into(),
             position: [5000, 0, 5000],
             quarter_turns: turns,
+            yaw_offset_mdeg: 0,
         }];
         d.validate().unwrap();
         let shifted = |point| {
@@ -298,6 +299,7 @@ fn plan_checks_allocation_and_cancellation_during_bounded_construction() {
             asset_id: "builtin:tree".into(),
             position: [1000 + (i % 20) * 1000, 0, 1000 + (i / 20) * 1000],
             quarter_turns: 0,
+            yaw_offset_mdeg: 0,
         })
         .collect();
     let allowance = RegionSourcePlan::allocation_bound(canonical(&d).unwrap().len() as u64);
