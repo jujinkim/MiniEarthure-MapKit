@@ -289,3 +289,9 @@ shader-slot ceiling without changing cell or memory budgets. Display-quality and
 richer-material regressions pass, including yaw, both material surfaces, stable
 lighting identity and immutable template materials. Representative seven-world
 renders pass on the macOS ARM64 compatibility renderer, including dense woodland.
+
+Surface-area overlap validation uses exact integer triangle separation. Touching
+edges and disjoint concave frontage/yard polygons are accepted; positive-area
+overlap, including one centimetre, remains rejected. Emitted geometry and existing
+work budgets are unchanged. Eight urban paving/sidewalk/occupancy regressions pass,
+including the rounded-clipping false-positive fixture and reversed winding.

@@ -1,6 +1,6 @@
 //! Ground paint. Integer subdivisions share the road clipping rule.
 use crate::generation::polygon_triangles;
-use crate::roads::{partition, tick, valid};
+use crate::roads::{partition, tick};
 use crate::*;
 
 fn overlaps(a: &[Vertex], b: &[Vertex]) -> bool {
@@ -8,6 +8,37 @@ fn overlaps(a: &[Vertex], b: &[Vertex]) -> bool {
         a.iter().map(|p| p[i]).min().unwrap() <= b.iter().map(|p| p[i]).max().unwrap()
             && b.iter().map(|p| p[i]).min().unwrap() <= a.iter().map(|p| p[i]).max().unwrap()
     })
+}
+
+/// Positive-area triangle intersection without creating rounded clip vertices.
+/// Quantized clipping is appropriate for emitted geometry, but a sequence of
+/// truncations can invent a thin intersection between disjoint concave paints.
+fn interiors_overlap(a: &[Vertex; 3], b: &[Vertex; 3]) -> bool {
+    let area = |t: &[Vertex; 3]| {
+        (t[1][0] - t[0][0]) as i128 * (t[2][2] - t[0][2]) as i128
+            - (t[1][2] - t[0][2]) as i128 * (t[2][0] - t[0][0]) as i128
+    };
+    if area(a) == 0 || area(b) == 0 {
+        return false;
+    }
+    for triangle in [a, b] {
+        for i in 0..3 {
+            let p = triangle[i];
+            let q = triangle[(i + 1) % 3];
+            let project = |v: &Vertex| {
+                (q[0] - p[0]) as i128 * (v[2] - p[2]) as i128
+                    - (q[2] - p[2]) as i128 * (v[0] - p[0]) as i128
+            };
+            let aa = a.map(|v| project(&v));
+            let bb = b.map(|v| project(&v));
+            if aa.iter().max().unwrap() <= bb.iter().min().unwrap()
+                || bb.iter().max().unwrap() <= aa.iter().min().unwrap()
+            {
+                return false;
+            }
+        }
+    }
+    true
 }
 pub(crate) fn validate(d: &MapDocument) -> Result<()> {
     for road in &d.roads {
@@ -37,8 +68,12 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
             for ta in a {
                 for tb in b {
                     tick(&mut work, 1)?;
-                    if overlaps(ta, tb) && valid(&partition(ta, tb, &mut work)?.0) {
-                        return Err(error("E_GEOMETRY", "surface area interiors overlap"));
+                    if overlaps(ta, tb) {
+                        // Retain the prior per-triangle clipping work charge.
+                        tick(&mut work, 9)?;
+                        if interiors_overlap(ta, tb) {
+                            return Err(error("E_GEOMETRY", "surface area interiors overlap"));
+                        }
                     }
                 }
             }
