@@ -263,7 +263,7 @@ are at least 200cm; road/loop/halfpipe domains are unchanged. The catalogue expo
 `pipe_min_radius_cm` for Editor controls. Undersize source data is rejected with
 `E_PIPE_DIMENSIONS`; there is no conversion or source mutation. Standalone default
 radius remains 125cm. These are current v1 constraints, not a format increment.
-# Placement yaw and distribution assets
+## Placement yaw and distribution assets
 
 General `Placement` and generated objects accept `yaw_offset_mdeg` in
 [-360000,360000], default zero, added to `quarter_turns * 90000`. Source axes are
@@ -281,3 +281,11 @@ bytes have distinct content hashes; originals are never overwritten.
 Scoped macOS arm64 validation: placement/assets/occupancy/cost/hash regressions,
 two additive-yaw/convex/archive tests, indexed/region-plan regressions and schema
 agreement pass. Native CLI/binding build and Editor document/asset loading pass.
+
+Opaque shared rendering emits each multi-material mesh once. Single-object groups
+also use MultiMesh custom data; exceptional material overrides receive an owned
+seed binding while sharing shaders/textures. This removes the global per-instance
+shader-slot ceiling without changing cell or memory budgets. Display-quality and
+richer-material regressions pass, including yaw, both material surfaces, stable
+lighting identity and immutable template materials. Representative seven-world
+renders pass on the macOS ARM64 compatibility renderer, including dense woodland.

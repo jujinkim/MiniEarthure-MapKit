@@ -30,7 +30,9 @@ uniform int lighting_role = 0; // 1 windows, 2 street lamps
 uniform bool instanced = false;
 uniform bool distant = false;
 uniform bool vertex_tinted = false;
-instance uniform float building_seed = 0.5;
+// Opaque instances carry this identity in INSTANCE_CUSTOM. A material uniform
+// supports the exceptional non-instanced path without a global instance block.
+uniform float building_seed = 0.5;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float seed;

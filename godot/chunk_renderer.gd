@@ -199,7 +199,7 @@ static func _advance(job: Dictionary) -> bool:
 				while not pending.is_empty():
 					var piece: Node3D = pending.pop_back()
 					if piece is MeshInstance3D:
-						piece.set_instance_shader_parameter("building_seed",float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0)
+						_seed_fallback_materials(piece,float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0,job.lease)
 						if piece.get_meta("mapkit_occluder",false):
 							var occluder := QUALITY.occluder(piece.mesh,job.lease)
 							if occluder != null: piece.add_child(occluder)
@@ -444,6 +444,22 @@ static func wet_urban_shader() -> Shader:
 static func _object_group(object: Dictionary) -> String:
 	var p := scene_position(object.position)
 	return "%s/%d,%d,%d" % [object.asset_id,floori(p.x/32.0),floori(p.y/32.0),floori(p.z/32.0)]
+
+static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, lease: RefCounted) -> void:
+	# Only exceptional overlays/unsupported instancing need a private parameter
+	# binding. Shader code, mesh buffers and texture resources remain shared.
+	if piece.mesh==null: return
+	var copied := {}
+	for index in range(-1,piece.mesh.get_surface_count()):
+		var material: Material=piece.material_override if index==-1 else piece.get_active_material(index)
+		if material is not ShaderMaterial or not material.get_meta("mapkit_opaque",false): continue
+		if not copied.has(material):
+			var replacement: ShaderMaterial=material.duplicate(false)
+			replacement.set_shader_parameter("building_seed",seed_value)
+			copied[material]=replacement
+			if lease!=null: lease.track(replacement)
+		if index==-1: piece.material_override=copied[material];break
+		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
 	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","safety:metal":"metal"}.get(key,key.get_slice(":",0))

@@ -14,13 +14,18 @@ static func parts(template: Node3D) -> Array:
 				if node.get_surface_override_material(i) != null: return []
 				var material: Material = node.get_active_material(i)
 				if material != null and not material.get_meta("mapkit_opaque",false) and (not material is BaseMaterial3D or material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED): return []
+			# One MultiMesh draws all surfaces of this mesh. Appending inside
+			# the surface loop duplicates the entire object for every material.
 			result.append({"mesh": node.mesh, "material": node.material_override, "transform": transform, "shadow": node.cast_shadow})
 		for child: Node3D in node.get_children(): pending.append({"node": child, "transform": transform})
 	return result
 
 static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounted) -> Dictionary:
 	var pieces := parts(template)
-	if pieces.is_empty() or count < 2: return {}
+	# A single opaque object still uses INSTANCE_CUSTOM for its seed. Falling
+	# back to an instance uniform exhausts the hardware's shared shader buffer
+	# in dense cells; this path keeps the same meshes, materials and transform.
+	if pieces.is_empty() or count < 1: return {}
 	var groups: Array = []
 	for piece: Dictionary in pieces:
 		var multi := MultiMesh.new()
