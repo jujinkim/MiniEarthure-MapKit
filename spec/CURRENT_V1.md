@@ -289,6 +289,8 @@ shader-slot ceiling without changing cell or memory budgets. Display-quality and
 richer-material regressions pass, including yaw, both material surfaces, stable
 lighting identity and immutable template materials. Representative seven-world
 renders pass on the macOS ARM64 compatibility renderer, including dense woodland.
+Small-prop distance classification includes authored root scale; metre-scale
+buildings are not classified from their unscaled source mesh dimensions.
 
 Surface-area overlap validation uses exact integer triangle separation. Touching
 edges and disjoint concave frontage/yard polygons are accepted; positive-area

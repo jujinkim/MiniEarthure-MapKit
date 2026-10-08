@@ -40,7 +40,8 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 		node.multimesh = multi
 		node.material_override = piece.material
 		node.cast_shadow = piece.shadow
-		node.set_meta("mapkit_decoration", piece.mesh.get_aabb().size.length() <= 6.0)
+		var authored_bounds: AABB=piece.transform * piece.mesh.get_aabb()
+		node.set_meta("mapkit_decoration", authored_bounds.size.length() <= 6.0)
 		preload("./display_quality.gd").apply_node(node,preload("./display_quality.gd").active())
 		parent.add_child(node)
 		if lease != null:

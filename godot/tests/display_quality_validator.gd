@@ -50,6 +50,10 @@ func run() -> void:
 	INSTANCES.append(single,pose,"single-yaw","fixture-map")
 	check(single.groups[0].multi.get_instance_transform(0).is_equal_approx(pose),"single-object arbitrary yaw and translation survive")
 	check(single.groups[0].multi.get_instance_custom_data(0).r>0 and single.groups[0].multi.mesh.get_surface_count()==2,"seed custom data and both material surfaces survive")
+	single_template.scale=Vector3.ONE*4
+	var metre_scaled := INSTANCES.begin(single_template,1,scene,null)
+	check(not metre_scaled.groups[0].node.get_meta("mapkit_decoration"),"actual-metre root scale keeps buildings out of small-prop distance culling")
+	metre_scaled.clear()
 	single_template.free();single.clear()
 	var fallback := MeshInstance3D.new();fallback.mesh=surfaces
 	var shared := ShaderMaterial.new();shared.shader=preload("../atmosphere_surface.gdshader")
