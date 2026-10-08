@@ -446,6 +446,8 @@ impl MapKitBridge {
                     let cell = mapkit_core::Cell { x, y };
                     let mut cost = serde_json::json!(p.document.estimate(cell, 500_000)?);
                     cost["distant_triangles"] = serde_json::json!(p.distant_triangle_bound(cell)?);
+                    cost["generation_scratch_bytes"] = serde_json::json!(
+                        cost["generation_scratch_bytes"].as_u64().unwrap() + p.distant_workspace_bytes(cell)?);
                     cost["presentation_bytes"] = serde_json::json!(presentation::cost(
                         p,
                         cell,

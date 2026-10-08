@@ -7,7 +7,7 @@ fn document() -> MapDocument {
     d.cell_size_cm = 1600;
     d.nodes.clear(); d.roads.clear(); d.buildings.clear(); d.placements.clear();
     d.assets.clear(); d.zones.clear(); d.heightmaps.clear(); d.repetitions.clear();
-    d.assets.push(Asset {
+    d.assets.push(Asset { distant_path: None,
         id: "shared-tree".into(), path: "assets/tree.glb".into(),
         attribution: Attribution { source: "synthetic test".into(), license: "MIT".into(), notice: "Original test geometry".into() },
         collision: vec![CollisionBox { center: [0,12,0], size_cm: [300,24,300] },

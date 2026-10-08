@@ -5,6 +5,7 @@ const BATCH_VERTICES := 1536
 static func begin(data: Dictionary, parent: Node3D, lease: RefCounted, resources: RefCounted = null) -> Dictionary:
 	var root := Node3D.new()
 	root.set_meta("mapkit_render_root", true)
+	root.add_to_group("mapkit_quality_targets")
 	root.name = "MapKitDistant"
 	root.visible = false
 	parent.add_child(root)
@@ -32,6 +33,12 @@ static func advance(job: Dictionary) -> bool:
 		job.owner = null
 		return true
 	var end := mini(count, int(job.offset) + BATCH_VERTICES)
+	var small: bool = not job.view.get("decoration", PackedByteArray()).is_empty() and job.view.decoration[job.offset] == 1
+	if job.view.has("decoration"):
+		for vertex in range(int(job.offset) + 3, end, 3):
+			if (job.view.decoration[vertex] == 1) != small:
+				end = vertex
+				break
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = job.view.vertices.slice(job.offset, end)
@@ -44,6 +51,8 @@ static func advance(job: Dictionary) -> bool:
 	instance.mesh = mesh
 	instance.material_override = job.material
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	instance.set_meta("mapkit_decoration", small)
+	preload("./display_quality.gd").apply_node(instance, preload("./display_quality.gd").active())
 	job.root.add_child(instance)
 	job.lease.track(mesh)
 	job.offset = end

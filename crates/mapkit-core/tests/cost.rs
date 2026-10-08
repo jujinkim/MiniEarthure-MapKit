@@ -162,7 +162,7 @@ fn rotated_proxies_concave_buildings_and_negative_origin_are_bounded() {
         [13000, 15000],
         [12000, 15000],
     ];
-    d.assets.push(Asset {
+    d.assets.push(Asset { distant_path: None,
         convex_collision: vec![],
         material: None,
         id: "asset".into(),

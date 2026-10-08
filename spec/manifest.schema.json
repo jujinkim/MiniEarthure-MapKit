@@ -133,6 +133,13 @@
             "$ref": "#/definitions/CollisionConvex"
           }
         },
+        "distant_path": {
+          "description": "Optional authored, display-only silhouette mesh in the same local frame.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "type": "string"
         },

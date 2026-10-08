@@ -196,7 +196,7 @@ fn validate_course_files(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> 
 fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
     if d.assets
         .iter()
-        .map(|a| &a.path)
+        .flat_map(|a| a.paths())
         .chain(d.heightmaps.iter().map(|h| &h.path))
         .any(|p| p.starts_with("course-validation/"))
     {
@@ -211,7 +211,7 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
         .heightmaps
         .iter()
         .map(|h| &h.path)
-        .chain(d.assets.iter().map(|a| &a.path))
+        .chain(d.assets.iter().flat_map(|a| a.paths()))
         .chain(
             d.courses
                 .iter()
@@ -655,7 +655,7 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
     validate_course_files(&document, &files)?;
     validate_assets(&document, &files)?;
     validate_heightmaps(&document, &files)?;
-    let asset_paths: BTreeSet<_> = document.assets.iter().map(|a| a.path.as_str()).collect();
+    let asset_paths: BTreeSet<_> = document.assets.iter().flat_map(|a| a.paths().map(String::as_str)).collect();
     let user_asset_bytes = files
         .iter()
         .filter(|(p, _)| asset_paths.contains(p.as_str()))

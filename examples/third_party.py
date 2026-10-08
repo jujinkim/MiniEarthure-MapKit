@@ -38,6 +38,7 @@ def produce(output, document_path=None):
         heightmap.setdefault('source_accuracy_cm', None)
     files = {'document.json': canonical(document)}
     paths = {record['path'] for record in document['heightmaps'] + document['assets']}
+    paths.update(a['distant_path'] for a in document['assets'] if a.get('distant_path'))
     for path in sorted(paths):
         parts = path.split('/')
         if (path in ('manifest.json', 'document.json') or len(path) > 240

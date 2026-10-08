@@ -62,7 +62,7 @@ void fragment() {
     // Large, restrained variation remains stable when the camera moves.
     float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
     color *= 0.985 + 0.03*grain;
-    if(terrain_surface) {
+    if(terrain_surface || (distant && UV.y < -0.5)) {
         float broad=sin(world_position.x*0.055+sin(world_position.z*0.037))*cos(world_position.z*0.063);
         color*=0.96+0.06*broad;
         float rock=1.0-smoothstep(0.70,0.94,world_normal.y);

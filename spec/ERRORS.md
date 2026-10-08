@@ -41,13 +41,13 @@ create accepted outputs. `scripts/check_input_defense.py` and the Rust
 `input_defense` tests exercise the bounded K03 asset/container profile.
 Platform/renderer/allocator acceptance remains in [LIMITATIONS](../LIMITATIONS.md).
 
-Recipe 2 also uses `E_GEOMETRY` for overlapping structural junction mouths,
+Current v1 also uses `E_GEOMETRY` for overlapping structural junction mouths,
 mismatched joined tunnel clearances or a ground/structure apron that disagrees
 with restored terrain. Author explicit separated, terrain-level approaches;
 readers never repair original source. `E_LIMIT` bounds endpoint degree (32).
 `E_BUDGET` includes local road planning, live fragment/vertex, subdivision work and
 source-derived output allowances. `E_MANIFEST` includes document/manifest recipe
-mismatch; both supported recipes retain their own source and generated identity.
+mismatch; the current recipe retains source and generated identity.
 
 
 Common renderer jobs use `E_RENDER_ASSET` for missing validated presentation bytes,
@@ -59,6 +59,36 @@ Current v1 also reports `E_INDEX` for malformed regional directories or identiti
 `E_CANCELLED` when an owning request is retired, and `E_ENVIRONMENT` for invalid map environment profiles.
 
 Panel authoring errors: `E_TRACK_PANEL_SUPPORT` means no supported production road
-triangles (or an unrepresentable convex surface); `E_TRACK_PANEL_BUDGET` means
-the panel exceeds the existing 32-part cap. Invalid width/alignment is
+triangles (or an unrepresentable convex surface). Invalid width/alignment is
 `E_TRACK_SOURCE`. No partial panel replaces the current document on failure.
+
+Additional current v1 authoring/runtime input diagnostics:
+
+| Code | Meaning / corrective action |
+| --- | --- |
+| `E_ROAD` | Invalid road profile, connection or surface input. |
+| `E_PLACEMENT` | Invalid placement transform or asset use. |
+| `E_WATER` | Invalid water geometry/profile. |
+| `E_GIMMICK` | Invalid driving structure/effect declaration. |
+| `E_GRIND_SOURCE` | Invalid authored grind geometry. |
+| `E_GRIND_CONNECTION` | Disconnected grind endpoint or transition. |
+| `E_GRIND_BUDGET` | Authored grind exceeds its bounded resources. |
+| `E_PIPE_DIMENSIONS` | Unsupported pipe dimension/clearance. |
+| `E_TRACK_SETTINGS` | Invalid procedural track settings. |
+| `E_TRACK_REQUIRED` | Operation requires an authored track. |
+| `E_TRACK_ASSEMBLY` | Invalid track assembly or connectivity. |
+| `E_TRACK_MODIFIED` | Stored/generated track no longer matches its authoring source. |
+| `E_TRACK_COURSE` | Track course cannot be built from the selected route. |
+| `E_CHECKPOINT` | Invalid or unsupported authored checkpoint. |
+| `E_RACE_SIZE` | Unsupported race participant count. |
+| `E_COURSE` | Invalid course definition or requested operation. |
+| `E_COURSE_JSON` | Malformed course JSON. |
+| `E_COURSE_VERSION` | Unsupported course format. |
+| `E_COURSE_LIMIT` | Course count/size limit exceeded. |
+| `E_COURSE_HASH` | Course content digest mismatch. |
+| `E_COURSE_MAP` | Course map identity mismatch. |
+| `E_COURSE_WORLD` | Course world content identity mismatch. |
+| `E_COURSE_BOUNDS` | Course checkpoint is outside map bounds. |
+| `E_COURSE_VALIDATION` | Invalid course completion reference or evidence. |
+| `E_PREVIEW` | Invalid menu preview input or identity. |
+| `E_THREAD` | Native background task could not be created or joined. |

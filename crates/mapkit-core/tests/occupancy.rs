@@ -118,7 +118,7 @@ fn rotated_odd_sized_asset_proxies_keep_exact_extents_across_cells() {
     let mut d = document();
     d.zones.clear();
     d.buildings.clear();
-    d.assets.push(Asset { convex_collision: vec![], material: None,
+    d.assets.push(Asset { distant_path: None, convex_collision: vec![], material: None,
         id: "asset".into(),
         path: "asset.glb".into(),
         attribution: Attribution {

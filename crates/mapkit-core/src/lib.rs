@@ -222,12 +222,20 @@ pub struct Heightmap {
 pub struct Asset {
     pub id: String,
     pub path: String,
+    /// Optional authored, display-only silhouette mesh in the same local frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub distant_path: Option<String>,
     pub attribution: Attribution,
     pub collision: Vec<CollisionBox>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub convex_collision: Vec<CollisionConvex>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub material: Option<AssetMaterial>,
+}
+impl Asset {
+    pub fn paths(&self) -> impl Iterator<Item = &String> {
+        std::iter::once(&self.path).chain(self.distant_path.iter())
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -685,6 +693,9 @@ impl MapDocument {
                         })
                 })
                 || !safe_path(&a.path)
+                || a.distant_path.as_ref().is_some_and(|p| {
+                    !a.path.ends_with(".glb") || !safe_path(p) || !p.ends_with(".glb")
+                })
                 || ![".glb", ".png", ".webp"]
                     .iter()
                     .any(|e| a.path.ends_with(e))

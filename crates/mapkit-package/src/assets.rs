@@ -531,18 +531,18 @@ pub(super) fn validate_assets(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>
     let mut budget = DecodeBudget {
         remaining: 256 * 1024 * 1024,
     };
-    for a in &d.assets {
-        if !seen.insert(&a.path) {
+    for path in d.assets.iter().flat_map(|a| a.paths()) {
+        if !seen.insert(path) {
             continue;
         }
         let bytes = files
-            .get(&a.path)
+            .get(path)
             .ok_or_else(|| error("E_REFERENCE", "missing asset"))?;
-        if a.path.ends_with(".glb") {
+        if path.ends_with(".glb") {
             validate_glb(bytes, &mut budget)?;
-        } else if a.path.ends_with(".png") {
+        } else if path.ends_with(".png") {
             validate_png(bytes, &mut budget)?;
-        } else if a.path.ends_with(".webp") {
+        } else if path.ends_with(".webp") {
             validate_webp(bytes, &mut budget)?;
         } else {
             return Err(bad("unsupported asset type"));

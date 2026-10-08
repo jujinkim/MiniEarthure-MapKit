@@ -287,8 +287,7 @@ also use MultiMesh custom data; exceptional material overrides receive an owned
 seed binding while sharing shaders/textures. This removes the global per-instance
 shader-slot ceiling without changing cell or memory budgets. Display-quality and
 richer-material regressions pass, including yaw, both material surfaces, stable
-lighting identity and immutable template materials. Representative seven-world
-renders pass on the macOS ARM64 compatibility renderer, including dense woodland.
+lighting identity and immutable template materials.
 Small-prop distance classification includes authored root scale; metre-scale
 buildings are not classified from their unscaled source mesh dimensions.
 
@@ -297,3 +296,40 @@ edges and disjoint concave frontage/yard polygons are accepted; positive-area
 overlap, including one centimetre, remains rejected. Emitted geometry and existing
 work budgets are unchanged. Eight urban paving/sidewalk/occupancy regressions pass,
 including the rounded-clipping false-positive fixture and reversed winding.
+
+## Authored distant meshes and shared models
+
+An `Asset` may declare `distant_path`, a second safe package-relative `.glb` path.
+It uses the primary model's local origin, metre scale and placement transform.
+Both files participate in package references, manifest hashes, source/asset byte
+counts, validation workspaces and memory estimates. The optional field remains
+part of the current v1 contract. No loader conversion or format increment exists.
+The primary asset alone defines collision; changing display LOD never changes
+surface probes, collision triangles, execution cells or admission budgets.
+
+The distant path emits its authored triangles, node hierarchy, materials and
+vertex tint. Quarter turns, continuous yaw and reflected node transforms apply
+once. Open arcades remain open. Assets without a distant path retain the generic
+display proxy. Water retains the clipped shoreline and islands without physical
+triangles. Terrain uses the same broad variation in near and distant shaders.
+Small authored props form a contiguous batch tail and follow the existing quality
+distance limit. Batches keep the existing vertex cap; cancellation releases their
+native geometry and GPU mesh owners. Parsing workspace and emitted triangle bounds
+are charged before allocation; the 32 m execution cell and Runtime budgets remain
+consumer policy.
+
+`scripts/authored_assets.py` supplies original MIT models for houses, shops,
+market hall, farm equipment, crops, tree growth stages, shrubs, rocks and bridge
+piers. Paired files have immutable SHA-256 names and share the existing material
+tiles (at most 512 px). Editor owns their world placement and recipes. Fine joinery
+is omitted at distance while roof forms, tree crowns and architectural openings
+remain. Near/middle distance still uses the common mesh LOD and instancing path.
+
+Scoped validation on macOS ARM64 / Godot 4.7.2: package library 26,
+input-defense 12, package-contract 24 and authored-distance 3 Rust tests pass;
+schema/public error agreement passes. Two authored-model tests cover reproducible
+hashes, bounds, real openings and reduced triangle counts (for example, shop
+2380→446, oak 840→236, cabbage patch 4320→72). CLI/native binding builds and Editor
+save/history/paired derivation/resource-release regressions pass. A fixed-camera
+common-render terrain comparison differs by at most 1/255 RGB. These checks do
+not constitute map art or device performance acceptance.

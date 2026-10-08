@@ -325,6 +325,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     for Asset {
         id,
         path,
+        distant_path,
         attribution,
         collision,
         convex_collision,
@@ -333,6 +334,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     {
         retained.string(id)?;
         retained.string(path)?;
+        if let Some(path) = distant_path { retained.string(path)?; }
         retained.attribution(attribution)?;
         retained.vector(collision)?;
         for CollisionBox {
@@ -535,6 +537,7 @@ mod tests {
             Asset {
                 id: string(179),
                 path: string(181),
+                distant_path: Some(string(183)),
                 attribution: Attribution {
                     source: string(191),
                     license: string(193),
@@ -585,6 +588,7 @@ mod tests {
             &d.zones[0].tree.as_ref().unwrap().asset_id,
             &d.assets[0].id,
             &d.assets[0].path,
+            d.assets[0].distant_path.as_ref().unwrap(),
             &d.assets[0].attribution.source,
             &d.assets[0].attribution.license,
             &d.assets[0].attribution.notice,

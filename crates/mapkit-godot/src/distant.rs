@@ -9,12 +9,13 @@ struct MapKitFarGeometry {
     normals: PackedVector3Array,
     colors: PackedColorArray,
     light_data: PackedVector2Array,
+    decoration: PackedByteArray,
 }
 #[godot_api]
 impl MapKitFarGeometry {
     #[func]
     fn view(&self) -> VarDictionary {
-        vdict! { "vertices" => &self.vertices, "normals" => &self.normals, "colors" => &self.colors, "light_data" => &self.light_data }
+        vdict! { "vertices" => &self.vertices, "normals" => &self.normals, "colors" => &self.colors, "light_data" => &self.light_data, "decoration" => &self.decoration }
     }
 }
 pub(super) fn pack(mesh: mapkit_package::distant::DistantMesh) -> VarDictionary {
@@ -54,6 +55,7 @@ pub(super) fn pack(mesh: mapkit_package::distant::DistantMesh) -> VarDictionary 
         normals: PackedVector3Array::from(normals.as_slice()),
         colors: PackedColorArray::from(colors.as_slice()),
         light_data: PackedVector2Array::from(light_data.as_slice()),
+        decoration: PackedByteArray::from(mesh.decoration.as_slice()),
     });
     vdict! { "geometry" => &owner, "triangles" => triangles,
     "retained_bytes" => 4096i64 + triangles * 160,

@@ -395,7 +395,7 @@ fn external_asset_uri_is_rejected() {
     bytes.extend(b"JSON");
     bytes.extend(data);
     let mut d = document();
-    d.assets.push(Asset { convex_collision: vec![], material: None,
+    d.assets.push(Asset { distant_path: None, convex_collision: vec![], material: None,
         id: "custom".into(),
         path: "assets/custom.glb".into(),
         attribution: Attribution {

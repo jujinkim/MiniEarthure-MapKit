@@ -559,7 +559,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             })
             .collect();
         let expanded_bytes: u64 = records.iter().map(|r| r.size).sum();
-        let asset_paths: BTreeSet<_> = document.assets.iter().map(|a| &a.path).collect();
+        let asset_paths: BTreeSet<_> = document.assets.iter().flat_map(|a| a.paths()).collect();
         let user_asset_bytes: u64 = records
             .iter()
             .filter(|r| asset_paths.contains(&r.path))
@@ -704,7 +704,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         let overview = mapkit_core::source_overview(&document)?;
         let overview_cost = overview.cost()?;
         let overview_json = overview.to_json(4 * 1024 * 1024)?;
-        let assets: BTreeSet<_> = document.assets.iter().map(|a| a.path.as_str()).collect();
+        let assets: BTreeSet<_> = document.assets.iter().flat_map(|a| a.paths().map(String::as_str)).collect();
         let user_asset_bytes: u64 = files
             .iter()
             .filter(|(path, _)| assets.contains(path.as_str()))
