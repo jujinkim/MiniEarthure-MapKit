@@ -31,6 +31,9 @@ pub fn cell(text:&str,project:&Path,cell:Cell)->Result<(MapDocument,GeneratedChu
     Ok((d,chunk))
 }
 pub fn assets(d:&MapDocument,c:&GeneratedChunk,root:&Path)->Result<(BTreeMap<String,Vec<u8>>,u64)> {
+    assets_from(d,c,|p,limit|payload(root,p,limit))
+}
+pub fn assets_from(d:&MapDocument,c:&GeneratedChunk,mut read:impl FnMut(&str,u64)->Result<Vec<u8>>)->Result<(BTreeMap<String,Vec<u8>>,u64)> {
     let mut needed:BTreeSet<_>=c.objects.iter().map(|o|o.asset_id.clone()).filter(|id|!id.starts_with("builtin:")).collect();
     let objects:BTreeSet<_>=c.triangles.iter().map(|t|t.object_id.as_str()).collect();
     for p in &d.placements {if objects.contains(p.id.as_str()) && !p.asset_id.starts_with("builtin:"){needed.insert(p.asset_id.clone());}}
@@ -40,7 +43,7 @@ pub fn assets(d:&MapDocument,c:&GeneratedChunk,root:&Path)->Result<(BTreeMap<Str
     let mut files=BTreeMap::new();let mut remaining=16*1024*1024;
     for a in &mut subset.assets {
         a.distant_path=None;
-        let bytes=payload(root,&a.path,remaining)?;remaining-=bytes.len() as u64;files.insert(a.path.clone(),bytes);
+        let bytes=read(&a.path,remaining)?;remaining-=bytes.len() as u64;files.insert(a.path.clone(),bytes);
     }
     let cost=mapkit_package::preview_asset_cost(&subset,&files,c.objects.len())?;
     Ok((files,cost))

@@ -6,6 +6,7 @@ mod regional;
 mod road_style;
 mod source_preview;
 mod work_token;
+mod working;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
 use mapkit_package::{pack_bytes, read, read_bytes, read_project, write_new, Package};

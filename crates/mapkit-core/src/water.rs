@@ -49,6 +49,34 @@ pub fn sample(bodies: &[WaterBody], p: Vertex) -> Option<&WaterBody> {
         .max_by(|a,b| a.surface_cm.cmp(&b.surface_cm).then_with(|| b.id.cmp(&a.id)))
 }
 
+/// Shared authoring polygon operation; rings retain islands and integer shores.
+pub fn union(rings: &[Vec<Vec<Point>>]) -> Result<Vec<Vec<Vec<Point>>>> {
+    overlay(rings, &[], false)
+}
+pub fn overlap(a: &WaterBody, b: &WaterBody) -> Result<bool> {
+    if !a.intersects(&crate::bounds_index::bounds(&b.polygon)) {return Ok(false);}
+    Ok(!overlay(&[std::iter::once(a.polygon.clone()).chain(a.islands.clone()).collect()],
+        &std::iter::once(b.polygon.clone()).chain(b.islands.clone()).collect::<Vec<_>>(), true)?.is_empty())
+}
+pub fn connected(a: &WaterBody,b: &WaterBody)->bool {
+    if a.surface_cm!=b.surface_cm || !a.intersects(&crate::bounds_index::bounds(&b.polygon)){return false;}
+    a.polygon.iter().any(|&p|b.contains_horizontal(p)) || b.polygon.iter().any(|&p|a.contains_horizontal(p)) ||
+        (0..a.polygon.len()).any(|i|(0..b.polygon.len()).any(|j|intersects(a.polygon[i],a.polygon[(i+1)%a.polygon.len()],b.polygon[j],b.polygon[(j+1)%b.polygon.len()])))
+}
+fn overlay(subjects:&[Vec<Vec<Point>>],clip:&[Vec<Point>],intersection:bool)->Result<Vec<Vec<Vec<Point>>>> {
+    use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType},overlay_rule::OverlayRule},i_float::int::point::IntPoint};
+    crate::cancellation::checkpoint()?;
+    let count:usize=subjects.iter().flat_map(|s|s.iter()).chain(clip).map(Vec::len).sum();
+    if count>2_000_000 {return Err(error("E_BUDGET","water shoreline work allowance exceeded"));}
+    let mut overlay=Overlay::<i64>::new(count);
+    for (rings,kind) in subjects.iter().map(|s|(s.as_slice(),ShapeType::Subject)).chain(std::iter::once((clip,ShapeType::Clip))) {
+        for ring in rings {overlay.add_contour(&ring.iter().map(|p|IntPoint::new(p[0],p[1])).collect::<Vec<_>>(),kind);}
+    }
+    let result=overlay.overlay(if intersection {OverlayRule::Intersect}else{OverlayRule::Subject},FillRule::NonZero);
+    crate::cancellation::checkpoint()?;
+    Ok(result.into_iter().map(|s|s.into_iter().map(|r|r.into_iter().map(|p|[p.x,p.y]).collect()).collect()).collect())
+}
+
 pub(crate) fn validate(d: &MapDocument) -> Result<()> { validate_bodies(&d.water_bodies, &d.bounds) }
 
 pub(crate) fn validate_bodies(bodies: &[WaterBody], bounds: &Bounds) -> Result<()> {

@@ -3,9 +3,41 @@
 The user-approved 2026-09-26 arcade/water decision replaces the earlier reader-v2
 policy. All current own formats and protocols, including `.memap`, are version 1.
 Readers accept exactly 1, with no historical loader or automatic converter.
-Original files and completion evidence remain preserved; active packages are
+Original files remain preserved; active packages are
 exported anew from authored source. Build fingerprints invalidate disposable
 geometry caches and world hashes separate changed content.
+
+## In-memory authoring snapshots
+
+`mapkit_package::working::WorkingSnapshot` owns copy-on-write height arrays and a
+bounded `Resources` provider (memory bytes or confined project paths). The Godot
+`MapKitWorkingSnapshot` exposes configuration/fork, queries, brush lifecycle,
+sparse delta history, water operations, memory validation and common packed
+cell generation. These operations never encode PNGs or write project/recovery
+files. Explicit `materialize` validates and encodes only modified tiles as PNG16;
+consumers own atomic publication and saved baselines. Disk-source hashes detect
+external changes, and forks isolate concurrent preview/output workers.
+Source descriptors remain stable across publication; saved PNG descriptors and
+height baselines are separate, so earlier file imports can still be undone/redone
+after sculpting and saving. Save As carries the referenced source payloads too.
+
+Brushes follow existing spacing (new terrain 200 cm), accumulate fractional timed
+height changes, interpolate paths and update all shared seam owners. Raise/lower,
+fixed/numeric flatten and smooth have bounded radius/falloff/strength. Sparse
+changes are capped at one million samples, working height arrays/resources at
+64 MiB each; Editor also charges its 16 MiB Undo budget. No disk spilling or
+format conversion is used. Raw height and common road-fitted surface queries are
+separate; display, flood and physics generation share the fitting operation.
+
+Water editing floods connected sub-level terrain triangles at a fixed clicked
+height. Flat clicks do nothing; open map edges retain level. Symmetric integer
+edge interpolation avoids cracks between incident faces. Terrain changes update
+shorelines/islands, merge/split lakes, and higher overlaps delete complete lower
+components. Complex lakes split into existing v1 bodies (512 vertices / 16 islands,
+1024 bodies) while connected equal-level pieces remain one editor operation.
+Search/union budgets and cancellation bound work. This adds no fluid simulation,
+new disk layout or version number. Tests cover seams, timed/path editing, memory
+versus materialized geometry, cancellation, multi-tile paths and water topology.
 
 ## Independent roads and composite worlds
 

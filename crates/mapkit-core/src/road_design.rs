@@ -236,13 +236,14 @@ pub fn design_triangles(d:&MapDocument,bounds:&Bounds)->Result<Vec<(String,[Vert
 }
 
 /// Cell-local source plan. Fitting never scans a whole world for every vertex.
-pub(crate) struct Fitter<'a> { segments: Vec<(Vertex,Vertex,f64,f64,&'a str)> }
-impl<'a> Fitter<'a> {
-    pub fn new(d: &'a MapDocument,bounds:&Bounds)->Self {
+#[derive(Clone)]
+pub struct Fitter { segments: Vec<(Vertex,Vertex,f64,f64,String)> }
+impl Fitter {
+    pub fn new(d: &MapDocument,bounds:&Bounds)->Self {
         let mut segments=Vec::new();
-        let mut add=|a:Vertex,b:Vertex,width:u32,shoulder:u32,id:&'a str| {
+        let mut add=|a:Vertex,b:Vertex,width:u32,shoulder:u32,id:&str| {
             let margin=i64::from(width)/2+i64::from(shoulder);
-            if crate::road_plan::hit(&[a,b],bounds,margin) {segments.push((a,b,width as f64/2.0,shoulder as f64,id));}
+            if crate::road_plan::hit(&[a,b],bounds,margin) {segments.push((a,b,width as f64/2.0,shoulder as f64,id.to_owned()));}
         };
         for r in &d.roads {
             let Some(design)=&r.design else {continue;};
@@ -262,16 +263,16 @@ impl<'a> Fitter<'a> {
     }
     pub fn height(&self,p:Point,original:i64)->i64 {
         let mut best:Option<(f64,&str,f64)>=None;
-        for &(a,b,half,shoulder,id) in &self.segments {
+        for (a,b,half,shoulder,id) in &self.segments {
             let (dx,dz)=((b[0]-a[0]) as f64,(b[2]-a[2]) as f64);
             if dx*dx+dz*dz<1.0 {continue;}
             let along=(((p[0]-a[0]) as f64*dx+(p[1]-a[2]) as f64*dz)/(dx*dx+dz*dz)).clamp(0.0,1.0);
             let edge=libm::hypot(p[0] as f64-a[0] as f64-along*dx,p[1] as f64-a[2] as f64-along*dz)-half;
-            if edge>shoulder || best.as_ref().is_some_and(|(n,owner,_)|(edge,id)>=(*n,*owner)) {continue;}
-            let t=if shoulder==0.0 {1.0} else {(edge/shoulder).clamp(0.0,1.0)};
+            if edge>*shoulder || best.as_ref().is_some_and(|(n,owner,_)|(edge,id.as_str())>=(*n,*owner)) {continue;}
+            let t=if *shoulder==0.0 {1.0} else {(edge/shoulder).clamp(0.0,1.0)};
             let weight=1.0-t*t*(3.0-2.0*t);
             let height=a[1] as f64+along*(b[1]-a[1]) as f64;
-            best=Some((edge,id,original as f64*(1.0-weight)+height*weight));
+            best=Some((edge,id.as_str(),original as f64*(1.0-weight)+height*weight));
         }
         best.map_or(original,|(_,_,h)|libm::round(h) as i64)
     }

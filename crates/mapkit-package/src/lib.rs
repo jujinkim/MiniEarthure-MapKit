@@ -1,6 +1,8 @@
 //! Bounded package I/O adapter. The core never opens files or reads a clock.
 pub mod assembled_track;
 pub mod track_environment;
+pub mod working;
+pub mod water_edit;
 pub mod road_audit;
 use mapkit_core::*;
 use schemars::JsonSchema;

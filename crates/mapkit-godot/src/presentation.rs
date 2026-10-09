@@ -310,7 +310,7 @@ fn decorate_inner(
     Ok(data)
 }
 
-fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
+pub(crate) fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
     // Native serialization plus Godot UTF-32 dictionary presentation, per admitted cell.
     d.environment.as_ref().map_or(0, |e| {
         serde_json::to_string(e).unwrap().len() as u64 * 8 + 4096
