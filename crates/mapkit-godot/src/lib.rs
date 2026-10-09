@@ -490,6 +490,35 @@ impl MapKitBridge {
             .unwrap_or_default()
     }
     #[func]
+    fn package_preview_png(&self) -> PackedByteArray {
+        self.package.as_ref().and_then(|p|p.files.get(mapkit_package::preview::PATH))
+            .map(|bytes|PackedByteArray::from(bytes.as_slice())).unwrap_or_default()
+    }
+    #[func]
+    fn inspect_package_preview(&self, bytes: PackedByteArray) -> GString {
+        response(mapkit_package::preview::inspect(bytes.as_slice()).map(|preview|serde_json::to_value(preview).unwrap()))
+    }
+    #[func]
+    fn sharing_work_bytes(&self) -> i64 {
+        self.package.as_ref().map(|p|mapkit_package::sharing::work_bytes(&p.inspection) as i64).unwrap_or(0)
+    }
+    /// Worker-only export. Reuses the opened immutable snapshot; never overwrites.
+    #[func]
+    fn export_course_package(&self, course: GString, evidence: PackedByteArray, destination: GString, allowance: i64) -> GString {
+        response((|| {
+            let package=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
+            if allowance < 0 || (allowance as u64) < mapkit_package::sharing::work_bytes(&package.inspection) {
+                return Err(mapkit_core::error("E_MEMORY_BUDGET","package export exceeds reserved allowance"));
+            }
+            let course=mapkit_core::course::decode::<mapkit_core::course::Course>(course.to_string().as_bytes())?;
+            let preview=if package.manifest.preview.is_some() {None} else {Some(mapkit_package::preview::overview(package,&course)?)};
+            let bytes=mapkit_package::sharing::course_bytes(package,course,
+                (!evidence.is_empty()).then(||evidence.as_slice().to_vec()),preview)?;
+            mapkit_package::write_new(Path::new(&destination.to_string()),&bytes)?;
+            Ok(serde_json::json!({"path":destination.to_string(),"package_sha256":mapkit_core::sha256(&bytes),"package_bytes":bytes.len(),"world_content_hash":package.inspection.world_content_hash}))
+        })())
+    }
+    #[func]
     fn document_json(&self) -> GString {
         if let Some(d)=&self.draft {return response(Ok(serde_json::to_value(d).unwrap()));}
         response(

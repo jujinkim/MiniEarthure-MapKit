@@ -76,6 +76,16 @@
       "maxLength": 128,
       "minLength": 1
     },
+    "preview": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Preview"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "provenance": {
       "$ref": "#/definitions/Provenance"
     },
@@ -340,6 +350,38 @@
           "format": "uint64",
           "maximum": 134217728.0,
           "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Preview": {
+      "type": "object",
+      "required": [
+        "height",
+        "media_type",
+        "path",
+        "width"
+      ],
+      "properties": {
+        "height": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 512.0,
+          "minimum": 1.0
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^image/png$"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^preview\\.png$"
+        },
+        "width": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 512.0,
+          "minimum": 1.0
         }
       },
       "additionalProperties": false

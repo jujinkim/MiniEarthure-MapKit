@@ -455,3 +455,7 @@ limit. Far meshes preserve the wheel spokes, gondolas, coaster rails and station
 access ramp while reducing detail. Two focused model tests pass deterministic
 hashes, paired bounds, reduced landmark triangles, hull limits and open wheel/
 pier rays. No format, collision policy or render budget changed.
+
+Selected-course `.memap` sharing and the optional integrity-bound, non-driving
+`preview.png` use the current v1 [container contract](FORMAT.md). Sharing preserves
+already validated stored geometry and never fabricates completion evidence.

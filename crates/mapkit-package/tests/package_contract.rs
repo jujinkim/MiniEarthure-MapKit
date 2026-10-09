@@ -83,6 +83,12 @@ fn stored_track_is_independent_of_generator_but_not_geometry_or_hashes() {
     let loaded=read_bytes(&stale).unwrap();
     assert_eq!(loaded.document.assembled_track.as_ref().unwrap().generator_fingerprint,"previous-build");
     assert!(pack_bytes(loaded.document.clone(),BTreeMap::new()).is_err(),"export still requires compilation equality");
+    let mut shared_course = d.courses[0].clone();
+    shared_course.definition.world_content_hash = loaded.inspection.world_content_hash.clone();
+    shared_course.course_id = sha256(&canonical(&shared_course.definition).unwrap());
+    let shared = read_bytes(&sharing::course_bytes(&loaded, shared_course, None, None).unwrap()).unwrap();
+    assert_eq!(shared.document.assembled_track, loaded.document.assembled_track, "sharing preserves validated stored geometry without recompilation");
+    assert_eq!(shared.inspection.world_content_hash, loaded.inspection.world_content_hash);
     assert!(read_bytes(&rewrite(&stale,|entries|entries[1].1.push(b' '))).is_err());
     for kind in 0..5 {
         let mut bad=d.clone();let a=bad.assembled_track.as_mut().unwrap();
@@ -546,4 +552,78 @@ fn recipe_five_courtyard_roundtrip_preserves_holes_and_content_identity() {
     let mut filled=d.clone();filled.buildings[0].holes.clear();let solid=read_bytes(&package(filled)).unwrap();
     assert_ne!(p.inspection.world_content_hash,solid.inspection.world_content_hash);
     assert_ne!(p.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap(),solid.generate(Cell{x:0,y:0},500_000).unwrap().hash().unwrap());
+}
+
+#[test]
+fn sharing_roundtrip_keeps_selected_course_evidence_preview_and_driving_identity() {
+    use mapkit_core::course::*;
+    let original=package(document());
+    let p=read_bytes(&original).unwrap();
+    let mut course=Course::from_definition(CourseBody {map_id:p.document.map_id.clone(),display_name:"Shared circuit".into(),
+        world_content_hash:p.inspection.world_content_hash.clone(),mode:Mode::Sprint,start_mode:StartMode::Ground,
+        start_direction:[1,0],checkpoints:vec![[1000,0,1000],[10000,0,1000]].into_iter().map(|position_cm|Checkpoint {
+            position_cm,radius_cm:100,shape:CheckpointShape::Sphere,placement_mode:PlacementMode::Free,surface_id:String::new()
+        }).collect()},&p.document.bounds).unwrap();
+    let evidence=b"synthetic opaque completion evidence".to_vec();
+    let hash=sha256(&evidence);
+    course.validation=Some(ValidationReference {sha256:hash.clone(),bytes:evidence.len() as u32,
+        world_content_hash:p.inspection.world_content_hash.clone(),geometry_hash:course.definition.geometry_hash().unwrap(),
+        path:format!("course-validation/{hash}.mevalidation")});
+    let preview=preview::overview(&p,&course).unwrap();
+    let exported=sharing::course_bytes(&p,course.clone(),Some(evidence.clone()),Some(preview.clone())).unwrap();
+    let shared=read_bytes(&exported).unwrap();
+    assert_eq!(shared.manifest.format_version,1);
+    assert_eq!(shared.document.courses,vec![course.clone()]);
+    assert_eq!(shared.files[&course.validation.as_ref().unwrap().path],evidence);
+    assert_eq!(shared.files[preview::PATH],preview);
+    assert_eq!(shared.inspection.world_content_hash,p.inspection.world_content_hash);
+    assert_eq!(shared.generate(Cell{x:0,y:0},500_000).unwrap(),p.generate(Cell{x:0,y:0},500_000).unwrap());
+    assert_ne!(shared.inspection.package_sha256,p.inspection.package_sha256);
+    assert_eq!(sharing::course_bytes(&shared,course.clone(),None,None).unwrap(),exported);
+    assert_eq!(pack_bytes(shared.document.clone(),shared.files.clone()).unwrap(),exported);
+    assert!(sharing::course_bytes(&p,course.clone(),None,None).is_err(),"evidence is never fabricated");
+    assert!(sharing::course_bytes(&p,course,Some(b"corrupt".to_vec()),None).is_err());
+    let corrupt=rewrite(&exported,|entries| entries.iter_mut().find(|(path,_)|path==preview::PATH).unwrap().1[40]^=1);
+    assert_eq!(read_bytes(&corrupt).err().unwrap().code,"E_HASH");
+    let malformed=rewrite(&exported,|entries| {
+        let mut manifest:serde_json::Value=serde_json::from_slice(&entries[0].1).unwrap();
+        manifest["preview"]["path"]="../preview.png".into(); entries[0].1=canonical(&manifest).unwrap();
+    });
+    assert_eq!(read_bytes(&malformed).err().unwrap().code,"E_PREVIEW");
+    let token=mapkit_core::cancellation::CancellationToken::default();token.cancel();
+    assert_eq!(token.run(||sharing::course_bytes(&p,shared.document.courses[0].clone(),None,None)).unwrap_err().code,"E_CANCELLED");
+}
+#[test]
+fn optional_preview_limits_and_unpacked_project_roundtrip() {
+    fn bitmap(width:u32,height:u32)->Vec<u8> {
+        let mut bytes=vec![];
+        {let mut encoder=png::Encoder::new(&mut bytes,width,height);encoder.set_color(png::ColorType::Rgb);
+        encoder.write_header().unwrap().write_image_data(&vec![12;width as usize*height as usize*3]).unwrap();}
+        bytes
+    }
+    assert!(preview::inspect(&bitmap(512,512)).is_ok());
+    assert_eq!(preview::inspect(&bitmap(513,1)).unwrap_err().code,"E_LIMIT");
+    assert_eq!(preview::inspect(&vec![0;preview::MAX_BYTES as usize+1]).unwrap_err().code,"E_LIMIT");
+    let bytes=pack_bytes(document(),BTreeMap::from([(preview::PATH.into(),bitmap(8,8))])).unwrap();
+    let original=read_bytes(&package(document())).unwrap();
+    let with_preview=read_bytes(&bytes).unwrap();
+    assert_eq!(with_preview.inspection.world_content_hash,original.inspection.world_content_hash);
+    let dir=std::env::temp_dir().join(format!("mapkit-preview-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    unpack(&with_preview,&dir).unwrap();
+    let (d,f)=read_project(&dir).unwrap();assert_eq!(pack_bytes(d,f).unwrap(),bytes);
+    std::fs::remove_dir_all(dir).unwrap();
+    let extra=BTreeMap::from([("../preview.png".into(),bitmap(8,8))]);
+    assert!(pack_bytes(document(),extra).is_err());
+}
+
+#[test]
+fn sharing_edited_embedded_course_cannot_claim_assembled_route_validation() {
+    let d=mapkit_package::assembled_track::compile_source(&mapkit_core::assembled_track::authoring::shortcut_source()).unwrap();
+    let p=read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
+    let mut definition=p.document.courses[0].definition.clone();
+    definition.checkpoints[0].radius_cm+=1;
+    let course=mapkit_core::course::Course::from_definition(definition,&p.document.bounds).unwrap();
+    let bytes=sharing::course_bytes(&p,course.clone(),None,None).unwrap();
+    let shared=read_bytes(&bytes).unwrap();
+    assert_eq!(mapkit_package::assembled_track::verify_course(&shared.document,&shared.inspection.world_content_hash,&course).unwrap_err().code,"E_TRACK_REQUIRED");
 }

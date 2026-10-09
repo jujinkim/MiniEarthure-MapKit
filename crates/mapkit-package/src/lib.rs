@@ -48,6 +48,8 @@ mod export_limits;
 pub mod indexed;
 mod write;
 pub use write::write_new;
+pub mod preview;
+pub mod sharing;
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -89,6 +91,8 @@ pub struct PackageManifest {
     pub provenance: Provenance,
     #[schemars(length(equal = 64), regex(pattern = "^[0-9a-f]{64}$"))]
     pub world_content_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<preview::Preview>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Inspection {
@@ -195,7 +199,7 @@ fn content_hash(document: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Re
     value.as_object_mut().unwrap().remove("courses");
     let hashes: BTreeMap<_, _> = files
         .iter()
-        .filter(|(p, _)| p.as_str() != "document.json" && !p.starts_with("course-validation/"))
+        .filter(|(p, _)| p.as_str() != "document.json" && p.as_str() != preview::PATH && !p.starts_with("course-validation/"))
         .map(|(p, b)| (p, sha256(b)))
         .collect();
     Ok(sha256(&canonical(&(value, hashes))?))
@@ -224,7 +228,7 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
         ));
     }
     let mut paths = BTreeSet::from(["document.json".into()]);
-    let mut folded = BTreeSet::from(["document.json".to_string(), "manifest.json".to_string()]);
+    let mut folded = BTreeSet::from(["document.json".to_string(), "manifest.json".to_string(), preview::PATH.to_string()]);
     for p in d
         .heightmaps
         .iter()
@@ -236,7 +240,7 @@ fn references(d: &MapDocument) -> Result<BTreeSet<String>> {
                 .filter_map(|c| c.validation.as_ref().map(|v| &v.path)),
         )
     {
-        if !safe_path(p) || p == "document.json" || p == "manifest.json" {
+        if !safe_path(p) || p == "document.json" || p == "manifest.json" || p == preview::PATH {
             return Err(error("E_PATH", "unsafe/reserved reference"));
         }
         if paths.contains(p) {
@@ -418,7 +422,9 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
     d.validate()?;
     let mut files = BTreeMap::new();
     let mut total = 0u64;
-    for p in references(&d)? {
+    let mut paths = references(&d)?;
+    if root.join(preview::PATH).exists() { paths.insert(preview::PATH.into()); }
+    for p in paths {
         let actual = root.join(&p).canonicalize().map_err(io)?;
         if !actual.starts_with(&root) {
             return Err(error("E_PATH", "reference escapes project"));
@@ -426,7 +432,7 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
         let bytes = if p == "document.json" {
             canonical(&d)?
         } else {
-            bounded_read(&actual, MAX_ENTRY_BYTES)?
+            bounded_read(&actual, if p == preview::PATH { preview::MAX_BYTES } else { MAX_ENTRY_BYTES })?
         };
         total += bytes.len() as u64;
         if total > MAX_EXPANDED_BYTES {
@@ -438,26 +444,36 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
     validate_course_files(&d, &files)?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
+    preview::from_files(&files)?;
     Ok((d, files))
 }
 pub fn pack_bytes(
     document: impl Into<MapDocument>,
-    mut files: BTreeMap<String, Vec<u8>>,
+    files: BTreeMap<String, Vec<u8>>,
 ) -> Result<Vec<u8>> {
-    let mut d = document.into();
+    pack_inner(document.into(), files, true)
+}
+fn pack_inner(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>, bind_overlay: bool) -> Result<Vec<u8>> {
     mapkit_core::cancellation::progress("package_validation", 0, Some(5), "checks");
     d.normalize();
-    for road in &d.roads {mapkit_core::road_design::verify(road)?;}
-    mapkit_core::assembled_track::surface::verify(&d)?;
+    if bind_overlay {
+        for road in &d.roads {mapkit_core::road_design::verify(road)?;}
+        mapkit_core::assembled_track::surface::verify(&d)?;
+    }
     d.validate()?;
     mapkit_core::cancellation::progress("package_validation", 1, Some(5), "checks");
-    if d.assembled_track.is_some() {
+    // Sharing changes only courses/preview in an already admitted immutable
+    // package. Recompiling its stored geometry would change the user's source.
+    if bind_overlay && d.assembled_track.is_some() {
         mapkit_core::assembled_track::composite::executable(&d)?;
         mapkit_core::assembled_track::verify_document(&d)?;
     }
-    assembled_track::bind_overlay_course(&mut d,&files)?;
+    if bind_overlay { assembled_track::bind_overlay_course(&mut d,&files)?; }
     files.insert("document.json".into(), canonical(&d)?);
-    if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
+    let preview = preview::from_files(&files)?;
+    let mut paths = references(&d)?;
+    if preview.is_some() { paths.insert(preview::PATH.into()); }
+    if files.keys().cloned().collect::<BTreeSet<_>>() != paths {
         return Err(error("E_REFERENCE", "unexpected or missing file"));
     }
     let payload_size =
@@ -493,6 +509,7 @@ pub fn pack_bytes(
         attributions: d.attributions.clone(),
         provenance: d.provenance.clone(),
         world_content_hash: content_hash(&d, &files)?,
+        preview,
     };
     let manifest_bytes = canonical(&manifest)?;
     export_limits::including_manifest(payload_size, manifest_bytes.len() as u64)?;
@@ -591,6 +608,8 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
             MAX_MANIFEST_BYTES
         } else if name == "document.json" {
             MAX_DOCUMENT_BYTES
+        } else if name == preview::PATH {
+            preview::MAX_BYTES
         } else {
             MAX_ENTRY_BYTES
         };
@@ -655,7 +674,11 @@ pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package
             ));
         }
     }
-    if records != references(&document)? || records != files.keys().cloned().collect() {
+    let preview = preview::from_files(&files)?;
+    if manifest.preview != preview { return Err(error("E_PREVIEW", "preview metadata and payload disagree")); }
+    let mut paths = references(&document)?;
+    if preview.is_some() { paths.insert(preview::PATH.into()); }
+    if records != paths || records != files.keys().cloned().collect() {
         return Err(error("E_REFERENCE", "unlisted or missing payload"));
     }
     if manifest.recipe_version != document.recipe_version

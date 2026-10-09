@@ -96,12 +96,10 @@ pub fn verify(document: &MapDocument, world: &str, candidate: &Course) -> Result
 /// Association checks for an already deterministically verified immutable document.
 /// This alone does not certify the document; `verify` remains the complete public check.
 pub fn verify_course(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
-    let a=document.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","ordinary map course"))?;
-    if a.terrain_integration() {
-        let generated=course(document,world).ok();
-        if generated.as_ref().is_none_or(|c|c.definition.checkpoints!=candidate.definition.checkpoints || c.definition.mode!=candidate.definition.mode) {
-            return Err(error("E_TRACK_REQUIRED","mixed-map course uses general surface routing"));
-        }
+    document.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","ordinary map course"))?;
+    let generated=course(document,world)?;
+    if generated.definition.geometry_hash()? != candidate.definition.geometry_hash()? {
+        return Err(error("E_TRACK_REQUIRED","edited course requires its own completion and routing"));
     }
     candidate.validate(world, &document.bounds)?;
     let mut definition = candidate.clone();

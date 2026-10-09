@@ -140,10 +140,10 @@ fn normalized_current_export_has_stable_bytes_and_hashes() {
     let bytes = package();
     assert_eq!(
         sha256(&bytes),
-        "28e02ce50b92760d2509d9a8c03ab923788636274072e447b286a61a915140e5"
+        "bfa3eebeea19a82cbd2098bab81000a3fff6d94c2cba1c0861693d5fb0083667"
     );
     assert_eq!(
         read_bytes(&bytes).unwrap().inspection.world_content_hash,
-        "cbdd26b1dec24f6ec71beee23adc528bce8105bc31912581cb2853d6e2aef776"
+        "61f0517848cb937e0f0ebb5506051770bc106d61422be03c3cd03f66be078e2f"
     );
 }

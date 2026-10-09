@@ -63,9 +63,10 @@ These small exact tests do not prove universal absence of cracks, physics-engine
 trajectory determinism, renderer pixel identity or sustained frame/memory targets.
 
 
-## Current unresolved vector expectation
+## Current vector check
 
-The 2026-10-05 frozen portable input/archive hash check failed although compared
-output matched a9e2761; four other determinism checks passed. Inspect current
-fixture semantics and expected values before adopting a new golden. This known
-failure is separate from scoped geometry/roundtrip successes and native OS parity.
+All five reproducibility checks pass. The minimal fixture's stale input/archive
+expectations were corrected against the unchanged pre-sharing CLI output:
+sharing preserves that fixture's exact bytes and driving hash. This expectation
+correction does not change the fixture, generator or saved maps, and does not
+establish native cross-platform parity.

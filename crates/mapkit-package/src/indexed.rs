@@ -586,6 +586,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             attributions: document.attributions.clone(),
             provenance: document.provenance.clone(),
             world_content_hash: self.index.world_content_hash.clone(),
+            preview: None,
         };
         let inspection = Inspection {
         free_roam: document.free_roam,

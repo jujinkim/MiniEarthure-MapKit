@@ -93,7 +93,7 @@ impl Serialize for PayloadHashes<'_> {
     ) -> std::result::Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(None)?;
         for (path, bytes) in self.0 {
-            if path != "document.json" && !path.starts_with("course-validation/") {
+            if path != "document.json" && path != crate::preview::PATH && !path.starts_with("course-validation/") {
                 self.1.check()?;
                 let mut digest = Sha256::new();
                 for chunk in bytes.chunks(64 * 1024) {

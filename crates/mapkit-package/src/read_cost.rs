@@ -50,6 +50,8 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
             MAX_MANIFEST_BYTES
         } else if name == "document.json" {
             MAX_DOCUMENT_BYTES
+        } else if name == preview::PATH {
+            preview::MAX_BYTES
         } else {
             MAX_ENTRY_BYTES
         };

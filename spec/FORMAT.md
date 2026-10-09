@@ -29,7 +29,7 @@ trust. Export does not invent timestamps or read environment metadata.
 `package_sha256` hashes exact ZIP bytes for transport/cache identity and is
 reported outside the ZIP. `world_content_hash` hashes canonical gameplay source
 and content payload hashes, excluding provenance, top-level attributions,
-document.json and courses/completion records. The course's own geometry identity
+document.json, courses/completion records and the optional reserved preview.png. The course's own geometry identity
 is separate. Changing ZIP compression alone need not change driving identity.
 Current source/dependency fingerprints invalidate disposable generated caches.
 
@@ -58,7 +58,8 @@ external URLs and executable dependencies are rejected. See [errors](ERRORS.md),
 [assets](WORLD_ASSETS.md) and [memory](../RENDER_MEMORY.md).
 
 Read validates hashes, references, saved geometry and limits without recompiling
-the stored package. Authoring/export verifies current source equality. Output
+the stored package. Authoring export verifies current source equality; sharing an
+already validated immutable package preserves its geometry without recompiling it. Output
 uses owned temporary files and atomic publication to a new destination; originals
 are never silently replaced. Cancellation cannot publish partial packages.
 `read_with_budget` bounds file-backed input; `unpack_source` requires a new directory.
@@ -67,3 +68,35 @@ CLI `pack`, `inspect`, `validate`, `unpack` and `generate-chunk` are available f
 the independent public build. Contract, corruption, path, cancellation and
 determinism tests use synthetic fixtures. Desktop checks do not establish device
 parity or detailed gameplay acceptance.
+
+## Selected-course sharing and optional preview
+
+`sharing::course_bytes` exports one selected current v1 course against the opened
+package's exact driving hash. It preserves matching completion bytes from the
+package or an explicitly supplied reference, removes other course proofs, and
+never creates completion evidence. Unreferenced or mismatched evidence fails.
+Edited routes cannot inherit a generated assembly's route validation merely by
+being embedded: their geometry must match the assembly route or be validated by
+the consumer's ordinary completion rules. No user records or cosmetic progress
+are read by this API.
+
+The optional manifest `preview` has `path: "preview.png"`, `media_type:
+"image/png"`, and actual integer width/height in 1..512. This reserved static PNG
+is at most 1 MiB. Its full decode, CRC/envelope, inventory size and SHA-256 are
+checked; animated/trailing/oversized/renamed or mismatched metadata fails. The
+preview changes package identity, never driving content or generated geometry.
+`read_project`/`unpack` preserve it at the same fixed relative path. This option is
+for `.memap`; indexed regional containers retain their own contract.
+
+The Godot export adapter reserves `sharing_work_bytes`, creates a deterministic
+map-only 384px road/gate thumbnail when no preview exists, and publishes to a new
+filename. Cancellation checks and atomic no-replace publication apply as for
+other package writes. Consumers own their file picker and worker lifetime.
+
+Scoped checks: package contract27, input defense12, reproducibility5 and package
+unit26 passed; the sharing-specific checks passed again after final bounded
+thumbnail changes. They cover preview/evidence roundtrip, driving identity,
+source/no-overwrite preservation, metadata/path/size/hash rejection, cancellation
+and edited-course admission. The current minimal-fixture golden hashes were
+corrected against the unchanged pre-sharing CLI output. Native Godot/CLI build
+passed on macOS; this does not claim mobile or detailed gameplay acceptance.
