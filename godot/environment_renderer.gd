@@ -137,7 +137,8 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	var day := float(celestial.daylight)
 	var design := PROFILE.design_at(state.profile,Vector2(camera_position.x,-camera_position.z))
 	var settlement := str(design.get("settlement","urban" if design.get("concept")=="metropolis" else "sparse"))
-	var night_ambient := 0.07 if settlement == "urban" else (0.028 if settlement == "village" else 0.012)
+	var night_ambient := 0.22 if settlement == "urban" else (0.028 if settlement == "village" else 0.012)
+	var night_color := Color(0.42,0.49,0.63) if settlement == "urban" else Color(0.23,0.32,0.48)
 	var now := Time.get_ticks_msec()
 	var delta := 0.1 if _last_update < 0 else clampf(float(now - _last_update) / 1000.0,0.0,0.25)
 	_last_update = now
@@ -152,8 +153,11 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	moon.light_energy = maxf(0.0,sin(float(celestial.moon_altitude)))*float(celestial.moon_phase)*0.12*(1.0-_clouds*0.85)
 	sun.shadow_enabled = float(celestial.altitude) > 0.0
 	moon.shadow_enabled = not sun.shadow_enabled and moon.light_energy > 0.01
-	settings.ambient_light_color = Color(0.23,0.32,0.48).lerp(Color(0.62,0.69,0.72),day)
+	settings.ambient_light_color = night_color.lerp(Color(0.62,0.69,0.72),day)
 	settings.ambient_light_energy = lerpf(night_ambient,0.24,day)*(1.0-_clouds*0.58)
+	# Preserve low night tones; extra contrast otherwise clips the indirect
+	# illumination of urban road/building materials down to black.
+	settings.adjustment_contrast = lerpf(1.0,1.02,day) if settlement == "urban" else 1.02
 	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.36,0.42,0.46),day)
 	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
 	_weather_fog_energy = lerpf(0.04,0.6,day)

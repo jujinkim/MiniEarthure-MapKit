@@ -372,6 +372,7 @@ dependencies = [
  "gltf",
  "image-webp",
  "libc",
+ "libm",
  "mapkit-core",
  "png",
  "schemars",

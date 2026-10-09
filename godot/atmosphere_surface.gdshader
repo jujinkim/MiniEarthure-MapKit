@@ -46,6 +46,11 @@ void fragment() {
     vec4 weather = texelFetch(environment_data,ivec2(0,0),0);
     vec4 clock = texelFetch(environment_data,ivec2(1,0),0);
     vec3 color = distant ? COLOR.rgb : base_color.rgb;
+    // Distant packed colours and colour properties both use sRGB. The source
+    // hint converts uniforms in Forward/Mobile; vertex attributes need it here.
+    if(distant && !OUTPUT_IS_SRGB) {
+        color=mix(color/12.92,pow((color+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),color));
+    }
     if(vertex_tinted && !distant) color *= COLOR.rgb;
     if(textured) color *= texture(albedo_texture,UV).rgb;
     float surface_roughness=roughness;
@@ -104,6 +109,7 @@ void fragment() {
         float windows = step(0.2,fract(floor(world_position.x*0.7)+floor(world_position.y*0.6)*0.618+seed));
         EMISSION = enabled ? vec3(1.0,0.63,0.28)*windows*1.2 : vec3(0.0);
     } else if(role == 2) {
-        EMISSION = enabled ? vec3(1.0,0.76,0.45)*2.2 : vec3(0.0);
+        // Authored bulbs/signs retain their material colour in both LODs.
+        EMISSION = enabled ? color*0.9 : vec3(0.0);
     }
 }

@@ -310,7 +310,11 @@ surface probes, collision triangles, execution cells or admission budgets.
 The distant path emits its authored triangles, node hierarchy, materials and
 vertex tint. Quarter turns, continuous yaw and reflected node transforms apply
 once. Open arcades remain open. Assets without a distant path retain the generic
-display proxy. Water retains the clipped shoreline and islands without physical
+display proxy. Packed distant colours are sRGB: linear GLTF PBR/vertex colours
+are converted once, while explicit sRGB overrides retain their values. The common
+shader converts vertex colours for Forward/Mobile as it does colour uniforms;
+Compatibility consumes sRGB directly. Emissive signs preserve their authored hue
+in both LODs and retain the existing daylight schedule. Water retains the clipped shoreline and islands without physical
 triangles. Terrain uses the same broad variation in near and distant shaders.
 Small authored props form a contiguous batch tail and follow the existing quality
 distance limit. Batches keep the existing vertex cap; cancellation releases their
@@ -324,6 +328,10 @@ piers. Paired files have immutable SHA-256 names and share the existing material
 tiles (at most 512 px). Editor owns their world placement and recipes. Fine joinery
 is omitted at distance while roof forms, tree crowns and architectural openings
 remain. Near/middle distance still uses the common mesh LOD and instancing path.
+`scripts/harbor_assets.py` adds six shop/apartment silhouettes with rear access,
+roof equipment, three loading warehouses, container stacks, open gantry cranes,
+trucks, quays, pipes and supported bridge piers. Urban night ambient light and
+contrast preserve facade detail within the existing light-pool/quality budgets.
 
 Scoped validation on macOS ARM64 / Godot 4.7.2: package library 26,
 input-defense 12, package-contract 24 and authored-distance 3 Rust tests pass;
@@ -333,3 +341,12 @@ hashes, bounds, real openings and reduced triangle counts (for example, shop
 save/history/paired derivation/resource-release regressions pass. A fixed-camera
 common-render terrain comparison differs by at most 1/255 RGB. These checks do
 not constitute map art or device performance acceptance.
+
+The Harbor changes pass four model tests (paired bounds, openings and reduction),
+the distant/display Rust regression and three authored-distance regressions,
+including linear GLTF colour and unchanged explicit override values. CLI/native
+builds pass. An actual-pixel night/day test passes on Compatibility and Forward
+Mobile on the same macOS M1: near/far cyan/pink keep their hue and daylight disables
+emission. Light-pool regression uses the current quality limits rather than the
+retired platform-size assumption. The terrain colour comparison remains within
+1/255 on Compatibility. No device/FPS or full-platform acceptance is claimed.

@@ -69,7 +69,9 @@ fn authored_silhouette_preserves_opening_transforms_collision_and_bounds() {
     let p=read_bytes(&pack_bytes(d.clone(),files.clone()).unwrap()).unwrap();
     let cell=Cell{x:0,y:0};let geometry=p.generate(cell,500_000).unwrap();
     let far=p.distant_from_generated(&geometry).unwrap();
-    let vertices:Vec<_>=far.vertices.iter().zip(&far.colors).filter(|(_,c)| **c==[64,128,191,255]).map(|(v,_)| *v).collect();
+    // GLTF's linear [.25,.5,.75] reaches the same sRGB colour properties as
+    // the primary GLTF importer; terrain colours already use display sRGB.
+    let vertices:Vec<_>=far.vertices.iter().zip(&far.colors).filter(|(_,c)| **c==[137,188,225,255]).map(|(v,_)| *v).collect();
     assert_eq!(vertices.len(),18,"authored faces, not filled material boxes");
     let angle=120_f32.to_radians();let (s,c)=angle.sin_cos();
     // Recover GLB local points: parent translation and child translation/scale
@@ -82,6 +84,13 @@ fn authored_silhouette_preserves_opening_transforms_collision_and_bounds() {
     }
     assert!(p.distant_triangle_bound(cell).unwrap() >= far.vertices.len() as u64/3);
     assert!(p.distant_workspace_bytes(cell).unwrap() > files["far.glb"].len() as u64);
+    let mut tinted=d.clone();
+    tinted.assets[0].material=Some(AssetMaterial{albedo_rgba:[64,128,192,255],metallic_per_mille:0,
+        roughness_per_mille:900,double_sided:false,albedo_texture:None});
+    let override_package=read_bytes(&pack_bytes(tinted,files.clone()).unwrap()).unwrap();
+    let override_mesh=override_package.generate_distant(cell).unwrap();
+    assert_eq!(override_mesh.colors.iter().filter(|c| **c==[64,128,192,255]).count(),18,
+        "sRGB overrides must not be transformed a second time");
     let mut without=d;without.assets[0].distant_path=None;
     let mut near_files=files;near_files.remove("far.glb");
     let other=read_bytes(&pack_bytes(without,near_files).unwrap()).unwrap();

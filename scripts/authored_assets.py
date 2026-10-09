@@ -392,6 +392,10 @@ def library():
         'tractor':lambda far:vehicle(True,far),'parked-car':lambda far:vehicle(False,far),
         'wheat':lambda far:crop(0,far),'cabbage':lambda far:crop(1,far)}
     factories.update({name:lambda far,name=name:prop(name,far) for name in ('bench','lamp','hay','crate','table','planter','bin','log','reeds','grass')})
+    return assemble_library(factories)
+
+def assemble_library(factories,source='authored_assets.py'):
+    """Serialize paired originals with one placement/collision frame."""
     result={}
     for name,factory in factories.items():
         near=factory(False);far=factory(True);payloads={}
@@ -408,6 +412,6 @@ def library():
                 size_cm=cm((bounds[1][0]-bounds[0][0],.2,bounds[1][2]-bounds[0][2])))]
         record=dict(id='authored-'+name,path=paths[0],distant_path=paths[1],collision=near.collision,
             convex_collision=near.convex,attribution=dict(source='mapkit-authored-assets-v1',license='MIT',
-                notice='Original metre-scale geometry; authored_assets.py. Shared MapKit material tiles. No extracted assets.'))
+                notice='Original metre-scale geometry; '+source+'. Shared MapKit material tiles. No extracted assets.'))
         result[name]=(record,payloads,bounds)
     return result

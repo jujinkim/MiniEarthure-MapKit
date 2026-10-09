@@ -5,6 +5,7 @@ import struct
 import unittest
 import numpy as np
 from authored_assets import library
+from harbor_assets import library as harbor_library
 
 def triangles(data):
     size=struct.unpack_from('<I',data,12)[0]
@@ -60,5 +61,33 @@ class AuthoredAssets(unittest.TestCase):
                 self.assertTrue(hits,(name,field))
                 self.assertLess(max(hits),front-1,(name,field,'opening filled'))
                 self.assertGreaterEqual(max(hits),wall-.2,(name,field,'back wall lost'))
+
+class HarborAssets(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):cls.assets=harbor_library()
+
+    def test_paired_envelopes_hashes_and_reduction(self):
+        self.assertEqual(self.assets,harbor_library())
+        for name,(record,payloads,_) in self.assets.items():
+            pair=[]
+            for field in ('path','distant_path'):
+                data=payloads[record[field]]
+                self.assertEqual(record[field],'assets/'+hashlib.sha256(data).hexdigest()+'.glb')
+                pair.append(triangles(data))
+            near,far=pair
+            self.assertLessEqual(len(far),len(near),name)
+            a=near.reshape(-1,3);b=far.reshape(-1,3)
+            self.assertTrue(np.all(np.abs(a.min(0)-b.min(0))<=.30),name)
+            self.assertTrue(np.all(np.abs(a.max(0)-b.max(0))<=.30),name)
+            if name.startswith(('urban-','warehouse-','container-')) or name=='dock-crane':
+                self.assertLess(len(far),len(near),name)
+
+    def test_crane_and_bridge_openings_survive(self):
+        for name in ('dock-crane','harbor-pier'):
+            record,payloads,_=self.assets[name]
+            for field in ('path','distant_path'):
+                faces=triangles(payloads[record[field]])
+                self.assertFalse(ray_hits(faces,0,3),(name,field,'central opening filled'))
+                self.assertTrue(ray_hits(faces,7.5 if name=='dock-crane' else 4,3),(name,field,'leg lost'))
 
 if __name__=='__main__':unittest.main()

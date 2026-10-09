@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Debug, Default)]
 pub struct DistantMesh {
     pub vertices: Vec<[f32; 3]>,
+    /// Display sRGB, matching Godot colour properties (alpha remains linear).
     pub colors: Vec<[u8; 4]>,
     pub light_data: Vec<[f32; 2]>,
     pub decoration: Vec<u8>,
@@ -21,6 +22,15 @@ struct Proxy {
 
 fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     std::array::from_fn(|c| std::array::from_fn(|r| (0..4).map(|k| a[k][r] * b[c][k]).sum()))
+}
+
+fn gltf_color(value: [f32; 4]) -> [u8; 4] {
+    std::array::from_fn(|c| {
+        let v = value[c].clamp(0., 1.);
+        let display = if c == 3 { v } else if v <= 0.0031308 { v * 12.92 }
+            else { 1.055 * libm::powf(v, 1. / 2.4) - 0.055 };
+        (display * 255.).clamp(0., 255.).round() as u8
+    })
 }
 
 /// Read the authored silhouette, preserving holes and the complete node hierarchy.
@@ -47,15 +57,17 @@ fn silhouette(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core:
                 let indices: Vec<_> = reader.read_indices().map(|i| i.into_u32().collect())
                     .unwrap_or_else(|| (0..points.len() as u32).collect());
                 let colors: Option<Vec<_>> = reader.read_colors(0).map(|c| c.into_rgba_f32().collect());
-                let base = tint.map(|c| c.map(|v| v as f32/255.))
-                    .unwrap_or_else(|| primitive.material().pbr_metallic_roughness().base_color_factor());
+                let base = primitive.material().pbr_metallic_roughness().base_color_factor();
                 let index = primitive.material().index().unwrap_or(usize::MAX) as u16;
                 let role = binding.map_or(0, |b| if b.window_materials.contains(&index) {1} else if b.bulb_materials.contains(&index) {2} else {0});
                 for face in indices.chunks_exact(3) {
                     for corner in if determinant < 0. { [0,1,2] } else { [0,2,1] } {
                         let i = face[corner] as usize;
                         result.vertices.push(std::array::from_fn(|r| m[3][r]+(0..3).map(|c| m[c][r]*points[i][c]).sum::<f32>()));
-                        result.colors.push(std::array::from_fn(|c| (base[c]*colors.as_ref().map_or(1., |v| v[i][c])*255.).clamp(0.,255.).round() as u8));
+                        // A source override is already sRGB and replaces the
+                        // GLTF material/vertex tint, as the primary importer does.
+                        result.colors.push(tint.unwrap_or_else(|| gltf_color(std::array::from_fn(|c|
+                            base[c]*colors.as_ref().map_or(1., |v| v[i][c])))));
                         result.light_data.push([0.,role as f32]);
                         result.decoration.push(0);
                     }
@@ -100,11 +112,10 @@ fn proxies(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core::en
             let mut groups = BTreeMap::<([u8; 4], u8), Proxy>::new();
             for primitive in mesh.primitives() {
                 let color = tint.unwrap_or_else(|| {
-                    primitive
+                    gltf_color(primitive
                         .material()
                         .pbr_metallic_roughness()
-                        .base_color_factor()
-                        .map(|v| (v.clamp(0., 1.) * 255.).round() as u8)
+                        .base_color_factor())
                 });
                 let index = primitive.material().index().unwrap_or(usize::MAX) as u16;
                 let role = binding.map_or(0, |b| if b.window_materials.contains(&index) {1} else if b.bulb_materials.contains(&index) {2} else {0});
