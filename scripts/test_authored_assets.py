@@ -6,6 +6,7 @@ import unittest
 import numpy as np
 from authored_assets import library
 from harbor_assets import library as harbor_library
+from forest_assets import library as forest_library
 
 def triangles(data):
     size=struct.unpack_from('<I',data,12)[0]
@@ -89,5 +90,33 @@ class HarborAssets(unittest.TestCase):
                 faces=triangles(payloads[record[field]])
                 self.assertFalse(ray_hits(faces,0,3),(name,field,'central opening filled'))
                 self.assertTrue(ray_hits(faces,7.5 if name=='dock-crane' else 4,3),(name,field,'leg lost'))
+
+class ForestAssets(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):cls.assets=forest_library()
+
+    def test_growth_forms_hashes_and_far_silhouettes(self):
+        self.assertEqual(self.assets,forest_library())
+        for name,(record,payloads,_) in self.assets.items():
+            pair=[]
+            for field in ('path','distant_path'):
+                data=payloads[record[field]]
+                self.assertEqual(record[field],'assets/'+hashlib.sha256(data).hexdigest()+'.glb')
+                pair.append(triangles(data))
+            near,far=pair;a=near.reshape(-1,3);b=far.reshape(-1,3)
+            self.assertLessEqual(len(far),len(near),name)
+            tolerance=np.maximum(.3,np.ptp(a,axis=0)*.18)
+            self.assertTrue(np.all(np.abs(a.min(0)-b.min(0))<=tolerance),name)
+            self.assertTrue(np.all(np.abs(a.max(0)-b.max(0))<=tolerance),name)
+            if name.startswith(('cedar','sapling')) or name in ('beech','ranger-lodge'):
+                self.assertLess(len(far),len(near),name)
+
+    def test_bridge_and_shelter_remain_open(self):
+        for name in ('forest-pier','picnic-shelter'):
+            record,payloads,_=self.assets[name]
+            for field in ('path','distant_path'):
+                faces=triangles(payloads[record[field]])
+                self.assertFalse(ray_hits(faces,0,2),(name,field))
+                self.assertTrue(ray_hits(faces,3,2),(name,field))
 
 if __name__=='__main__':unittest.main()

@@ -8,7 +8,9 @@ pub struct DistantMesh {
     pub vertices: Vec<[f32; 3]>,
     /// Display sRGB, matching Godot colour properties (alpha remains linear).
     pub colors: Vec<[u8; 4]>,
+    /// Light seed/role for solids; scene-space flow m/s for water (kind 2).
     pub light_data: Vec<[f32; 2]>,
+    /// Display kind: 0 solid, 1 small prop, 2 water. No collision semantics.
     pub decoration: Vec<u8>,
 }
 
@@ -274,15 +276,17 @@ impl Package {
             }
         }
         // Distant water keeps the same clipped shoreline and elevation. This
-        // opaque low-detail surface never enters collision/physical triangles.
+        // tagged surface uses the common water material and never enters
+        // collision/physical triangles. Flow uses the existing two UV channels.
         for water in &chunk.water_bodies {
             for triangle in &water.surface {
                 for i in [0, 2, 1] {
                     let p = triangle[i];
                     result.vertices.push([p[0] as f32 * 0.01, p[1] as f32 * 0.01, -p[2] as f32 * 0.01]);
                     result.colors.push([56, 103, 112, 255]);
-                    result.light_data.push([0., 0.]);
-                    result.decoration.push(0);
+                    result.light_data.push([water.body.flow_cm_s[0] as f32 * 0.01,
+                        -water.body.flow_cm_s[1] as f32 * 0.01]);
+                    result.decoration.push(2);
                 }
             }
         }

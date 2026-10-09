@@ -350,3 +350,27 @@ Mobile on the same macOS M1: near/far cyan/pink keep their hue and daylight disa
 emission. Light-pool regression uses the current quality limits rather than the
 retired platform-size assumption. The terrain colour comparison remains within
 1/255 on Compatibility. No device/FPS or full-platform acceptance is claimed.
+
+Forest authoring adds original cedar/broadleaf growth stages, saplings, fern
+patches, fallen timber, ranger lodges, tents, open picnic shelters and piers.
+Six total authored-model regressions cover hashes, reduced silhouettes and real
+openings. Ground-cover patches are small spatial units using the existing quality
+distance limits; static trunks and structures retain primary collision.
+
+Distant water uses the same quality-selected water shader as nearby water,
+including depth, refraction and map-to-scene flow. The packed display kind byte
+is 0 for solids, 1 for the small-prop tail and 2 for water; the existing two UV
+channels carry flow for water and light identity/role for solids. This is a
+display payload change under v1, not a physical or source-water change. Batches
+split on kind and share at most two job materials. The existing 64 KiB fixed
+far overhead covers these materials and the additional two run boundaries;
+per-triangle/cell scheduling limits are unchanged. Materials and geometry retire
+with the original far lease. Colour/quality, flow, collision invariance and
+last-owner tests cover the change; renderer fingerprints invalidate old caches.
+
+On macOS M1 / Godot 4.7.2, the water correction passes the distant, authored-distance
+and water-contract Rust checks (1+3+1), native binding/CLI builds, and actual near/
+far water pixel checks at low/high quality on Compatibility and Forward Mobile.
+Mean RGB delta is below 1/255 in both backends; far water owners release. The
+existing terrain colour check also passes. This is bounded display verification,
+not a device or whole-map performance acceptance.

@@ -21,8 +21,16 @@ static func begin(data: Dictionary, parent: Node3D, lease: RefCounted, resources
 			material = context.surface_material(material,0)
 			material.set_shader_parameter("distant",true)
 	lease.track(material)
+	# Two bounded shared materials per job. Water retains the existing depth,
+	# refraction and quality path, so cell LOD does not create square colour seams.
+	var water := ShaderMaterial.new()
+	water.shader = preload("./water_surface.gdshader")
+	water.set_meta("mapkit_water",true)
+	preload("./display_quality.gd").apply_material(water,preload("./display_quality.gd").active())
+	water.set_shader_parameter("flow_from_uv",true)
+	lease.track(water)
 	return {"root": root, "owner": data.geometry, "view": data.geometry.view(), "offset": 0,
-		"material": material, "lease": lease, "done": false, "cancelled": false}
+		"material": material, "water_material":water, "lease": lease, "done": false, "cancelled": false}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled: return true
@@ -33,10 +41,10 @@ static func advance(job: Dictionary) -> bool:
 		job.owner = null
 		return true
 	var end := mini(count, int(job.offset) + BATCH_VERTICES)
-	var small: bool = not job.view.get("decoration", PackedByteArray()).is_empty() and job.view.decoration[job.offset] == 1
+	var kind: int = 0 if job.view.get("decoration", PackedByteArray()).is_empty() else int(job.view.decoration[job.offset])
 	if job.view.has("decoration"):
 		for vertex in range(int(job.offset) + 3, end, 3):
-			if (job.view.decoration[vertex] == 1) != small:
+			if int(job.view.decoration[vertex]) != kind:
 				end = vertex
 				break
 	var arrays := []
@@ -49,9 +57,9 @@ static func advance(job: Dictionary) -> bool:
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
-	instance.material_override = job.material
+	instance.material_override = job.water_material if kind==2 else job.material
 	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	instance.set_meta("mapkit_decoration", small)
+	instance.set_meta("mapkit_decoration", kind==1)
 	preload("./display_quality.gd").apply_node(instance, preload("./display_quality.gd").active())
 	job.root.add_child(instance)
 	job.lease.track(mesh)
@@ -63,6 +71,7 @@ static func cancel(job: Dictionary) -> void:
 	job.view = {}
 	job.owner = null
 	job.material = null
+	job.water_material = null
 	if is_instance_valid(job.root) and not job.root.is_queued_for_deletion():
 		job.root.visible = false
 		job.root.queue_free()

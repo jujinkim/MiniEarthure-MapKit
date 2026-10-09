@@ -3,6 +3,7 @@ uniform sampler2D depth_texture : hint_depth_texture, repeat_disable, filter_nea
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear;
 #endif
 uniform vec2 flow = vec2(0.0);
+uniform bool flow_from_uv = false;
 uniform int quality_level = 1;
 varying vec3 world_position;
 void vertex() { world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
@@ -18,7 +19,7 @@ float scene_depth(vec2 uv, mat4 inverse_projection) {
 }
 void fragment() {
     float thickness = max(0.0, scene_depth(SCREEN_UV, INV_PROJECTION_MATRIX) + VERTEX.z);
-    vec2 p = world_position.xz - flow * TIME * .3;
+    vec2 p = world_position.xz - (flow_from_uv ? UV : flow) * TIME * .3;
     vec2 wave = vec2(cos(p.x*3.8+TIME*.7), sin(p.y*4.1-TIME*.6))*.035;
     if(quality_level>0) wave += vec2(sin(p.y*7.1+p.x*1.7-TIME),cos(p.x*6.7-p.y*2.1+TIME*.9))*.018;
     NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(wave.x,0.0,wave.y,0.0)).xyz);

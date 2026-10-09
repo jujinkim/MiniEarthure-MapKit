@@ -38,7 +38,7 @@ fn water_and_small_props_have_bounded_display_only_geometry() {
     d.water_bodies.push(mapkit_core::water::WaterBody {
         id:"pond".into(),polygon:vec![[1000,1000],[4000,1000],[4000,4000],[1000,4000]],
         islands:vec![vec![[2000,2000],[2000,3000],[3000,3000],[3000,2000]]],
-        surface_cm:100,bottom_cm:-200,flow_cm_s:[0,0],
+        surface_cm:100,bottom_cm:-200,flow_cm_s:[45,-20],
     });
     let p=read_bytes(&pack_bytes(d,files).unwrap()).unwrap();
     let cell=Cell{x:0,y:0};let chunk=p.generate(cell,500_000).unwrap();
@@ -50,6 +50,9 @@ fn water_and_small_props_have_bounded_display_only_geometry() {
     let water:Vec<_>=far.vertices.iter().zip(&far.colors).filter(|(_,c)| **c==[56,103,112,255]).collect();
     assert_eq!(water.len(),chunk.water_bodies[0].surface.len()*3);
     assert!(water.iter().all(|(v,_)| v[1]==1.0));
+    let water_data:Vec<_>=far.decoration.iter().zip(&far.light_data).filter(|(kind,_)| **kind==2).collect();
+    assert_eq!(water_data.len(),water.len());
+    assert!(water_data.iter().all(|(_,uv)| (uv[0]-0.45).abs()<0.0001 && (uv[1]-0.20).abs()<0.0001));
     assert!(chunk.triangles.iter().all(|t| t.object_id!="pond"));
     assert!(p.distant_triangle_bound(cell).unwrap()>=far.vertices.len() as u64/3);
 }
