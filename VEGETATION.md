@@ -1,6 +1,6 @@
-# Recipe 7 vegetation assets
+# Current vegetation assets
 
-Recipe 7 lets a Forest or Orchard zone select a shared GLB instead of the builtin
+Current v1 lets a Forest or Orchard zone select a shared GLB instead of the builtin
 tree. The zone polygon, exclusions, seed, spacing and density remain the inputs
 to MapKit's deterministic generator. There is no target count, archived point
 list, relocation search or fill quota. Ineligible candidates are omitted.
@@ -28,15 +28,14 @@ Density zero generates none; narrow or occupied zones can also generate none.
 
 Existing candidate hashing, forest jitter, source-global thinning, terrain
 anchoring and centre ownership are reused. Custom trees emit their shared asset
-ID and complete declared collision at one owner cell. Recipe 7 occupancy queries
+ID and complete declared collision at one owner cell. Vegetation occupancy queries
 include a conservative 200cm owner halo, including metadata-only indexed queries;
 cell allowance checks still apply before allocation. Source-region derivation
 keeps zone-referenced assets and material dependencies. Cost planning counts all
 box/convex shapes, and the source ownership audit accounts for the new asset ID.
 
-The `tree` field requires explicit recipe 7. Omission retains builtin behavior;
-recipes 1–6 preserve their serialization and generated output. Package v1,
-indexed v2 and generated v6 formats remain unchanged. Core `zone_assets` and
+Omitting `tree` selects the builtin asset. All own package, indexed, recipe and
+generated versions are 1; old recipe branches are not supported. Core `zone_assets` and
 `zone_obstacles` tests cover opt-in, rejected references/footprints, zero density,
 spacing/exclusions, no relocation, road/obstacle clearance, seam ownership,
 regular/indexed metadata queries, regional asset retention and output budgets.

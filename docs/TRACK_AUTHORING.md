@@ -1,8 +1,7 @@
 # Category generation and free track authoring — current v1
 
-This 2026-09-30 decision replaces the earlier mandatory-family, obstacle-minimum,
-overrun-acceptance and 8m/90° placement rules in ASSEMBLED_TRACKS.md. Historical
-files and Git history remain intact. There are no old readers or converters.
+This is the current generation/authoring contract. Saved files and Git history
+remain intact. There are no old readers or converters.
 
 Generation settings use `categories: ["driving", "gimmick", "action"]`, all enabled
 by default. Empty/unknown selections are rejected. Categories provide candidates;
@@ -23,7 +22,7 @@ These are reference-speed estimates, not vehicle performance certification.
 Ordinary width choices are 200/400/600/800/1200cm with eased entry/exit widths.
 The public catalogue reports category, supported dimensions and entry/exit ports.
 Dedicated loops, halfpipes and the compact overpass use 400cm; authored pipe bores
-support 100/200/300/400/600cm. Generated pipes choose 100/200/300cm. Internal
+support 200/300/400/600cm. Generated pipes choose 200/300/400cm. Internal
 profiles remain catalogue-owned.
 
 For width w in metres, gentle 45°/90° radius is max(16,4w), right-angle 90° radius
@@ -189,8 +188,8 @@ The affected package cases are `generated_walls_have_no_reverse_coplanar_duplica
 `manual_flight_and_static_shapes_survive_both_containers`. No full suite, category
 matrix or platform acceptance was run. Consumer timing and native-load results
 are in the public [Editor report](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md).
-Build fingerprints change, so active bundled packages must be re-exported from
-their preserved sources; no old loader or automatic conversion is introduced.
+Build fingerprints invalidate compiled caches. Valid saved packages remain readable;
+authoring/export verifies current source equality.
 
 ## Independent grind lines and RC attachments (2026-10-01)
 
@@ -214,8 +213,8 @@ line for one rail placement; thereafter deleting or editing the line does not
 change its supporting collider or silently regenerate the interaction.
 
 RC attachments are `ramp_low` (25 cm), `ramp_standard` (60 cm), `ramp_triple`
-(three 25 cm ramps), left/right 2 m radius quarterpipes, and a 6 m rail with a
-60 cm top. They are static convex geometry with no automatic jump effect.
+(three 25 cm ramps), left/right 2 m radius quarterpipes, and a rail with a
+40 cm top. They are static convex geometry with no automatic jump effect.
 Ordinary road paths, including cubic links, share curvature/width/twist
 refinement. Connected junctions clip only wall intervals inside the neighbor's
 road ribbon at the same height. Rendering, collision, occupancy and preview use
@@ -379,39 +378,6 @@ so future fitter edits invalidate compiled assembly products as well as cell
 cache fingerprints. Preserved packages must be recompiled by their authoring
 workflow; this is not a loader fallback.
 
-## Pipe bore reduction (08, 2026-10-04 replacement)
-
-This explicitly replaces the earlier generated 2/4/6m bores with 1/2/3m. The
-existing pipe draw is uniform at each difficulty: the identical seeded draw now
-selects half its previous bore. Difficulty-dependent ordinary-road weights and
-road width choices are unchanged. Authoring keeps 1/2/3/4/6m, including existing
-4/6m sources without dimensional conversion. General cylinder catalogue defaults
-are 2m; explicitly named wide presets retain their 4m defaults. Catalogue entries
-expose `default_width_cm` and `min_port_width_cm` for consumers.
-
-The cylinder body keeps its centreline bends, end poses and length. Only bore
-radius and its dependent tessellation/clearances change. Outer ramps retain the
-diameter/3 portal drop and maximum 12% analytic grade. Generated exit ramps taper
-back to the former road-side width, so no 1m ordinary road/port is introduced.
-Tube/ramp authoring admits 1m ports; ordinary-road ports still start at 2m.
-Internal connected pipes retain matching open rings without internal funnels.
-
-Straight-cylinder authoring now defaults to radius 125cm (2.5m bore), length
-1600cm. Cylinder and swept-cylinder minimum radii are 50cm. Loop minimum radius
-150cm and swept-halfpipe minimum 100cm are unchanged. Loop, halfpipe, panel and
-ordinary-road dimensions stay unchanged. Current v1 and explicit stored values
-remain; source fingerprints change, with no historical loader or converter.
-
-Scoped macOS arm64 tests passed: three `pipe_dimensions` tests, five
-`special_tracks` tests, seeded pipe-draw/budget and retained road-distribution
-units, package tests `small_and_existing_authored_pipe_sizes_roundtrip_without_conversion`
-and `reproducible_roundtrip_and_modified_source_rejected`, plus native/CLI build.
-These cover all 12 cylinder presets at all five authored sizes, unchanged body
-endpoints/length (under 3cm sampling difference), actual circular/hollow geometry,
-portal frames/grade, internal open sections, shape/source tampering, deterministic
-bytes, old 4/6m roundtrip and unchanged rejection budgets. Shared Godot material/
-preview and Editor history verification are reported by the consumers. Runtime
-passage observations are separate from geometric admission and user acceptance.
 
 ## Air ring defaults 09 — 2026-10-04
 

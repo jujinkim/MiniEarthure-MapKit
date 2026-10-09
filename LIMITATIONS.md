@@ -1,73 +1,27 @@
-# Remaining implementation and acceptance work
+# Current boundaries and open validation
 
-This repository is a working development foundation, not a completed game cutover.
+MapKit implements current-v1 map/asset validation, deterministic geometry,
+assembled generation and authoring, memory terrain/water editing, package and
+regional I/O, incremental common rendering and cost planning. It is independent
+of game transport, physics, progress and release acceptance.
 
-- K01 public metadata/CLI/Schema audit is implemented. Schema success alone does
-  not validate a package; calendar, graph, references, bytes and payloads require
-  semantic checks. K02 canonical export/container/inventory audit and scoped Mac
-  regressions are implemented; locked-exporter native OS byte parity remains
-  unverified. K03 bounded container/static-asset defense is implemented; see the
-  exact supported subset in `spec/FORMAT.md`. Repacking malformed metadata requires an explicit source
-  edit; the toolkit never silently changes saved originals.
+- Schema validation is only one layer: graph, geometry, hashes, decoder bounds,
+  inventory and semantic references are also required. Invalid sources are not repaired.
+- Static GLB/PNG/WebP support is bounded; morphs, skins, animations, executable
+  extensions and external resources are unsupported. General intersecting shells,
+  arbitrary roofs and inferred structure connectivity require explicit authoring.
+- Courtyards allow at most 16 disjoint interior rings and 512 total vertices with
+  a flat roof. Touching/nested holes and arbitrary sloped courtyard roofs reject.
+- Regional files retain one bounded original authoring document. Sharded authoring,
+  arbitrary density, source LRU and network region requests are not provided here.
+- Logical estimates and decoder caps are not complete allocator/RSS/GPU accounting.
+  Engine GLB import is not preemptible. Callers retain leases through real retirement.
+- Portable frozen input/archive vectors had a known expectation mismatch in the
+  2026-10-05 check; compared output matched the prior revision. Other determinism
+  checks passed. Investigate the fixture contract before changing expectations.
+- Native Windows/Android parity, detailed application driving, hardware rendering
+  and representative large-map performance remain user/consumer verification.
 
-- K05 recipe-2 road graph aprons, terrain-conforming ground surfaces and explicit
-  elevated/bridge/underpass/tunnel geometry are implemented. Recipe 1 remains
-  frozen. Authoring constraints (junction arm/approach limits, terrain-level
-  transitions, matching tunnel clearances) and bounded generation failures are
-  specified in `spec/FORMAT.md`. Scoped native Mac collision tests are not full
-  target-platform driving acceptance. Arbitrary intersecting structures still
-  require author-supplied clearance; no implicit crossing connection is generated.
-- K06 recipe-3 building materials/flat and rectangular gable roofs, exact solid
-  parts, full-canopy placement clearance, deterministic spacing, manual/repeated
-  builtin fences/lights and theme/override/access-aware sidewalks are implemented.
-  Recipes 1/2 remain frozen. See `spec/FORMAT.md` for explicit supported authoring
-  limits; arbitrary roofs, curved fence panels and inferred entrances are not
-  supported. Scoped Mac native checks do not establish real-driving acceptance.
-- Generator work remaining: user assets/rendering (K07) and native
-  cross-platform/reference-map acceptance (K08/P). Recipe-2 road scratch has an
-  explicit consumer reservation, as do recipe-3 workspace and convex parts, but complete S04 allocator/RSS/GPU accounting
-  remains separate.
-- K03 validates ZIP envelopes/descriptors/ZIP64 and complete PNG/WebP pixels,
-  GLB framing/references/accessor bytes/indices/static node graphs/materials and
-  embedded PNGs before admission. It accepts a documented static triangle subset,
-  not every glTF feature: sparse/matrix accessors, morphs, skins, animation,
-  extensions, extras, external resources and non-PNG embedded images are rejected.
-  Collision metadata currently supports bounded box primitives; new convex proxy
-  authoring, custom asset rendering and display/performance budgets remain K07.
-  The 256 MiB decoded-image work cap and conservative validation allowances are
-  not complete allocator/RSS accounting; native decoder OS/device checks remain open.
-- Common Godot renderer uses simple material colors and basic tree canopies;
-  streaming attachment budgeting, LOD/material libraries and incremental preview
-  invalidation are not complete. No claim of 4 ms attachment is made.
-- `.memap` v1 still reads complete source/payloads and validates seams up front.
-  Opt-in L01 `.mkregions` now provides an index-only open, independently verified
-  bounded region reads, shared on-disk payloads and a native generation bridge.
-  See `spec/REGIONAL_SOURCE.md`: complete dependency audit and application
-  scheduling/admission/region-source leases remain distinct from partial loading.
-  Client/Host/Editor session integration is still implementation work. Distant
-  road/rule dependencies can retain extra source, and conservative decoder
-  reservations can exceed those of the legacy reader; RSS/GPU savings and a
-  structural-inspection latency guarantee are not established.
-- Native Windows/Android hash parity, native Windows exports, representative
-  10x10 km mixed-use 50 MB benchmark, and real hardware driving are unverified.
-- Game transport, collision admission, session memory/cache policy and release
-  acceptance belong to consumers and are not certified by this standalone tool's
-  tests. This repository does not declare a completed game cutover.
-
-
-K07 scoped implementation (2026-09-09): recipe-4 convex proxy authoring, static GLB
-and PNG/WebP display, declarative materials and procedural default assets use the
-shared renderer. Supported bounds and axes are explicit in FORMAT. Visual-only
-placements without a footprint proxy, engine programs/extensions and animations
-are outside this static authoring profile. The caller owns collision admission,
-job/frame scheduling and display-error rejection. Engine GLB import is one
-non-preemptible operation; complete asset/driver memory accounting, native
-Windows/Linux/Android render parity, exported products and reference-map frame/RSS
-acceptance remain unverified. Mac synthetic evidence cannot close those gates.
-
-
-I02 courtyard extension: recipe 5 accepts at most 16 disjoint interior rings and
-512 total vertices with a flat roof. No touching/nested holes, inferred entrances,
-general intersecting shells, curved/sloped courtyard roofs or structural OSM
-normalization. Bounded integer triangulation fails closed on budget exhaustion;
-full native platform and representative-map acceptance remain pending.
+See [current contracts](spec/CURRENT_V1.md), [container](spec/FORMAT.md),
+[regional source](spec/REGIONAL_SOURCE.md) and [determinism](spec/DETERMINISM.md).
+Passing scoped tests is not a complete game release or cross-platform claim.

@@ -1,20 +1,15 @@
 # MiniEarthure MapKit
 
-> Current contract: [CURRENT_V1](spec/CURRENT_V1.md). The dated version/compatibility records below are historical and do not authorize old loaders or generation branches.
-
-Independent MIT map document, deterministic generation and `.memap` package tools.
-No private MiniEarthure repository is required. Development foundation; current
-scope and outstanding gameplay requirements are explicit in [LIMITATIONS.md](LIMITATIONS.md).
-
-[Current water and arcade presentation](docs/WATER.md) defines non-solid volumes,
-shared queries/rendering, authored time/colors and original MIT scenery.
+Independent public MIT map contracts, deterministic generation, package I/O and
+shared Godot rendering. No private game dependency is required. All own formats
+are current v1; original files are never converted automatically.
 
 ## Build and use
 
 Rust stable and Cargo are required. CLI/core need no Godot installation.
 
 ```sh
-cargo test --locked
+cargo test --locked -p mapkit-package --test package_contract
 cargo build --locked -p mapkit-cli
 ./target/debug/mapkit pack examples/minimal /tmp/example.memap
 ./target/debug/mapkit inspect /tmp/example.memap
@@ -48,348 +43,30 @@ See [format specification](spec/FORMAT.md), generated JSON Schemas in `spec/`, a
 [test cases](crates/mapkit-package/tests/package_contract.rs). API exports use
 explicit typed boundaries; JSON is restricted to adapters. No CI/CD is included.
 
-The [K01 public contract](spec/FORMAT.md#public-authoring-contract-audit-k01)
-defines producer/source validation, Schema versus semantic validation, CLI output
-and the [error catalog](spec/ERRORS.md). `inspect` includes the validated manifest;
-unknown producer fingerprints have no trust privileges. Independently create a
-fixture with `python3 examples/third_party.py /tmp/third-party.memap`.
 
-Run the public CLI/Schema regression with a separate development environment:
+## Contracts and ownership
 
-```sh
-python3 -m venv /tmp/mapkit-contract-env
-/tmp/mapkit-contract-env/bin/pip install jsonschema==4.26.0
-/tmp/mapkit-contract-env/bin/python scripts/check_contract.py
-python3 scripts/check_architecture.py
-python3 scripts/check_reproducibility.py
-python3 scripts/check_input_defense.py
-```
+- [Current domain](spec/CURRENT_V1.md), [container](spec/FORMAT.md),
+  [regional source](spec/REGIONAL_SOURCE.md) and [errors](spec/ERRORS.md).
+- [Assembled geometry](docs/ASSEMBLED_TRACKS.md) and
+  [generation/track authoring](docs/TRACK_AUTHORING.md).
+- [Prepared generation](docs/PREPARED_GENERATION.md),
+  [renderer resource ownership](RENDER_MEMORY.md),
+  [distant rendering](docs/DISTANT_RENDERING.md) and [world assets](spec/WORLD_ASSETS.md).
+- [Road geometry](docs/STREET_GEOMETRY.md), [contact](docs/ROAD_CONTACT.md),
+  [special driving](docs/SPECIAL_DRIVING.md), [water](docs/WATER.md),
+  [environment](docs/ENVIRONMENT.md), [vegetation](VEGETATION.md).
+- [Determinism](spec/DETERMINISM.md), [limitations](LIMITATIONS.md) and
+  [third-party licenses](THIRD_PARTY.md).
 
-`jsonschema` is only a check dependency; the producer uses Python's standard
-library and core/CLI builds remain independent of Python, Godot and game code.
-Cargo tests also fail if checked-in schemas differ from their derived Rust types.
+`MapKitBridge` validates immutable packages and exposes cells, spawn options,
+courses and bounded costs. Consumers own acquisition, leases, collision admission,
+session authority, frame scheduling and memory budgets. Cost estimates are
+conservative allocation inputs, not measured RSS/GPU limits.
+`godot/chunk_renderer.gd` provides begin/advance/cancel and shared resource contexts;
+headless consumers do not load it. Source fingerprints invalidate derived caches.
 
-The [K02 reproducibility audit](spec/FORMAT.md#reproducible-authoring-and-container-audit-k02)
-covers fixed JSON/ZIP exports, exact file inventory and size limits, editable-source
-roundtrips and metadata-independent generation. Its CLI check uses only Python's
-standard library and temporary synthetic files. A foreign ZIP implementation can
-produce different package bytes with the same canonical entries and world hash;
-native OS parity and deeper asset defenses remain separate acceptance work.
-
-Native library paths are relative to `mapkit.gdextension`, so the same addon also
-works nested inside another runtime. `MapKitBridge.open_package_bytes` accepts
-an already acquired package snapshot; the application owns transfer, cache and
-snapshot lifetimes. `cell_window` supplies validated local cell topology and
-scale/contracts without requiring the application to copy generator constants.
-
-`MapKitBridge.spawn_options(x_cm, y_cm)` returns only valid spawnable surfaces at
-the chosen point, including separate bridge/ground heights and excluding roofs.
-The shared renderer supports `begin(chunk, parent)`, `advance(job)` and `cancel(job)`.
-One advance prepares/imports one resource, attaches at most512 surface triangles,
-or places one model; callers own scheduling/time budgets. The optional session
-resource context shares original meshes/materials across cells and batches repeated
-opaque models. See [resource ownership and planning](RENDER_MEMORY.md). `attach` remains a synchronous convenience using the same
-renderer. The native-layout probe also tests renderer batching/cancellation in a
-separate renderer process, without any private game dependency.
-
-## Generation cost planning
-
-Pure core `estimate_generation(document, cell, max_triangles)` and Godot
-`MapKitBridge.estimate_chunk(x, y)` return conservative successful-output counts:
-triangles, objects, optional occupied solids, height samples and maximum object/asset ID length. No heightmap
-is decoded or geometry generated by the estimate. Clipped boundaries, procedural
-vegetation and rotated collision proxies contribute to the upper bound; an invalid
-document or cell returns the normal domain error. Counts are independent of input
-ordering and never influence generation hashes.
-
-These counts are allocation-planning inputs, not byte measurements. Runtime must
-account separately for package/document residency, generator scratch work, JSON and
-Godot containers, collision, renderer buffers and assets. It must keep reservations
-until canceled workers and attachment resources have actually released ownership.
-The current cost API does not by itself enforce a session memory limit.
-
-## Package validation memory policy
-
-`inspect_read_cost(bytes)` reads ZIP metadata without inflating payloads and returns
-conservative retained/validation-peak byte estimates. `read_bytes_with_budget(bytes,
-limit)` checks the index and full validation allowance before inflation. Godot exposes
-`open_package_bytes_budgeted(bytes, limit)`; failed opens clear the previous package.
-Inspection results include `retained_memory_bytes` and `validation_peak_bytes` so
-application owners can combine package residency with cell-work reservations.
-
-The existing unbudgeted API preserves the public format profile; applications opt
-into a smaller working-set allowance. Estimates include payload vectors, structured
-JSON/GLB processing, metadata, bounded image decoding and terrain seams. They are
-conservative policy inputs, not allocator/RSS measurements. Validation retains only
-four edges per decoded heightmap instead of every full grid. Payload reads are capped
-at the declared uncompressed size plus one byte, rejecting mismatches. Full payload
-hash checks still run. The separate opt-in indexed source path below provides
-bounded file-backed region reads; the current `.memap` read behavior is unchanged.
-
-## Compact map overview
-
-Pure core `overview(document)` exposes a borrowed `MapOverview` v1 containing map
-ID/bounds, road ID/kind/centerlines, building ID/footprints, source/license labels
-and a custom-asset flag. It preserves selection geometry without copying terrain,
-asset metadata, procedural zones or editor provenance. Full data and license notices
-remain in the original document/package. Entries sort by stable IDs/labels.
-
-`MapOverview.cost()` counts escaped JSON bytes, points, records and text bytes
-without retaining JSON output. `to_json(max_bytes)` rejects before serialization
-when the JSON body exceeds its allowance. Native Godot exposes `overview_cost()`
-and `overview_json(max_json_bytes)`; the adapter adds a small response envelope.
-Application owners combine these counts with package residency and their own
-container/rendering overhead. This replaces neither generation nor world hashes.
-
-Godot runtime generation can use `generate_chunk_packed` and immutable native
-geometry ownership to avoid per-triangle JSON/Dictionary copies. See the packed
-view contract in `spec/FORMAT.md`; generated v6 hashes remain unchanged.
-
-Renderer attachment batches contain at most 512 triangles. Materials are shared
-within each cell and released with its meshes; callers still own frame admission.
-
-## Optional occupied-volume generation
-
-Pure Rust `generate_with_occupancy(input, max_solids)` runs the same generator and
-returns `GeneratedOccupancy { chunk, solids }`. `chunk` retains the exact generated
-v6 representation and hash. The typed, in-memory sidecar is not serialized into
-packages or chunk JSON. `Package::generate_with_occupancy` uses the normal package
-heightmap decoder; Godot exposes `generate_chunk_occupied_packed(x, y, max_solids)`.
-Normal `generate(input)` does not collect solids.
-
-`OccupiedSolid` carries an object ID and either an axis-aligned integer box or a
-triangular footprint extruded from bottom to top height. Buildings reuse the exact
-roof triangulation, preserving concave notches. Asset proxies and vegetation trunks
-reuse the same centers, rotations and odd-size rounding as their collision faces.
-Full solids are retained when their horizontal AABB overlaps the cell, including
-buildings that enclose the cell without a local wall. Overlapping cells may report
-the same full solid; do not infer unique ownership from a sidecar entry.
-
-Vegetation still uses its existing center-owned generation policy. A query near a
-cell edge must include neighboring owner cells for protruding trunks. This API does
-not change or repair clipped cross-cell vegetation collision. Terrain and road,
-bridge and tunnel surfaces remain triangle geometry; callers need both triangles
-and occupied solids for clearance. Sidecars alone do not establish safe placement.
-
-The caller supplies a solid count cap (0 through 200,000); exceeding it returns
-`E_BUDGET`, never a partial success. This cap covers retained sidecar records, not
-whole generation scratch, document, triangle or allocator bytes. Callers must
-reserve those separately and hold reservations until canceled workers terminate.
-`estimate_generation` / `estimate_chunk` include `occupied_solids`, a conservative
-uncapped record count. The successful sidecar is bounded by the smaller of this
-count and the requested allowance. Counts include whole enclosing buildings even
-when no local wall survives clipping. Existing triangle limits do not cap this
-independent count.
-
-Godot returns an immutable `occupancy` owner alongside the ordinary `chunk` and
-`generated_sha256`. Its versioned packed view uses eight integer coordinates per
-solid, byte shape tags and indexed object IDs. Consumer mutations use copy-on-write
-and cannot modify the native owner. See `spec/FORMAT.md` for the exact layout.
-Counts bound records, not packing peak bytes; both native solids and packed arrays
-coexist during conversion.
-
-Cell assembly, memory planning, solid intersection and admission remain application
-responsibilities. Generation has no engine, filesystem, clock or network dependency.
-
-Apple Silicon macOS development uses native `libmapkit_godot.dylib` builds.
-The standalone/nested binding and renderer probe supports this platform:
-`python3.12 scripts/verify_godot_layout.py --godot /absolute/Godot`.
-Godot 4.7.2 source checks do not establish signed application distribution.
-
-## Disposable generated-cell archives
-
-The pure-core `archive_key`, `archive_limit`, `encode_archive` and `decode_archive`
-APIs store generated v6 integer geometry and placed objects in a bounded little-endian
-`MKCELL01` archive. The key binds world content hash, recipe/generated versions and
-cell coordinates. The header carries the canonical generated hash; decoding checks
-identity, format, source-derived count/string/byte limits, coordinate magnitudes,
-record tags, truncation/trailing data and the recomputed canonical hash before use.
-This is corruption detection, not authentication or a replacement map format.
-Bump the archive revision if generator semantics change without a public contract bump.
-
-Godot exposes `chunk_archive_info(x, y)`, `generate_chunk_archived(x, y, max_bytes)`
-and `restore_chunk_archive(x, y, bytes)`. The first reports identity and the
-pre-allocation byte bound. Generation returns ordinary packed data plus optional
-`data.archive`; insufficient archive allowance still returns the generated data.
-The caller drops archive bytes after storage. Restored output uses the same native
-immutable geometry owner and isolated COW views as uncached generation. No renderer,
-filesystem, clock, locks, cache path, eviction policy or game dependency is added to
-these APIs. Applications own storage, scheduling, memory admission and active leases.
-The standalone native layout probe covers all four example cells, layered surfaces,
-orchard objects, hash equality, wrong coordinates and archive allowance denial.
-
-### Road and multilevel generation
-
-Opt in with `recipe_version: 2`; recipe 1 is still supported without migration.
-See [the road/structure contract](spec/FORMAT.md#recipe-2-roads-and-structures-k05)
-and the original [road fixture](examples/roads/document.json). The public native
-probe includes actual floor/portal/wall/ceiling contacts and matching render faces:
-`python3 scripts/verify_godot_layout.py --godot GODOT --probe roads`.
-Road and placement probes use actual metre scene units for both shapes and queries.
-Their contact allowances retain the original source-centimetre tolerances; the
-road probe also reports the largest native integer-height/contact difference and
-missing contacts. They do not apply the former 1/8 display scale.
-Native OS/device and representative driving acceptance remain in [LIMITATIONS](LIMITATIONS.md).
-
-
-Recipe 4 adds explicit bounded convex asset proxies and common static GLB/PNG/WebP
-rendering with declarative material overrides. Use `examples/assets` and the
-[public contract](spec/FORMAT.md#recipe-4-common-static-assets-and-explicit-convex-proxies).
-Presentation is opt-in after generation or cache restore; Host can keep CPU-only
-output. Reserve estimates before requesting display bytes. The renderer returns an
-error instead of readiness on an unsupported backend result. See
-[asset provenance](examples/assets/README.md) and [limits](LIMITATIONS.md).
-
-The [K08 determinism audit](spec/DETERMINISM.md) supplies frozen 13-fixture/52-cell
-geometry, occupancy, query and cache vectors, order/seed/boundary regressions and
-native packed/display isolation probes. `python3 scripts/check_determinism.py`
-compares fresh processes to the committed vectors; `--release` checks optimized
-output. Supported native OS/device parity remains a separate acceptance gate.
-
-
-Recipe 5 supports bounded flat-roof building courtyards with exact shared
-roof/solid/query geometry. See [the contract](spec/FORMAT.md#recipe-5-building-courtyards)
-and the synthetic [example](examples/courtyard/document.json). Opt in explicitly;
-existing recipes and package bytes remain supported.
-
-Recipe 6 adds ground surface polygons, connected sidewalks and optional road markings.
-Exactly coincident structural-road terrain is removed; intentional burial is preserved.
-See [urban generation and presentation](spec/FORMAT.md#recipe-6-urban-ground-and-road-presentation).
-
-### Bounded surface selection
-
-`MapKitBridge.surface_options_limits()` declares 64 selectable surfaces, 256 UTF-8
-bytes per identity and a 2 MiB selection allowance. Reserve that allowance **in
-addition to** the cell generation peak before `spawn_options(x_cm, y_cm)`, and
-keep it while the decoded result is retained. A replacement needs its own working
-allowance while the previous result is alive. These are application estimates,
-not a process memory limit.
-
-Selection scans existing generated triangles without collecting every cell ID.
-It retains at most 64 intersecting borrowed identities, then returns lexical ID
-order and the same first-triangle position as `spawn`. Overflow or an oversized
-intersecting ID returns `E_SURFACE_LIMIT` before copying/serializing options;
-no truncated success is returned. Retry at another position on the same package.
-The recipe, generated bytes, physical surfaces and world hash are unchanged.
-`crates/mapkit-core/tests/surface_probe.rs` covers the boundary and spawn parity.
-
-## Prepared loading and actual metres
-
-`PreparedMap` validates an immutable source once and caches bounded per-cell cost
-estimates. Package generation, archive admission and Godot binding calls reuse it.
-The native binding prepares packed mesh vertices/normals/UVs on the worker; common
-rendering and collision consume those arrays without per-triangle GDScript loops.
-Road influence uses its actual width rather than a fixed100m neighbourhood, and
-source placement validation reuses coarse road bounds before exact predicates.
-Existing geometry, cancellation ownership and budget ceilings remain authoritative.
-
-Custom coordinates and glTF assets use actual metres (`WORLD_SCALE=1.0`, scene
-units2). Importers own any source-specific conversion. Generated format6 still
-stores centimetres, so unchanged source retains its generated hashes and archives.
-Consumer execution/physics identities must change when adopting the new scene units.
-
-`mapkit validate-cells FILE.memap` opens one package and outputs all generated cell
-hashes. `cargo run -p mapkit-cli --example loading_benchmark -- FILE.memap` measures
-representative cells of the public driving-school fixture. Neither is a mobile
-rendering benchmark; applications must measure collision and presentation readiness.
-
-Repeated GLB instances in a cell share imported meshes, materials and textures.
-Display planning charges those shared resources once per asset and reserves scene
-nodes for each instance. The renderer keeps its cell-owned resource lease until
-all retained resources retire; this does not set a whole-process memory limit.
-
-### World asset authoring
-
-The [language-neutral world library and static sign surface](spec/WORLD_ASSETS.md)
-provide reproducible MIT source assets and a bounded PNG-to-GLB byte helper.
-They use the existing native package validation and rendering contract.
-
-## Indexed regional source (L01 MapKit implementation)
-
-See [REGIONAL_SOURCE](spec/REGIONAL_SOURCE.md) for the decision, exact profile,
-ownership, partial versus complete validation, costs and integration limits.
-Storage groups execution cells without changing their coordinates or generation.
-Shared payloads are stored once; the original canonical authoring document and
-all original declared payloads can be recovered into a new directory.
-
-```sh
-rtk cargo run --locked -p mapkit-cli -- pack-regions examples/minimal /tmp/example.mkregions 1
-rtk cargo run --locked -p mapkit-cli -- inspect-regions /tmp/example.mkregions 536870912
-rtk cargo run --locked -p mapkit-cli -- audit-regions /tmp/example.mkregions 536870912
-rtk cargo run --locked -p mapkit-cli -- generate-region-chunk /tmp/example.mkregions 0 0 /tmp/region-cell.json 536870912
-rtk cargo run --locked -p mapkit-cli -- unpack-regions /tmp/example.mkregions /tmp/restored-source 536870912
-```
-
-`MapKitRegionReader` exposes `open_index`, `region_for_cell`, `begin_request`,
-`load_region`, `cancel_request` and `request_is_current`. A successful load returns
-an independently owned `MapKitBridge` restricted to that prepared region, usable
-for the existing packed generation, presentation, occupancy and archive methods.
-Native verification: `python3 scripts/verify_godot_layout.py --godot GODOT --probe regional`.
-Applications must reserve source validation and generation separately, join workers,
-reject stale candidates at commit, and keep current collision until replacement
-is admitted. `audit` provides complete file/index/world identity and a bounded
-overview; consumer installation must require this full audit.
-
-New exports use current **v1** with local road/zone/water dependencies and verified
-decoder planning declarations. The 2026-09-26 user decision also resets `.memap`
-to v1. Earlier artifacts remain preserved, with no old reader or automatic
-converter. See [current contract](spec/CURRENT_V1.md).
-
-`regional_benchmark` separates complete audit, regional source validation,
-generation estimates, occupied generation and generated hash costs on an existing
-artifact. It keeps one source snapshot at a time and writes JSON lines to stdout:
-`rtk cargo run --locked -p mapkit-cli --example regional_benchmark -- MAP.mkregions '[[3,3],[7,8],[8,8]]'`.
-Use the same debug/release profile and artifact bytes for comparisons. The opt-in
-`ReadProfile` reports accumulated stage microseconds and call counts; normal reader
-calls do not read a clock. Timings do not establish cold storage, RSS/GPU, consumer
-budget admission or gameplay acceptance.
-
-L01-E complete audit reuses one borrow-scoped plan of placement footprint/road
-bounds and global selection constants. It retains exact v1/v2 canonical closure
-checks and releases the plan before returning. The extra bounded plan allowance
-is included in pre-read audit admission; region loads and consumer budgets are
-unchanged. `audit_region_plan_build` and `audit_region_derivation` report its
-separate preparation and reuse costs. See [the design](spec/REGIONAL_SOURCE.md)
-for memory, cancellation and validation boundaries; this is not a resident source
-cache or a partial-audit installation path.
-
-L01-F complete audit uses a discarding strict JSON pass, direct typed decoding
-and a borrowed canonical world hash. Before original I/O it reserves the existing
-typed parsing envelope; before validation/payloads it charges every actual owned
-String/Vec capacity plus allocation overhead. Full original, unused payload and
-all regional closure checks remain mandatory. The index-only `audit_peak_bytes`
-is a sufficient conservative bound; a smaller allowance can pass staged admission.
-The summary reports the admitted phase maximum, source ownership and preflight.
-Region loads, formats, limits and worker lifetime rules remain unchanged.
-
-The optional single-threaded `regional_allocations` example reports requested
-Rust heap peak and release points separately from logical reservations:
-`rtk cargo run --locked -p mapkit-cli --example regional_allocations -- MAP.mkregions 536870912`.
-Read `accepted` and `error_code`: a diagnosed rejection still exits successfully.
-It excludes allocator overhead, external malloc, stack and RSS; it never changes
-the production allocator. See [the L01-F decision](spec/REGIONAL_SOURCE.md) for
-staged refusal, whole-source validation and the preserved acceptance limits.
-
-Recipe 7 supports [zone-selected vegetation assets](VEGETATION.md): shared GLBs, declared canopy footprints, and live spacing/density without a fixed tree count.
-
-### Environment design (recipe 8)
-
-`MapDocument.environment` optionally supplies concept, independent architecture,
-climate/settlement overrides, latitude/longitude, time zone, sunrise/sunset,
-ordered regional polygons and explicit asset material indices for windows/lamps.
-Older documents omit it. These fields contribute to world identity; no existing
-source is silently upgraded. See [the public contract](docs/ENVIRONMENT.md).
-
-
-### Conforming ground subdivision (recipe 9)
-
-Recipe 9 builds an integer planar subdivision before assigning ground road and
-terrain faces. It preserves shared rounded intersections across materials and
-cell boundaries, including height-grid crossfall. Existing recipes retain their
-previous generation paths. See [implementation and verification status](docs/INGAME_BUGFIX.md)
-and [new dependency notices](THIRD_PARTY.md). Consumer integration and actual
-whole-map driving acceptance remain in progress.
-
-Current street geometry: [rounded corners and automatic deck safety](docs/ROAD_SAFETY.md).
-
-- [Current v1 category generation and authored track graphs](docs/TRACK_AUTHORING.md)
+Tests use synthetic public fixtures. Run affected Cargo targets, schema/contract
+checks and required native probes; no whole-suite or device acceptance is implied.
+In the superproject use its `.venv` and development workflow. Standalone public
+Python checks need the dependencies declared by their scripts, including jsonschema.

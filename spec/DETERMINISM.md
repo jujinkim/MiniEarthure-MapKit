@@ -1,28 +1,19 @@
 # Determinism and boundary audit
 
-> Current contract: [CURRENT_V1](CURRENT_V1.md). The dated version/compatibility records below are historical and do not authorize old loaders or generation branches.
+Only the current v1 algorithms run. Integer centimetres, exact predicates,
+stable ID ordering, bounded work, pinned portable math and source/cell-derived
+randomness define generation. There is no clock, platform path, global RNG or
+cell arrival order in content identity. Ordered geometry arrays are not sorted
+as sets. Display quality never changes collision or generation hashes.
 
-K08, 2026-09-09. The checked scope adds executable regression evidence without
-changing recipes 1–4, generated v6, source bytes, cache keys or production code.
-Native Windows/Linux/Android parity and reference-map driving remain acceptance
-work. Passing on one OS is not cross-platform evidence.
-
-## Audited generation boundary
-
-| Concern | Source and preserved rule |
-| --- | --- |
-| Math | `generation.rs`, `roads.rs`, `placement.rs`, `lib.rs`: exact pinned `libm =0.2.16` for square roots and rounding; integer cm output. No platform transcendental calls, fused multiply-add or fast-math configuration. Normal queries quantize to millionths after portable normalization. |
-| Integer predicates | `spatial.rs`, `roads.rs`, `convex.rs`, `placement.rs`: checked source magnitudes, i128 cross products/interpolation and integer quarter turns. Signed lattice indices use `div_euclid`; clipping orders endpoints lexicographically. Recipe-1 vegetation deliberately retains its historical relative-height quantization. |
-| Ordering | `MapDocument::normalize` sorts named collections by ID, heightmaps by cell and attributions by content. `BTreeMap`/`BTreeSet` order graph/group processing. Authored polygon vertices, road points, proxy faces and repetition paths are ordered geometry, not sortable sets. |
-| Randomness | The first 16 hexadecimal SHA256 digits of canonical `[document_seed,zone_id,rule_id,lattice_x,lattice_y]` become a u64. Rules are `vegetation-v1` for recipes 1–2 and `vegetation-v3` for 3–4. Density uses `%1000`, jitter fixed shifts/moduli and rotation `%4`; no mutable global RNG, spawn seed or cell arrival index. Repetitions use object ID plus path index. |
-| Ownership | Visual anchors have one half-open cell owner (the outside map maximum belongs to the last cell). Faces are clipped as defined by the recipe; whole occupied solids may repeat in neighboring query results by design. Recipe-3/4 vegetation owners emit whole trunks and near-edge queries include owner cells. Shared solids are not duplicate visual instances. |
-| Cache and quality | Canonical generated hashes and little-endian archives contain gameplay geometry/instances, not engine meshes/materials. `packed.rs` creates immutable native owners with isolated COW views. `with_presentation` works after cold generation or archive restore. LOD bias, shadows and texture filtering act on rendered nodes only. Full product quality controls/LOD assets are separate work. |
-| Dependencies | Pure core has no filesystem, environment, time, threads, engine, network, random-state or hardware-intrinsic dependency. `scripts/check_architecture.py` now gates these accidental additions and the exact math pin. This source scan is a guard, not a formal proof about compiler/transitive behavior. |
+Generated caches bind source/schema/dependency fingerprints and current world,
+cell and contract identity. Original packages are preserved. Source changes can
+invalidate caches without changing format numbers or adding old decoders.
 
 ## Reproducible vectors and checks
 
 `determinism-vectors.json` freezes 13 original synthetic fixtures / 52 cells:
-the four public recipe examples, signed/offset placement with maximum exact JSON
+the public map examples, signed/offset placement with maximum exact JSON
 seed, four negative-height partial terrain variants and four oblique sloped bridge
 variants. Each records input identity (including decoded grid values), generated,
 triangle, object, occupied-sidecar and archive digests, counts and integer surface
@@ -64,24 +55,17 @@ run the native packed/cache/asset probe in a device project too. Cross-compilati
 alone, emulation and desktop resource exports do not prove native device parity.
 Record OS/CPU/toolchain/revision, build profile, command, stderr and vector digest.
 A differing component is a failure to investigate, never a reason to bless new
-goldens or rewrite saved maps. Semantic changes require an explicit strategy and
-archive/release compatibility decision.
+goldens or rewrite saved maps. Semantic changes require an explicit replacement decision; own formats stay v1.
 
 Reference maps still need continuous rendered/collision traversal across seams,
 rotated/partial structures, cancel/retry and cache cold/warm on supported hardware.
 These small exact tests do not prove universal absence of cracks, physics-engine
 trajectory determinism, renderer pixel identity or sustained frame/memory targets.
 
-## Current road geometry replacement — 2026-09-26
 
-The approved [road safety and rounding decision](../docs/ROAD_SAFETY.md) changes
-generated surfaces/convexes/occupancy and their archives while retaining source
-IDs and all format numbers. The seven fixture input and instance hashes remain
-unchanged. The golden geometry is regenerated for this semantic replacement;
-source/cell permutations, exact geometry checks and cache round trips remain
-independent regressions. Existing build fingerprints invalidate old disposable
-caches. Historical completion proofs do not establish completion on these roads.
+## Current unresolved vector expectation
 
-The archived vectors also lagged the already implemented `0cb0062` gimmick
-trailer. Cells with unchanged geometry gain exactly six archive bytes (u32 length
-and empty `[]`). This synchronization does not change the archive encoder.
+The 2026-10-05 frozen portable input/archive hash check failed although compared
+output matched a9e2761; four other determinism checks passed. Inspect current
+fixture semantics and expected values before adopting a new golden. This known
+failure is separate from scoped geometry/roundtrip successes and native OS parity.

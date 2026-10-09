@@ -107,8 +107,6 @@ The renderer's update_environment accepts `immediate` to apply road wetness/snow
 without blending at a race boundary. It consumes resolved state and never advances
 simulation time; precipitation animation remains live.
 
-Earlier dated design and validation documents preserve evidence of prior formats.
-Their old-reader, version-selection and frozen legacy-output requirements are superseded.
 
 Authored placement validation uses the convex hull of the complete transformed
 collision footprint, rather than its axis-aligned bounding rectangle. Placement
@@ -159,7 +157,7 @@ Racing requires at least two effective gates. `CourseBody.effective_indices`,
 `Course.effective`, and the Godot course/edit APIs share this contract. Authoring
 rejects new overlaps before modifying a draft. Continuous capsule entry geometry
 is MapKit-owned; consumers own authoritative progress and resets.
-Overlaps are legal. Surface labels are authoring hints, not completion constraints.
+Stored overlaps use the effective-list rule above. Surface labels are authoring hints, not completion constraints.
 
 Optional completion references identify bounded opaque consumer records by hash, size and
 `course-validation/<sha256>.mevalidation`. MapKit verifies bytes and references, never
@@ -247,12 +245,6 @@ The current v1 special-track contract also accepts `swept_cylinder` with 2–512
 The canonical schema and source fingerprints identify this definition; no
 version increment or migration is introduced.
 
-2026-09-28 seeded variety replaces sharp-corner quotas and corridor escape rules.
-The v1 assembly now requires piece widths/chain membership, ordinary-distance
-statistics and a non-spawnable venue floor definition. Selected families are
-mandatory; target time may be exceeded. See the replacement section in
-[ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md).
-
 ## Race finish policy (2026-09-28)
 
 `MapDocument.free_roam` is a required boolean in current v1. New manual and seeded
@@ -273,24 +265,6 @@ course tests passed locally. Consumer driving acceptance is separate.
 
 The sprint finish candidate is an explicit path sample in the terminal entry; if it overlaps an earlier gate, stable first-wins removal makes that earlier effective gate the finish. AI and progression use the same effective course. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.
 
-## Random seed extension (2026-09-28 replacement)
-
-The current assembly removes `straight_target_percent`. Selected families require
-one instance, with at most two consecutive family members even across mandatory
-transitions/circuit boundaries. There is no fixed scaffold or mandatory opposite
-helix. Ordinary 1m grades preserve the 8m horizontal lattice; actual floor samples
-are shared with cylinder meshes and raised entry/exit ramps. See the **Random
-extension replacement** in [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). All own
-format numbers remain 1; source/catalogue fingerprints identify fresh output.
-
-Seed assembly's current v1 contract exposes `selection_ids` separately from road
-presets. Only `obstacles` selects attachments; seven retired obstacle road IDs are
-rejected in requests. The assembly contains `obstacles`,
-`obstacle_eligible_length_cm` and `obstacle_target_count`. Resolved path identity,
-station/frame, lateral sweep and AI action positions are validated by exact
-reconstruction. Duration options are 60/90/120 seconds in both modes, with circuit
-lap limits 3/2/2. Sprint-lane geometry is 1600cm. See
-[assembled tracks](../docs/ASSEMBLED_TRACKS.md) for placement and budget rules.
 
 ## Category generation and authored track graphs (2026-09-30 replacement)
 
@@ -307,7 +281,7 @@ The document schema, generator and catalogue fingerprints change within v1.
 ## Grounded seed support policy (2026-09-30)
 
 Current v1 requires `Assembly.supports` and `Source.grounded_supports`.
-See [grounded seed structures](../docs/ASSEMBLED_TRACKS.md#grounded-seed-structures-2026-09-30).
+See [grounded seed structures](../docs/ASSEMBLED_TRACKS.md#grounded-supports).
 The shared road slab, grounded floor and structural columns participate in exact
 source reconstruction, hash, cell costs and memory accounting. Generated
 sources retain this policy when converted to manual authoring. Independent
@@ -327,14 +301,6 @@ Current v1 permits `manual_flight` approach/landing declarations and bounded
 explicit static `Source.structures`. See the [manual airborne link
 contract](../docs/TRACK_AUTHORING.md#manual-airborne-links-and-static-authored-structures-2026-10-01).
 No automatic action or player completion proof is implied.
-
-Current pipe authoring (2026-10-04): assembled bores 100/200/300/400/600cm,
-generated bores 100/200/300cm, standalone default radius 125cm and length 1600cm.
-Cylinder-only minimum radius is 50cm; tube/ramp minimum port width is 100cm.
-Road/loop/halfpipe ranges are unchanged. These are current-v1 value/domain and
-generation-default changes, not a format bump or automatic conversion. See
-[track authoring](../docs/TRACK_AUTHORING.md#pipe-bore-reduction-08-2026-10-04-replacement).
-
 
 2026-10-05 pipe minimum replacement: cylinder/swept-cylinder radius is at least
 100cm (2m bore); assembled sizes are 200/300/400/600cm. Generated pipes uniformly
