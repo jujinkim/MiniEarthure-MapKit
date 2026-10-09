@@ -21,6 +21,8 @@ const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
+pub mod composite;
+pub mod surface;
 mod stored;
 mod geometry;
 mod road;
@@ -31,6 +33,7 @@ mod layout;
 pub const WIDTHS: &[u32] = &[200, 400, 600, 800, 1200];
 mod grounding;
 pub use grounding::Support;
+pub(crate) use grounding::terrain_supports;
 mod obstacles;
 pub use obstacles::Obstacle;
 
@@ -176,6 +179,9 @@ pub struct Assembly {
     pub seed_source: Option<authoring::Source>,
     pub routes: Vec<authoring::Route>,
     pub issues: Vec<String>,
+    /// Geometry errors block free roam as well as course publication.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub geometry_issues: Vec<String>,
     pub settings: Settings,
     pub generator_fingerprint: String,
     pub catalogue_fingerprint: String,
@@ -218,9 +224,9 @@ pub fn start_surface_at(assembly: &Assembly, point: [i64; 2]) -> Option<String> 
                     if length < 1.0 {
                         return false;
                     }
-                    let t =
-                        ((point[0] - a[0]) as f64 * dx + (point[1] - a[2]) as f64 * dz) / length;
-                    let side = ((point[0] - a[0]) as f64 * dz - (point[1] - a[2]) as f64 * dx)
+                    let (px,pz)=((point[0] as i128-a[0] as i128) as f64,(point[1] as i128-a[2] as i128) as f64);
+                    let t = (px * dx + pz * dz) / length;
+                    let side = (px * dz - pz * dx)
                         .abs()
                         / libm::sqrt(length);
                     (0.0..=1.0).contains(&t)
@@ -401,6 +407,9 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/authoring.rs").as_slice(),
             include_bytes!("assembled_track/obstacles.rs").as_slice(),
             include_bytes!("assembled_track/grounding.rs").as_slice(),
+            include_bytes!("assembled_track/composite.rs").as_slice(),
+            include_bytes!("assembled_track/surface.rs").as_slice(),
+            include_bytes!("road_design.rs").as_slice(),
         ]
         .concat(),
     )
@@ -1311,6 +1320,14 @@ pub fn assemble(settings: &Settings) -> Result<Assembly> {
 }
 
 impl Assembly {
+    pub fn terrain_policy(&self,index:usize)->crate::road_design::TerrainPolicy {
+        self.authoring.as_ref().and_then(|s|s.terrain_policies.get(&s.instances[index].id)).copied()
+            .unwrap_or(if self.pieces[index].ordinary {crate::road_design::TerrainPolicy::AutoFit} else {crate::road_design::TerrainPolicy::Preserve})
+    }
+    pub fn terrain_integration(&self) -> bool {
+        self.authoring.as_ref().is_some_and(|s| s.terrain_integration)
+    }
+
     pub fn validate(&self) -> Result<()> {
         if let Some(source) = &self.authoring {
             if *self != authoring::compile(source)? {
@@ -1603,7 +1620,24 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
     }
     Ok(out)
 }
-fn gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
+/// Preserve the rigid special-piece mesh while cutting only nearby terrain
+/// contacts. Special collision meshes use 100 units per source centimetre.
+pub(crate) fn terrain_cut_faces(a:&Assembly,bounds:&Bounds)->Result<Vec<[Vertex;3]>> {
+    let mut out=Vec::new();
+    for g in road_gimmicks(a)? {
+        if !g.intersects(bounds) {continue;}
+        if let Some(track)=&g.track {
+            for face in track.mesh().inner {
+                cancellation::checkpoint()?;
+                let v=face.map(|v|geometry::rotate3(v,g.rotation_mdeg)).map(|v|std::array::from_fn(|j|g.position[j]+libm::round(v[j] as f64/100.0) as i64));
+                if crate::road_plan::hit(&v,bounds,2) && crate::road_plan::orient(v[0],v[1],v[2])!=0 {out.push(v);}
+                if out.len()>300_000 {return Err(error("E_BUDGET","special terrain footprint exceeds allowance"));}
+            }
+        }
+    }
+    Ok(out)
+}
+pub(crate) fn gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
     let mut out = road_gimmicks(a)?;
     out.extend(
         a.obstacles
@@ -1617,16 +1651,15 @@ pub fn verify_products(d: &MapDocument, a: &Assembly) -> Result<()> {
     let mut expected = gimmicks(a)?;
     expected.extend(authoring::action_gimmicks(a)?);
     expected.sort_by(|a, b| a.id.cmp(&b.id));
-    let mut actual = d.gimmicks.clone();
+    let (attached,attached_lines)=surface::derived(d,&d.surface_attachments)?;
+    let mut actual: Vec<_> = d.gimmicks.iter().filter(|g| !attached.contains(g)).filter(|g| !a.terrain_integration() || expected.iter().any(|e| e.id == g.id)).cloned().collect();
     actual.sort_by(|a, b| a.id.cmp(&b.id));
     let mut expected_lines=obstacles::grind_lines(a); expected_lines.sort_by(|a,b|a.id.cmp(&b.id));
-    let mut actual_lines=d.grind_lines.clone(); actual_lines.sort_by(|a,b|a.id.cmp(&b.id));
+    let mut actual_lines: Vec<_> = d.grind_lines.iter().filter(|g| !attached_lines.contains(g)).filter(|g| !a.terrain_integration() || expected_lines.iter().any(|e| e.id == g.id)).cloned().collect();
+    actual_lines.sort_by(|a,b|a.id.cmp(&b.id));
     if actual != expected || actual_lines != expected_lines
-        || d.seed != a.settings.seed
-        || !d.nodes.is_empty()
-        || !d.roads.is_empty()
-        || !d.heightmaps.is_empty()
-        || !d.placements.is_empty()
+        || (!a.terrain_integration() && (d.seed != a.settings.seed
+        || !d.nodes.is_empty() || !d.roads.is_empty() || !d.heightmaps.is_empty() || !d.placements.is_empty()))
     {
         return Err(error(
             "E_TRACK_MODIFIED",
@@ -1674,6 +1707,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
     }
     let mut d = MapDocument {
         free_roam: false,
+        surface_attachments: vec![],
         assembled_track: Some(a.clone()),
         water_bodies: vec![],
         grind_lines,
@@ -1734,12 +1768,21 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
         .as_ref()
         .ok_or_else(|| error("E_TRACK_REQUIRED", "map is not an assembled track"))?;
     a.validate()?;
+    if a.terrain_integration() {
+        let expected = authoring::compile(a.authoring.as_ref().unwrap())?;
+        if &expected != a { return Err(error("E_TRACK_MODIFIED", "overlay differs from authoring source")); }
+        return verify_products(d, a);
+    }
     let expected = if let Some(source) = &a.authoring {
         document_from_assembly(authoring::compile(source)?)?
     } else {
         document(&a.settings)?
     };
     let mut actual = d.clone();
+    let (attached,attached_lines)=surface::derived(d,&d.surface_attachments)?;
+    actual.gimmicks.retain(|g|!attached.contains(g));
+    actual.grind_lines.retain(|g|!attached_lines.contains(g));
+    actual.surface_attachments.clear();
     actual.courses.clear();
     actual.free_roam = expected.free_roam;
     actual.provenance = expected.provenance.clone();
@@ -1757,6 +1800,7 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
 /// Faces and occupancy share this geometry; background never enters this path.
 pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Result<()> {
     let f = &a.floor;
+    if !a.terrain_integration() {
     b.quad(
         [
             [f.min_cm[0], f.min_cm[1], f.min_cm[2]],
@@ -1775,6 +1819,7 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
             max: f.max_cm,
         },
     )?;
+    }
     for support in &a.supports {
         let id = format!("assembled-support-{}", support.piece_index);
         emit_shape(&support.shape, &id, b)?;

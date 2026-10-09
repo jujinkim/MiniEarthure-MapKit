@@ -8,7 +8,7 @@ fn custom_canopies_avoid_roads_buildings_and_authored_placements() {
     d.nodes.clear();d.roads.clear();d.buildings.clear();d.zones.clear();d.assets.clear();d.placements.clear();
     d.nodes.push(RoadNode { id:"a".into(),position:[0,0,1000],level:0 });
     d.nodes.push(RoadNode { id:"b".into(),position:[3200,0,1000],level:0 });
-    d.roads.push(Road { snow_retention_percent: 100, id:"road".into(), from:"a".into(),to:"b".into(),points:vec![[0,0,1000],[3200,0,1000]],widths_cm:vec![200],surfaces:vec![Surface::Asphalt],kind:RoadKind::Ground,sidewalk_cm:Some(0),clearance_cm:None,..road });
+    d.roads.push(Road { design: None, snow_retention_percent: 100, id:"road".into(), from:"a".into(),to:"b".into(),points:vec![[0,0,1000],[3200,0,1000]],widths_cm:vec![200],surfaces:vec![Surface::Asphalt],kind:RoadKind::Ground,sidewalk_cm:Some(0),clearance_cm:None,..road });
     d.assets.push(Asset { distant_path: None, id:"tree".into(),path:"tree.glb".into(),
         attribution:Attribution { source:"synthetic".into(),license:"MIT".into(),notice:"Original fixture".into() },
         collision:vec![CollisionBox { center:[0,100,0],size_cm:[100,200,100] }],convex_collision:vec![],material:None });

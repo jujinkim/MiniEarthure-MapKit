@@ -113,7 +113,22 @@ pub(crate) fn triangulate_rings(
     let mut holes: Vec<_> = interior.iter().map(|h| canonical(h, false)).collect();
     holes.sort();
     let target = area(&ring) + holes.iter().map(|h| area(h)).sum::<i128>();
-    for hole in &holes {
+    let mut pending:Vec<usize>=(0..holes.len()).collect();
+    while !pending.is_empty() {
+        // Connect the whole chain of touching holes before adding visibility
+        // bridges. Otherwise a bridge can cut a later pinched boundary sector.
+        let at=pending.iter().position(|&i|holes[i].iter().any(|p|ring.contains(p))).unwrap_or(0);
+        let hole=&holes[pending.remove(at)];
+        // Integer arrangements can have a hole touching its outer boundary at
+        // one exact graph vertex. Join at that vertex, without inventing a
+        // crossing visibility bridge or losing its (possibly 1 cm²) area.
+        if let Some((i,j))=ring.iter().enumerate().find_map(|(i,p)|hole.iter().position(|q|p==q).map(|j|(i,j))) {
+            let mut merged=ring[..=i].to_vec();
+            merged.extend((1..=hole.len()).map(|k|hole[(j+k)%hole.len()]));
+            merged.extend_from_slice(&ring[i+1..]);
+            ring=merged;
+            continue;
+        }
         let mut best = None;
         for (i, &a) in ring.iter().enumerate() {
             for (j, &c) in hole.iter().enumerate() {

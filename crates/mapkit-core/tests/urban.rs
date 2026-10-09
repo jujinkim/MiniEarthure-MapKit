@@ -17,7 +17,7 @@ fn doc(height: i64) -> MapDocument {
             level: 0,
         },
     ];
-    d.roads = vec![Road {
+    d.roads = vec![Road { design: None,
         snow_retention_percent: 100,
         id: "road".into(),
         from: "a".into(),

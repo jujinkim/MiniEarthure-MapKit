@@ -71,7 +71,7 @@ fn offset(s: &Sample, lateral: i64) -> Vertex {
         right(s).map(|v| round(v as f64 * lateral as f64 / 1e6)),
     )
 }
-fn sample(path: &[Sample], station: u64) -> Sample {
+pub(super) fn sample(path: &[Sample], station: u64) -> Sample {
     let mut at = 0;
     for w in path.windows(2) {
         let len = distance(w[0].position_cm, w[1].position_cm);

@@ -194,7 +194,6 @@ fn road_overlap(poly: &[Point], r: &Road, extra: i64, work: &mut usize) -> Resul
 /// Exact current carriageways and their exterior safety strip share the same
 /// plan as generation. The capsule remains a cheap conservative broad phase.
 fn planned_overlap(d: &MapDocument, poly: &[Point], r: &Road, work: &mut usize) -> Result<bool> {
-    if !road_overlap(poly,r,224,work)? { return Ok(false); }
     let area=aabb(poly);
     let (patches,edges)=crate::road_plan::plan(d,&area)?;
     for patch in patches.iter().filter(|p|p.road.id==r.id) {
@@ -925,7 +924,7 @@ impl PreparedPlacements {
 }
 pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder, prepared: Option<&PreparedPlacements>) -> Result<()> {
     let mut work=0;
-    crate::roads::sidewalks(d,b)?;
+    crate::roads::sidewalks(d,b).map_err(|mut e| {e.message=format!("sidewalk: {}",e.message);e})?;
     buildings(d,b)?;
     let owned;
     let prepared = if let Some(value)=prepared { value } else { owned=PreparedPlacements::new(d)?; &owned };
@@ -954,7 +953,22 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
         })
         .collect();
     let buildings = BoundsIndex::new(&building_bounds);
-    let roads = BoundsIndex::new(road_bounds);
+    // Dense authored splines must not multiply every placement by every road
+    // station. Index segment corridors; preserve the same exact plan predicates
+    // and unchanged 4M work ceiling after this broad phase.
+    let segments:Vec<_>=d.roads.iter().enumerate().flat_map(|(id,r)|(0..r.points.len()-1).step_by(16).map(move |i|{
+        let end=(i+16).min(r.points.len()-1);
+        let mut area=aabb(&r.points[i..=end].iter().copied().map(xy).collect::<Vec<_>>());
+        let margin=crate::road_plan::width_influence_margin(*r.widths_cm[i..end].iter().max().unwrap());
+        for j in 0..2 {area.min[j]-=margin;area.max[j]+=margin;}
+        (id,area)
+    })).collect();
+    tick(work,segments.len())?;
+    let roads = BoundsIndex::new(&segments.iter().map(|(_,b)|b.clone()).collect::<Vec<_>>());
+    let nearby_roads=|area:&Bounds,work:&mut usize|->Result<BTreeSet<usize>> {
+        Ok(roads.query(area,work)?.into_iter().filter(|&i|overlaps(area,&segments[i].1)).map(|i|segments[i].0).collect())
+    };
+    let _=road_bounds;
     for (i, b) in d.buildings.iter().enumerate() {
         let area = aabb(&b.footprint);
         for index in buildings.query(&area, work)?.into_iter().filter(|&j| j < i) {
@@ -970,7 +984,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
                 ));
             }
         }
-        for index in roads.query(&area, work)? {
+        for index in nearby_roads(&area, work)? {
             let road = &d.roads[index];
             let hit = if b.holes.is_empty() {
                 planned_overlap(d, &b.footprint, road, work)?
@@ -1035,7 +1049,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
                 }
             }
         }
-        for j in roads.query(area, work)? {
+        for j in nearby_roads(area, work)? {
             if planned_overlap(d, poly, &d.roads[j], work)? && !below_deck(d, p, poly, &d.roads[j], work)? {
                 return Err(error(
                     "E_GEOMETRY",

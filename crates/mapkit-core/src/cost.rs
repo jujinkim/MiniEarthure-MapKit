@@ -61,7 +61,8 @@ pub(crate) fn estimate_validated(
 ) -> Result<GenerationCost> {
     let area = d.cell_bounds(cell)?;
     let descriptor = d.heightmaps.iter().find(|h| h.cell == cell);
-    let spacing = descriptor.map_or(d.cell_size_cm, |h| h.spacing_cm) as i64;
+    let source_spacing = descriptor.map_or(d.cell_size_cm, |h| h.spacing_cm) as i64;
+    let spacing=if d.assembled_track.as_ref().is_some_and(|a|a.terrain_integration()) {source_spacing.min(200)} else {source_spacing};
     let side = d.cell_size_cm as u64 / spacing as u64 + 1;
     let mut cost = GenerationCost {
         water_bytes: crate::water::candidates(d, &area)?.iter().map(|&i| d.water_bodies[i].memory_bytes()).sum(),
@@ -76,13 +77,28 @@ pub(crate) fn estimate_validated(
         occupied_solids: d.gimmicks.iter().filter(|g| g.intersects(&area)).map(|g| g.occupied_count()).sum(),
         building_prisms: 0,
         asset_convexes: 0,
-        height_samples: if descriptor.is_some() { side * side } else { 0 },
+        height_samples: if descriptor.is_some() { (d.cell_size_cm as u64/source_spacing as u64+1).pow(2) } else { 0 },
         max_object_id_bytes: d.gimmicks.iter().map(|g| g.id.len() as u64).max().unwrap_or(7).max(7),
     };
     if let Some(track) = &d.assembled_track {
         let (triangles, solids, scratch) = crate::assembled_track::cost(track, &area)?;
         cost.generation_scratch_bytes += scratch;
         cost.triangles += triangles;
+        if track.terrain_integration() {
+            // Every terrain tile may be subdivided by local track edges. Bound
+            // those arrangements as well as the track's ordinary clipped faces.
+            for piece in &track.pieces { for path in [&piece.path,&piece.alternate_path] {for pair in path.windows(2) {
+                let radius=pair[0].lateral_cm.max(pair[1].lateral_cm) as i64+200;
+                let shape=bounds(pair.iter().map(|s|[s.position_cm[0],s.position_cm[2]]),radius);
+                if clip_factor(&shape,&area)==0 {continue;}
+                let span=|axis:usize| ((shape.max[axis].min(area.max[axis])-shape.min[axis].max(area.min[axis])).max(0)/spacing+2) as u64;
+                cost.triangles=cost.triangles.saturating_add(span(0)*span(1)*96);
+            }}}
+            let local=track.pieces.iter().filter(|p| crate::road_plan::hit(&[p.reserved_min_cm,p.reserved_max_cm],&area,20)).count() as u64;
+            cost.triangles+=local*60;
+            cost.occupied_solids+=local;
+            cost.generation_scratch_bytes+=crate::roads::SCRATCH_BYTES;
+        }
         cost.occupied_solids += solids;
         cost.max_object_id_bytes = cost.max_object_id_bytes.max(32);
     }
@@ -96,7 +112,7 @@ pub(crate) fn estimate_validated(
     let ny = ((area.max[1] - area.min[1]) / spacing + 1).min(side as i64 - 1) as u64;
     let partial = (area.max[0] - area.min[0]) < d.cell_size_cm as i64
         || (area.max[1] - area.min[1]) < d.cell_size_cm as i64;
-    if d.assembled_track.is_none() { add(nx * ny * 2 * if partial { 5 } else { 1 }, 7); }
+    if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) { add(nx * ny * 2 * if partial { 5 } else { 1 }, 7); }
     for paint in &d.surface_areas {
         let shape = bounds(paint.polygon.iter().copied(), 0);
         if clip_factor(&shape, &area) != 0 {

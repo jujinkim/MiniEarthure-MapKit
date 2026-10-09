@@ -4,6 +4,7 @@ mod packed;
 mod presentation;
 mod regional;
 mod road_style;
+mod source_preview;
 mod work_token;
 use godot::prelude::*;
 use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
@@ -93,6 +94,26 @@ impl MapKitBridge {
             Ok(serde_json::json!({"meshes":meshes,"gimmicks":chunk.gimmicks,"grind_lines":chunk.grind_lines.iter().map(|l|l.resolved_json()).collect::<Vec<_>>()}))
         })())
     }
+    /// Draft-only bounded cell preview. It neither exports nor certifies the
+    /// project, so an unfinished course can still be edited on actual terrain.
+    #[func]
+    fn source_preview(&self, document:GString, project:GString, x:i32, y:i32)->GString {
+        response(source_preview::cell(&document.to_string(),Path::new(&project.to_string()),Cell{x,y}).map(|(_,chunk)|serde_json::to_value(chunk).unwrap()))
+    }
+    #[func]
+    fn source_preview_packed(&self,document:GString,project:GString,x:i32,y:i32)->VarDictionary {
+        packed::respond((|| {
+            let (d,mut c)=source_preview::cell(&document.to_string(),Path::new(&project.to_string()),Cell{x,y})?;
+            // The reusable track preview owns its meshes and attached gizmos.
+            c.triangles.retain(|t|!t.object_id.starts_with("assembled-"));c.gimmicks.clear();c.grind_lines.clear();
+            let (files,cost)=source_preview::assets(&d,&c,Path::new(&project.to_string()))?;
+            let signature=mapkit_core::sha256(&serde_json::to_vec(&(c.hash()?,&d.environment,&d.assets,files.iter().map(|(p,b)|(p,mapkit_core::sha256(b))).collect::<Vec<_>>())).unwrap());
+            let mut data=presentation::decorate_document(&d,&files,packed::pack(c)?)?;
+            data.set("preview_bytes",cost as i64);
+            data.set("preview_signature",signature.as_str());
+            Ok(data)
+        })())
+    }
     #[func]
     fn track_shortcut_source(&self)->GString {
         response(Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::shortcut_source()).unwrap()))
@@ -110,6 +131,78 @@ impl MapKitBridge {
             let source=serde_json::from_value(engine_value(&source.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
             let d=mapkit_package::assembled_track::compile_source(&source)?;
             Ok(serde_json::json!({"document":d}))
+        })())
+    }
+    #[func]
+    fn apply_track_source(&self, document: GString, source: GString) -> GString {
+        response((|| {
+            let document = engine_document(&document.to_string())?;
+            let source = serde_json::from_value(engine_value(&source.to_string())?)
+                .map_err(|e| mapkit_core::error("E_TRACK_SOURCE", e.to_string()))?;
+            let d = mapkit_core::assembled_track::composite::apply_source(&document, &source)?;
+            Ok(serde_json::json!({"document": d}))
+        })())
+    }
+    #[func]
+    fn apply_surface_attachments(&self, document:GString, attachments:GString)->GString {
+        response((|| {
+            let d=engine_document(&document.to_string())?;
+            let items=serde_json::from_value(engine_value(&attachments.to_string())?).map_err(|e|mapkit_core::error("E_SURFACE_ATTACHMENT",e.to_string()))?;
+            let next=mapkit_core::assembled_track::surface::apply(&d,items)?;
+            Ok(serde_json::json!({"document":next}))
+        })())
+    }
+    #[func]
+    fn preview_surface_attachment(&self, document:GString, attachment:GString)->GString {
+        response((|| {
+            let d=engine_document(&document.to_string())?;
+            let item=serde_json::from_value(engine_value(&attachment.to_string())?).map_err(|e|mapkit_core::error("E_SURFACE_ATTACHMENT",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::surface::products(&d,&[item])?).unwrap())
+        })())
+    }
+    #[func]
+    fn surface_reference(&self, document:GString, reference:GString)->GString {
+        response((|| {
+            let d=engine_document(&document.to_string())?;
+            let r=serde_json::from_value(engine_value(&reference.to_string())?).map_err(|e|mapkit_core::error("E_SURFACE_REFERENCE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::surface::resolve(&d,&r)?).unwrap())
+        })())
+    }
+    #[func]
+    fn road_design(&self, road: GString) -> GString {
+        response((|| {
+            let r: mapkit_core::Road = serde_json::from_value(engine_value(&road.to_string())?)
+                .map_err(|e| mapkit_core::error("E_ROAD_DESIGN",e.to_string()))?;
+            let design=if let Some(design)=r.design.clone(){design}else{
+                let mut design=mapkit_core::road_design::from_points(&r.points)?;
+                if r.kind!=mapkit_core::RoadKind::Ground {design.terrain_policy=mapkit_core::road_design::TerrainPolicy::Elevated;}
+                design
+            };
+            Ok(serde_json::to_value(design).unwrap())
+        })())
+    }
+    #[func]
+    fn edit_road_design(&self, document: GString, road_id: GString, design: GString, width_cm: i64) -> GString {
+        response((|| {
+            let d=engine_document(&document.to_string())?;
+            let design=serde_json::from_value(engine_value(&design.to_string())?).map_err(|e|mapkit_core::error("E_ROAD_DESIGN",e.to_string()))?;
+            let next=mapkit_core::road_design::edit(&d,&road_id.to_string(),design,u32::try_from(width_cm).map_err(|_|mapkit_core::error("E_ROAD_DESIGN","invalid width"))?)?;
+            Ok(serde_json::json!({"document":next}))
+        })())
+    }
+    #[func]
+    fn road_surface_path(&self, road: GString) -> GString {
+        response((|| {
+            let r=serde_json::from_value(engine_value(&road.to_string())?).map_err(|e|mapkit_core::error("E_ROAD_SURFACE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::road_design::path(&r)?).unwrap())
+        })())
+    }
+    #[func]
+    fn snap_track_surface(&self, instance: GString, sample: GString) -> GString {
+        response((|| {
+            let i=serde_json::from_value(engine_value(&instance.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            let s=serde_json::from_value(engine_value(&sample.to_string())?).map_err(|e|mapkit_core::error("E_ROAD_SURFACE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::authoring::snap_surface(&i,&s)?).unwrap())
         })())
     }
     #[func]
@@ -310,7 +403,7 @@ impl MapKitBridge {
         *self.presentation.get_mut() = Default::default();
         response((|| {
             let (d,f)=read_project(Path::new(&path.to_string()))?;
-            if d.assembled_track.as_ref().is_some_and(|a|!a.issues.is_empty()) {
+            if mapkit_core::assembled_track::composite::executable(&d).is_err() {
                 let info=serde_json::json!({"draft":true,"map_id":d.map_id,"bounds":d.bounds,"free_roam":d.free_roam});
                 self.draft=Some(d);
                 return Ok(info);

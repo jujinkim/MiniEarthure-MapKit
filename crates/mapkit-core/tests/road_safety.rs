@@ -19,7 +19,7 @@ fn source(kind: RoadKind, points: Vec<Vertex>) -> MapDocument {
         });
     }
     let n = points.len() - 1;
-    d.roads[0] = Road {
+    d.roads[0] = Road { design: None,
         snow_retention_percent: 100,
         id: "road".into(),
         from: "a".into(),
@@ -66,6 +66,10 @@ fn bridge_base_rail_posts_caps_and_spawn_exclusion_match_collision() {
     for kind in [RoadKind::Elevated, RoadKind::Bridge] {
         let d = source(kind, vec![[1000, 600, 2500], [9000, 600, 2500]]);
         let c = generated(&d, Cell { x: 0, y: 0 });
+        for face in c.chunk.triangles.iter().filter(|t|t.spawnable && t.object_id=="road") {
+            let [a,b,c]=face.vertices;
+            assert!((b[0]-a[0]) as i128*(c[2]-a[2]) as i128-(b[2]-a[2]) as i128*(c[0]-a[0]) as i128>0,"road tops face upward through the shared Godot reflection");
+        }
         let solids = &c.solids;
         assert!(solids.iter().any(|s| contains(s, [2500, 675, 2708])));
         assert!(solids.iter().any(|s| contains(s, [2500, 675, 2292])));

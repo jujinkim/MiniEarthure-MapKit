@@ -153,6 +153,12 @@
         "$ref": "#/definitions/SurfaceArea"
       }
     },
+    "surface_attachments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Attachment"
+      }
+    },
     "terrain_base_cm": {
       "type": "integer",
       "format": "int64"
@@ -288,6 +294,13 @@
         },
         "generator_fingerprint": {
           "type": "string"
+        },
+        "geometry_issues": {
+          "description": "Geometry errors block free roam as well as course publication.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         },
         "issues": {
           "type": "array",
@@ -452,6 +465,47 @@
       "additionalProperties": false
     },
     "Attachment": {
+      "type": "object",
+      "required": [
+        "height_cm",
+        "id",
+        "kind",
+        "panel_alignment",
+        "panel_width_percent",
+        "side",
+        "surface"
+      ],
+      "properties": {
+        "height_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "panel_alignment": {
+          "$ref": "#/definitions/PanelAlignment"
+        },
+        "panel_width_percent": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "side": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "surface": {
+          "$ref": "#/definitions/Reference"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Attachment2": {
       "type": "object",
       "required": [
         "kind",
@@ -858,6 +912,38 @@
         },
         "world_content_hash": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Design": {
+      "type": "object",
+      "required": [
+        "control_points",
+        "shoulder_cm",
+        "terrain_policy"
+      ],
+      "properties": {
+        "control_points": {
+          "description": "Joined cubic Bezier spans: 3*n+1 controls, including both road nodes.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "shoulder_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "terrain_policy": {
+          "$ref": "#/definitions/TerrainPolicy"
         }
       },
       "additionalProperties": false
@@ -1895,6 +1981,25 @@
       },
       "additionalProperties": false
     },
+    "Reference": {
+      "type": "object",
+      "required": [
+        "station_cm",
+        "surface_id"
+      ],
+      "properties": {
+        "station_cm": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "surface_id": {
+          "description": "Ordinary road ID, or `track:<authoring instance ID>` (never array index).",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
     "Repetition": {
       "type": "object",
       "required": [
@@ -1951,6 +2056,16 @@
           ],
           "format": "uint32",
           "minimum": 0.0
+        },
+        "design": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Design"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "from": {
           "type": "string"
@@ -2015,6 +2130,26 @@
             "format": "uint32",
             "minimum": 0.0
           }
+        }
+      },
+      "additionalProperties": false
+    },
+    "RoadConnection": {
+      "type": "object",
+      "required": [
+        "instance",
+        "road",
+        "start"
+      ],
+      "properties": {
+        "instance": {
+          "type": "string"
+        },
+        "road": {
+          "type": "string"
+        },
+        "start": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -2284,7 +2419,7 @@
         "attachments": {
           "type": "array",
           "items": {
-            "$ref": "#/definitions/Attachment"
+            "$ref": "#/definitions/Attachment2"
           }
         },
         "checkpoints": {
@@ -2331,6 +2466,12 @@
             "$ref": "#/definitions/Path"
           }
         },
+        "road_connections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RoadConnection"
+          }
+        },
         "settings": {
           "$ref": "#/definitions/Settings"
         },
@@ -2339,6 +2480,16 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Gimmick"
+          }
+        },
+        "terrain_integration": {
+          "description": "Compile as an overlay on the existing terrain document.",
+          "type": "boolean"
+        },
+        "terrain_policies": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/TerrainPolicy"
           }
         }
       },
@@ -2444,6 +2595,14 @@
         }
       },
       "additionalProperties": false
+    },
+    "TerrainPolicy": {
+      "type": "string",
+      "enum": [
+        "auto_fit",
+        "preserve",
+        "elevated"
+      ]
     },
     "TrackKind": {
       "type": "string",

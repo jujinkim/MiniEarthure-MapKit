@@ -160,12 +160,9 @@ zero yaw-offset argument to compile. macOS and Android ARM64/API 29 MapKit nativ
 builds passed; Android imports `syscall`, with no `renameat2` function-symbol
 dependency. This is not Android device execution evidence.
 
-Known existing regression: `--test assembled_track` passed 16/17;
-`finish_plaza_and_editable_free_roam_keep_exact_source_validation` expects the last
-effective gate to differ from the plaza center (line 271), but they coincide.
-The exact test also fails on unchanged `4dae0e5`; this save change does not edit
-generation/checkpoint geometry. Reconcile that fixture with the current finish
-gate contract separately. Save/progress/cancellation regressions passed.
+The finish-plaza regression now checks the actual `effective_checkpoints` order.
+A particular seed may retain its plaza gate; deduplication does not require
+removing that gate. The focused assembly/package/course regressions pass.
 
 Tests: `cargo test -p mapkit-package --test assembled_track --test courses
 --test package_contract`. Consumer vehicle/race acceptance remains separate.

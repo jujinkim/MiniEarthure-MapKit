@@ -29,9 +29,11 @@ impl MapDocument {
     }
 }
 pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
+    crate::road_design::validate_crossings(d)?;
     let mut degree = BTreeMap::new();
     let mut work=0;
     for r in &d.roads {
+        crate::road_design::validate(r)?;
         for id in [&r.from, &r.to] {
             let n = degree.entry(id).or_insert(0usize);
             *n += 1;
@@ -164,6 +166,12 @@ pub(crate) fn on_plane(v: &[Vertex; 3], p: Vertex) -> Vertex {
         / area;
     [p[0], height as i64, p[2]]
 }
+fn designed_plane(v:&[Vertex;3],p:Vertex)->Vertex {
+    let area=orient(v[0],v[1],v[2]);
+    let numerator=orient(v[1],v[2],p)*v[0][1] as i128+orient(v[2],v[0],p)*v[1][1] as i128+orient(v[0],v[1],p)*v[2][1] as i128;
+    let sign=numerator.signum()*area.signum();
+    [p[0],(sign*((numerator.abs()+area.abs()/2)/area.abs())) as i64,p[2]]
+}
 pub(crate) fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
     points.sort_by_key(|p| (p[0], p[2], p[1]));
     points.dedup_by_key(|p| (p[0], p[2]));
@@ -192,6 +200,7 @@ fn ground_tile(
     d: &MapDocument,
     v: [Vertex; 4],
     patches: &[Patch],
+    track: &[[Vertex;3]],
     b: &mut Builder,
     work: &mut usize,
 ) -> Result<()> {
@@ -212,7 +221,19 @@ fn ground_tile(
     )?;
     let terrain = [[v[0], v[1], v[2]], [v[0], v[2], v[3]]];
     let nearby: Vec<_> = patches.iter().filter(|p| hit(&p.v, &bounds, 2)).collect();
+    let nearby_track:Vec<_>=track.iter().filter(|f|hit(&f[..],&bounds,2)
+        && f.iter().map(|p|p[1]).min().unwrap()<=v.iter().map(|p|p[1]).max().unwrap()+50
+        && f.iter().map(|p|p[1]).max().unwrap()>=v.iter().map(|p|p[1]).min().unwrap()-50).collect();
     let mut lines = vec![(xy(v[0]), xy(v[2]))];
+    // Only footprint boundaries partition terrain. Rigid pipe meshes contain
+    // many tiny internal faces which must not spend the tile edge budget again.
+    let mut track_edges=BTreeMap::new();
+    for face in &nearby_track {for i in 0..3 {
+        let (a,b)=(xy(face[i]),xy(face[(i+1)%3]));
+        let edge=if a<b {(a,b)} else {(b,a)};
+        *track_edges.entry(edge).or_insert(0usize)+=1;
+    }}
+    lines.extend(track_edges.into_iter().filter(|(_,count)|*count==1).map(|(edge,_)|edge));
     let mut shared = BTreeMap::<(&str,u8,Point,Point), Vec<&Patch>>::new();
     for patch in &nearby {
         for i in 0..3 {
@@ -224,13 +245,13 @@ fn ground_tile(
     for ((_,_,a,b),owners) in shared {
         // Ground follows the terrain, and bridge/underpass footprints do not
         // need their internal fan diagonals to partition that terrain again.
-        let redundant=owners.len()==2 && (owners[0].road.kind!=RoadKind::Tunnel
+        let redundant=owners.len()==2 && ((owners[0].road.kind!=RoadKind::Tunnel && owners[0].road.design.is_none())
             || owners[1].v.iter().all(|p|floor_plane(&owners[0].v,*p)==0));
         if !redundant { lines.push((a,b)); }
     }
     for patch in &nearby {
         for t in terrain {
-            if patch.terrain_join {
+            if patch.terrain_join && patch.road.design.is_none() {
                 let (inside, _) = partition(&t, &patch.v, work)?;
                 if let Some(point) = inside
                     .iter()
@@ -264,6 +285,23 @@ fn ground_tile(
                     lines.push((crossing[0], *crossing.last().unwrap()));
                 }
             }
+            if patch.road.design.is_some() && matches!(patch.road.kind,RoadKind::Bridge|RoadKind::Elevated) {
+                for offset in [-51,51] {
+                    let plane=patch.v.map(|p|[p[0],p[1]+offset,p[2]]);
+                    let mut crossing=Vec::new();
+                    for i in 0..3 {
+                        let (a,c)=(t[i],t[(i+1)%3]);
+                        let (da,dc)=(floor_plane(&plane,a),floor_plane(&plane,c));
+                        if da==0 {crossing.push(xy(a));}
+                        if (da<0 && dc>0)||(da>0 && dc<0) {
+                            let p=std::array::from_fn(|j|((a[j] as i128*(da-dc)+(c[j]-a[j]) as i128*da)/(da-dc)) as i64);
+                            crossing.push(xy(p));
+                        }
+                    }
+                    crossing.sort();crossing.dedup();
+                    if crossing.len()>=2 {lines.push((crossing[0],*crossing.last().unwrap()));}
+                }
+            }
         }
     }
     let paint: Vec<_> = d
@@ -288,7 +326,18 @@ fn ground_tile(
         } else {
             terrain[1]
         };
-        on_plane(&t, [p[0], 0, p[1]])
+        if let Some(patch) = nearby.iter().find(|patch| patch.road.design.as_ref().is_some_and(|d|d.terrain_policy==crate::road_design::TerrainPolicy::AutoFit)
+            && point_in_polygon(p,&patch.v.map(xy))) {
+            return designed_plane(&patch.v,[p[0],0,p[1]]);
+        }
+        let terrain=on_plane(&t,[p[0],0,p[1]]);
+        for face in &nearby_track {
+            if point_in_polygon(p,&face.map(xy)) {
+                let deck=on_plane(face,[p[0],0,p[1]]);
+                if (deck[1]-terrain[1]).abs()<=50 {return deck;}
+            }
+        }
+        terrain
     };
     for rings in shapes {
         for triangle in crate::road_arrangement::triangulate(&rings, work)? {
@@ -305,6 +354,7 @@ fn ground_tile(
             };
             let mut selected = Some((Surface::Grass, "terrain"));
             let mut road = false;
+            let mut designed = None;
             for patch in &nearby {
                 tick(work, 1)?;
                 if !point_in_polygon(center, &patch.v.map(|p| [p[0] * 3, p[2] * 3])) {
@@ -312,6 +362,7 @@ fn ground_tile(
                 }
                 match patch.road.kind {
                     RoadKind::Ground => {
+                        if patch.road.design.is_some() {designed=Some(patch.v);}
                         selected = Some((patch.surface, patch.road.id.as_str()));
                         road = true;
                         break;
@@ -337,7 +388,9 @@ fn ground_tile(
                         }
                     }
                     RoadKind::Elevated | RoadKind::Bridge => {
-                        if patch.v.iter().all(|p| floor_plane(&t, *p) == 0) {
+                        let p=[center[0]/3,0,center[1]/3];
+                        if patch.v.iter().all(|p| floor_plane(&t, *p) == 0)
+                            || patch.road.design.is_some() && (designed_plane(&patch.v,p)[1]-on_plane(&t,p)[1]).abs()<=51 {
                             selected = None;
                             break;
                         }
@@ -360,8 +413,13 @@ fn ground_tile(
                     }
                 }
             }
+            let center_point=[center[0]/3,0,center[1]/3];
+            if nearby_track.iter().any(|face|point_in_polygon([center[0],center[1]],&face.map(|p|[p[0]*3,p[2]*3]))
+                && (on_plane(face,center_point)[1]-on_plane(&t,center_point)[1]).abs()<=50) {
+                selected=None;
+            }
             if let Some((surface, id)) = selected {
-                b.triangle(triangle.map(height), surface, id, true)?;
+                b.triangle(triangle.map(|p|designed.map_or_else(||height(p),|plane|designed_plane(&plane,[p[0],0,p[1]]))), surface, id, true)?;
             }
         }
     }
@@ -377,8 +435,15 @@ pub(crate) fn generate(
     b: &mut Builder,
 ) -> Result<()> {
     let (patches, walls) = plan(d, bounds)?;
-    let height =
-        |x: usize, y: usize| grid.map_or(d.terrain_base_cm, |g| g.heights_cm[y * side + x]);
+    let (source_spacing,source_side)=(spacing,side);
+    let spacing=if d.assembled_track.as_ref().is_some_and(|a|a.terrain_integration()) {spacing.min(200)} else {spacing};
+    let side=d.cell_size_cm as usize/spacing as usize+1;
+    let fitter=crate::road_design::Fitter::new(d,bounds);
+    let mut track:Vec<_>=b.chunk.triangles.iter().filter(|t|t.spawnable && t.object_id.starts_with("assembled-road-") && orient(t.vertices[0],t.vertices[1],t.vertices[2])!=0).map(|t|t.vertices).collect();
+    if let Some(a)=d.assembled_track.as_ref().filter(|a|a.terrain_integration()) {track.extend(crate::assembled_track::terrain_cut_faces(a,bounds)?);}
+    let height = |x: usize, y: usize| fitter.height(
+        [bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing],
+        crate::terrain_height(bounds,source_spacing,source_side,grid,d.terrain_base_cm,[bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing]));
     let mut work = 0;
     for y in 0..side - 1 {
         for x in 0..side - 1 {
@@ -391,14 +456,16 @@ pub(crate) fn generate(
                 [px, height(x, y + 1), py + spacing],
             ];
 
-            ground_tile(d, v, &patches, b, &mut work)?;
+            ground_tile(d, v, &patches, &track, b, &mut work)?;
         }
     }
     for patch in &patches {
         if patch.road.kind == RoadKind::Ground {
             continue;
         }
-        b.triangle(patch.v, patch.surface, &patch.road.id, true)?;
+        let mut face=patch.v;
+        if orient(face[0],face[1],face[2])<0 {face.swap(1,2);}
+        b.triangle(face, patch.surface, &patch.road.id, true)?;
         if patch.road.kind == RoadKind::Tunnel {
             b.triangle(
                 patch
@@ -524,14 +591,15 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
         }
         for shape in overlay.overlay(OverlayRule::Subject,FillRule::NonZero) {
             let rings:Vec<Vec<Point>>=shape.into_iter().map(|r|r.into_iter().map(|p|[p.x,p.y]).collect()).collect();
-            for v in crate::road_arrangement::triangulate(&rings,&mut buffer_work)? {
-                patches.push(Patch{v:v.map(|p|[p[0],0,p[1]]),road,surface:Surface::Concrete,terrain_join:false});
-            }
+            patches.push((road,rings));
         }
     }
     if patches.is_empty() {
         return Ok(());
     }
+    let patch_index = crate::bounds_index::BoundsIndex::new(
+        &patches.iter().map(|(_,rings)| crate::bounds_index::bounds(&rings[0])).collect::<Vec<_>>(),
+    );
     let exclusions: Vec<_> = d
         .buildings
         .iter()
@@ -556,42 +624,52 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
     for t in ground {
         let area = crate::bounds_index::bounds(&t.vertices.map(xy));
         let nearby = exclusion_index.query(&area, &mut work)?;
-        let mut remaining = vec![t.vertices.to_vec()];
-        for patch in &patches {
-            tick(&mut work, 1)?;
-            if !hit(&patch.v, &area, 0) {
-                continue;
+        let mut remaining = vec![vec![t.vertices.map(xy).to_vec()]];
+        for i in patch_index.query(&area, &mut work)? {
+            let (road,rings) = &patches[i];
+            // Clip the complete apron before triangulating. Triangulating the
+            // entire curved buffer first creates long fan diagonals through
+            // every terrain fragment and needlessly multiplies solid faces.
+            let mut fitted = sidewalk_overlay(&remaining,rings,OverlayRule::Intersect,&mut work)?;
+            remaining = sidewalk_overlay(&remaining,rings,OverlayRule::Difference,&mut work)?;
+            for &i in &nearby {
+                fitted = sidewalk_overlay(&fitted,&[exclusions[i].clone()],OverlayRule::Difference,&mut work)?;
             }
-            let mut next = vec![];
-            for poly in remaining {
-                let (inside, outside) = partition(&poly, &patch.v, &mut work)?;
-                next.extend(outside);
-                if valid(&inside) {
-                    let mut fitted = vec![inside];
-                    for &i in &nearby {
-                        fitted = crate::urban::subtract(fitted, exclusions[i], &mut work)?;
-                    }
-                    let id = format!("{}:sidewalk", patch.road.id);
-                    for p in fitted {
-                        let bottom: Vec<_> = p.iter().map(|p| on_plane(&t.vertices, *p)).collect();
-                        let top: Vec<_> = bottom.iter().map(|p| [p[0], p[1] + 12, p[2]]).collect();
-                        emit(b, &top, Surface::Concrete, &id, true)?;
-                        tops.push(top.iter().copied().map(xy).collect::<Vec<_>>());
-                        for i in 0..top.len() {
-                            let j = (i + 1) % top.len();
-                            edges.push((bottom[i], bottom[j], patch.road.id.as_str()));
-                        }
-                    }
+            let id = format!("{}:sidewalk", road.id);
+            let bottom=|p:Point| on_plane(&t.vertices,[p[0],0,p[1]]);
+            for rings in fitted {
+                for triangle in crate::road_arrangement::triangulate(&rings,&mut work)? {
+                    let top=triangle.map(|p| {let p=bottom(p);[p[0],p[1]+12,p[2]]});
+                    emit(b,&top,Surface::Concrete,&id,true)?;
+                    tops.push(triangle.to_vec());
                 }
+                for ring in rings {for i in 0..ring.len() {
+                    edges.push((bottom(ring[i]),bottom(ring[(i+1)%ring.len()]),road.id.as_str()));
+                }}
             }
-            remaining = next;
             if remaining.len() > MAX_FRAGMENTS {
                 return Err(error("E_BUDGET", "sidewalk fragments exceeded"));
             }
         }
     }
-    sidewalk_boundary_walls(b, &edges, &tops, &mut work)?;
+    sidewalk_boundary_walls(b, &edges, &tops, &mut work).map_err(|mut e| {
+        e.message=format!("boundary of {} tops/{} edges, work {work}: {}",tops.len(),edges.len(),e.message);e
+    })?;
     Ok(())
+}
+
+fn sidewalk_overlay(subjects:&[Vec<Vec<Point>>],clip:&[Vec<Point>],rule:i_overlay::core::overlay_rule::OverlayRule,work:&mut usize)->Result<Vec<Vec<Vec<Point>>>> {
+    use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType}},i_float::int::point::IntPoint};
+    if subjects.is_empty(){return Ok(vec![]);}
+    let count=subjects.iter().flat_map(|s|s.iter()).chain(clip).map(Vec::len).sum();
+    tick(work,count)?;
+    let mut overlay=Overlay::<i64>::new(count);
+    for (rings,kind) in subjects.iter().map(|s|(s.as_slice(),ShapeType::Subject)).chain(std::iter::once((clip,ShapeType::Clip))) {
+        for ring in rings {overlay.add_contour(&ring.iter().map(|p|IntPoint::new(p[0],p[1])).collect::<Vec<_>>(),kind);}
+    }
+    let out:Vec<Vec<Vec<Point>>>=overlay.overlay(rule,FillRule::NonZero).into_iter().map(|s|s.into_iter().map(|r|r.into_iter().map(|p|[p.x,p.y]).collect()).collect()).collect();
+    if out.len()>MAX_FRAGMENTS{return Err(error("E_BUDGET","sidewalk fragments exceeded"));}
+    Ok(out)
 }
 
 /// Clip fragment edges against one another before making the visible step.

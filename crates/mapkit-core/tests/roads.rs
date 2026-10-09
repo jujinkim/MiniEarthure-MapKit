@@ -209,7 +209,7 @@ fn explicit_ground_portal_connects_and_rejects_an_incompatible_apron() {
             position: [0, 0, 4000],
             level: 0,
         });
-        d.roads.push(Road {
+        d.roads.push(Road { design: None,
             snow_retention_percent: 100,
             id: "approach".into(),
             from: "underpass-from".into(),

@@ -931,7 +931,7 @@ pub fn read_source_project(path: &Path) -> Result<(MapDocument, BTreeMap<String,
     }
     let mut d: MapDocument = json(&bounded_read(&doc_path, MAX_DOCUMENT_BYTES)?)?;
     d.normalize();
-    if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; }
+    if d.assembled_track.is_some() { mapkit_core::assembled_track::composite::executable(&d)?; }
     d = d.into_indexed_source()?;
     let mut files = BTreeMap::new();
     let mut total = 0u64;
@@ -960,7 +960,10 @@ pub fn pack_source(
     side_cells: u32,
 ) -> Result<Vec<u8>> {
     d.normalize();
-    if let Some(a)=&d.assembled_track { mapkit_core::assembled_track::authoring::executable(a)?; mapkit_core::assembled_track::verify_document(&d)?; }
+    for road in &d.roads {mapkit_core::road_design::verify(road)?;}
+    mapkit_core::assembled_track::surface::verify(&d)?;
+    if d.assembled_track.is_some() { mapkit_core::assembled_track::composite::executable(&d)?; mapkit_core::assembled_track::verify_document(&d)?; }
+    crate::assembled_track::bind_overlay_course(&mut d,&files)?;
     d = d.into_indexed_source()?;
     files.insert("document.json".into(), canonical(&d)?);
     export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
@@ -970,6 +973,7 @@ pub fn pack_source(
     validate_course_files(&d, &files)?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
+    crate::track_environment::validate(&d,&files)?;
     let mut index = Index {
         version: 1,
         world: metadata(&d),

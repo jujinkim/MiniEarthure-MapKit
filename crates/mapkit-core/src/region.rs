@@ -95,7 +95,7 @@ impl<'a> RegionSourcePlan<'a> {
         if bytes > memory_limit {
             return Err(error("E_MEMORY_BUDGET", "regional plan exceeds allowance"));
         }
-        let mut prune = document.repetitions.is_empty();
+        let mut prune = document.repetitions.is_empty() && document.surface_attachments.is_empty();
         let mut widest = None;
         let mut maximum_width = 0;
         for (i, road) in document.roads.iter().enumerate() {
@@ -145,7 +145,7 @@ impl<'a> RegionSourcePlan<'a> {
             margin: maximum_spacing.max(501) + 1000,
             prune,
             road_margin: if use_local {
-                crate::roads::width_influence_margin(maximum_width) + 1000
+                crate::roads::width_influence_margin(maximum_width) + 1000 + document.roads.iter().filter_map(|r|r.design.as_ref()).map(|d|i64::from(d.shoulder_cm)).max().unwrap_or(0)
             } else {
                 0
             },
@@ -199,7 +199,7 @@ fn competition_margin(d: &MapDocument) -> i64 {
 }
 
 fn can_prune(d: &MapDocument) -> bool {
-    d.repetitions.is_empty()
+    d.repetitions.is_empty() && d.surface_attachments.is_empty()
         && d.roads
             .iter()
             .all(|r| r.kind != RoadKind::Ground || r.sidewalk_cm.is_some())
@@ -216,6 +216,7 @@ fn widest_road(d: &MapDocument) -> Option<usize> {
 /// Clone metadata without allocating a transient copy of world geometry.
 pub fn source_metadata(d: &MapDocument) -> MapDocument {
     MapDocument {
+        surface_attachments:d.surface_attachments.clone(),
         free_roam: d.free_roam,
         assembled_track: d.assembled_track.clone(),
         water_bodies: vec![],
@@ -319,7 +320,7 @@ fn derive_source(
     out.repetitions = d.repetitions.clone();
     if prune {
         let road_margin = plan.map_or_else(
-            || crate::roads::influence_margin(d) + 1000,
+            || crate::roads::influence_margin(d) + 1000 + d.roads.iter().filter_map(|r|r.design.as_ref()).map(|d|i64::from(d.shoulder_cm)).max().unwrap_or(0),
             |p| p.road_margin,
         );
         let road_bounds = Bounds {

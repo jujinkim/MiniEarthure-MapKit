@@ -20,6 +20,7 @@ struct Arm<'a> {
     pub road: &'a Road,
     segment: usize,
     end: usize,
+    point_index: usize,
     point: Vertex,
     other: Vertex,
 }
@@ -66,28 +67,42 @@ pub(crate) fn plan<'a>(
     bounds: &Bounds,
 ) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let mut groups: BTreeMap<Key, Vec<Arm>> = BTreeMap::new();
+    let mut nodes=BTreeMap::<&str,(usize,u32)>::new();
+    for r in &d.roads {for id in [&r.from,&r.to] {
+        let entry=nodes.entry(id).or_default();entry.0+=1;entry.1=entry.1.max(*r.widths_cm.iter().max().unwrap());
+    }}
+    let chains:BTreeMap<_,Vec<_>>=d.roads.iter().map(|r| {
+        let mut distances=vec![0.0];
+        for pair in r.points.windows(2){distances.push(distances.last().unwrap()+length(pair[0],pair[1]));}
+        let total=*distances.last().unwrap();
+        let approach=|id:&str|if r.design.is_some() && nodes[id].0>1 {(nodes[id].1 as f64*1.5+200.0).min(total/4.0)} else {0.0};
+        let (start,end)=(approach(&r.from),approach(&r.to));
+        (r.id.as_str(),(0..r.points.len()).filter(|&i|i==0 || i+1==r.points.len() || distances[i]>=start && total-distances[i]>=end).collect())
+    }).collect();
     // Include complete endpoint junctions when a corridor touches this cell.
     let mut relevant = BTreeSet::new();
     let mut local_segments = 0;
     let margin = influence_margin(d);
     let width = |r: &Road, i: usize| r.widths_cm[i] as f64;
     for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
-            if hit(s, bounds, margin) {
+        for indices in chains[r.id.as_str()].windows(2) {
+            let s=[r.points[indices[0]],r.points[indices[1]]];
+            if hit(&s, bounds, margin) {
                 local_segments += 1;
                 if local_segments > MAX_LOCAL_PATCHES / 8 {
                     return Err(error("E_BUDGET", "road local segment limit"));
                 }
-                relevant.insert(key(r, i));
-                relevant.insert(key(r, i + 1));
+                relevant.insert(key(r, indices[0]));
+                relevant.insert(key(r, indices[1]));
             }
         }
     }
     let mut arm_count = 0;
     for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
+        for indices in chains[r.id.as_str()].windows(2) {
+            let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
             for end in 0..2 {
-                let k = key(r, i + end);
+                let k = key(r, indices[end]);
                 if relevant.contains(&k) {
                     arm_count += 1;
                     if arm_count > MAX_LOCAL_PATCHES {
@@ -97,6 +112,7 @@ pub(crate) fn plan<'a>(
                         road: r,
                         segment: i,
                         end,
+                        point_index:indices[end],
                         point: s[end],
                         other: s[1 - end],
                     });
@@ -107,8 +123,19 @@ pub(crate) fn plan<'a>(
     let mut mouths: BTreeMap<(&str, usize, usize), [Vertex; 2]> = BTreeMap::new();
     let mut patches = vec![];
     let mut walls = vec![];
+    let mut sections=BTreeMap::new();
     for arms in groups.values_mut() {
         crate::cancellation::checkpoint()?;
+        if arms.len()==2 && arms[0].road.id==arms[1].road.id && arms[0].road.design.is_some() && arms[0].point_index==arms[1].point_index {
+            for arm in arms.iter() {
+                let at=arm.point_index;
+                if !sections.contains_key(arm.road.id.as_str()) {sections.insert(arm.road.id.as_str(),crate::road_design::cross_sections(arm.road)?);}
+                let mut section=sections[arm.road.id.as_str()][at];
+                if arm.end==1 {section.swap(0,1);}
+                mouths.insert((&arm.road.id,arm.segment,arm.end),section);
+            }
+            continue;
+        }
         arms.sort_by_key(|a| (&a.road.id, a.segment, a.end));
         let radius = arms
             .iter()
@@ -116,6 +143,13 @@ pub(crate) fn plan<'a>(
             .fold(0.0, f64::max);
         let mut ring = vec![];
         for arm in arms.iter() {
+            if arms.len()==1 && arm.road.design.is_some() {
+                if !sections.contains_key(arm.road.id.as_str()) {sections.insert(arm.road.id.as_str(),crate::road_design::cross_sections(arm.road)?);}
+                let mut mouth=sections[arm.road.id.as_str()][arm.point_index];
+                if arm.end==1 {mouth.swap(0,1);}
+                mouths.insert((&arm.road.id,arm.segment,arm.end),mouth);ring.extend(mouth);
+                continue;
+            }
             let dx = (arm.other[0] - arm.point[0]) as f64;
             let dy = (arm.other[2] - arm.point[2]) as f64;
             let len = libm::sqrt(dx * dx + dy * dy);
@@ -378,8 +412,9 @@ pub(crate) fn plan<'a>(
         }
     }
     for r in &d.roads {
-        for (i, s) in r.points.windows(2).enumerate() {
-            if !hit(s, bounds, margin) {
+        for indices in chains[r.id.as_str()].windows(2) {
+            let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
+            if !hit(&s, bounds, margin) {
                 continue;
             }
             let a = mouths[&(r.id.as_str(), i, 0)];

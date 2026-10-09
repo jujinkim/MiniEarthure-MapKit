@@ -2,7 +2,7 @@ use mapkit_core::assembled_track::{start_surface_at, Settings, START_PIECES};
 
 #[test]
 fn each_start_row_uses_its_actual_runway_piece() {
-    let settings = Settings { seed: 7, circuit: false, gimmicks: vec![], ..Settings::default() };
+    let settings = Settings { seed: 7, circuit: false, categories: vec!["driving".into()], ..Settings::default() };
     let document = mapkit_package::assembled_track::generate(&settings).unwrap();
     let assembly = document.assembled_track.as_ref().unwrap();
     for (i, piece) in assembly.pieces.iter().take(START_PIECES).enumerate() {

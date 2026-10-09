@@ -1,6 +1,7 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod water;
 pub mod assembled_track;
+pub mod road_design;
 pub use generation::assembled_preview;
 pub mod gimmick;
 pub mod grind;
@@ -126,6 +127,8 @@ pub struct RoadNode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Road {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design: Option<road_design::Design>,
     /// Percentage of weather snow retained on this road, including its paint.
     #[serde(default = "full_snow_retention", skip_serializing_if = "is_full_snow_retention")]
     #[schemars(range(max = 100))]
@@ -277,6 +280,8 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub surface_attachments: Vec<assembled_track::surface::Attachment>,
     /// Post-finish presentation policy. Required in the current v1 source.
     pub free_roam: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -528,7 +533,7 @@ impl MapDocument {
             .iter()
             .map(|a| a.polygon.len())
             .sum::<usize>()
-            + self.roads.iter().map(|r| r.points.len()).sum::<usize>()
+            + self.roads.iter().map(|r| r.points.len()+r.design.as_ref().map_or(0,|d|d.control_points.len())).sum::<usize>()
             + self
                 .buildings
                 .iter()
@@ -756,6 +761,7 @@ impl MapDocument {
         }
         water::validate(self)?;
         gimmick::validate(self)?;
+        if !source_topology {assembled_track::surface::validate(self)?;}
         grind::validate(&self.grind_lines)?;
         if self.grind_lines.iter().flat_map(|l|&l.control_points).any(|p|!self.bounds.contains([p[0],p[2]])) {
             return Err(error("E_GRIND_SOURCE","grind path leaves document bounds"));
@@ -1038,3 +1044,14 @@ pub use road_paint::{RoadPaint, RoadPaintSegment};
 mod road_safety;
 mod urban;
 pub use placement::BuildingPrism;
+
+/// Exact piecewise planar height of the immutable input grid, including seams.
+pub fn terrain_height(bounds:&Bounds,spacing:i64,side:usize,grid:Option<&HeightGrid>,base:i64,p:Point)->i64 {
+    let Some(grid)=grid else {return base;};
+    let x=((p[0]-bounds.min[0]).div_euclid(spacing)).clamp(0,side as i64-2) as usize;
+    let z=((p[1]-bounds.min[1]).div_euclid(spacing)).clamp(0,side as i64-2) as usize;
+    let at=|i:usize,j:usize|[bounds.min[0]+i as i64*spacing,grid.heights_cm[j*side+i],bounds.min[1]+j as i64*spacing];
+    let (a,b,c,e)=(at(x,z),at(x+1,z),at(x+1,z+1),at(x,z+1));
+    let face=if p[0]-a[0]>=p[1]-a[2] {[a,b,c]} else {[a,c,e]};
+    roads::on_plane(&face,[p[0],0,p[1]])[1]
+}

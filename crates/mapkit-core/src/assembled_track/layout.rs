@@ -207,6 +207,7 @@ pub(super) fn finish(pieces: Vec<Piece>, s: &Settings) -> Assembly {
         seed_source: None,
         routes: vec![route],
         issues: vec![],
+        geometry_issues: vec![],
         settings: s.clone(),
         generator_fingerprint: fingerprint(),
         catalogue_fingerprint: catalogue_fingerprint(),

@@ -15,7 +15,8 @@ impl Assembly {
     pub fn validate_stored(&self) -> Result<()> {
         let fail = |stage: &str| error("E_TRACK_ASSEMBLY", format!("invalid saved track {stage}"));
         self.settings.normalized()?;
-        if self.pieces.len()>MAX_PIECES
+        if self.issues.len()>2048 || self.geometry_issues.len()>2048 || self.issues.iter().chain(&self.geometry_issues).any(|v|v.len()>1024)
+            || self.pieces.len()>MAX_PIECES
             || self.pieces.iter().map(|p|p.path.len()+p.alternate_path.len()).sum::<usize>()>MAX_SAMPLES
             || self.routes.len()>64 || self.supports.len()>MAX_SAMPLES || self.obstacles.len()>MAX_SAMPLES
             || self.generator_fingerprint.len()>128 || self.catalogue_fingerprint.len()>128
@@ -41,7 +42,7 @@ impl Assembly {
                         || s.ribbon_cm.is_some_and(|r|r.iter().any(|&v|!coordinate(v)))
                         || s.lateral_cm==0 || s.lateral_cm>10000 || s.tube_radius_cm>10000
                         || s.above_cm>100000 || s.below_cm>100000 || s.min_speed_cmps>100000
-                        || !["drive","drift","bridge","boost","spiral","flight","loop","cylinder","halfpipe"].contains(&s.mode.as_str()) {
+                        || !["drive","drift","bridge","boost","spiral","flight","loop","cylinder","halfpipe","roller"].contains(&s.mode.as_str()) {
                         return Err(error("E_TRACK_ASSEMBLY",format!("invalid saved sample in {}: {:?}",p.id,s)));
                     }
                 }

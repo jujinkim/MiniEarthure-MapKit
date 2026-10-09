@@ -3,13 +3,28 @@ use mapkit_package::*;
 use std::path::Path;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let help="usage: mapkit compile-track SOURCE.json NEW.memap | track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
+    let help="usage: mapkit audit-roads PACKAGE | design-roads INPUT.json NEW.json | compile-track SOURCE.json NEW.memap | track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
     let arg = |i: usize| {
         args.get(i)
             .map(String::as_str)
             .ok_or_else(|| error("E_USAGE", help))
     };
     match arg(0)? {
+        "design-roads" if args.len()==3 => {
+            let mut d:MapDocument=serde_json::from_slice(&std::fs::read(arg(1)?).map_err(|e|error("E_IO",e.to_string()))?).map_err(|e|error("E_JSON",e.to_string()))?;
+            for r in &mut d.roads {
+                let mut design=r.design.clone().map_or_else(||road_design::from_points(&r.points),Ok)?;
+                if r.kind!=RoadKind::Ground {design.terrain_policy=road_design::TerrainPolicy::Elevated;}
+                road_design::compile(r,design,r.widths_cm[0])?;
+            }
+            mapkit_core::assembled_track::surface::refresh(&mut d)?;
+            d.validate()?;
+            write_new(Path::new(arg(2)?),&canonical(&d)?)?;
+        }
+        "audit-roads" if args.len()==2 => {
+            let p=read(Path::new(arg(1)?))?;
+            println!("{}",road_audit::audit(&p,0.12)?);
+        }
         "track-catalogue" if args.len() == 1 => println!("{}",mapkit_core::assembled_track::catalogue()),
         "generate-track" if args.len() == 3 => {
             let settings = serde_json::from_slice(&std::fs::read(arg(1)?).map_err(|e|error("E_IO",e.to_string()))?).map_err(|e|error("E_TRACK_SETTINGS",format!("{e}")))?;

@@ -80,6 +80,24 @@ pub(super) fn fit(a: &Assembly, index: usize, g: &mut Gimmick, lateral: u32, wid
     Ok(())
 }
 
+pub(super) fn fit_road(d:&MapDocument,id:&str,g:&mut Gimmick,lateral:u32,width:u8,alignment:authoring::PanelAlignment)->Result<()> {
+    let half=(lateral as f64-25.0).max(0.0);
+    let span=half*2.0*width as f64/100.0;
+    let left=match alignment {authoring::PanelAlignment::Left=>-half,authoring::PanelAlignment::Center=>-span/2.0,authoring::PanelAlignment::Right=>half-span};
+    let basis:[[f64;3];3]=std::array::from_fn(|j|geometry::rotate3(std::array::from_fn(|k|if j==k {1_000_000} else {0}),g.rotation_mdeg).map(|v|v as f64/1e6));
+    let basis=std::array::from_fn(|i|std::array::from_fn(|j|basis[j][i]));
+    let bounds=Bounds{min:[g.position[0]-2000,g.position[2]-2000],max:[g.position[0]+2000,g.position[2]+2000]};
+    g.parts.clear();g.scale_per_mille=[100;3];
+    let mut surface=PanelSurface{g,basis,left,right:left+span,area:0.0};
+    for patch in crate::road_plan::plan(d,&bounds)?.0 {
+        if patch.road.id!=id {continue;}
+        let mut v=patch.v;if crate::road_plan::orient(v[0],v[1],v[2])>0 {v.swap(1,2);}
+        surface.triangle(v,patch.surface,id,true)?;
+    }
+    if surface.area<1.0 {return Err(error("E_TRACK_PANEL_SUPPORT","ordinary-road panel has no supporting triangles"));}
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

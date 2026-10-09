@@ -1,6 +1,6 @@
 //! Ground paint. Integer subdivisions share the road clipping rule.
 use crate::generation::polygon_triangles;
-use crate::roads::{partition, tick};
+use crate::roads::tick;
 use crate::*;
 
 fn overlaps(a: &[Vertex], b: &[Vertex]) -> bool {
@@ -80,30 +80,4 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         }
     }
     Ok(())
-}
-pub(crate) fn subtract(
-    mut polys: Vec<Vec<Vertex>>,
-    ring: &[Point],
-    work: &mut usize,
-) -> Result<Vec<Vec<Vertex>>> {
-    if polys.is_empty() {
-        return Ok(polys);
-    }
-    let v: Vec<_> = ring.iter().map(|p| [p[0], 0, p[1]]).collect();
-    tick(work, 1)?;
-    if !polys.iter().any(|p| overlaps(p, &v)) {
-        return Ok(polys);
-    }
-    for t in polygon_triangles(ring)? {
-        let clip = t.map(|i| v[i]);
-        let mut next = vec![];
-        for p in polys {
-            next.extend(partition(&p, &clip, work)?.1);
-        }
-        if next.len() > 16384 {
-            return Err(error("E_BUDGET", "sidewalk exclusions exceeded"));
-        }
-        polys = next;
-    }
-    Ok(polys)
 }

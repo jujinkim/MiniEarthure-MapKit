@@ -149,6 +149,46 @@ fn column(index: usize, x: i64, z: i64, bottom: i64, top: i64) -> Support {
         shape,
     }
 }
+
+/// Environment-backed supports use the actual terrain under a deterministic
+/// mesh contact, never the standalone venue floor. The shape is derived per
+/// cell; its source and the heightmap already participate in the world hash.
+pub(crate) fn terrain_supports(a: &Assembly, b: &mut crate::generation::Builder,
+    height: impl Fn(Point)->i64) -> Result<()> {
+    let objects=road_gimmicks(a)?;
+    for (i,p) in a.pieces.iter().enumerate() {
+        if p.path.iter().chain(&p.alternate_path).all(|s|s.mode=="flight")
+            || p.ordinary && a.terrain_policy(i)==crate::road_design::TerrainPolicy::AutoFit {continue;}
+        if !crate::road_plan::hit(&[p.reserved_min_cm,p.reserved_max_cm],&b.bounds,20) {continue;}
+        let m=mesh(p,i,&objects)?;
+        let path=&p.path;
+        let mut indices:Vec<_>=(0..path.len()).collect();
+        indices.sort_by_key(|&n|n.abs_diff(path.len()/2));
+        let mut site=None;
+        for n in indices {
+            if path[n].mode=="flight" {continue;}
+            let s=&path[n];
+            for side in [0.0,-0.75,0.75] {
+                let basis=geometry::basis(s);
+                let x=s.position_cm[0]+libm::round(basis[0][0]*s.lateral_cm as f64*side) as i64;
+                let z=s.position_cm[2]+libm::round(basis[2][0]*s.lateral_cm as f64*side) as i64;
+                let Some(top)=m.cap(x,z) else {continue;};
+                // A column must never pass through a different track. This
+                // conservative global test is independent of cell load order.
+                let candidate=column(i,x,z,-1_000_000,top);
+                if safe_without(a,&candidate,&[],&objects,Some(i)) {site=Some((x,z,top));break;}
+            }
+            if site.is_some() {break;}
+        }
+        let Some((x,z,top))=site else {return Err(error("E_TRACK_SUPPORT",format!("piece {i} at {:?}: no clear terrain support site",p.origin_cm)));};
+        if x-10>b.bounds.max[0] || x+10<b.bounds.min[0] || z-10>b.bounds.max[1] || z+10<b.bounds.min[1] {continue;}
+        let bottom=height([x,z]);
+        if top<=bottom+1 {continue;}
+        let support=column(i,x,z,bottom,top);
+        emit_shape(&support.shape,&format!("assembled-terrain-support-{i}"),b)?;
+    }
+    Ok(())
+}
 fn overlap(a: (Vertex, Vertex), b: (Vertex, Vertex)) -> bool {
     (0..3).all(|j| a.0[j] < b.1[j] && b.0[j] < a.1[j])
 }
@@ -193,6 +233,9 @@ fn clear_width(half: f64, mut intervals: Vec<(f64, f64)>) -> f64 {
     widest.max(half - end)
 }
 fn safe(a: &Assembly, candidate: &Support, placed: &[Support], objects: &[Gimmick]) -> bool {
+    safe_without(a,candidate,placed,objects,None)
+}
+fn safe_without(a: &Assembly, candidate: &Support, placed: &[Support], objects: &[Gimmick], skip:Option<usize>) -> bool {
     let area = bounds(candidate);
     if placed.iter().any(|s| overlap(area, bounds(s))) {
         return false;
@@ -206,6 +249,7 @@ fn safe(a: &Assembly, candidate: &Support, placed: &[Support], objects: &[Gimmic
         return false;
     }
     for (i, p) in a.pieces.iter().enumerate() {
+        if Some(i)==skip {continue;}
         if area.0[0] > p.reserved_max_cm[0]
             || area.1[0] < p.reserved_min_cm[0]
             || area.0[2] > p.reserved_max_cm[2]

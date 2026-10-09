@@ -320,8 +320,17 @@ fn generate_validated(
         for face in &mut b.chunk.triangles {
             if face.object_id.starts_with("assembled-road-") { face.contact_class = 3; }
         }
-    } else {
+    }
+    if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) {
         crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
+    }
+
+    if let Some(track)=d.assembled_track.as_ref().filter(|a|a.terrain_integration()) {
+        let first=b.chunk.triangles.len();
+        crate::assembled_track::terrain_supports(track,&mut b,|p| {
+            crate::terrain_height(&bounds,spacing,side,input.heightgrid,d.terrain_base_cm,p)
+        })?;
+        for face in &mut b.chunk.triangles[first..] {face.vertices.swap(1,2);}
     }
 
     // Classify generated faces while only terrain/road geometry exists. Authored
@@ -331,7 +340,7 @@ fn generate_validated(
     for face in &mut b.chunk.triangles {
         if !face.spawnable { continue; }
         if let Some(road) = roads.get(face.object_id.as_str()) {
-            face.contact_class = if road.kind == RoadKind::Ground { 2 } else { 3 };
+            face.contact_class = if road.kind == RoadKind::Ground && road.design.is_none() { 2 } else { 3 };
             face.snow_retention_percent = road.snow_retention_percent;
         } else if face.object_id == "terrain" || areas.contains(face.object_id.as_str()) {
             face.contact_class = 1;
@@ -360,11 +369,12 @@ pub(crate) fn water_surface(bounds: &Bounds, height: i64, faces: &[[Point; 3]]) 
 
 /// Bounded draft display uses the exact executable track tessellator.
 pub fn assembled_preview(d:&MapDocument)->Result<GeneratedChunk> {
-    let a=d.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","track required"))?;
     let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],grind_lines:d.grind_lines.clone(),gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None};
-    b.assembled(a)?;
-    if a.authoring.as_ref().is_some_and(|s| !s.grounded_supports) {
-        b.chunk.triangles.retain(|t|t.object_id!="assembled-venue-floor");
+    if let Some(a)=&d.assembled_track {
+        b.assembled(a)?;
+        if a.authoring.as_ref().is_some_and(|s| !s.grounded_supports) {
+            b.chunk.triangles.retain(|t|t.object_id!="assembled-venue-floor");
+        }
     }
     Ok(b.chunk)
 }

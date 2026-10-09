@@ -48,6 +48,18 @@ paths (base first), common ordered checkpoints, actions and obstacle attachments
 an Assembly and reports draft issues. `mapkit_package::assembled_track::compile_source`
 creates the document and, when executable, binds a public course to its content.
 
+For an existing map, use `assembled_track::composite::apply_source(&document,
+&source)` (Godot `apply_track_source`) instead. It sets `terrain_integration`,
+recompiles the overlay and replaces only owned track products. An empty overlay
+restores the original document. `Source.terrain_policies` selects `auto_fit`,
+`preserve` or `elevated` by instance ID. `road_connections` records
+`{road, start, instance}`; `composite::road_port` provides the ordinary road's
+actual entry/exit frame, and edits propagate through connected track chains.
+Ordinary roads use `road_design::{from_points,compile,edit}`. The explicit first
+edit adds cubic controls; merely opening an imported source never changes it.
+Shared `surface::{path,resolve,apply}` handles road and `track:<instance>` action,
+obstacle and grind-rail attachments. See [current contract](../spec/CURRENT_V1.md).
+
 Seeded assemblies have `authoring: null`; composed seeded graphs also store
 `seed_source`. Verification regenerates the exact seed and settings. Manual
 assemblies have `authoring: Source` and `seed_source: null`; verification compiles
@@ -59,7 +71,12 @@ separate course concern and does not participate in source regeneration.
 
 Drafts may contain disconnected roads, missing paths/checkpoints or clearance
 issues. They can be saved/recovered as projects. Execution export, including
-indexed packages, rejects them with `E_TRACK_DRAFT`. Invalid references, malformed
+indexed packages, always rejects `geometry_issues` with `E_TRACK_GEOMETRY`.
+Free-roam maps do not need a completed route; race-track export also rejects
+unresolved route/start/checkpoint issues with `E_TRACK_DRAFT`. Terrain, occupied
+driving space and generated support interference are checked against the actual
+composed map, with the failing object and source coordinates in the diagnostic.
+Invalid references, malformed
 values and resource overflows are hard errors. Manual authoring has no occurrence
 or target-time quota. Structural graph/sample/cell/memory limits remain binding.
 

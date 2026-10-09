@@ -45,6 +45,16 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
         &document.bounds,
     )
 }
+/// Explicit race-package export binds the composed track route to all current
+/// terrain/assets. Existing independent or stale courses stay in the source.
+/// This creates a definition, never player completion evidence.
+pub(crate) fn bind_overlay_course(document:&mut MapDocument,files:&BTreeMap<String,Vec<u8>>)->Result<()> {
+    if document.free_roam || document.assembled_track.as_ref().is_none_or(|a|!a.terrain_integration()) {return Ok(());}
+    let world=super::content_hash(document,files)?;
+    let current=course(document,&world)?;
+    if !document.courses.iter().any(|c|c.course_id==current.course_id) {document.courses.push(current);}
+    document.validate()
+}
 pub fn generate(settings: &track::Settings) -> Result<MapDocument> {
     mapkit_core::cancellation::progress("searching", 0, None, "candidates");
     let mut d = track::document(settings)?;
@@ -61,6 +71,12 @@ pub fn generate(settings: &track::Settings) -> Result<MapDocument> {
 /// verification is still mandatory; this does not certify edited track sources.
 pub fn reseal(document: &mut MapDocument) -> Result<()> {
     track::verify_document(document)?;
+    // Composite courses bind all source payloads. Metadata edits preserve the
+    // old hash (and therefore invalidate it); only explicit course publication
+    // with the complete project may bind a new world hash.
+    if document.assembled_track.as_ref().is_some_and(|a|a.terrain_integration()) {
+        return document.validate();
+    }
     let world = super::content_hash(document, &BTreeMap::new())?;
     if document
         .assembled_track
@@ -80,6 +96,13 @@ pub fn verify(document: &MapDocument, world: &str, candidate: &Course) -> Result
 /// Association checks for an already deterministically verified immutable document.
 /// This alone does not certify the document; `verify` remains the complete public check.
 pub fn verify_course(document: &MapDocument, world: &str, candidate: &Course) -> Result<()> {
+    let a=document.assembled_track.as_ref().ok_or_else(||error("E_TRACK_REQUIRED","ordinary map course"))?;
+    if a.terrain_integration() {
+        let generated=course(document,world).ok();
+        if generated.as_ref().is_none_or(|c|c.definition.checkpoints!=candidate.definition.checkpoints || c.definition.mode!=candidate.definition.mode) {
+            return Err(error("E_TRACK_REQUIRED","mixed-map course uses general surface routing"));
+        }
+    }
     candidate.validate(world, &document.bounds)?;
     let mut definition = candidate.clone();
     definition.validation = None;

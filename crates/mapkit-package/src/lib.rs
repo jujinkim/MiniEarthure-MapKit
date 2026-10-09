@@ -1,5 +1,7 @@
 //! Bounded package I/O adapter. The core never opens files or reads a clock.
 pub mod assembled_track;
+pub mod track_environment;
+pub mod road_audit;
 use mapkit_core::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,20 @@ mod audit_hash;
 mod container;
 pub mod distant;
 use assets::validate_assets;
+/// Apply the package's resource safety checks to a bounded draft-cell asset set.
+pub fn preview_asset_cost(d:&MapDocument,files:&BTreeMap<String,Vec<u8>>,instances:usize)->Result<u64> {
+    validate_assets(d,files)?;
+    let mut bytes=0;
+    let mut largest=0;
+    for a in &d.assets {
+        let payload=files.get(&a.path).ok_or_else(||error("E_REFERENCE","preview asset missing"))?;
+        bytes+=assets::presentation_cost(&a.path,payload);
+        largest=largest.max(assets::instance_cost(&a.path,payload));
+    }
+    bytes+=largest*instances as u64;
+    if bytes>128*1024*1024 {return Err(error("E_BUDGET","preview display resources exceed allowance"));}
+    Ok(bytes)
+}
 mod audit_json;
 mod audit_memory;
 mod read_cost;
@@ -429,12 +445,15 @@ pub fn pack_bytes(
     let mut d = document.into();
     mapkit_core::cancellation::progress("package_validation", 0, Some(5), "checks");
     d.normalize();
+    for road in &d.roads {mapkit_core::road_design::verify(road)?;}
+    mapkit_core::assembled_track::surface::verify(&d)?;
     d.validate()?;
     mapkit_core::cancellation::progress("package_validation", 1, Some(5), "checks");
-    if let Some(a)=&d.assembled_track {
-        mapkit_core::assembled_track::authoring::executable(a)?;
+    if d.assembled_track.is_some() {
+        mapkit_core::assembled_track::composite::executable(&d)?;
         mapkit_core::assembled_track::verify_document(&d)?;
     }
+    assembled_track::bind_overlay_course(&mut d,&files)?;
     files.insert("document.json".into(), canonical(&d)?);
     if files.keys().cloned().collect::<BTreeSet<_>>() != references(&d)? {
         return Err(error("E_REFERENCE", "unexpected or missing file"));
@@ -446,6 +465,7 @@ pub fn pack_bytes(
     validate_assets(&d, &files)?;
     mapkit_core::cancellation::progress("package_validation", 3, Some(5), "checks");
     validate_heightmaps(&d, &files)?;
+    track_environment::validate(&d,&files)?;
     mapkit_core::cancellation::progress("package_validation", 4, Some(5), "checks");
     let manifest = PackageManifest {
         format: "memap".into(),

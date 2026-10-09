@@ -7,6 +7,53 @@ Original files and completion evidence remain preserved; active packages are
 exported anew from authored source. Build fingerprints invalidate disposable
 geometry caches and world hashes separate changed content.
 
+## Independent roads and composite worlds
+
+An ordinary `Road` may explicitly opt into `design`: joined cubic
+`control_points` (3n+1 source-centimetre points), `terrain_policy`
+(`auto_fit`, `preserve`, `elevated`) and `shoulder_cm`. The sampled points,
+widths, lane markings, sidewalks and graph node IDs remain part of the road.
+Export verifies that the samples match the controls. Heights and shared tangent
+frames come from the authored curve; integer terrain samples never pull the
+carriageway up or down. Roads without `design` retain the explicit imported
+terrain-following path. Opening a source does not add or convert designs.
+
+`road_design::edit` moves shared endpoints, connected authored roads, attached
+tools and connected track entries atomically. Same-level crossings require an
+explicit shared node; separated bridges/tunnels retain their own surface level.
+Original heightmap payloads remain immutable. Ordinary `auto_fit` roads derive
+cut/fill and shoulders locally, choosing the nearest road edge, and deleting or
+moving a road restores the previous terrain. Redundant terrain contacts beneath
+the road are removed. Preserved/elevated roads reject terrain penetration on
+execution export. Authored road tops use contact class 3.
+
+`assembled_track.authoring.terrain_integration` makes a track an overlay on the
+same document. `assembled_track::composite::apply_source` replaces only its owned
+products, retaining terrain, buildings, water, assets and independent gimmicks.
+`terrain_policies` provides per-instance fitting choices; `road_connections`
+binds an entry to an ordinary road's start/end frame. Special meshes keep their
+shape and receive terrain-based supports. Export checks terrain, independent
+occupied driving space, road clearance and support interference without moving
+or deleting source objects. Composite generation, distant display, occupancy,
+costs and content hashes include both the environment and track.
+
+`surface_attachments` bind actions/obstacles/rails to a stable `surface_id` and
+`station_cm`; ordinary road IDs and `track:<instance-id>` share the resolver.
+Derived physical geometry and rail interaction lines move with the source.
+Existing course hashes/proofs become stale after driving-content edits. Free-roam
+exports may have no course or disconnected route drafts; unsafe geometry always
+blocks export. Race-track export additionally verifies its routes, ground start
+and common checkpoints, then binds a course to all current source/assets without
+inventing player completion evidence. Execution cells remain 32 m in products;
+all current format versions and existing resource caps remain unchanged.
+
+The explicit CLI `design-roads INPUT.json NEW.json` authors a new document.
+`audit-roads PACKAGE` examines generated collision at 0.5 m intervals on five
+width lines, checks junction fans, duplicate terrain contacts and road-paint
+budgets, and enforces the default-world 12% design grade / 1 cm deviation limits.
+Dense road paint is compacted within 1 cm for display; collision keeps its full
+curve sampling and shader path/exterior arrays remain capped at 128 segments.
+
 Ordinary map generation uses integer road arrangement, connected sidewalks, courtyard
 buildings, indexed placement validation, authored tree assets and environment
 profiles. The latest road partition and three-dimensional seam rules remain.
@@ -156,8 +203,9 @@ Road snow retention and generated face traits follow [ROAD_CONTACT](../docs/ROAD
 
 ## Seeded assembly (2026-09-27)
 
-Optional `assembled_track` metadata selects the dedicated, terrain-free modular
-track generator. Catalogue, generation, saved-package verification,
+Optional `assembled_track` metadata selects the modular track generator. A
+standalone assembly uses its venue; a terrain-integrated authored assembly is
+composed with the existing map as described above. Catalogue, generation, saved-package verification,
 package/Godot/CLI interfaces and cancellation follow
 [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md). This extends the current v1 schema;
 it introduces no old reader, automatic conversion or synthetic completion proof.

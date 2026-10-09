@@ -163,7 +163,7 @@ pub fn fixtures() -> Vec<Fixture> {
                 level: 1,
             },
         ];
-        d.roads = vec![Road {
+        d.roads = vec![Road { design: None,
             snow_retention_percent: 100,
             id: "oblique".into(),
             from: "a".into(),

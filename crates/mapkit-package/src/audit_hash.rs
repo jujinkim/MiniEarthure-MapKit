@@ -230,6 +230,7 @@ impl Serialize for Document<'_> {
         if !d.surface_areas.is_empty() {
             m.serialize_entry("surface_areas", &Normalized(&d.surface_areas, self.1))?;
         }
+        if !d.surface_attachments.is_empty() {m.serialize_entry("surface_attachments",&serde_json::to_value(&d.surface_attachments).map_err(serde::ser::Error::custom)?)?;}
         fields!(m, d, terrain_base_cm, theme);
         if !d.water_bodies.is_empty() {m.serialize_entry("water_bodies", &Normalized(&d.water_bodies,self.1))?;}
         m.serialize_entry("zones", &Normalized(&d.zones, self.1))?;
@@ -246,7 +247,9 @@ record!(RoadNode, d, m, {
     fields!(m, d, id, level, position);
 });
 record!(Road, d, m, {
-    fields!(m, d, clearance_cm, from, id, kind);
+    fields!(m,d,clearance_cm);
+    if let Some(design) = &d.design { m.serialize_entry("design", &serde_json::to_value(design).map_err(serde::ser::Error::custom)?)?; }
+    fields!(m, d, from, id, kind);
     if let Some(markings) = &d.markings {
         m.serialize_entry("markings", &Canonical(markings))?;
     }

@@ -21,6 +21,13 @@ pub struct Connection {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct RoadConnection {
+    pub road: String,
+    pub start: bool,
+    pub instance: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct Route {
     pub id: String,
     pub pieces: Vec<usize>,
@@ -71,6 +78,13 @@ pub struct Attachment {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
+    /// Compile as an overlay on the existing terrain document.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub terrain_integration: bool,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub terrain_policies: BTreeMap<String, crate::road_design::TerrainPolicy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub road_connections: Vec<RoadConnection>,
     pub original_seed: Option<Settings>,
     pub grounded_supports: bool,
     pub settings: Settings,
@@ -90,6 +104,9 @@ pub struct Source {
 impl Source {
     pub fn empty() -> Self {
         Self {
+            terrain_integration: false,
+            terrain_policies: BTreeMap::new(),
+            road_connections: vec![],
             original_seed: None,
             grounded_supports: false,
             settings: Settings::default(),
@@ -154,6 +171,9 @@ pub fn from_assembly(a: &Assembly) -> Source {
         })
         .collect();
     Source {
+        terrain_integration: false,
+            terrain_policies: BTreeMap::new(),
+            road_connections: vec![],
         original_seed: Some(a.settings.clone()),
         grounded_supports: true,
         settings: a.settings.clone(),
@@ -276,7 +296,13 @@ pub fn ports(instance: &Instance) -> Result<serde_json::Value> {
 }
 pub fn snap(instance: &Instance, target: &Instance) -> Result<Instance> {
     let t = piece(target)?;
-    let end = t.path.last().unwrap();
+    let mut out = snap_surface(instance, t.path.last().unwrap())?;
+    let end=t.path.last().unwrap();
+    let drop=portal_drop(&target.preset,&instance.preset,instance.width_cm);
+    for j in 0..3 {out.position_cm[j]-=end.normal[j]*drop/1_000_000;}
+    Ok(out)
+}
+pub fn snap_surface(instance: &Instance, end: &Sample) -> Result<Instance> {
     let mut out = instance.clone();
     out.rotation_mdeg = [0; 3];
     let local = piece(&out)?;
@@ -290,10 +316,6 @@ pub fn snap(instance: &Instance, target: &Instance) -> Result<Instance> {
     out.position_cm = std::array::from_fn(|j| {
         out.position_cm[j] + end.position_cm[j] - local.path[0].position_cm[j]
     });
-    let drop = portal_drop(&target.preset, &instance.preset, instance.width_cm);
-    for j in 0..3 {
-        out.position_cm[j] -= end.normal[j] * drop / 1_000_000;
-    }
     out.entry_width_cm = end.lateral_cm * 2;
     Ok(out)
 }
@@ -327,6 +349,8 @@ pub(super) fn within_source_limits(source: &Source) -> bool {
         && source.actions.len() <= 64
         && source.attachments.len() <= 128
         && source.structures.len() <= 32
+        && source.terrain_policies.len() <= MAX_PIECES
+        && source.road_connections.len() <= MAX_PIECES
 }
 
 fn compile_uncached(source: &Source) -> Result<Assembly> {
@@ -359,7 +383,17 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
     if pieces.iter().map(|p| p.path.len()).sum::<usize>() > MAX_SAMPLES {
         return Err(error("E_TRACK_BUDGET", "sample budget exceeded"));
     }
+    if source.terrain_policies.keys().any(|id|!names.contains_key(id)) {
+        return Err(error("E_TRACK_SOURCE","terrain policy references missing piece"));
+    }
+    let mut connected = BTreeSet::new();
+    for link in &source.road_connections {
+        if !source.terrain_integration || !names.contains_key(&link.instance) || link.road.is_empty() || link.road.len()>128 || !connected.insert(&link.instance) {
+            return Err(error("E_SURFACE_CONNECTION", "invalid ordinary-road port connection"));
+        }
+    }
     let mut issues = vec![];
+    let mut geometry_issues = vec![];
     let mut routes = vec![];
     for path in &source.paths {
         if path.pieces.len() > MAX_PIECES || path.id.len() > 128 {
@@ -510,7 +544,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                 .sum::<u64>()
                 < 1000
         {
-            issues.push(format!(
+            geometry_issues.push(format!(
                 "{}: booster chain needs ten metres of road",
                 action.id
             ));
@@ -531,7 +565,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                 .map(|w| distance(w[0].position_cm, w[1].position_cm))
                 .sum();
             if runway < 600 {
-                issues.push(format!(
+                geometry_issues.push(format!(
                     "{}: landing needs six metres of supported runway",
                     action.id
                 ));
@@ -542,7 +576,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                 || t.position_cm[1] - s.position_cm[1] >= i64::from(action.height_cm)
                 || distance(s.position_cm, t.position_cm) > 5000
             {
-                issues.push(format!(
+                geometry_issues.push(format!(
                     "{}: landing height, space or reach invalid",
                     action.id
                 ));
@@ -569,7 +603,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                             .is_some_and(|cp| Some(&cp.piece) == landing)
                 });
             if !declared {
-                issues.push(format!(
+                geometry_issues.push(format!(
                     "{}: flight requires an automatic or manual approach and declared supported landing",
                     id
                 ));
@@ -580,8 +614,8 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
     for i in 0..pieces.len() {
         for j in 0..i {
             cancellation::checkpoint()?;
-            if conflict(&pieces[i], &pieces[j]) {
-                issues.push(format!(
+            if pieces[i] == pieces[j] || conflict(&pieces[i], &pieces[j]) {
+                geometry_issues.push(format!(
                     "{} / {}: road clearance collision",
                     source.instances[i].id, source.instances[j].id
                 ));
@@ -590,12 +624,13 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
     }
     for (i, p) in pieces.iter().enumerate() {
         if geometry::self_intersects(p) {
-            issues.push(format!(
+            geometry_issues.push(format!(
                 "{}: ribbon self intersection or insufficient clearance",
                 source.instances[i].id
             ));
         }
     }
+    issues.extend(geometry_issues.iter().cloned());
     issues.sort();
     issues.dedup();
     let base: Vec<_> = routes.first().map_or(vec![], |r| {
@@ -626,6 +661,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         Some(f)
     });
     let mut assembly = Assembly {
+        geometry_issues,
         authoring: Some(source.clone()),
         seed_source: None,
         routes,
@@ -658,13 +694,12 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         if let Some(o) = obstacles::authored(&assembly, index, attachment) {
             assembly.obstacles.push(o);
         } else {
-            assembly.issues.push(format!(
-                "{}: obstacle no longer has safe clearance",
-                attachment.piece
-            ));
+            let issue = format!("{}: obstacle no longer has safe clearance", attachment.piece);
+            assembly.issues.push(issue.clone());
+            assembly.geometry_issues.push(issue);
         }
     }
-    if source.grounded_supports { grounding::apply(&mut assembly)?; }
+    if source.grounded_supports && !source.terrain_integration { grounding::apply(&mut assembly)?; }
     assembly.issues.sort();
     assembly.issues.dedup();
     Ok(assembly)

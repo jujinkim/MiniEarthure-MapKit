@@ -93,6 +93,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     // All accessible nested structures use exhaustive field patterns so newly
     // added fields require an explicit ownership decision at compile time.
     let MapDocument {
+        surface_attachments,
         map_id,
         revision: _,
         bounds: Bounds { min: _, max: _ },
@@ -157,8 +158,13 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         }
         retained.vector(&a.routes)?;
         for route in &a.routes { retained.string(&route.id)?; retained.vector(&route.pieces)?; }
+        retained.vector(&a.geometry_issues)?; for issue in &a.geometry_issues {retained.string(issue)?;}
         retained.vector(&a.issues)?; for issue in &a.issues {retained.string(issue)?;}
         for source in a.authoring.iter().chain(a.seed_source.iter()) {
+            retained.add(source.terrain_policies.len() as u64 * 256)?;
+            for id in source.terrain_policies.keys() {retained.string(id)?;}
+            retained.vector(&source.road_connections)?;
+            for c in &source.road_connections {retained.string(&c.road)?;retained.string(&c.instance)?;}
             for settings in std::iter::once(&source.settings).chain(source.original_seed.iter()) {
                 retained.string(&settings.difficulty)?;retained.vector(&settings.categories)?;for id in &settings.categories{retained.string(id)?;}
             }
@@ -188,6 +194,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             }
         }
     }
+    retained.vector(surface_attachments)?;
+    for item in surface_attachments {retained.string(&item.id)?;retained.string(&item.kind)?;retained.string(&item.surface.surface_id)?;}
     retained.string(map_id)?;
     retained.string(theme)?;
     if let Some(environment) = &document.environment {
@@ -243,6 +251,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     retained.vector(roads)?;
     for Road {
+        design,
         snow_retention_percent: _,
         id,
         from,
@@ -260,6 +269,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         retained.string(from)?;
         retained.string(to)?;
         retained.vector(points)?;
+        if let Some(d) = design { retained.vector(&d.control_points)?; }
         retained.vector(widths_cm)?;
         retained.vector(surfaces)?;
         if let Some(RoadMarkings {
@@ -664,7 +674,7 @@ mod tests {
         );
         d.roads = vector(
             5,
-            Road {
+            Road { design: None,
                 snow_retention_percent: 100,
                 id: string(107),
                 from: string(109),
@@ -936,6 +946,7 @@ mod tests {
             "nodes",
             "roads",
             "surface_areas",
+            "surface_attachments",
             "buildings",
             "zones",
             "assets",

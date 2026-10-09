@@ -174,7 +174,8 @@ pub(crate) fn triangulate(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<
     if rings.is_empty() || rings.len() > 17 || rings.iter().map(Vec::len).sum::<usize>() > 512 {
         return Err(error("E_BUDGET", "ground face triangulation limit"));
     }
-    let mut triangles = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], work)?;
+    let mut triangles = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], work)
+        .map_err(|mut e|{e.message=format!("{}: {rings:?}",e.message);e})?;
     // Hole bridging may simplify exactly collinear vertices. Restore those exact
     // graph vertices on both adjacent triangles; never stitch near an edge.
     let points: BTreeSet<Point> = rings.iter().flatten().copied().collect();
@@ -201,6 +202,16 @@ pub(crate) fn triangulate(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn quantized_junction_hole_touching_boundary_preserves_area() {
+        let rings=vec![vec![[18093,98200],[18200,98200],[18200,98400],[18150,98350],[18149,98346],[18142,98330],[18135,98310],[18133,98306],[18127,98288],[18097,98212]],vec![[18134,98306],[18135,98310],[18136,98311]]];
+        let tris=triangulate(&rings,&mut 0).unwrap();
+        assert_eq!(tris.iter().map(|t|area(t)).sum::<i128>(),rings.iter().map(|r|area(r)).sum::<i128>());
+        assert!(tris.iter().all(|t|area(t)>0));
+        let rings=vec![vec![[67600,90400],[67800,90600],[67794,90600],[67781,90597],[67770,90593],[67765,90592],[67758,90590],[67754,90589],[67727,90581],[67681,90568],[67631,90555],[67619,90552],[67610,90550],[67600,90547]],vec![[67612,90550],[67616,90551],[67613,90550]],vec![[67616,90551],[67619,90552],[67626,90553]]];
+        let tris=triangulate(&rings,&mut 0).unwrap();
+        assert_eq!(tris.iter().map(|t|area(t)).sum::<i128>(),rings.iter().map(|r|area(r)).sum::<i128>());
+    }
     #[test]
     fn arrangement_limits_fail_before_unbounded_graph_work() {
         let bounds = Bounds {
