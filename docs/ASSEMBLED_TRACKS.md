@@ -130,7 +130,7 @@ package cases and compiler reuse tests cover export equality and cancellation.
 
 
 
-## Analytic surface sampling — 2026-10-02 replacement
+## Analytic surface sampling
 
 Ordinary curves now sample the unrounded analytic centre and ribbon, quantizing
 only final centimetre vertices. Adaptive intervals bound tangent/frame changes
@@ -156,7 +156,7 @@ Two implementation failures were corrected: vertical endpoint side vectors and
 loop-crown miter noise under adaptive sampling. Detailed driving is a user check.
 
 
-## Difficulty-weighted routes — 2026-10-02 replacement
+## Difficulty-weighted routes
 
 Difficulty now selects a driving family before a uniform left/right/up/down
 variant. This replaces the uniform 26-ID driving pool; enabled category tickets
@@ -178,7 +178,7 @@ roundtrip/tamper rejection, cancellation/invalid requests and native/CLI build p
 Detailed driving remains user verification.
 
 
-## Quantized wall occupancy — 2026-10-03
+## Quantized wall occupancy
 
 The former eight-vertex wall proxy could contain repeated vertices, nonplanar
 faces or concave corners while claiming to be convex. Walls now emit deterministic
@@ -209,7 +209,7 @@ existing difficulty distribution are retained. Native bridge and CLI builds pass
 Detailed application driving and platform acceptance remain user checks.
 
 
-## Continuous unjoined straight-road clearance — 2026-10-03 replacement
+## Continuous unjoined straight-road clearance
 
 For level, constant-width straight drive ribbons without a shared port, the
 finite footprint now decides horizontal overlap before any discrete sample gate.

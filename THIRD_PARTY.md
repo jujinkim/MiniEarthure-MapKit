@@ -1,4 +1,4 @@
-# Recipe 9 integer geometry dependencies
+# Integer geometry dependencies
 
 The MapKit source remains MIT. The following linked libraries use the MIT license
 option; retain these notices in binary distributions that include them.

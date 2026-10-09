@@ -8,7 +8,7 @@ previews. MapKit contains no game admission, physics or network policy.
 ## Planning and shared resources
 
 `render_memory.gd` plans validated output without allocating GPU resources.
-`supports_batches` excludes image proxies whose alpha/order needs the legacy path.
+`supports_batches` excludes image proxies whose alpha/order needs individual rendering.
 `prepare_batches` groups opaque triangle surfaces by material and 32m spatial bucket into at most512
 triangles, preserving coordinates, normals, UVs, winding and hidden-proxy exclusion.
 Its packed buffers cost96 bytes per visible triangle plus bounded grouping metadata.
@@ -22,11 +22,11 @@ conservative logical allowances, not allocator measurements. `upper_bound` is a
 pre-generation safety bound; the exact plan can be admitted after worker completion
 and before renderer allocation. Compressed file length is never a RAM estimate.
 
-Recipe6+ native presentation records add `content_hash` and `memory_bytes` from the
+Current v1 native presentation records add `content_hash` and `memory_bytes` from the
 validated package. They are excluded from package serialization/generated hashes.
 The cache key includes content, declarative material settings and referenced image
-content. Older views without these records retain independent per-job ownership.
-The cache claims resources before import and holds at most256 entries/64MiB by
+content. Views without shareable records retain independent per-job ownership.
+The cache claims resources before import and holds at most256 entries/128MiB by
 default, including its urban shader. The caller supplies independent admission.
 Each model imports once while cached; materials, mesh surfaces and decoded images
 are shared. Import, MultiMesh setup, individual placement and mesh upload are
@@ -68,16 +68,14 @@ MultiMesh transform queries require a rendered engine; the dummy headless server
 cannot supply them. Caller integration tests cover admission, shared last borrowers,
 failed replacement, worker cancellation and delayed retirement.
 
-## Legacy presentation metadata
+## Unshareable presentation resources
 
-Recipes without per-asset content hashes and positive memory bounds retain the
-complete per-cell display reservation and local importer caches, even when the
-caller supplies a session cache. They cannot claim shared immutable templates.
-This preserves old validated custom image/model packages without inventing hashes
-or subtracting unproven shared memory. New recipes retain independent shared leases
-and last-borrower retirement. Generation and serialized package hashes are unchanged.
+Views without validated content hashes and positive memory bounds retain their
+full per-cell reservation and job-local importer ownership. A supplied session
+cache cannot subtract an unproven shared allowance. This is a resource-accounting
+rule within current v1, not support for historical package readers.
 
-## Shared miniature material tiles (2026-09-26)
+## Shared miniature material tiles
 
 The current cache remains 128 MiB / 256 entries. The admitted weather context
 reserves 4.75/16/61 MiB for ten 128/256/512px packed tiles, mipmaps and
@@ -86,7 +84,7 @@ Its bytes are also included in diagnostics without an admission callback.
 Normal, AO, roughness and metallic shader bindings join albedo in asset-lease
 tracking. See [material implementation and verification](docs/RICHER_MATERIALS.md).
 
-## LOD and occlusion admission — 2026-10-02
+## LOD and occlusion admission
 
 Each shared template reserves twice the validated native asset bound plus128KiB
 before import/LOD generation, covering transient source/output meshes and retained

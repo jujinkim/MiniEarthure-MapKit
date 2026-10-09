@@ -111,7 +111,7 @@ schema and memory accounting passed on macOS arm64; the category matrix covers
 passed. Current-source consumer binding checks are recorded by the integration root.
 
 
-## Compiler and preview preparation — 2026-10-01
+## Compiler and preview preparation
 
 Interactive consumers can prepare source edits and preview data in an isolated
 worker. `authoring::compile` retains one successful source/result pair per thread,
@@ -156,7 +156,7 @@ records measurements and the 49-piece seed-derived 500 ms commit target miss.
 Detailed interactive/platform acceptance remains user verification.
 
 
-## Piece-local wall preparation — 2026-10-03
+## Piece-local wall preparation
 
 Connected-road triangles and their five clipping planes are now prepared once per
 piece traversal. The opposite branch is prepared once per path. Quantized ribbon
@@ -191,7 +191,7 @@ are in the public [Editor report](https://github.com/jujinkim/MiniEarthure-MapEd
 Build fingerprints invalidate compiled caches. Valid saved packages remain readable;
 authoring/export verifies current source equality.
 
-## Independent grind lines and RC attachments (2026-10-01)
+## Independent grind lines and RC attachments
 
 Current v1 adds optional `grind_lines` to both the map and authored source. A line
 has a unique UTF-8 ID (1–32 bytes), two straight points or 3n+1 cubic control points
@@ -228,7 +228,7 @@ platform acceptance remain user verification. All own versions remain 1;
 source/schema fingerprints invalidate disposable caches, never user artifacts.
 
 
-## Manual airborne links and static authored structures (2026-10-01)
+## Manual airborne links and static authored structures
 
 A source action with `kind: "manual_flight"` declares a supported takeoff
 (`piece`, `sample`), supported `landing` reference and `height_cm` envelope.
@@ -251,7 +251,7 @@ automatic-flight regression, manual source package tampering test, both-containe
 static-shape audit and published schema test. Consumer physics/UI acceptance is
 separate.
 
-## Modular circuit returns — 2026-10-02 replacement
+## Modular circuit returns
 
 Circuit closure uses bounded deterministic best-first search over existing
 straight, right-angle, 45-degree, grade and height-return spiral modules.
@@ -276,7 +276,7 @@ one percent of the target stops the deterministic search early. No wall-clock
 cutoff, long-curve fallback, reduced category or manufactured success is used.
 All own formats stay v1; current source fingerprints identify regenerated data.
 
-## Stage progress — 2026-10-02
+## Stage progress
 
 `MapKitWorkToken` exposes an atomic snapshot with job ID, revision, stage,
 completed count, nullable total and unit. Candidate search has no total; attempts
@@ -294,7 +294,7 @@ existing unrelated `tests/water.rs` Triangle initializer missing contact fields;
 focused units use `--lib` or an explicit integration target. Detailed consumer
 interaction remains user verification; consumer wiring is delivered separately.
 
-## Automatic checkpoint spacing — 2026-10-02 replacement
+## Automatic checkpoint spacing
 
 Final generated routes select an ordinary checkpoint every four pieces. Straight,
 gentle corner and simple grade sections count toward spacing; narrow sections,
@@ -315,7 +315,7 @@ unknown search, counted work and preview stages before adoption. Client progress
 filter units and Editor preview adoption pass with the current native build.
 
 
-## Continuous draft preview — 2026-10-03
+## Continuous draft preview
 
 `track_authoring_preview.apply_draft` consumes current `track_instance` paths plus
 the validated source represented by its existing nodes. Stable piece IDs map old
@@ -339,7 +339,7 @@ Editor initial screen was inspected. Consumer evidence
 records the scope and fixed 49-piece measurement. Completion p95 532.745 ms still
 misses the 500 ms goal. Detailed interactions/platform acceptance remain user work.
 
-## Surface-conforming panels (02, 2026-10-04)
+## Surface-conforming panels
 
 Seed/source actions clip the production road triangles, including connected seams.
 The trigger top lies on that road (millimetre local quantization). A bounded
@@ -356,7 +356,7 @@ physical rims. Rust panel units4, surface/occupancy integration2, gimmick/archiv
 and the shared Editor geometry check pass. Detailed driving/device readability is
 user verification.
 
-## Partial-width panel contract (07, 2026-10-04)
+## Partial-width panel contract
 
 Current-v1 `Action` requires `panel_width_percent` (25, 50, 75 or 100) and
 `panel_alignment` (`left`, `center`, `right`). New Editor actions and generated
@@ -379,14 +379,14 @@ cache fingerprints. Preserved packages must be recompiled by their authoring
 workflow; this is not a loader fallback.
 
 
-## Air ring defaults 09 — 2026-10-04
+## Air ring defaults 09
 
 Automatic and manual action rings now have a 3m opening and strength100.
 Square rim thickness, action height and placement are unchanged; explicit standalone
-source values are preserved. [Contract and scoped results](SPECIAL_DRIVING.md#air-ring-defaults-09--2026-10-04-replacement).
+source values are preserved. [Contract and scoped results](SPECIAL_DRIVING.md#air-ring-defaults-09).
 
 
-## Pipe minimum — 2026-10-05 replacement
+## Pipe minimum
 
 This replaces the 2026-10-04 1m bore option: minimum radius 1m/bore 2m applies to
 new generation and authored cylinders, swept cylinders and their portals. Manual

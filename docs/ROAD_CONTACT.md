@@ -36,3 +36,30 @@ checks junction overlap and duplicate terrain contacts, analytic design grade
 (≤12% for default worlds) and per-cell road-paint caps. The seven authored default
 worlds pass 17,600 cells and 380,491 collision samples, with maximum 0.5 cm error.
 Broad elevation change remains; detailed real driving is user verification.
+
+## Sidewalk boundaries and shared geometry
+
+Sidewalk tops are 12cm above their clipped ground polygons. The generator unions
+these footprints in integer XY and emits walls only on exposed boundaries,
+excluding internal fragments and cell seams. Source edges retain bottom heights
+and road identity. A 1cm support check removes false boundaries from rounded
+intersections. Top faces remain spawnable; sides do not.
+
+Convex gimmick faces point outward in map coordinates. Z reflection produces
+Godot clockwise front faces, so their order is retained with flat outward normals.
+Sidewalk boundary winding keeps the interior on the left. Prepared and direct
+rendering both project vertical UVs and retain declared solid materials.
+
+Ramp entries start at zero height with a 5cm buried underside. `fit_to_surface`
+samples both entry edges, including crossfall, and bakes one shape for collision
+and display. Editor templates come from `godot/driving_templates.json`, generated
+by `scripts/driving_structures.py`; saved objects and example packages are preserved.
+Junction terrain errors report road ID and map coordinate without weakening the
+1cm terrain match requirement.
+
+The exposed-boundary regression checks a two-cell road, absence of walls inside
+supported sidewalks and at shared seams, and presence of the exterior step.
+Road/cost/package tests and Godot `surface_geometry_validator` cover bend/prop/
+slope geometry, clockwise normals and materials. These scoped checks passed;
+detailed driving and appearance remain user verification. Vegetation rendering
+is described in [VEGETATION](../VEGETATION.md).

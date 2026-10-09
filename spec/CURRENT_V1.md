@@ -141,7 +141,7 @@ It does not alter the package or grant spawn authority. Consumers must validate
 the package and selected surface before entry. The `cache_population` example
 creates valid disposable cell archives from a synthetic package for cache tests.
 
-## Course authoring and completion references (2026-09-22)
+## Course authoring and completion references
 
 `MapDocument.courses` is an optional list of up to 64 public current-v1 course documents.
 Definitions include map ID, name, driving-content hash, ordered 3D sphere/upward-hemisphere
@@ -168,13 +168,13 @@ references so consumers can display revalidation required after geometry/map cha
 Verification: package unit tests 15, course tests 2, indexed tests 16 and package contract
 tests 20 passed locally. Runtime certification and application acceptance are separate.
 
-## Dynamic light inputs (2026-09-22)
+## Dynamic light inputs
 
 Consumers supply atomic generic light groups instead of inferred vehicle poses.
-See [light group contract](../docs/LIGHT_GROUPS.md). Pool and shadow caps remain
+See [light group contract](../docs/ENVIRONMENT.md). Pool and shadow caps remain
 unchanged; no vehicle design data or serialized map contract is added.
 
-## Declarative driving structures (2026-09-24)
+## Declarative driving structures
 
 `MapDocument.gimmicks` declares at most 128 stable IDs. Each record has centimetre
 position, millidegree Euler YXZ rotation, per-mille scale, 1–32 validated convex
@@ -218,7 +218,7 @@ The consumer supplies authority time, generation, reset and activation policy.
 MapKit never starts a simulation clock. Geometry is transformed once into scene
 coordinates; scale is baked into physics shapes by the physics consumer.
 
-## Non-solid water (2026-09-26)
+## Non-solid water
 
 `water_bodies` declares bounded polygon volumes with dry islands, surface/bottom
 heights and horizontal flow. Shared queries exclude submerged ground from spawn
@@ -231,7 +231,7 @@ existing compatibility renderer, with depth tint, ripples and shoreline foam.
 
 Road snow retention and generated face traits follow [ROAD_CONTACT](../docs/ROAD_CONTACT.md).
 
-## Seeded assembly (2026-09-27)
+## Seeded assembly
 
 Optional `assembled_track` metadata selects the modular track generator. A
 standalone assembly uses its venue; a terrain-integrated authored assembly is
@@ -245,7 +245,7 @@ The current v1 special-track contract also accepts `swept_cylinder` with 2–512
 The canonical schema and source fingerprints identify this definition; no
 version increment or migration is introduced.
 
-## Race finish policy (2026-09-28)
+## Race finish policy
 
 `MapDocument.free_roam` is a required boolean in current v1. New manual and seeded
 documents use false; external geographic/terrain imports set true. It participates
@@ -266,7 +266,7 @@ course tests passed locally. Consumer driving acceptance is separate.
 The sprint finish candidate is an explicit path sample in the terminal entry; if it overlaps an earlier gate, stable first-wins removal makes that earlier effective gate the finish. AI and progression use the same effective course. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.
 
 
-## Category generation and authored track graphs (2026-09-30 replacement)
+## Category generation and authored track graphs
 
 [TRACK_AUTHORING.md](../docs/TRACK_AUTHORING.md) is the current track definition.
 Settings use three candidate categories and 60/90/120s ±10% base-route time;
@@ -278,7 +278,7 @@ export execution packages; manual courses retain player completion requirements.
 The document schema, generator and catalogue fingerprints change within v1.
 
 
-## Grounded seed support policy (2026-09-30)
+## Grounded seed support policy
 
 Current v1 requires `Assembly.supports` and `Source.grounded_supports`.
 See [grounded seed structures](../docs/ASSEMBLED_TRACKS.md#grounded-supports).
@@ -288,11 +288,11 @@ sources retain this policy when converted to manual authoring. Independent
 manual sources and external imports do not enable it automatically.
 
 
-## Independent grind contract (2026-10-01)
+## Independent grind contract
 
 Current v1 includes explicit `grind_lines` source, endpoint connections and
 resolved cap geometry, plus RC attachment presets and common ordinary-road
-refinement. See [the current line contract](../docs/TRACK_AUTHORING.md#independent-grind-lines-and-rc-attachments-2026-10-01).
+refinement. See [the current line contract](../docs/TRACK_AUTHORING.md#independent-grind-lines-and-rc-attachments).
 `E_GRIND_SOURCE`, `E_GRIND_CONNECTION` and `E_GRIND_BUDGET` reject malformed
 geometry, unresolved endpoints and excessive interaction work respectively.
 

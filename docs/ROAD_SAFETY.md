@@ -2,7 +2,7 @@
 
 Current v1 generation decision, 2026-09-26. Source coordinates, road/node IDs,
 width settings and the 12cm curb height remain authored as before. `.memap`
-format 2 and generated/recipe/scene versions 1 are unchanged. The source build
+all own format/generated/recipe/scene versions remain 1. The source build
 fingerprint invalidates disposable caches; there is no legacy generator branch.
 
 ## Shared plan

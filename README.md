@@ -53,7 +53,7 @@ explicit typed boundaries; JSON is restricted to adapters. No CI/CD is included.
 - [Prepared generation](docs/PREPARED_GENERATION.md),
   [renderer resource ownership](RENDER_MEMORY.md),
   [distant rendering](docs/DISTANT_RENDERING.md) and [world assets](spec/WORLD_ASSETS.md).
-- [Road geometry](docs/STREET_GEOMETRY.md), [contact](docs/ROAD_CONTACT.md),
+- [Road geometry](docs/ROAD_CONTACT.md), [contact](docs/ROAD_CONTACT.md),
   [special driving](docs/SPECIAL_DRIVING.md), [water](docs/WATER.md),
   [environment](docs/ENVIRONMENT.md), [vegetation](VEGETATION.md).
 - [Determinism](spec/DETERMINISM.md), [limitations](LIMITATIONS.md) and

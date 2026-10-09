@@ -46,7 +46,7 @@ package/region/schema contracts and Godot native build. The consumer separately
 verifies physical driving and effects. Detailed application acceptance is not
 claimed here.
 
-## Pipe material (03, 2026-10-04 replacement)
+## Pipe material
 
 New assembled cylinders and the standalone straight-cylinder template use
 `#596168`. Shared `gimmick_geometry.pipe_material` sets roughness 0.82, metallic
@@ -71,7 +71,7 @@ All formats stay v1. The assembly source fingerprint changes with its generated
 default colour; active generated packages are refreshed with the 08 delivery
 while preserving original artifacts.
 
-## Air ring defaults 09 — 2026-10-04 replacement
+## Air ring defaults 09
 
 New automatic track rings, manual air-ring actions and the standalone template
 use a 150cm inner radius (3m opening) and 100% target speed. The square track

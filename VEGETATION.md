@@ -39,3 +39,10 @@ generated versions are 1; old recipe branches are not supported. Core `zone_asse
 `zone_obstacles` tests cover opt-in, rejected references/footprints, zero density,
 spacing/exclusions, no relocation, road/obstacle clearance, seam ownership,
 regular/indexed metadata queries, regional asset retention and output budgets.
+
+The shared `street_tree` has a tapered trunk, attached roots and overlapping
+vertex-tinted crowns. Canopy variants use 78/84 triangles and the palm 44/44,
+with two materials. MultiMesh instances explicitly use white instance color so
+compatibility rendering preserves the mesh tint (16 bytes per instance within
+existing reservations). `street_tree_validator` passed green-coverage checks for
+the original tree and both instances. Existing saved models remain unchanged.
