@@ -400,3 +400,12 @@ busbars, compressors and administration buildings. The library shares original
 Harbor warehouse/crane/truck components. Two model tests pass reproducible hashes,
 paired envelopes, reduced details and preserved rack openings/connection spans.
 Physical declarations and all v1 budgets are unchanged.
+
+`park_assets.py` adds an open observation wheel with twelve gondolas, a static
+carousel, decorative coaster, three kiosks, queue rails, flowerbeds and two
+heights of open viaduct piers. Wheel and coaster legs have explicit physical
+hulls; the coaster's thirty legs plus its station roof fit the current 32-hull
+limit. Far meshes preserve the wheel spokes, gondolas, coaster rails and station
+access ramp while reducing detail. Two focused model tests pass deterministic
+hashes, paired bounds, reduced landmark triangles, hull limits and open wheel/
+pier rays. No format, collision policy or render budget changed.

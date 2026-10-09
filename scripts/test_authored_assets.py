@@ -10,6 +10,7 @@ from forest_assets import library as forest_library
 from canyon_assets import library as canyon_library
 from snow_assets import library as snow_library
 from factory_assets import library as factory_library
+from park_assets import library as park_library
 
 def triangles(data):
     size=struct.unpack_from('<I',data,12)[0]
@@ -184,5 +185,28 @@ class FactoryAssets(unittest.TestCase):
             faces=triangles(payloads[record[field]])
             self.assertFalse(ray_hits(faces,6,2),field);self.assertTrue(ray_hits(faces,11,2),field)
             self.assertAlmostEqual(float(faces[:,:,0].min()),-12);self.assertAlmostEqual(float(faces[:,:,0].max()),12)
+
+class ParkAssets(unittest.TestCase):
+    def test_paired_landmark_envelopes(self):
+        assets=park_library();self.assertEqual(assets,park_library())
+        for name,(record,payloads,_) in assets.items():
+            self.assertLessEqual(len(record['convex_collision']),32,name)
+            pair=[]
+            for field in ('path','distant_path'):
+                data=payloads[record[field]];self.assertEqual(record[field],'assets/'+hashlib.sha256(data).hexdigest()+'.glb');pair.append(triangles(data))
+            near,far=pair;a=near.reshape(-1,3);b=far.reshape(-1,3)
+            self.assertLessEqual(len(far),len(near),name)
+            self.assertTrue(np.all(np.abs(a.min(0)-b.min(0))<=.30),name)
+            self.assertTrue(np.all(np.abs(a.max(0)-b.max(0))<=.30),name)
+            if name in ('observation-wheel','carousel','decorative-coaster'):
+                self.assertLess(len(far),len(near),name)
+    def test_wheel_and_pier_openings_survive(self):
+        assets=park_library()
+        for name,x,y in [('observation-wheel',11.3,2),('sky-pier-low',3.6,2),('sky-pier-high',3.6,2)]:
+            record,payloads,_=assets[name]
+            for field in ('path','distant_path'):
+                faces=triangles(payloads[record[field]])
+                self.assertFalse(ray_hits(faces,0,y),(name,field,'opening filled'))
+                self.assertTrue(ray_hits(faces,x,y),(name,field,'leg lost'))
 
 if __name__=='__main__':unittest.main()
