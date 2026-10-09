@@ -393,3 +393,10 @@ lodges, snowbanks, road rails, an open shelter and a solid frozen tarn. The lake
 12-sided collision hull stays within the current 32-vertex/60-face limits; its
 near model adds surface cracks. Two model tests pass matching bounds/hashes,
 reduced distant meshes, the physical ice top and open shelter bays.
+
+`factory_assets.py` adds three multi-bay production halls, process tank shapes,
+boiler banks, 62 m stacks, supported pipe racks and feed branches, transformer
+busbars, compressors and administration buildings. The library shares original
+Harbor warehouse/crane/truck components. Two model tests pass reproducible hashes,
+paired envelopes, reduced details and preserved rack openings/connection spans.
+Physical declarations and all v1 budgets are unchanged.

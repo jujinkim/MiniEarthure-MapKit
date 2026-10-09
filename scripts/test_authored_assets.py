@@ -9,6 +9,7 @@ from harbor_assets import library as harbor_library
 from forest_assets import library as forest_library
 from canyon_assets import library as canyon_library
 from snow_assets import library as snow_library
+from factory_assets import library as factory_library
 
 def triangles(data):
     size=struct.unpack_from('<I',data,12)[0]
@@ -163,5 +164,25 @@ class SnowAssets(unittest.TestCase):
         for field in ('path','distant_path'):
             faces=triangles(payloads[record[field]])
             self.assertFalse(ray_hits(faces,0,2),field);self.assertTrue(ray_hits(faces,6.6,2),field)
+
+class FactoryAssets(unittest.TestCase):
+    def test_paired_industrial_envelopes(self):
+        assets=factory_library();self.assertEqual(assets,factory_library())
+        for name,(record,payloads,_) in assets.items():
+            pair=[]
+            for field in ('path','distant_path'):
+                data=payloads[record[field]];self.assertEqual(record[field],'assets/'+hashlib.sha256(data).hexdigest()+'.glb');pair.append(triangles(data))
+            near,far=pair;a=near.reshape(-1,3);b=far.reshape(-1,3)
+            self.assertLessEqual(len(far),len(near),name)
+            tolerance=np.maximum(.3,np.ptp(a,axis=0)*.08)
+            self.assertTrue(np.all(np.abs(a.min(0)-b.min(0))<=tolerance),name)
+            self.assertTrue(np.all(np.abs(a.max(0)-b.max(0))<=tolerance),name)
+            if name.startswith(('production-','process-tank-')):self.assertLess(len(far),len(near),name)
+    def test_pipe_rack_openings_and_full_span(self):
+        record,payloads,_=factory_library()['pipe-rack']
+        for field in ('path','distant_path'):
+            faces=triangles(payloads[record[field]])
+            self.assertFalse(ray_hits(faces,6,2),field);self.assertTrue(ray_hits(faces,11,2),field)
+            self.assertAlmostEqual(float(faces[:,:,0].min()),-12);self.assertAlmostEqual(float(faces[:,:,0].max()),12)
 
 if __name__=='__main__':unittest.main()
