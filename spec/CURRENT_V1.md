@@ -374,3 +374,16 @@ far water pixel checks at low/high quality on Compatibility and Forward Mobile.
 Mean RGB delta is below 1/255 in both backends; far water owners release. The
 existing terrain colour check also passes. This is bounded display verification,
 not a device or whole-map performance acceptance.
+
+The original `canyon_assets.py` library adds four eroded sandstone profiles with
+visible strata, talus, cactus/scrub, a quarry office, loader, open crusher bay,
+conveyor and open bridge piers. Primary/far meshes keep the same frame and major
+openings. Two focused model tests pass hashes, bounds, reduced rock triangles
+and open machinery/bridge rays; native source validation checks closed collision
+geometry. No new material/format version or runtime cap is introduced.
+
+The common sky now blends its horizon haze continuously into the lower
+hemisphere. A hard colour step exposed a dark band behind bounded canyon terrain.
+The day/night `sky_horizon_validator` actual-pixel test passes Compatibility and
+Metal Forward Mobile on macOS M1/Godot 4.7.2; no display radius or geometry
+budget was changed.

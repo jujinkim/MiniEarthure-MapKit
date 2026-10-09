@@ -7,6 +7,7 @@ import numpy as np
 from authored_assets import library
 from harbor_assets import library as harbor_library
 from forest_assets import library as forest_library
+from canyon_assets import library as canyon_library
 
 def triangles(data):
     size=struct.unpack_from('<I',data,12)[0]
@@ -118,5 +119,27 @@ class ForestAssets(unittest.TestCase):
                 faces=triangles(payloads[record[field]])
                 self.assertFalse(ray_hits(faces,0,2),(name,field))
                 self.assertTrue(ray_hits(faces,3,2),(name,field))
+
+class CanyonAssets(unittest.TestCase):
+    def test_paired_strata_equipment_and_hashes(self):
+        assets=canyon_library();self.assertEqual(assets,canyon_library())
+        for name,(record,payloads,_) in assets.items():
+            pair=[]
+            for field in ('path','distant_path'):
+                data=payloads[record[field]];self.assertEqual(record[field],'assets/'+hashlib.sha256(data).hexdigest()+'.glb')
+                pair.append(triangles(data))
+            near,far=pair;a=near.reshape(-1,3);b=far.reshape(-1,3)
+            self.assertLessEqual(len(far),len(near),name)
+            tolerance=np.maximum(.3,np.ptp(a,axis=0)*.18)
+            self.assertTrue(np.all(np.abs(a.min(0)-b.min(0))<=tolerance),name)
+            self.assertTrue(np.all(np.abs(a.max(0)-b.max(0))<=tolerance),name)
+            if name.startswith('sandstone-'):self.assertLess(len(far),len(near),name)
+    def test_open_quarry_bay_and_bridge_legs(self):
+        for name,x in [('quarry-crusher',3),('canyon-pier',3.2)]:
+            record,payloads,_=canyon_library()[name]
+            for field in ('path','distant_path'):
+                faces=triangles(payloads[record[field]])
+                self.assertFalse(ray_hits(faces,0,2),(name,field))
+                self.assertTrue(ray_hits(faces,x,2),(name,field))
 
 if __name__=='__main__':unittest.main()

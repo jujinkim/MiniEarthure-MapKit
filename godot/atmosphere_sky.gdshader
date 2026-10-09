@@ -47,6 +47,10 @@ void sky() {
     color+=aurora*curtain*(0.45+0.55*sin(EYEDIR.z*45.0+cloud_motion))*vec3(0.04,0.35,0.2)*(1.0-daylight);
     color*=1.0-cloud_cover*0.20;
     color=mix(color,mix(vec3(0.008,0.012,0.019),vec3(0.27,0.30,0.34),daylight),clouds);
-    if(EYEDIR.y<0.0) color=mix(vec3(0.002),vec3(0.08,0.10,0.08),daylight);
+    // A hard lower-hemisphere colour creates a black band behind bounded terrain
+    // when looking across a gorge. Preserve horizon haze and blend toward the
+    // ground only well below the horizon; the display radius stays unchanged.
+    vec3 ground=mix(vec3(0.002),vec3(0.08,0.10,0.08),daylight);
+    color=mix(color,ground,smoothstep(0.0,0.65,-EYEDIR.y));
     COLOR=color;
 }
