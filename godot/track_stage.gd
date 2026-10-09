@@ -104,5 +104,47 @@ static func create(_bounds: PackedInt64Array, assembly: Dictionary) -> Node3D:
 			box(root,p+Vector3(0,0.9,0),Vector3(2.6,1.8,2.6),paint(colors.road[i%4]))
 			label(root,str(i+1),p+Vector3(0,1,1.32),1.2,Color.WHITE)
 	label(root,VENUE.NAMES[theme],Vector3(center.x,floor_y+4,lo.z-12),1.2,colors.accent)
+	_direction_markings(root, assembly, accent)
 	root.set_meta("rc_display_only",true)
 	return root
+
+static func _direction_markings(root: Node3D, assembly: Dictionary, material: Material) -> void:
+	# One bounded display mesh, independent of drive geometry and collision.
+	var vertices := PackedVector3Array()
+	var distance := 24.0
+	var previous := Vector3.INF
+	var count := 0
+	for piece: Dictionary in assembly.pieces:
+		for sample: Dictionary in piece.path:
+			var at := point(sample.position_cm)
+			if previous != Vector3.INF: distance += previous.distance_to(at)
+			previous = at
+			var up := point(sample.normal).normalized()
+			if count >= 64 or distance < 24.0 or up.y < 0.85 or sample.mode != "drive": continue
+			var forward := point(sample.forward).normalized()
+			var side := forward.cross(up).normalized()
+			at += up * 0.012
+			var half := minf(0.7, float(sample.lateral_cm)*0.004)
+			for sign_value in [-1.0, 1.0]:
+				var a := at + forward*0.65
+				var b: Vector3 = at - forward*0.35 + side*half*float(sign_value)
+				var c: Vector3 = b - forward*0.22
+				var d := a - forward*0.22
+				vertices.append_array(PackedVector3Array([a,b,c,a,c,d]))
+			distance = 0.0
+			count += 1
+	if vertices.is_empty(): return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var node := MeshInstance3D.new()
+	node.name = "DirectionMarkings"
+	node.mesh = mesh
+	var ink: StandardMaterial3D = material.duplicate()
+	ink.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ink.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	node.material_override = ink
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(node)

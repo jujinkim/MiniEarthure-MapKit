@@ -228,3 +228,11 @@ Twenty-five affected tests and native/CLI build pass.
 Detailed consumer acceptance is separate.
 
 Course sealing now retains stable non-overlapping checkpoints only. Stored package source is preserved; the public course view derives a new course identity only if overlap removal changes its geometry. Fewer than two effective gates disables racing without rejecting the map. Sphere/hemisphere overlap and continuous chassis-capsule entry tests cover grazing, stationary/initial-inside rejection and separated half volumes.
+
+## RC direction marking
+
+The common stage adds up to64 flat-road chevrons in one display-only mesh at
+24m path intervals, using the stored tangent/normal. Steep/special sections are
+excluded. The marks have no collision, occupancy, spawn role or shadow.
+The scoped rc_venue validator passes bounded nodes, common material consumption
+and collision-free display on all three venue themes. Native generation is unchanged.
