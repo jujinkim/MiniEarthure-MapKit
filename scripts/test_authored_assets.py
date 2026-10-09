@@ -8,6 +8,7 @@ from authored_assets import library
 from harbor_assets import library as harbor_library
 from forest_assets import library as forest_library
 from canyon_assets import library as canyon_library
+from snow_assets import library as snow_library
 
 def triangles(data):
     size=struct.unpack_from('<I',data,12)[0]
@@ -141,5 +142,26 @@ class CanyonAssets(unittest.TestCase):
                 faces=triangles(payloads[record[field]])
                 self.assertFalse(ray_hits(faces,0,2),(name,field))
                 self.assertTrue(ray_hits(faces,x,2),(name,field))
+
+class SnowAssets(unittest.TestCase):
+    def test_alpine_pairs_and_frozen_surface(self):
+        assets=snow_library();self.assertEqual(assets,snow_library())
+        for name,(record,payloads,_) in assets.items():
+            pair=[]
+            for field in ('path','distant_path'):
+                data=payloads[record[field]];self.assertEqual(record[field],'assets/'+hashlib.sha256(data).hexdigest()+'.glb');pair.append(triangles(data))
+            near,far=pair;a=near.reshape(-1,3);b=far.reshape(-1,3)
+            self.assertLessEqual(len(far),len(near),name)
+            tolerance=np.maximum(.3,np.ptp(a,axis=0)*.18)
+            self.assertTrue(np.all(np.abs(a.min(0)-b.min(0))<=tolerance),name)
+            self.assertTrue(np.all(np.abs(a.max(0)-b.max(0))<=tolerance),name)
+            if name.startswith(('snow-fir','alpine-lodge')):self.assertLess(len(far),len(near),name)
+        record,payloads,_=assets['frozen-lake'];self.assertTrue(record['convex_collision'])
+        self.assertEqual(max(v[1] for v in record['convex_collision'][0]['vertices']),0)
+    def test_gallery_travel_opening_survives(self):
+        record,payloads,_=snow_library()['snow-gallery']
+        for field in ('path','distant_path'):
+            faces=triangles(payloads[record[field]])
+            self.assertFalse(ray_hits(faces,0,2),field);self.assertTrue(ray_hits(faces,6.6,2),field)
 
 if __name__=='__main__':unittest.main()

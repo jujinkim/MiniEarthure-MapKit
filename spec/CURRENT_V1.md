@@ -387,3 +387,9 @@ hemisphere. A hard colour step exposed a dark band behind bounded canyon terrain
 The day/night `sky_horizon_validator` actual-pixel test passes Compatibility and
 Metal Forward Mobile on macOS M1/Godot 4.7.2; no display radius or geometry
 budget was changed.
+
+`snow_assets.py` adds three snow-covered fir ages, granite crags, two timber
+lodges, snowbanks, road rails, an open shelter and a solid frozen tarn. The lake's
+12-sided collision hull stays within the current 32-vertex/60-face limits; its
+near model adds surface cracks. Two model tests pass matching bounds/hashes,
+reduced distant meshes, the physical ice top and open shelter bays.
