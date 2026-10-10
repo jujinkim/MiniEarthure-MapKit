@@ -211,6 +211,17 @@ fn ground_tile(
     if (0..2).any(|i| bounds.min[i] >= bounds.max[i]) {
         return Ok(());
     }
+    ground_tile_part(d, v, bounds, patches, track, b, work, 0)
+}
+
+// Dense city terrain is divided spatially before an arrangement can exceed its
+// local edge/intersection budget. Every leaf samples the original two terrain
+// planes; subdivision never bilinearly invents a different slope or elevation.
+#[allow(clippy::too_many_arguments)]
+fn ground_tile_part(
+    d: &MapDocument, v: [Vertex;4], bounds: Bounds, patches: &[Patch],
+    track: &[[Vertex;3]], b: &mut Builder, work: &mut usize, depth: u8,
+) -> Result<()> {
     tick(
         work,
         patches.len()
@@ -317,10 +328,28 @@ fn ground_tile(
             lines.push((area.polygon[i], area.polygon[(i + 1) % area.polygon.len()]));
         }
     }
-    let shapes = crate::road_arrangement::subdivide(&bounds, &lines, work)?;
+    let shapes = match crate::road_arrangement::subdivide(&bounds, &lines, work) {
+        Ok(shapes) => shapes,
+        Err(e) if e.code == "E_BUDGET"
+            && matches!(e.message.as_str(), "ground tile arrangement edge limit" | "ground tile intersection limit")
+            && depth < 6 && (0..2).all(|i| bounds.max[i]-bounds.min[i]>=4) => {
+            let mid:Point=std::array::from_fn(|i|bounds.min[i]+(bounds.max[i]-bounds.min[i])/2);
+            // No faces have been emitted yet. Children share exact integer cuts
+            // and the same cumulative work/output limits as their parent cell.
+            for y in 0..2 {for x in 0..2 {
+                let part=Bounds {
+                    min:[if x==0 {bounds.min[0]} else {mid[0]},if y==0 {bounds.min[1]} else {mid[1]}],
+                    max:[if x==0 {mid[0]} else {bounds.max[0]},if y==0 {mid[1]} else {bounds.max[1]}],
+                };
+                ground_tile_part(d,v,part,patches,track,b,work,depth+1)?;
+            }}
+            return Ok(());
+        }
+        Err(e) => return Err(e),
+    };
     let height = |p: Point| {
-        let t = if (p[0] - bounds.min[0]) * (v[2][2] - v[0][2])
-            >= (p[1] - bounds.min[1]) * (v[2][0] - v[0][0])
+        let t = if (p[0] - v[0][0]) * (v[2][2] - v[0][2])
+            >= (p[1] - v[0][2]) * (v[2][0] - v[0][0])
         {
             terrain[0]
         } else {
@@ -345,8 +374,8 @@ fn ground_tile(
                 triangle.iter().map(|p| p[0]).sum::<i64>(),
                 triangle.iter().map(|p| p[1]).sum::<i64>(),
             ];
-            let t = if (center[0] - 3 * bounds.min[0]) * (v[2][2] - v[0][2])
-                >= (center[1] - 3 * bounds.min[1]) * (v[2][0] - v[0][0])
+            let t = if (center[0] - 3 * v[0][0]) * (v[2][2] - v[0][2])
+                >= (center[1] - 3 * v[0][2]) * (v[2][0] - v[0][0])
             {
                 terrain[0]
             } else {

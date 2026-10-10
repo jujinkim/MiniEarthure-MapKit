@@ -88,6 +88,12 @@ Focused city regressions compare indexed and full plans, including remote widest
 roads, endpoint stars, designed approaches, input reversal and 6,000 sparse roads.
 Direct courtyard predicates are compared with the triangulated solid, including
 wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
+Dense terrain arrangements split into spatial quarters only when their local
+edge/intersection limit is reached, to a maximum depth of six. Each leaf retains
+the original terrain planes, road identities and integer boundaries; cumulative
+work and output budgets remain unchanged. The dense parallel-road regression
+verifies complete area coverage, surface selection, noncoplanar terrain heights
+and conservative generation costs. Scoped road, urban and cost suites pass.
 
 Golden vectors bind the current generated geometry and archive contract;
 independent permutation, coverage and archive tests remain active. See

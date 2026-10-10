@@ -292,3 +292,42 @@ fn paving_and_sidewalks_share_the_sloping_terrain_plane() {
         }
     }
 }
+
+#[test]
+fn dense_road_tiles_subdivide_without_losing_area_identity_or_terrain_planes() {
+    let mut d = doc(0);
+    d.bounds.max = [12800,12800];
+    d.cell_size_cm = 12800;
+    d.nodes.clear();
+    let template = d.roads.pop().unwrap();
+    for i in 0..280 {
+        let mut road = template.clone();
+        road.id = format!("r{i}");
+        road.from = format!("a{i}");
+        road.to = format!("b{i}");
+        road.points = vec![[0,0,100+i*40],[12800,0,100+i*40]];
+        road.widths_cm = vec![20];
+        road.kind = RoadKind::Ground;
+        for (id,position) in [(&road.from,road.points[0]),(&road.to,road.points[1])] {
+            d.nodes.push(RoadNode {id:id.clone(),position,level:0});
+        }
+        d.roads.push(road);
+    }
+    let cell = Cell {x:0,y:0};
+    d.heightmaps.push(Heightmap {cell,path:"terrain.png".into(),spacing_cm:12800,offset_cm:0,step_cm:1,source_accuracy_cm:None});
+    let grid = HeightGrid {side:2,heights_cm:vec![0,128,256,0]};
+    let c = generate(GenerationInput {document:&d,cell,heightgrid:Some(&grid),max_triangles:200_000}).unwrap();
+    let area:i128=c.triangles.iter().map(|t|{
+        let [a,b,c]=t.vertices;
+        ((b[0]-a[0]) as i128*(c[2]-a[2]) as i128-(b[2]-a[2]) as i128*(c[0]-a[0]) as i128).abs()
+    }).sum();
+    assert_eq!(area,2*12800_i128.pow(2));
+    for i in [0,79,157,159,279] {for x in [3200,6400,9600] {
+        let y=100+i*40;
+        let expected=if x>=y {(x-y)/100} else {(y-x)*2/100};
+        assert!((sample(&c,&format!("r{i}"),[x,y]).unwrap()[1]-expected).abs()<=1);
+        assert!(sample(&c,"terrain",[x,y]).is_err());
+        assert!(sample(&c,"terrain",[x,y+20]).is_ok());
+    }}
+    assert!(estimate_generation(&d,cell,200_000).unwrap().triangles>=c.triangles.len() as u64);
+}
