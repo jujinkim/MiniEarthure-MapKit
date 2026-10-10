@@ -43,6 +43,25 @@ geometry. Export alone does not regenerate it, and normal export can require
 explicit source recompilation: regenerate/recompile first, then export to a new
 file to receive the correction. Original packages are never rewritten on load.
 
+The opt-in `catalogue_geometry_audit_includes_tapers_editor_curves_and_special_surfaces`
+test extends this to 2,694 catalogue/width/placement/port-taper/default-cubic
+conditions and 26 unique special-track contact/shell meshes. All 1,334,310 faces
+pass winding, nondegeneracy, ordinary ribbon progression/coplanar overlap and
+special closed-shell checks. A 12 m descending left 360-degree spiral at rotation
+`[27000,17000,11000]` remains rejected by the existing clearance validator;
+passing the face audit does not make that placement executable. Run the test
+explicitly with `cargo test -p mapkit-core --test track_winding catalogue_geometry_audit_includes_tapers_editor_curves_and_special_surfaces -- --ignored`.
+Arbitrary user-authored control points and continuous placement parameters are
+outside this finite catalogue audit.
+
+The saved-package audit covered 76 tracked Client/Editor packages (57 unique
+hashes): nine contained assemblies, with 321 piece paths and 9,603 ordinary road
+faces. No reversed/degenerate faces, nonprogressing ribbon edges or coplanar face
+overlaps were found; special/flight-only intervals were excluded from this
+ordinary-surface check. None contained `overpass` or an empty-control free/flight
+curve. Existing distributed maps remain unchanged; newly generated maps receive
+the generator correction without converting saved packages.
+
 Snapped pieces rebuild their first/last ribbon from the final integer centre and
 frame, avoiding a second rounding of already rounded local edges. Geometry
 preparation also canonicalizes saved endpoint ribbons, so loading an existing v1

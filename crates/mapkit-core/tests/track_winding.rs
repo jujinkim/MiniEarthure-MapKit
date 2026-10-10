@@ -283,3 +283,175 @@ fn free_and_flight_curve_end_frames_follow_empty_or_editor_cubic_controls() {
         }
     }
 }
+
+fn coplanar_overlap(a: [Vertex; 3], b: [Vertex; 3]) -> f64 {
+    let normal = cross(a);
+    if normal == [0; 3] || b.iter().any(|v| {
+        (0..3).map(|j| normal[j] * i128::from(v[j] - a[0][j])).sum::<i128>() != 0
+    }) { return 0.0; }
+    let axis = (0..3).max_by_key(|&j| normal[j].abs()).unwrap();
+    let axes: Vec<_> = (0..3).filter(|&j| j != axis).collect();
+    let project = |v: Vertex| [v[axes[0]], 0, v[axes[1]]];
+    overlap_area(a.map(project), b.map(project))
+}
+
+fn ordinary_segment(w: &[track::Sample]) -> bool {
+    w.iter().all(|s| !["flight", "loop", "cylinder", "halfpipe"].contains(&s.mode.as_str()))
+}
+
+fn audit_road_geometry(document: &mapkit_core::MapDocument) -> (usize, Vec<String>) {
+    let geometry = assembled_preview(document).unwrap();
+    let piece = &document.assembled_track.as_ref().unwrap().pieces[0];
+    let mut failures = vec![];
+    let mut faces = 0;
+    for (object, path) in [("assembled-road-0", &piece.path), ("assembled-road-0-bridge", &piece.alternate_path)] {
+        if piece.id != "finish_plaza" {
+            for (i, w) in path.windows(2).enumerate().filter(|(_, w)| ordinary_segment(w)) {
+                let [a, b] = [ribbon(&w[0]), ribbon(&w[1])];
+                let forward = std::array::from_fn(|j| (w[0].forward[j] + w[1].forward[j]) as f64);
+                for side in 0..2 {
+                    if dot(delta(b[side], a[side]), forward) <= 0.0 {
+                        failures.push(format!("{object}: folded edge at segment {i}, side {side}"));
+                    }
+                }
+            }
+        }
+        let mut road: Vec<_> = geometry.triangles.iter().filter(|f| f.object_id == object).collect();
+        faces += road.len();
+        for (i, face) in road.iter().enumerate() {
+            if dot(cross(face.vertices).map(|v| v as f64), nearest_normal(face.vertices, path)) >= 0.0 {
+                failures.push(format!("{object}: reversed/degenerate face {i}: {:?}", face.vertices));
+            }
+        }
+        // Sweep the first axis before exact coplanarity/projection. Shared
+        // seams have zero intersection area; elevated crossings are distinct
+        // planes. Branch mouths intentionally overlap, so audit each road ID.
+        road.sort_by_key(|face| face.vertices.iter().map(|v| v[0]).min().unwrap());
+        for (i, a) in road.iter().enumerate() {
+            let max_x = a.vertices.iter().map(|v| v[0]).max().unwrap();
+            for b in &road[i + 1..] {
+                if b.vertices.iter().map(|v| v[0]).min().unwrap() > max_x { break; }
+                if (1..3).any(|axis| {
+                    a.vertices.iter().map(|v| v[axis]).max().unwrap() < b.vertices.iter().map(|v| v[axis]).min().unwrap()
+                        || b.vertices.iter().map(|v| v[axis]).max().unwrap() < a.vertices.iter().map(|v| v[axis]).min().unwrap()
+                }) { continue; }
+                if coplanar_overlap(a.vertices, b.vertices) > 1e-6 {
+                    failures.push(format!("{object}: coplanar overlap {:?} / {:?}", a.vertices, b.vertices));
+                }
+            }
+        }
+    }
+    (faces, failures)
+}
+
+fn audit_special_geometry(special: &mapkit_core::special_track::SpecialTrack) -> (usize, Vec<String>) {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mesh = special.mesh();
+    let mut failures = vec![];
+    let mut edges = BTreeMap::<[Vertex; 2], (usize, i32)>::new();
+    let inner: BTreeSet<_> = mesh.inner.iter().flatten().copied().collect();
+    let outer: BTreeSet<_> = mesh.shell.iter().flatten().filter(|v| !inner.contains(*v)).copied().collect();
+    // A shell is ten centimetres thick; spatial bins avoid an all-pairs vertex
+    // search while locating the independent outside of every contact vertex.
+    const BIN: i64 = 1100; // Special meshes use 100 units per centimetre.
+    let cell = |v: Vertex| v.map(|n| n.div_euclid(BIN));
+    let mut bins = BTreeMap::<Vertex, Vec<Vertex>>::new();
+    for vertex in outer { bins.entry(cell(vertex)).or_default().push(vertex); }
+    let mut outward = BTreeMap::new();
+    for &vertex in &inner {
+        let at = cell(vertex);
+        let mut nearest: Option<(i128, Vertex)> = None;
+        for x in -1..=1 { for y in -1..=1 { for z in -1..=1 {
+            if let Some(candidates) = bins.get(&[at[0] + x, at[1] + y, at[2] + z]) {
+                for &candidate in candidates {
+                    let distance: i128 = (0..3).map(|j| i128::from(candidate[j] - vertex[j]).pow(2)).sum();
+                    if nearest.is_none_or(|n| distance < n.0) { nearest = Some((distance, candidate)); }
+                }
+            }
+        } } }
+        if let Some((_, candidate)) = nearest { outward.insert(vertex, delta(candidate, vertex)); }
+        else { failures.push(format!("special contact vertex has no outer shell: {vertex:?}")); }
+    }
+    for face in mesh.inner.iter().chain(&mesh.shell) {
+        if cross(*face) == [0; 3] { failures.push(format!("degenerate special face {face:?}")); }
+        for i in 0..3 {
+            let [a, b] = [face[i], face[(i + 1) % 3]];
+            let (key, sign) = if a < b { ([a, b], 1) } else { ([b, a], -1) };
+            let entry = edges.entry(key).or_default();
+            entry.0 += 1;
+            entry.1 += sign;
+        }
+    }
+    for (edge, (count, direction)) in edges {
+        if count != 2 || direction != 0 {
+            failures.push(format!("special shell boundary {edge:?}: count={count} direction={direction}"));
+        }
+    }
+    for face in &mesh.inner {
+        if face.iter().all(|v| outward.contains_key(v)) {
+            let shell_direction = std::array::from_fn(|j| face.iter().map(|v| outward[v][j]).sum::<f64>());
+            if dot(cross(*face).map(|v| v as f64), shell_direction) >= 0.0 {
+                failures.push(format!("special contact face points into its shell: {face:?}"));
+            }
+        }
+    }
+    (mesh.inner.len() + mesh.shell.len(), failures)
+}
+
+/// Explicit broad audit: all catalogue widths/placements, both extreme taper
+/// directions where supported, and the Editor's real default cubic controls.
+/// It is opt-in because it also audits every unique dedicated contact mesh.
+#[test]
+#[ignore = "explicit catalogue audit; set TRACK_GEOMETRY_AUDIT_OUT to retain diagnostic JSON"]
+fn catalogue_geometry_audit_includes_tapers_editor_curves_and_special_surfaces() {
+    use std::collections::BTreeSet;
+    let mut reports = vec![];
+    let mut special_reports = vec![];
+    let mut special_seen = BTreeSet::new();
+    for &preset in track::catalogue_ids() {
+        for &width in track::supported_widths(preset) {
+            let taper_supported = !preset.starts_with("cylinder")
+                && !["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&preset);
+            let mut ports = vec![[width, width]];
+            if taper_supported { ports.extend([[200, 1200], [1200, 200]]); }
+            let mut controls = vec![vec![]];
+            if ["free_curve", "flight_curve"].contains(&preset) {
+                controls.push(vec![[0, 0, 0], [0, 0, 600], [600, 0, 1200], [1200, 0, 1200]]);
+            }
+            for control_points in &controls { for &[entry, exit] in &ports { for rotation in PLACEMENTS {
+                let mut road = instance("road", preset, width);
+                road.entry_width_cm = entry;
+                road.exit_width_cm = exit;
+                road.control_points = control_points.clone();
+                road.position_cm = [137, 211, 389];
+                road.rotation_mdeg = rotation;
+                let mut source = Source::empty();
+                source.instances.push(road);
+                let result = compile(&source).and_then(track::document_from_assembly);
+                let (faces, failures, geometry_issues) = match result {
+                    Err(error) => (0, vec![format!("generation: {error:?}")], vec![]),
+                    Ok(document) => {
+                        let (faces, failures) = audit_road_geometry(&document);
+                        for special in document.gimmicks.iter().filter_map(|g| g.track.as_ref()) {
+                            if special_seen.insert(serde_json::to_string(special).unwrap()) {
+                                let (faces, failures) = audit_special_geometry(special);
+                                special_reports.push(serde_json::json!({"preset":preset,"width":width,"faces":faces,"failures":failures}));
+                            }
+                        }
+                        (faces, failures, document.assembled_track.as_ref().unwrap().geometry_issues.clone())
+                    }
+                };
+                reports.push(serde_json::json!({"preset":preset,"width":width,"entry":entry,"exit":exit,
+                    "rotation":rotation,"editor_controls":!control_points.is_empty(),"faces":faces,
+                    "geometry_issues":geometry_issues,"failures":failures}));
+            } } }
+        }
+    }
+    let failed: Vec<_> = reports.iter().chain(&special_reports).filter(|r| !r["failures"].as_array().unwrap().is_empty()).collect();
+    let face_count: u64 = reports.iter().chain(&special_reports).map(|r| r["faces"].as_u64().unwrap()).sum();
+    println!("CATALOGUE_GEOMETRY_AUDIT cases={} special_meshes={} faces={face_count} failed_cases={}", reports.len(), special_reports.len(), failed.len());
+    if let Ok(path) = std::env::var("TRACK_GEOMETRY_AUDIT_OUT") {
+        std::fs::write(path, serde_json::to_vec_pretty(&serde_json::json!({"cases":reports,"special_meshes":special_reports})).unwrap()).unwrap();
+    }
+    assert!(failed.is_empty(), "geometry failures (first eight): {:?}", &failed[..failed.len().min(8)]);
+}
