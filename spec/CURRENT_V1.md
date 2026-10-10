@@ -30,6 +30,13 @@ acceptance are recorded by their owning applications.
 
 ## In-memory authoring snapshots
 
+Bounded cell admission prepares an immutable document once per batch (1..256 unique
+cells), validates memory/resource seams, and generates every cell with the normal
+500,000-triangle and256MiB preview allowances. It discards each generated chunk;
+no presentation arrays or persistent validation result are retained. Later edits
+must create a new preparation, and resource identities are rechecked at completion.
+This changes no package shape or generator semantics.
+
 `mapkit_package::working::WorkingSnapshot` owns copy-on-write height arrays and a
 bounded `Resources` provider (memory bytes or confined project paths). The Godot
 `MapKitWorkingSnapshot` exposes configuration/fork, queries, brush lifecycle,

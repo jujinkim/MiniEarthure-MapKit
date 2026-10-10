@@ -354,6 +354,35 @@ impl WorkingSnapshot {
         }
         Ok((d, p.generate(cell, grid.as_deref(), 500_000)?))
     }
+    /// Admission generates every requested cell against one immutable prepared
+    /// document. No presentation buffers or persistent validation cache are kept.
+    pub fn validate_cells(&mut self, cells: &[Cell]) -> Result<()> {
+        if cells.is_empty() || cells.len() > 256 {
+            return Err(error("E_BUDGET", "cell validation requires 1..256 cells"));
+        }
+        let unique: BTreeSet<_> = cells.iter().copied().collect();
+        if unique.len() != cells.len() {
+            return Err(error("E_CELL", "duplicate validation cell"));
+        }
+        self.validate_memory()?;
+        let prepared = PreparedMap::new(self.composed_document())?;
+        for &cell in cells { prepared.cell_bounds(cell)?; }
+        for &cell in cells {
+            cancellation::checkpoint()?;
+            let result = (|| {
+                let grid = if prepared.heightmap(cell).is_some() { Some(self.grid(cell)?) } else { None };
+                let cost = prepared.estimate(cell, 500_000)?;
+                if cost.generation_scratch_bytes + cost.triangles * 256 > 256 * 1024 * 1024 {
+                    return Err(error("E_BUDGET", "preview work allowance"));
+                }
+                prepared.generate(cell, grid.as_deref(), 500_000)?;
+                Ok(())
+            })();
+            result.map_err(|mut e: Error| { e.message = format!("Cell ({}, {}): {}",cell.x,cell.y,e.message); e })?;
+        }
+        self.resources.verify()?;
+        Ok(())
+    }
     /// Explicit save/export only. Unchanged input PNGs are reused byte for byte.
     pub fn materialize(&self) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
         let mut snapshot = self.clone();

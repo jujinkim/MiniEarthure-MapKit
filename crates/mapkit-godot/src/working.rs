@@ -387,6 +387,18 @@ impl MapKitWorkingSnapshot {
             Ok(data)
         })())
     }
+    /// Full generation admission without packing render arrays for discarded cells.
+    #[func]
+    fn validate_cells(&mut self, cells: Array<Vector2i>) -> GString {
+        response((|| {
+            if cells.is_empty() || cells.len() > 256 {
+                return Err(error("E_BUDGET", "cell validation requires 1..256 cells"));
+            }
+            let selected: Vec<_> = cells.iter_shared().map(|c| Cell { x:c.x, y:c.y }).collect();
+            self.state()?.validate_cells(&selected)?;
+            Ok(serde_json::json!({"cells": selected.len()}))
+        })())
+    }
     #[func]
     fn materialize(&mut self) -> VarDictionary {
         packed::respond((|| {

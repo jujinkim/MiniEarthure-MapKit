@@ -247,3 +247,28 @@ fn partial_edge_keeps_regular_samples_and_exact_water_boundary() {
     options.target_cm = Some(f64::NAN);
     assert!(Brush::begin(&mut s, [0., 0.], options).is_err());
 }
+
+#[test]
+fn bounded_cell_admission_reuses_snapshot_without_mutating_or_caching_old_geometry() {
+    let mut s = snapshot();
+    let mut b = Brush::begin(&mut s, [3200.,3200.], options("raise")).unwrap();
+    b.step(&mut s,[3200.,3200.],1.).unwrap();
+    let cells = [Cell{x:0,y:0},Cell{x:1,y:0},Cell{x:0,y:1},Cell{x:1,y:1}];
+    let before = s.composed_document();
+    let heights: Vec<_> = cells.iter().map(|&c| s.grid(c).unwrap().heights_cm.clone()).collect();
+    s.validate_cells(&cells).unwrap();
+    assert_eq!(s.composed_document(),before);
+    for (i,&c) in cells.iter().enumerate() {
+        assert_eq!(s.grid(c).unwrap().heights_cm, heights[i]);
+        s.generate(c,false).unwrap();
+    }
+    assert!(s.validate_cells(&[]).is_err());
+    assert!(s.validate_cells(&vec![cells[0];257]).is_err());
+    assert!(s.validate_cells(&[cells[0],cells[0]]).is_err());
+    assert!(s.validate_cells(&[Cell{x:2,y:0}]).is_err());
+    s.document.buildings.push(Building { id:"invalid-after-validation".into(),
+        footprint:vec![[100,100],[200,200],[100,200],[200,100]], holes:vec![],
+        base_cm:0,height_cm:300,usage:"residential".into(),material:"concrete".into(),
+        roof:"flat".into(),entrances:vec![] });
+    assert!(s.validate_cells(&cells).is_err(), "later edits must be validated again");
+}
