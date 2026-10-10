@@ -518,6 +518,15 @@ mod tests {
         )
     }
     #[test]
+    fn extra_wide_straight_preserves_seed_fence_attachments() {
+        let mut a=fixture("straight",1200);
+        a.pieces.resize(8,a.pieces[3].clone());
+        let original=seed_fence_lines(&a);
+        assert_eq!(original.len(),1);
+        a.pieces[7].id="straight_extra_wide".into();
+        assert_eq!(seed_fence_lines(&a),original);
+    }
+    #[test]
     fn resolved_attachments_fit_three_widths_and_use_real_motion_geometry() {
         for width in [200, 400, 600, 800] {
             let a = fixture("sprint_lane", width);
@@ -747,7 +756,7 @@ pub(super) fn seed_fence_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
     let mut out=vec![];
     // This is explicit generator placement, never collider name/material detection.
     if a.authoring.is_none() && a.settings.categories.iter().any(|v|v=="gimmick") {
-        for (i,p) in a.pieces.iter().enumerate().filter(|(i,p)|*i>3 && *i%7==0 && p.id=="straight") {
+        for (i,p) in a.pieces.iter().enumerate().filter(|(i,p)|*i>3 && *i%7==0 && base_preset(&p.id)=="straight") {
             let points=[p.path.first().unwrap(),p.path.last().unwrap()].map(|s| add(offset(s,s.lateral_cm as i64),s.normal.map(|v|v*(WALL+1)/1_000_000)));
             out.push(crate::grind::GrindLine{id:format!("fence-{i}"),control_points:points.to_vec(),up:p.path[0].normal,capture_width_cm:30,start_connections:vec![],end_connections:vec![]});
         }

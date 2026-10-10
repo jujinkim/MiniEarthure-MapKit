@@ -325,7 +325,7 @@ pub(super) fn spiral_path(p: &Piece, rotation: [i32;3], origin: Vertex) -> Vec<S
         .into_iter().map(|(s,_,_)|s).collect()
 }
 pub(super) fn shape(p: &mut Piece, width: u32) -> bool {
-    let id = p.id.as_str();
+    let id = base_preset(&p.id);
     let left = id.contains("left");
     let sign = if left { -1.0 } else { 1.0 };
     let grade_curve = id.starts_with("curve") && (id.ends_with("up") || id.ends_with("down"));

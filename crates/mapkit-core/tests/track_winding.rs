@@ -138,7 +138,7 @@ fn all_catalogue_road_tops_face_the_authored_surface_at_supported_widths_and_pla
             }
         }
     }
-    assert_eq!(cases, 972, "every catalogue width and placement is audited");
+    assert_eq!(cases, 987, "every catalogue width and placement is audited");
     println!("CATALOGUE_ROAD_WINDING cases={cases} faces={faces}");
 }
 
@@ -342,6 +342,42 @@ fn audit_road_geometry(document: &mapkit_core::MapDocument) -> (usize, Vec<Strin
         }
     }
     (faces, failures)
+}
+
+#[test]
+fn extra_wide_tapers_rotations_surfaces_and_connected_walls() {
+    let mut cases = 0;
+    for (preset, base) in [("straight_extra_wide", "straight"), ("gentle90_extra_wide", "gentle90"),
+        ("gentle90_extra_wide_left", "gentle90_left"), ("right90_extra_wide", "right90"),
+        ("right90_extra_wide_left", "right90_left")] {
+        for rotation in PLACEMENTS {
+            for [entry, exit] in [[1200, 1200], [200, 1200], [1200, 200]] {
+                let mut road = instance("wide", preset, 1200);
+                road.rotation_mdeg = rotation;
+                road.position_cm = [137, 211, 389];
+                road.entry_width_cm = entry;
+                road.exit_width_cm = exit;
+                let mut source = Source::empty();
+                source.instances.push(road.clone());
+                let document = track::document_from_assembly(compile(&source).unwrap()).unwrap();
+                let (faces, failures) = audit_road_geometry(&document);
+                assert!(faces > 0 && failures.is_empty(), "{preset} {rotation:?} {entry}/{exit}: {failures:?}");
+                let next = snap(&instance("next", "straight", 400), &road).unwrap();
+                assert_eq!(piece(&road).unwrap().path.last().unwrap().ribbon_cm, piece(&next).unwrap().path[0].ribbon_cm);
+                source.instances.push(next);
+                source.connections.push(Connection { from: "wide".into(), to: "next".into() });
+                let wide = track::document_from_assembly(compile(&source).unwrap()).unwrap();
+                source.instances[0].preset = base.into();
+                let original = track::document_from_assembly(compile(&source).unwrap()).unwrap();
+                let geometry = assembled_preview(&wide).unwrap();
+                let expected = assembled_preview(&original).unwrap();
+                assert_eq!(geometry.triangles, expected.triangles, "same connected road/wall seams: {preset}");
+                assert_eq!(geometry, expected, "same published geometry and collision input: {preset}");
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 45);
 }
 
 fn audit_special_geometry(special: &mapkit_core::special_track::SpecialTrack) -> (usize, Vec<String>) {

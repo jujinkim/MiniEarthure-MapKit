@@ -24,8 +24,8 @@ width and shortcut height are preserved. Empty-control `free_curve` and
 `flight_curve` defaults also keep their straight exit tangent instead of
 inheriting an ordinary 90-degree curve endpoint.
 
-All seven `track_winding` tests pass on macOS: catalogue road orientation across
-972 preset/width/rotation conditions, lower-road edge progression and triangle
+The existing macOS `track_winding` baseline covers catalogue road orientation across
+972 preset/width/rotation conditions before the five extra-wide additions, lower-road edge progression and triangle
 overlap, preserved stations/ports and free/flight-curve endpoint frames. Package
 roundtrip checks preserve the generated ribbons and course references. Runtime
 checks the actual lower road with both cars at 60/120Hz; results belong to its
@@ -83,6 +83,12 @@ Categories have no mandatory family count. Current pipe bores are generated at
 2/3/4 m and authored at 2/3/4/6 m. Generator settings and source/catalogue
 fingerprints identify regeneration; loading a sound saved package does not
 require rewriting it. Reference-speed time is not a measured player lap time.
+The five fixed-12m driving IDs and their dimensions are defined in
+[TRACK_AUTHORING](TRACK_AUTHORING.md#geometry-and-catalogue). Their scoped
+45-case audit passes road winding, nondegenerate faces, ribbon progression,
+coplanar overlap and exact connected road/wall output against the existing 12m
+presets at flat, yaw and full Euler placements with both extreme taper directions.
+The complete catalogue audit is not repeated for this addition.
 
 Ordinary boundaries are closed 50 cm outward volumes. Shared section caps cancel
 across seams; rendering, collision and occupancy share quantized geometry. Wall
@@ -192,12 +198,17 @@ connections and fixed gimmick geometry retain their dimensions. Obstacle spacing
 remains 64/32/16m. Existing files, API default seed1, v1 formats, cancellation,
 24 candidates and all search/geometry budgets remain unchanged. Source fingerprints
 identify new generated layouts. No weather field is added to generation settings.
+For straight, gentle90 left/right and right90 left/right, a drawn 12m width is
+published under its extra-wide preset ID after both existing random draws.
+Family/width probabilities and random consumption are unchanged.
 
-Focused verification: five layout units
-pass, including distribution/uniform variants, seed17 repeatability in both modes,
-category exclusion and bounded geometry. Aggregate route-family complexity is
-70/139/175 for easy/normal/hard. All 42 category/mode/duration cases, package
-roundtrip/tamper rejection, cancellation/invalid requests and native/CLI build pass.
+Focused extra-wide verification passes 100,000 choices per difficulty (exact old
+shape/width/RNG equality, unchanged distribution, all five new IDs reachable),
+seed17 repeatability in both modes and geometry budgets. Current aggregate
+route-family complexity is 95/121/171 for easy/normal/hard. Two representative
+gimmick-only routes exclude all new IDs. The earlier 42-case category matrix
+is not repeated. The connected five-ID package export/reload preserves course,
+source and collision inputs.
 Detailed driving remains user verification.
 
 ## Quantized wall occupancy

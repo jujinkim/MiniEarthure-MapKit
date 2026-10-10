@@ -105,6 +105,7 @@ fn basic_ids() -> &'static [&'static str] {
         "tube_exit",
         "approach",
         "straight",
+        "straight_extra_wide",
         "curve",
         "curve_left",
         "sharp_curve",
@@ -299,6 +300,11 @@ pub struct VenueFloor {
 }
 pub fn catalogue_ids() -> &'static [&'static str] {
     &[
+        "straight_extra_wide",
+        "gentle90_extra_wide",
+        "gentle90_extra_wide_left",
+        "right90_extra_wide",
+        "right90_extra_wide_left",
         "gentle45",
         "gentle45_left",
         "gentle90",
@@ -371,6 +377,22 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "air_ring",
     ]
 }
+// Preset identity changes neither geometry nor the corresponding road semantics.
+const EXTRA_WIDE_PRESETS: [(&str, &str); 5] = [
+    ("straight_extra_wide", "straight"),
+    ("gentle90_extra_wide", "gentle90"),
+    ("gentle90_extra_wide_left", "gentle90_left"),
+    ("right90_extra_wide", "right90"),
+    ("right90_extra_wide_left", "right90_left"),
+];
+fn base_preset(id: &str) -> &str {
+    EXTRA_WIDE_PRESETS.iter().find(|(wide, _)| *wide == id).map_or(id, |(_, base)| *base)
+}
+fn catalogue_piece(id: &str) -> Piece {
+    let width = catalogue_width(id);
+    let port = if base_preset(id) != id { width } else { 400 };
+    variant(id, width, port, port)
+}
 /// Public choices are deliberately separate from resolved road presets.
 pub fn selection_ids() -> &'static [&'static str] {
     &["driving", "gimmick", "action"]
@@ -429,7 +451,7 @@ pub fn catalogue() -> serde_json::Value {
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
         "catalogue_fingerprint":catalogue_fingerprint(),
-        "pieces":catalogue_ids().iter().map(|id| variant(id, catalogue_width(id), 400, 400)).collect::<Vec<_>>()})
+        "pieces":catalogue_ids().iter().map(|id| catalogue_piece(id)).collect::<Vec<_>>()})
 }
 pub fn catalogue_fingerprint() -> String {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -438,7 +460,7 @@ pub fn catalogue_fingerprint() -> String {
             &canonical(
                 &catalogue_ids()
                     .iter()
-                    .map(|id| variant(id, catalogue_width(id), 400, 400))
+                    .map(|id| catalogue_piece(id))
                     .collect::<Vec<_>>(),
             )
             .unwrap(),
@@ -447,7 +469,9 @@ pub fn catalogue_fingerprint() -> String {
     .clone()
 }
 pub fn supported_widths(id: &str) -> &'static [u32] {
-    if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
+    if base_preset(id) != id {
+        &[1200]
+    } else if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
         &[400]
     } else if id.starts_with("cylinder") {
         &[200, 300, 400, 600]
@@ -459,7 +483,9 @@ pub fn supported_widths(id: &str) -> &'static [u32] {
 }
 pub fn minimum_port_width(_id: &str) -> u32 { 200 }
 fn catalogue_width(id: &str) -> u32 {
-    if id.ends_with("_narrow") || (id.starts_with("cylinder") && !id.starts_with("cylinder_wide")) {
+    if base_preset(id) != id {
+        1200
+    } else if id.ends_with("_narrow") || (id.starts_with("cylinder") && !id.starts_with("cylinder_wide")) {
         200
     } else {
         400
@@ -612,7 +638,7 @@ fn spiral_rise(t: f64) -> f64 {
 }
 fn build_local_piece(original_id: &str) -> Piece {
     let narrow = original_id.ends_with("_narrow");
-    let id = original_id.trim_end_matches("_narrow");
+    let id = base_preset(original_id).trim_end_matches("_narrow");
     let tube_radius = if id.starts_with("cylinder_wide") || id == "banked_chicane" {
         200
     } else {

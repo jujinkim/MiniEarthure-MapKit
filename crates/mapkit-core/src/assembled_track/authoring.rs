@@ -805,7 +805,7 @@ pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
         let p=&a.pieces[i];
         p.width_cm>=400 && p.entry_width_cm>=400 && p.exit_width_cm>=400
             && ["straight","approach","finish_plaza","curve","curve_left","gentle45","gentle45_left",
-                "slope","slope_up","slope_down","curve_up","curve_down","curve_left_up","curve_left_down"].contains(&p.id.as_str())
+                "slope","slope_up","slope_down","curve_up","curve_down","curve_left_up","curve_left_down"].contains(&base_preset(&p.id))
             && !a.obstacles.iter().any(|o|o.piece_index==i)
     };
     let mut run=0;
@@ -1243,6 +1243,17 @@ mod checkpoint_tests {
         assert_eq!(metadata["progress_checkpoints"].as_array().unwrap().len(),effective.len());
         assert_eq!(metadata["progress_checkpoints"][1]["piece_index"],raw[40].0);
         assert_eq!(common_checkpoints(&a),raw,"raw source order is unchanged");
+    }
+    #[test]
+    fn extra_wide_preserves_checkpoint_classification() {
+        for (wide, base) in EXTRA_WIDE_PRESETS {
+            let mut a=road(12);
+            a.pieces[4].id=base.into();
+            a.pieces[4].width_cm=1200;
+            let expected=automatic_checkpoints(&a);
+            a.pieces[4].id=wide.into();
+            assert_eq!(automatic_checkpoints(&a),expected,"{wide}");
+        }
     }
     #[test]
     fn ordinary_four_pieces_and_exact_endpoints() {

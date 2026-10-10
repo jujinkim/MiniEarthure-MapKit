@@ -25,6 +25,20 @@ Dedicated loops, halfpipes and the compact overpass use 400cm; authored pipe bor
 support 200/300/400/600cm. Generated pipes choose 200/300/400cm. Internal
 profiles remain catalogue-owned.
 
+Five driving presets have a fixed 1200cm body and 1200cm default entry/exit:
+`straight_extra_wide` (8m long), `gentle90_extra_wide` and
+`gentle90_extra_wide_left` (90°, centreline radius 48m),
+`right90_extra_wide` and `right90_extra_wide_left` (90°, radius 8m).
+Their supported body widths are `[1200]`; ports remain independently editable
+from 200 to 1200cm. They reuse the corresponding ordinary preset geometry,
+terrain policy, checkpoint classification, walls, collision and attachments.
+The catalogue's default preview also starts with 12m ports.
+
+Generation first draws the existing driving shape and width. A 12m result for
+one of these five shapes then uses its extra-wide ID, without another random
+draw or a change to difficulty/category weights. Occurrences remain optional;
+disabling driving excludes these presets. Existing saved IDs are not rewritten.
+
 For width w in metres, gentle 45°/90° radius is max(16,4w), right-angle 90° radius
 max(4,w/2+2), and sharp 135°/180° radius max(3,w/2+1). Width transitions use the
 largest supported cross-section when choosing bend radius. Helices offer
@@ -104,6 +118,18 @@ Focused regressions cover all widths, helices, full rotations/portals, vertical
 curve frames, category combinations/durations, cancellation, composed branches,
 source/action tampering, save roundtrip, draft export and retained memory.
 Detailed consumer editing and driving remain user acceptance.
+
+Extra-wide scoped Rust checks pass dimensions/fixed-body rejection, mirrored
+turns, arbitrary Euler placement, extreme port tapers, unchanged terrain and
+checkpoint/fence semantics, 45 surface/wall seam cases, and a connected five-preset
+package export/reload. Per-difficulty 100,000-draw checks retain the exact original
+shape/width draws and RNG state while reaching all five IDs. Seed17 circuit/sprint
+routes at all three difficulties remain deterministic and within duration,
+piece/sample limits; two seed42 gimmick-only routes exclude extra-wide pieces.
+Cancellation/invalid-request regression and the CLI/Godot native builds pass on
+macOS arm64. The package fixture uses separated approaches to respect existing
+non-neighbour road clearance; no clearance rule is relaxed. All formats stay v1,
+and source/catalogue fingerprints invalidate disposable generated caches.
 
 Automated delivery: 49 relevant Rust tests across core geometry/authoring, package,
 schema and memory accounting passed on macOS arm64; the category matrix covers

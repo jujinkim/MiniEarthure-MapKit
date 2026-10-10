@@ -268,6 +268,14 @@ fn road_width(rng: &mut u64, id: &str, difficulty: usize) -> u32 {
     let weights: Vec<_> = widths.iter().map(|w| WIDTH_WEIGHTS[difficulty][WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
     widths[weighted_index(rng, &weights)]
 }
+fn driving_piece(rng: &mut u64, difficulty: usize) -> (&'static str, u32) {
+    let id = driving_choice(rng, difficulty);
+    let width = road_width(rng, id, difficulty);
+    let preset = if width == 1200 {
+        EXTRA_WIDE_PRESETS.iter().find(|(_, base)| *base == id).map_or(id, |(wide, _)| *wide)
+    } else { id };
+    (preset, width)
+}
 fn special_width(rng: &mut u64, id: &str) -> u32 {
     // One uniform draw at every difficulty; manual 6m bores remain available.
     let widths = if id.starts_with("cylinder") { &[200, 300, 400] } else { supported_widths(id) };
@@ -348,9 +356,8 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         let mut added = false;
         for _ in 0..12 {
             let choice = choices[next(&mut rng) as usize % choices.len()];
-            let id = if choice == "driving" { driving_choice(&mut rng, difficulty) } else { choice };
-            let w = if choice == "driving" { road_width(&mut rng, id, difficulty) }
-                else { special_width(&mut rng, id) };
+            let (id, w) = if choice == "driving" { driving_piece(&mut rng, difficulty) }
+                else { (choice, special_width(&mut rng, choice)) };
             if add_block(&mut pieces, id, w) {
                 added = true;
                 break;
@@ -456,22 +463,30 @@ mod tests {
         let mut widths = vec![];
         for difficulty in 0..3 {
             let mut rng = 42;
+            let mut previous_rng = rng;
+            let mut wide_seen = std::collections::BTreeSet::new();
             let mut family_counts = [0u32; 10];
             let mut variant_counts = std::collections::BTreeMap::new();
             let mut width_counts = [0u32; 5];
             let mut score = 0u64;
             let mut width_sum = 0u64;
             for _ in 0..100_000 {
-                let id = driving_choice(&mut rng, difficulty);
+                let previous_id = driving_choice(&mut previous_rng, difficulty);
+                let previous_width = road_width(&mut previous_rng, previous_id, difficulty);
+                let (preset, width) = driving_piece(&mut rng, difficulty);
+                let id = base_preset(preset);
+                assert_eq!((id, width, rng), (previous_id, previous_width, previous_rng), "same geometry/width draws and RNG consumption");
+                if preset != id { wide_seen.insert(preset); assert_eq!(width, 1200); }
+                else { assert!(width != 1200 || !EXTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id)); }
                 let family = DRIVING_FAMILIES.iter().position(|v| v.contains(&id)).unwrap();
                 family_counts[family] += 1;
                 *variant_counts.entry(id).or_insert(0u32) += 1;
                 score += family as u64;
-                let width = road_width(&mut rng, id, difficulty);
-                assert!(supported_widths(id).contains(&width));
+                assert!(supported_widths(preset).contains(&width));
                 width_counts[WIDTHS.iter().position(|w| *w == width).unwrap()] += 1;
                 width_sum += u64::from(width);
             }
+            assert_eq!(wide_seen, EXTRA_WIDE_PRESETS.iter().map(|(wide, _)| *wide).collect());
             for (i, count) in family_counts.iter().enumerate() {
                 assert!(count.abs_diff(FAMILY_WEIGHTS[difficulty][i]*1000) < 700, "family {difficulty}/{i}: {count}");
                 if FAMILY_WEIGHTS[difficulty][i] == 0 { assert_eq!(*count, 0); }
@@ -500,7 +515,7 @@ mod tests {
                 assert!(a.pieces.iter().all(|p| category(&p.id)=="driving"));
                 assert!(a.pieces.len() <= MAX_PIECES);
                 assert!(a.pieces.iter().map(|p|p.path.len()).sum::<usize>() <= MAX_SAMPLES);
-                complexity[index] += a.pieces.iter().filter_map(|p|DRIVING_FAMILIES.iter().position(|v|v.contains(&p.id.as_str()))).sum::<usize>();
+                complexity[index] += a.pieces.iter().filter_map(|p|DRIVING_FAMILIES.iter().position(|v|v.contains(&base_preset(&p.id)))).sum::<usize>();
             }
         }
         eprintln!("difficulty route complexity: {complexity:?}");
