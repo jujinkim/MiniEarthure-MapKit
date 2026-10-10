@@ -272,3 +272,31 @@ fn bounded_cell_admission_reuses_snapshot_without_mutating_or_caching_old_geomet
         roof:"flat".into(),entrances:vec![] });
     assert!(s.validate_cells(&cells).is_err(), "later edits must be validated again");
 }
+
+#[test]
+fn changed_terrain_save_validates_every_batch_and_preserves_samples() {
+    let mut s = snapshot();
+    s.document.bounds.max = [17 * 3200, 16 * 3200];
+    s.document.nodes = serde_json::from_value(serde_json::json!([
+        {"id":"a","position":[400,0,1000],"level":0},
+        {"id":"b","position":[2400,0,1000],"level":0}
+    ])).unwrap();
+    s.document.roads = serde_json::from_value(serde_json::json!([
+        {"id":"r","from":"a","to":"b","points":[[400,0,1000],[2400,0,1000]],
+         "widths_cm":[200],"surfaces":["asphalt"],"kind":"ground","clearance_cm":null,"sidewalk_cm":null}
+    ])).unwrap();
+    for y in 0..16 { for x in 0..17 { s.set_sample([x*16+8,y*16+8],1).unwrap(); } }
+    assert_eq!(s.modified.len(),272);
+    let before = s.composed_document();
+    let modified = s.modified.clone();
+    let (document, files) = s.materialize().unwrap();
+    assert_eq!(document.heightmaps.len(),272);
+    assert_eq!(s.composed_document(),before);
+    assert_eq!(s.modified,modified);
+    for h in &document.heightmaps {
+        let decoded = mapkit_package::decode_heightmap(h,document.cell_size_cm,&files[&h.path]).unwrap();
+        assert_eq!(decoded.heights_cm,s.grid(h.cell).unwrap().heights_cm);
+    }
+    s.modified.insert(Cell{x:17,y:0});
+    assert!(s.validate_changed_geometry().is_err(), "an invalid cell in the later batch cannot be skipped");
+}

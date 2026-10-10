@@ -36,6 +36,10 @@ cells), validates memory/resource seams, and generates every cell with the norma
 no presentation arrays or persistent validation result are retained. Later edits
 must create a new preparation, and resource identities are rechecked at completion.
 This changes no package shape or generator semantics.
+Materializing edited terrain uses these bounded batches for every modified cell
+instead of preparing the entire document again per cell. Larger edited sets use
+successive batches, retaining all geometry, cancellation and resource checks.
+The272-cell save regression verifies both batches and exact terrain samples.
 
 `mapkit_package::working::WorkingSnapshot` owns copy-on-write height arrays and a
 bounded `Resources` provider (memory bytes or confined project paths). The Godot

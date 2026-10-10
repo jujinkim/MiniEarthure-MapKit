@@ -508,8 +508,9 @@ impl WorkingSnapshot {
         if self.document.roads.is_empty() && self.document.assembled_track.is_none() {
             return Ok(());
         }
-        for cell in self.modified.clone() {
-            self.generate(cell, false)?;
+        let cells: Vec<_> = self.modified.iter().copied().collect();
+        for batch in cells.chunks(256) {
+            self.validate_cells(batch)?;
         }
         Ok(())
     }
