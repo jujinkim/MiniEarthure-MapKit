@@ -39,7 +39,9 @@ impl MapDocument {
             nodes.entry(&r.from).or_default().push((r, true));
             nodes.entry(&r.to).or_default().push((r, false));
         }
-        let (_, edges) = plan(self, bounds)?;
+        let edges = if self.roads.iter().any(|r| r.markings.as_ref().is_some_and(|m| m.edge_lines)) {
+            plan(self, bounds)?.1
+        } else { Vec::new() };
         for edge in edges {
             if edge.road.markings.as_ref().is_some_and(|m| m.edge_lines)
                 && hit(&[edge.a, edge.b], bounds, 20)

@@ -95,6 +95,8 @@ Surface generation also omits unused ground boundary walls from its plan; the
 independent sidewalk plan keeps them. Structural walls and safety post stationing
 are identical to the complete plan. Dense bend regressions compare every retained
 road face with independent per-road plans without raising the local workspace cap.
+Safety cost estimation uses that same surface plan; unmarked imports skip the
+unused exterior paint plan as well.
 Direct courtyard predicates are compared with the triangulated solid, including
 wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
 Dense terrain arrangements split into spatial quarters only when their local

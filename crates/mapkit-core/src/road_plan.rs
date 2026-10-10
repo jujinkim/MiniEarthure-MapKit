@@ -256,6 +256,9 @@ mod index_tests {
         let mut actual: Vec<_> = patches.iter().map(|p| (p.v, p.road.id.clone())).collect();
         let mut expected = expected; expected.sort(); actual.sort();
         assert_eq!(actual, expected);
+        // Unmarked imports require neither exterior paint nor ground walls for
+        // safety cost estimation; these consumers must not rebuild a full plan.
+        assert!(d.road_paint(&bounds).unwrap().edges.is_empty());
     }
 }
 

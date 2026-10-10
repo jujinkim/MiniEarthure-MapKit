@@ -153,7 +153,9 @@ pub(crate) fn estimate_validated(
     }
     // The shared exterior plan gives bounded safety counts, including arcs and
     // posts whose centers lie outside this cell. No memory/cell caps change.
-    let (_, edges) = crate::road_plan::plan(d, &area)?;
+    let edges = if d.roads.iter().any(|r| matches!(r.kind, RoadKind::Elevated | RoadKind::Bridge)) {
+        crate::road_plan::surface_plan(d, &area)?.1
+    } else { Vec::new() };
     for edge in edges {
         if matches!(edge.road.kind, RoadKind::Elevated | RoadKind::Bridge)
             && crate::road_plan::hit(&[edge.a, edge.b], &area, crate::road_safety::OUTSET_CM) {
