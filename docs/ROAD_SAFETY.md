@@ -24,6 +24,11 @@ band. Genuine disconnected regions or holes remain errors. Polygon self-intersec
 are contextual errors, never silent sharp-corner fallback. Authored centerline
 self-crossings at the same level also report the road and intersection location.
 
+Nearly retraced ground approaches can round to the same mouth cross-section.
+Their shared terminal cap is included before the same union and rounding stages,
+so both approaches remain represented by a nonzero surface. Bridge/tunnel mouths
+still require explicitly separated approaches.
+
 The sidewalk ring is built from the shared exterior and unioned before terrain
 subdivision, avoiding walls inside touching sidewalk patches. Road paint uses
 the same fillet operation and exterior edges. Centerline radius includes half
@@ -57,6 +62,17 @@ bounded paint uniforms. The existing cell/memory caps are unchanged. Post querie
 clip the station range before iteration. Cancellation checkpoints and local
 plan/paint budgets reject work rather than permitting unbounded tessellation.
 
+Whole-document placement validation prepares a transient road bounds/endpoint
+index once. Each footprint query retains complete incident endpoint stars, global
+node degrees and maximum widths, and source order before using the shared plan.
+One local plan serves every nearby road. Courtyard collision compares corridor
+polygons with the building's outer and inner rings directly; it does not rebuild
+the whole road network or retriangulate a building per road/triangle. Exact
+contact rules and the existing 4 million work limit remain authoritative.
+Building edges are also indexed once. First-vertex containment plus exact
+candidate boundary intersections replaces repeated all-vertex containment and
+all-edge-pair scans; courtyard walls still count as solid contacts.
+
 ## Verification and artifacts
 
 Focused core suites cover geometry, graph/order determinism, placement, occupancy,
@@ -67,6 +83,11 @@ manual overlap. Package/region tests preserve cache, dependency, budget and
 partition behavior. The native `godot/tests/road_safety_validator.gd` fixture
 checks packed presentation, metal rendering, convex contact and non-recovery;
 `MAPKIT_ROAD_CAPTURE` optionally writes a fixed-view image.
+
+Focused city regressions compare indexed and full plans, including remote widest
+roads, endpoint stars, designed approaches, input reversal and 6,000 sparse roads.
+Direct courtyard predicates are compared with the triangulated solid, including
+wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
 
 Golden vectors bind the current generated geometry and archive contract;
 independent permutation, coverage and archive tests remain active. See

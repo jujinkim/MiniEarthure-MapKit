@@ -410,3 +410,15 @@ fn acute_ground_approach_unions_and_quantized_tangencies_remain_simple() {
         );
     }
 }
+
+#[test]
+fn narrow_ground_retrace_generates_a_supported_terminal_surface() {
+    let mut d = source(RoadKind::Ground, vec![[4650, 0, 4910], [5000, 0, 5000], [4201, 0, 4796]]);
+    d.roads[0].widths_cm = vec![20; 2];
+    d.roads[0].sidewalk_cm = Some(0);
+    d.roads[0].markings = None;
+    for position_cm in [[5000, 5000], [4700, 4923], [4300, 4821]] {
+        let c = generated(&d, d.cell_at(position_cm).unwrap());
+        assert!(c.chunk.spawn(&SpawnRequest { position_cm, surface_id: "road".into() }).is_ok(), "missing road at {position_cm:?}");
+    }
+}

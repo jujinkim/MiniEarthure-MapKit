@@ -62,16 +62,165 @@ pub(crate) fn hit(v: &[Vertex], b: &Bounds, margin: i64) -> bool {
     })
 }
 
+fn node_widths(d: &MapDocument) -> BTreeMap<&str, (usize, u32)> {
+    let mut nodes = BTreeMap::<&str, (usize, u32)>::new();
+    for road in &d.roads {
+        for id in [&road.from, &road.to] {
+            let entry = nodes.entry(id).or_default();
+            entry.0 += 1;
+            entry.1 = entry.1.max(*road.widths_cm.iter().max().unwrap());
+        }
+    }
+    nodes
+}
+
+/// One transient index per immutable validation, not one whole-city plan per
+/// building/road pair. Complete endpoint stars and global width influence are
+/// retained, including approaches outside the queried bounds.
+pub(crate) struct PlanIndex<'a> {
+    document: &'a MapDocument,
+    bounds: crate::bounds_index::BoundsIndex,
+    incident: BTreeMap<&'a str, Vec<usize>>,
+    nodes: BTreeMap<&'a str, (usize, u32)>,
+    margin: i64,
+}
+
+impl<'a> PlanIndex<'a> {
+    pub fn new(document: &'a MapDocument) -> Result<Self> {
+        let margin = influence_margin(document);
+        let mut incident = BTreeMap::<&str, Vec<usize>>::new();
+        let mut areas = Vec::with_capacity(document.roads.len());
+        for (i, road) in document.roads.iter().enumerate() {
+            crate::cancellation::checkpoint()?;
+            for id in [&road.from, &road.to] { incident.entry(id).or_default().push(i); }
+            areas.push(Bounds {
+                min: std::array::from_fn(|a| road.points.iter().map(|p| p[a*2]).min().unwrap()-margin),
+                max: std::array::from_fn(|a| road.points.iter().map(|p| p[a*2]).max().unwrap()+margin),
+            });
+        }
+        Ok(Self { document, bounds: crate::bounds_index::BoundsIndex::new(&areas),
+            incident, nodes: node_widths(document), margin })
+    }
+
+    pub fn plan(&self, bounds: &Bounds, work: &mut usize) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+        let mut selected = BTreeSet::new();
+        for index in self.bounds.query(bounds, work)? {
+            let road = &self.document.roads[index];
+            if !hit(&road.points, bounds, self.margin) { continue; }
+            selected.insert(index);
+            for id in [&road.from, &road.to] {
+                selected.extend(self.incident[id.as_str()].iter().copied());
+            }
+        }
+        let roads: Vec<_> = selected.into_iter().map(|i| &self.document.roads[i]).collect();
+        plan_selected(&roads, &self.nodes, bounds, self.margin)
+    }
+}
+
+#[cfg(test)]
+mod index_tests {
+    use super::*;
+
+    fn fixture(designed: bool) -> MapDocument {
+        let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+        let template = d.roads[0].clone();
+        d.roads.clear();
+        for (i, (from, to, points, width)) in [
+            ("a", "b", vec![[0, 0, 0], [1000, 0, 120], [5000, 0, 0]], 600),
+            ("b", "c", vec![[5000, 0, 0], [7000, 0, 2500]], 900),
+            ("b", "e", vec![[5000, 0, 0], [7000, 0, -2500]], 400),
+            // The widest road is far outside every local query. Its global
+            // influence still affects the existing junction planning rules.
+            ("far-a", "far-b", vec![[100000, 0, 100000], [104000, 0, 100000]], 2400),
+        ].into_iter().enumerate() {
+            let mut r = template.clone();
+            r.id = format!("r{i}"); r.from = from.into(); r.to = to.into();
+            r.kind = RoadKind::Ground; r.design = None; r.sidewalk_cm = Some(0);
+            r.points = points;
+            r.widths_cm = vec![width; r.points.len() - 1];
+            r.surfaces = vec![Surface::Asphalt; r.points.len() - 1];
+            if designed {
+                let design = crate::road_design::from_points(&r.points).unwrap();
+                crate::road_design::compile(&mut r, design, width).unwrap();
+            }
+            d.roads.push(r);
+        }
+        d
+    }
+
+    fn assert_same(d: &MapDocument, area: Bounds) {
+        let index = PlanIndex::new(d).unwrap();
+        let (full_patches, full_edges) = plan(d, &area).unwrap();
+        let (local_patches, local_edges) = index.plan(&area, &mut 0).unwrap();
+        let patches = |v: Vec<Patch>| v.into_iter().map(|p|
+            (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
+        let edges = |v: Vec<Edge>| v.into_iter().map(|e|
+            (e.a, e.b, e.station_cm.to_bits(), e.road.id.clone())).collect::<Vec<_>>();
+        assert_eq!(patches(full_patches), patches(local_patches));
+        assert_eq!(edges(full_edges), edges(local_edges));
+    }
+
+    #[test]
+    fn indexed_plan_keeps_complete_junctions_global_widths_and_design_approaches() {
+        for designed in [false, true] {
+            let mut d = fixture(designed);
+            for reverse in [false, true] {
+                if reverse { d.roads.reverse(); }
+                for x in (-3000..9000).step_by(500) {
+                    assert_same(&d, Bounds { min: [x, -120], max: [x + 90, 180] });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sparse_city_index_keeps_exact_geometry_and_bounded_query_work() {
+        let mut d = fixture(false);
+        for i in 0..6000 {
+            let mut r = d.roads[0].clone();
+            let x = 200000 + i * 10000;
+            r.id = format!("remote-{i}"); r.from = format!("s{i}"); r.to = format!("t{i}");
+            r.points = vec![[x, 0, x], [x + 1000, 0, x]];
+            r.widths_cm = vec![600]; r.surfaces = vec![Surface::Asphalt];
+            d.roads.push(r);
+        }
+        let area = Bounds { min: [100, -200], max: [500, 200] };
+        assert_same(&d, area.clone());
+        let index = PlanIndex::new(&d).unwrap();
+        let mut work = 0;
+        index.plan(&area, &mut work).unwrap();
+        assert!(work < 100, "spatial traversal should skip distant roads: {work}");
+        assert_same(&d, Bounds { min: [-100000; 2], max: [-90000; 2] });
+    }
+
+    #[test]
+    fn rounded_ground_retrace_preserves_both_approaches_and_a_real_cap() {
+        let mut d = fixture(false);
+        d.roads.truncate(1);
+        d.roads[0].points = vec![[-350, 0, -90], [0, 0, 0], [-799, 0, -204]];
+        d.roads[0].widths_cm = vec![20; 2];
+        d.roads[0].surfaces = vec![Surface::Asphalt; 2];
+        let area = Bounds { min: [-1000; 2], max: [1000; 2] };
+        let (patches, edges) = plan(&d, &area).unwrap();
+        assert!(!patches.is_empty() && !edges.is_empty());
+        assert!(patches.iter().all(|p| orient(p.v[0], p.v[1], p.v[2]) != 0));
+        assert!(patches.iter().flat_map(|p| p.v).any(|p| p[0] > 0));
+        assert_same(&d, area);
+    }
+}
+
 pub(crate) fn plan<'a>(
     d: &'a MapDocument,
     bounds: &Bounds,
 ) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+    let roads: Vec<_> = d.roads.iter().collect();
+    plan_selected(&roads, &node_widths(d), bounds, influence_margin(d))
+}
+
+fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bounds: &Bounds, margin: i64)
+    -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let mut groups: BTreeMap<Key, Vec<Arm>> = BTreeMap::new();
-    let mut nodes=BTreeMap::<&str,(usize,u32)>::new();
-    for r in &d.roads {for id in [&r.from,&r.to] {
-        let entry=nodes.entry(id).or_default();entry.0+=1;entry.1=entry.1.max(*r.widths_cm.iter().max().unwrap());
-    }}
-    let chains:BTreeMap<_,Vec<_>>=d.roads.iter().map(|r| {
+    let chains:BTreeMap<_,Vec<_>>=roads.iter().map(|r| {
         let mut distances=vec![0.0];
         for pair in r.points.windows(2){distances.push(distances.last().unwrap()+length(pair[0],pair[1]));}
         let total=*distances.last().unwrap();
@@ -82,9 +231,8 @@ pub(crate) fn plan<'a>(
     // Include complete endpoint junctions when a corridor touches this cell.
     let mut relevant = BTreeSet::new();
     let mut local_segments = 0;
-    let margin = influence_margin(d);
     let width = |r: &Road, i: usize| r.widths_cm[i] as f64;
-    for r in &d.roads {
+    for r in roads {
         for indices in chains[r.id.as_str()].windows(2) {
             let s=[r.points[indices[0]],r.points[indices[1]]];
             if hit(&s, bounds, margin) {
@@ -98,7 +246,7 @@ pub(crate) fn plan<'a>(
         }
     }
     let mut arm_count = 0;
-    for r in &d.roads {
+    for r in roads {
         for indices in chains[r.id.as_str()].windows(2) {
             let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
             for end in 0..2 {
@@ -174,6 +322,33 @@ pub(crate) fn plan<'a>(
             ring.extend(mouth);
         }
         if arms.len() > 1 {
+            // Nearly retraced ground approaches can have identical rounded
+            // mouths. Their hull has no depth, although the physical corridor
+            // has a real terminal cap at the shared node. Include that cap
+            // before the ordinary union/fillet path, preserving both arms.
+            if arms.iter().all(|a| a.road.kind == RoadKind::Ground) {
+                let first = &arms[0];
+                let len = length(first.point, first.other);
+                let direction = [
+                    (first.other[0] - first.point[0]) as f64 / len,
+                    (first.other[2] - first.point[2]) as f64 / len,
+                ];
+                let retraced = arms.iter().all(|a| {
+                    let length = length(a.point, a.other);
+                    let dot = ((a.other[0] - a.point[0]) as f64 * direction[0]
+                        + (a.other[2] - a.point[2]) as f64 * direction[1]) / length;
+                    dot > 0.9999
+                });
+                if retraced {
+                    for side in [-1.0, 1.0] {
+                        ring.push([
+                            first.point[0] + libm::round(-direction[0] * radius - direction[1] * radius * side) as i64,
+                            first.point[1],
+                            first.point[2] + libm::round(-direction[1] * radius + direction[0] * radius * side) as i64,
+                        ]);
+                    }
+                }
+            }
             let ring = hull(ring);
             // Coincident horizontal mouth corners have one shared height even
             // when the incoming grades differ. Preserve the authored node and
@@ -231,7 +406,7 @@ pub(crate) fn plan<'a>(
                     .position(|arm| {
                         original[&(arm.road.id.as_str(), arm.segment, arm.end)].contains(&a)
                     })
-                    .unwrap();
+                    .unwrap_or(0); // A retraced cap belongs to the first source arm.
                 corners.push(Corner {
                     p: a,
                     owner,
@@ -411,7 +586,7 @@ pub(crate) fn plan<'a>(
             return Err(error("E_BUDGET", "road local junction limit"));
         }
     }
-    for r in &d.roads {
+    for r in roads {
         for indices in chains[r.id.as_str()].windows(2) {
             let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
             if !hit(&s, bounds, margin) {
