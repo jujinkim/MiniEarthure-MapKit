@@ -13,20 +13,12 @@ publication boundary; analytic frames, occupied solids, vertex positions and
 shared seam edges are unchanged. The build fingerprint invalidates generated
 caches; source maps and assembly layout fingerprints remain unchanged.
 
-The reversed track fronts previously relied on backface collision for support:
-Jolt/CCD could shorten actual travel while reported velocity stayed normal and
-excite vertical rocking. `track_winding` checks top/bottom orientation, exact
-shared join vertices and closed wall orientation. Runtime's `vehicle_seam_validator`
-uses actual generated straight/practice joins with both directions, RC sedan and
-monster truck against an identical-material plane. Current driving counts, expanded internal-boundary coverage and
-platform limits belong to Runtime's vehicle physics document; these geometry
-checks do not establish a Windows driving fix.
+`track_winding` checks top/bottom orientation, shared join vertices and closed
+walls. Runtime's seam tests check actual generated geometry against a same-material
+plane; geometry audits alone do not establish a Windows driving fix.
 
 The compact `overpass` lower road uses analytic quarter-circle tangents and lane
-edges, transformed before centimetre quantization. Differencing rounded 15 cm
-centre chords previously reversed short inner edges and folded overlapping road
-triangles; correcting only face winding did not remove the vehicle bounce.
-The corrected ribbon is shared by road, walls, collision and occupancy. Its
+edges, transformed before centimetre quantization. The ribbon is shared by road, walls, collision and occupancy. Its
 263 lower-road stations, 65 shortcut stations, action/checkpoint indices, ports,
 width and shortcut height are preserved. Empty-control `free_curve` and
 `flight_curve` defaults also keep their straight exit tangent instead of
@@ -76,14 +68,12 @@ normal; closed end caps remain present. The acceleration panel is on the final
 straight approach, after the lateral entry transition. There is no extra overlap
 or added runway. The upper arc distributes its longitudinal advance with radius
 `r*(1.1 + 0.6*cos(t) + 0.3*cos(2*t))`: the minimum is 0.65r and the crown is
-0.8r, replacing the former 0.4r crown. Height remains 2r and the external ports
+0.8r. Height remains 2r and the external ports
 remain identical. Eight special-track tests verify ports, manifold orientation,
 quantized upper curvature,
 occupancy and bounded normals; all ten wall units pass. Ordinary curve wall
 reductions remain 40–44% (the short vertical spiral remains the 29% exception).
-The loop needs 3,208 wall triangles instead of the earlier 3,400;
-this is a geometry count, not a measured processing-time improvement.
-
+The loop has 3,208 wall triangles; this is a geometry count, not a runtime-cost measurement.
 
 ## Generation and catalogue
 
@@ -141,7 +131,6 @@ External imports are unchanged. Current own formats remain v1, with the updated
 required schema and source/catalogue/build fingerprints; no original files are
 converted or overwritten.
 
-
 Focused verification: six grounding unit tests cover actual slab/shell extrema,
 flat/graded/high endpoints, helices, pipes, loops, branches and plaza, 20cm caps,
 partial intrusion/110cm boundaries, combined obstructions, rejected placement,
@@ -151,7 +140,6 @@ retained-memory and source-budget regressions passed. Schema regeneration and
 Draft 7 validation passed without a format increment. Native Godot binding,
 shared venue rendering and consumer contact/authoring checks passed. Detailed
 application driving/editing and platform acceptance remain user verification.
-
 
 ## Saved-package verification
 
@@ -166,8 +154,6 @@ current-source equality; load never edits a file.
 macOS Rust checks: 22 package contract tests include stale-fingerprint/interior
 geometry acceptance, corruption and invalid reference rejection. The 15 assembly
 package cases and compiler reuse tests cover export equality and cancellation.
-
-
 
 ## Analytic surface sampling
 
@@ -191,9 +177,7 @@ Scoped automated results: assembled geometry units (all widths, grades, frames,
 spacing, deterministic edges), five wall units (closed seams and thickness),
 five special-track units, eight authoring units excluding the unrelated category
 combination matrix, all twelve assembled-package units and native/CLI build pass.
-Two implementation failures were corrected: vertical endpoint side vectors and
-loop-crown miter noise under adaptive sampling. Detailed driving is a user check.
-
+Vertical endpoint and loop-crown cases are included. Detailed driving is a user check.
 
 ## Difficulty-weighted routes
 
@@ -216,11 +200,9 @@ category exclusion and bounded geometry. Aggregate route-family complexity is
 roundtrip/tamper rejection, cancellation/invalid requests and native/CLI build pass.
 Detailed driving remains user verification.
 
-
 ## Quantized wall occupancy
 
-The former eight-vertex wall proxy could contain repeated vertices, nonplanar
-faces or concave corners while claiming to be convex. Walls now emit deterministic
+Walls emit deterministic
 outward tetrahedra. Canonical quad diagonals handle concave corners, shared section
 diagonals remain stable, and exact i128 determinants remove only zero-volume
 parts. Repeated quantized vertices and duplicate tetrahedra are deduplicated.
@@ -246,7 +228,6 @@ failure. Seed 7, 60-second one-way start cell (0,0) contains 6,802 solids, inclu
 6,195 convexes; every convex passes strict validation. Branch composition and the
 existing difficulty distribution are retained. Native bridge and CLI builds pass.
 Detailed application driving and platform acceptance remain user checks.
-
 
 ## Continuous unjoined straight-road clearance
 

@@ -1,7 +1,6 @@
 # Current map contract
 
-The user-approved 2026-09-26 arcade/water decision replaces the earlier reader-v2
-policy. All current own formats and protocols, including `.memap`, are version 1.
+All current own formats and protocols, including `.memap`, are version 1.
 Readers accept exactly 1, with no historical loader or automatic converter.
 Original files remain preserved; active packages are
 exported anew from authored source. Build fingerprints invalidate disposable
@@ -107,7 +106,6 @@ The renderer's update_environment accepts `immediate` to apply road wetness/snow
 without blending at a race boundary. It consumes resolved state and never advances
 simulation time; precipitation animation remains live.
 
-
 Authored placement validation uses the convex hull of the complete transformed
 collision footprint, rather than its axis-aligned bounding rectangle. Placement
 contact remains forbidden. Bridge/elevated corridors admit a support only when
@@ -123,7 +121,6 @@ allocation and checks the existing validation peak before inflation. Godot expos
 uses the already validated immutable package, retains every original payload and
 requires a new destination directory. Failed opens clear prior native state.
 These APIs do not introduce another format or a migration path.
-
 
 ### Immutable source preparation and menu preview
 
@@ -183,7 +180,7 @@ continuous `rotate`, `boost` or `launch`. Motion stores period/phase millisecond
 world-space displacement/impulse, rotation axis and per-vehicle cooldown. No
 executable user scripts are accepted. See [the reusable library](../examples/driving-library/README.md).
 
-The 2026-09-26 extension adds target speed, launch height and directional air-ring
+Driving structures include target speed, launch height and directional air-ring
 effects, plus parametric loop/cylinder tracks with separate inner/shell roles.
 Tracks replace ordinary convex parts with a bounded shared mesh; all other
 definitions retain the 32-part cap. See [special driving](../docs/SPECIAL_DRIVING.md)
@@ -265,7 +262,6 @@ course tests passed locally. Consumer driving acceptance is separate.
 
 The sprint finish candidate is an explicit path sample in the terminal entry; if it overlaps an earlier gate, stable first-wins removal makes that earlier effective gate the finish. AI and progression use the same effective course. Focused `finish_plaza_and_editable_free_roam_keep_exact_source_validation` and Runtime `assembled_track_validator` verify the source/route boundary.
 
-
 ## Category generation and authored track graphs
 
 [TRACK_AUTHORING.md](../docs/TRACK_AUTHORING.md) is the current track definition.
@@ -277,7 +273,6 @@ are distinct verification modes. Disconnected drafts save as projects but cannot
 export execution packages; manual courses retain player completion requirements.
 The document schema, generator and catalogue fingerprints change within v1.
 
-
 ## Grounded seed support policy
 
 Current v1 requires `Assembly.supports` and `Source.grounded_supports`.
@@ -287,7 +282,6 @@ source reconstruction, hash, cell costs and memory accounting. Generated
 sources retain this policy when converted to manual authoring. Independent
 manual sources and external imports do not enable it automatically.
 
-
 ## Independent grind contract
 
 Current v1 includes explicit `grind_lines` source, endpoint connections and
@@ -296,13 +290,12 @@ refinement. See [the current line contract](../docs/TRACK_AUTHORING.md#independe
 `E_GRIND_SOURCE`, `E_GRIND_CONNECTION` and `E_GRIND_BUDGET` reject malformed
 geometry, unresolved endpoints and excessive interaction work respectively.
 
-
 Current v1 permits `manual_flight` approach/landing declarations and bounded
 explicit static `Source.structures`. See the [manual airborne link
-contract](../docs/TRACK_AUTHORING.md#manual-airborne-links-and-static-authored-structures-2026-10-01).
+contract](../docs/TRACK_AUTHORING.md#manual-airborne-links-and-static-authored-structures).
 No automatic action or player completion proof is implied.
 
-2026-10-05 pipe minimum replacement: cylinder/swept-cylinder radius is at least
+Cylinder/swept-cylinder radius is at least
 100cm (2m bore); assembled sizes are 200/300/400/600cm. Generated pipes uniformly
 select 200/300/400cm, with the same one RNG draw at all difficulties. Tube ports
 are at least 200cm; road/loop/halfpipe domains are unchanged. The catalogue exposes

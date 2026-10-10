@@ -19,6 +19,8 @@ of game transport, physics, progress and release acceptance.
 - Portable frozen input/archive vectors had a known expectation mismatch in the
   2026-10-05 check; compared output matched the prior revision. Other determinism
   checks passed. Investigate the fixture contract before changing expectations.
+- `scripts/check_architecture.py` flags `std::thread` in the test-only cancellation
+  module. This known audit issue is separate from production ownership.
 - Native Windows/Android parity, detailed application driving, hardware rendering
   and representative large-map performance remain user/consumer verification.
 

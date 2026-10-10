@@ -28,7 +28,7 @@ profiles remain catalogue-owned.
 For width w in metres, gentle 45°/90° radius is max(16,4w), right-angle 90° radius
 max(4,w/2+2), and sharp 135°/180° radius max(3,w/2+1). Width transitions use the
 largest supported cross-section when choosing bend radius. Helices offer
-90°/180°/360°, either direction and up/down; radius max(8,w/2+2), rises 2/4/8m,
+90°/180°/360°, either direction and up/down; radius max(8,w/2+7), rises 2/4/8m,
 and eased entry/exit grades. Frames, road surfaces, wall meshes, occupancy,
 overview and AI path derive from the same quantized samples.
 
@@ -110,7 +110,6 @@ schema and memory accounting passed on macOS arm64; the category matrix covers
 42 mode/target/category combinations at seed 42. CLI and Godot extension builds
 passed. Current-source consumer binding checks are recorded by the integration root.
 
-
 ## Compiler and preview preparation
 
 Interactive consumers can prepare source edits and preview data in an isolated
@@ -138,23 +137,12 @@ and changes selection materials without recompiling. Object owner metadata group
 roads, attached actions and obstacles for consumer drag ghosts; floor/supports
 are separate final-commit geometry. The worker cancellation token is optional.
 
-Scoped macOS arm64 / Godot 4.7.2 validation: native build, one new compiler-cache
-unit test, eight completed track-authoring tests and package tests
-`authored_source_roundtrip_draft_export_and_tampering`,
-`finish_plaza_and_editable_free_roam_keep_exact_source_validation`, and
-`source_mode_and_course_progress_remain_distinct` passed. The long 42-case
-category/duration matrix was deliberately stopped, so this is not a full suite
-pass. Initial unfiltered test discovery also found an unrelated existing
-`tests/water.rs:22` initializer missing `contact_class` and `snow_retention_percent`;
-it is outside this patch and remains a known unrelated test compilation failure.
-Native logs retain the actual scope.
-
-MapEditor verifies fresh/reused preview equivalence, zero whole-preview/mesh builds
-for selection and existing-piece drag, async history/save/recovery and cancellation.
-Its public [editing report](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md)
-records measurements and the 49-piece seed-derived 500 ms commit target miss.
-Detailed interactive/platform acceptance remains user verification.
-
+Scoped macOS arm64/Godot 4.7.2 native, compiler-cache, authored-track and package
+roundtrip/tampering/cancellation checks passed. MapEditor checks preview reuse,
+selection/drag without whole-preview rebuilds and async document ownership.
+Its [editing performance document](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md)
+owns the unresolved 49-piece 500 ms completion target. Full category matrices and
+detailed interaction/device acceptance are not implied by these scoped checks.
 
 ## Piece-local wall preparation
 
@@ -172,24 +160,12 @@ segment checks. Generation workspace now reserves the plane capacity (including
 skipped triangles), interval/sort scratch and prepared edge/offset arrays. No
 budget limit or validation requirement is relaxed; all own formats remain v1.
 
-Scoped macOS arm64 validation: 20 core library tests (walls, junctions, grounding,
-compiler-cache equivalence/tamper/cancellation), ten `track_authoring` tests
-(excluding duration/category searches), five affected package tests and optimized
-debug CLI/Godot native builds pass. The new pre-change golden covers 40 synthetic
-shape/orientation/neighbor combinations and **115,902** ordered surface/solid
-records, SHA256 `1a847ea6ef087f15ebb75dd7d72d225874bede0851b4ad4c8664c7ff3b8b617b`.
-It matches exactly after preparation. Added allocation-capacity and cancellation
-regressions pass, as do existing curved/tapered/grade-separated joins, loops,
-branch walls, support caps/clearance, occupancy and generation budgets.
-
-The affected package cases are `generated_walls_have_no_reverse_coplanar_duplicates`,
-`cancellation_and_invalid_requests`, `venue_floor_is_collision_only_and_budgeted`,
-`authored_source_roundtrip_draft_export_and_tampering` and
-`manual_flight_and_static_shapes_survive_both_containers`. No full suite, category
-matrix or platform acceptance was run. Consumer timing and native-load results
-are in the public [Editor report](https://github.com/jujinkim/MiniEarthure-MapEditor/blob/main/docs/TRACK_EDIT_PERFORMANCE.md).
-Build fingerprints invalidate compiled caches. Valid saved packages remain readable;
-authoring/export verifies current source equality.
+Scoped wall/grounding/compiler-cache, track-authoring and package checks passed
+ordered geometry equivalence, allocation-capacity bounds, cancellation, curved/
+tapered/grade-separated joins, loops, branch walls, supports and occupancy.
+The frozen 40-shape regression covers 115,902 ordered surface/solid records.
+Build fingerprints invalidate compiled caches; saved packages remain readable.
+Consumer timing is owned by the Editor performance document linked above.
 
 ## Independent grind lines and RC attachments
 
@@ -222,11 +198,9 @@ the resulting common triangles; outside and grade-separated walls remain.
 
 Focused checks: four `mapkit-core` grind tests, package grind roundtrip, schema
 contract, the 12 assembled-track unit tests, authored source regressions and
-indexed ownership/hash tests. The earlier frame-orthogonality regression was
-fixed and the affected width/helix test passed. Full application driving and
+indexed ownership/hash tests. The width/helix frame-orthogonality regression passed. Full application driving and
 platform acceptance remain user verification. All own versions remain 1;
 source/schema fingerprints invalidate disposable caches, never user artifacts.
-
 
 ## Manual airborne links and static authored structures
 
@@ -289,10 +263,8 @@ indeterminate and reduced-motion display; consumers translate stage labels.
 
 Validation: four Rust cancellation/progress units, generated-request cancellation,
 written-byte/source-preservation unit, native/CLI build and isolated Godot
-`work_progress_validator` pass. An initial unfiltered test invocation exposed the
-existing unrelated `tests/water.rs` Triangle initializer missing contact fields;
-focused units use `--lib` or an explicit integration target. Detailed consumer
-interaction remains user verification; consumer wiring is delivered separately.
+`work_progress_validator` pass. Detailed consumer interaction remains user
+verification; consumer UI wiring is documented by its owning application.
 
 ## Automatic checkpoint spacing
 
@@ -313,7 +285,6 @@ authoring preview output. Geometry reports completed pieces; the common ring
 also exposes stage keys for consumer localization. Editor's worker test observed
 unknown search, counted work and preview stages before adoption. Client progress
 filter units and Editor preview adoption pass with the current native build.
-
 
 ## Continuous draft preview
 
@@ -378,17 +349,15 @@ so future fitter edits invalidate compiled assembly products as well as cell
 cache fingerprints. Preserved packages must be recompiled by their authoring
 workflow; this is not a loader fallback.
 
-
-## Air ring defaults 09
+## Air ring defaults
 
 Automatic and manual action rings now have a 3m opening and strength100.
 Square rim thickness, action height and placement are unchanged; explicit standalone
-source values are preserved. [Contract and scoped results](SPECIAL_DRIVING.md#air-ring-defaults-09).
-
+source values are preserved. [Contract and scoped results](SPECIAL_DRIVING.md#air-ring-defaults).
 
 ## Pipe minimum
 
-This replaces the 2026-10-04 1m bore option: minimum radius 1m/bore 2m applies to
+Minimum radius 1m/bore 2m applies to
 new generation and authored cylinders, swept cylinders and their portals. Manual
 bores are 2/3/4/6m, automatic bores are uniform 2/3/4m. Standalone 2.5m/16m defaults,
 wide presets, internal open sections, portal grade and road ranges stay intact.
@@ -419,5 +388,4 @@ construction and Runtime progress metadata before the64-gate limit is checked.
 Raw authoring arrays remain unchanged. The original seed42/gimmick/sprint120s
 and seed1/all-category/sprint60s conditions both generate, validate and round-trip.
 Four checkpoint-selection tests, three course-geometry tests and17 assembled
-package tests pass. The earlier72-raw-gates budget refusal is resolved for its
-recorded case without increasing any limit.
+package tests pass. Effective-gate admission respects the unchanged limit.

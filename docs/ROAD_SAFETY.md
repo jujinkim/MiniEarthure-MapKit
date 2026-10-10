@@ -1,6 +1,6 @@
 # Rounded streets and automatic deck safety
 
-Current v1 generation decision, 2026-09-26. Source coordinates, road/node IDs,
+Source coordinates, road/node IDs,
 width settings and the 12cm curb height remain authored as before. `.memap`
 all own format/generated/recipe/scene versions remain 1. The source build
 fingerprint invalidates disposable caches; there is no legacy generator branch.
@@ -68,15 +68,9 @@ partition behavior. The native `godot/tests/road_safety_validator.gd` fixture
 checks packed presentation, metal rendering, convex contact and non-recovery;
 `MAPKIT_ROAD_CAPTURE` optionally writes a fixed-view image.
 
-The 2026-09-26 golden vectors intentionally replace the old generated geometry:
-all seven fixture input hashes and instance hashes stay unchanged, while rounded
-roads, curbs and guard solids change triangle/collision/archive hashes and some
-surface probes. This is an approved current-algorithm change, not a new format
-or permission to reuse old completion evidence. See [DETERMINISM](../spec/DETERMINISM.md).
-The independent permutation, geometric coverage and archive tests remain active.
-The old golden also predates `0cb0062`'s existing gimmick archive trailer: otherwise
-unchanged cells gain exactly six bytes (u32 length + `[]`). The archive encoder is
-unchanged by this work; these stale expectations are explicitly synchronized.
+Golden vectors bind the current generated geometry and archive contract;
+independent permutation, coverage and archive tests remain active. See
+[determinism](../spec/DETERMINISM.md) for current vector status and comparison rules.
 
 `road_safety_probe` checks affected cells and authored starts in public synthetic
 regional examples. `reseal_courses` copies definitions onto a new map identity

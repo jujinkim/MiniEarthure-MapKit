@@ -1,8 +1,6 @@
 # Shared world materials and display quality
 
-The 2026-10-02 implementation (root §44.262) replaces the previous eight 256px
-luminance/roughness/height/AO tiles and single water shader. All current formats
-remain v1. Original MIT library assets use metre UVs, framed panes, foundations,
+All current formats remain v1. Original MIT library assets use metre UVs, framed panes, foundations,
 eaves, signs, groves and faceted rocks. Containers now have corrugations and door
 hardware; lamps have a cap and base, with corresponding collision proxies.
 Built-in fences/trunks/lights use wood/metal detail and the canopy uses a bounded

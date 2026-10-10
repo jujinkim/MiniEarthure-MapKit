@@ -1,5 +1,7 @@
 # MiniEarthure MapKit
 
+[Documentation index](docs/README.md) — choose a feature before reading implementation details.
+
 Independent public MIT map contracts, deterministic generation, package I/O and
 shared Godot rendering. No private game dependency is required. All own formats
 are current v1; original files are never converted automatically.
@@ -43,7 +45,6 @@ See [format specification](spec/FORMAT.md), generated JSON Schemas in `spec/`, a
 [test cases](crates/mapkit-package/tests/package_contract.rs). API exports use
 explicit typed boundaries; JSON is restricted to adapters. No CI/CD is included.
 
-
 ## Contracts and ownership
 
 - [Current domain](spec/CURRENT_V1.md), [container](spec/FORMAT.md),
@@ -53,7 +54,7 @@ explicit typed boundaries; JSON is restricted to adapters. No CI/CD is included.
 - [Prepared generation](docs/PREPARED_GENERATION.md),
   [renderer resource ownership](RENDER_MEMORY.md),
   [distant rendering](docs/DISTANT_RENDERING.md) and [world assets](spec/WORLD_ASSETS.md).
-- [Road geometry](docs/ROAD_CONTACT.md), [contact](docs/ROAD_CONTACT.md),
+- [Road safety](docs/ROAD_SAFETY.md), [contact](docs/ROAD_CONTACT.md),
   [special driving](docs/SPECIAL_DRIVING.md), [water](docs/WATER.md),
   [environment](docs/ENVIRONMENT.md), [vegetation](VEGETATION.md).
 - [Determinism](spec/DETERMINISM.md), [limitations](LIMITATIONS.md) and

@@ -71,7 +71,7 @@ All formats stay v1. The assembly source fingerprint changes with its generated
 default colour; active generated packages are refreshed with the 08 delivery
 while preserving original artifacts.
 
-## Air ring defaults 09
+## Air ring defaults
 
 New automatic track rings, manual air-ring actions and the standalone template
 use a 150cm inner radius (3m opening) and 100% target speed. The square track
