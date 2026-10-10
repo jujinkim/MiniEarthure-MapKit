@@ -292,7 +292,8 @@ mod tests {
         }
         // Synthetic ordered geometry, renewed for shared road sections and
         // final-vertex diagonals, canonical ports and curvature-continuous loop
-        // feet. Includes IDs, materials and spawn eligibility.
+        // feet and analytic overpass ribbons. Includes IDs, materials and spawn
+        // eligibility; ribbon corrections also change wall clipping/convexes.
         let mut transcript=Transcript::default();
         for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","loop","overpass","finish_plaza","cylinder"] {
             for rotation in [[0,0,0],[12000,35000,7000]] {
@@ -312,8 +313,8 @@ mod tests {
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
         println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
-        assert_eq!(transcript.0.len(),92034);
-        assert_eq!(digest,"6cf878fe1ffe61d31da21c885e611aafd698a1f801ef268c4dabf50f4abf5700");
+        assert_eq!(transcript.0.len(),90620);
+        assert_eq!(digest,"704f8e52a95fa305bfc15972a67e1646665fe5b6896ce2f9301b7e56ee841f13");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }

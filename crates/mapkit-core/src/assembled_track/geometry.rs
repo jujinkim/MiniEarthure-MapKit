@@ -230,6 +230,46 @@ pub(super) fn ramp(length:f64,rise:f64,width:u32,entry:u32,exit:u32)->Vec<Sample
     analytical(|t|([0.0,rise*spiral_rise(t),length*t],[0.0,rise*spiral_pitch(t),length]),
         &[0.0,0.125,0.875,1.0],width,entry,exit,"drive")
 }
+
+/// Preserve the compact overpass's authored stations (including checkpoint and
+/// action indices), but never infer its tangent from rounded 15cm chords. That
+/// noise used to reverse 1cm inner edges and fold triangles across the road.
+pub(super) fn overpass_path(rotation: [i32; 3], origin: Vertex) -> Vec<Sample> {
+    let mut path = Vec::with_capacity(263);
+    let normal = rotate_float([0.0, 1.0, 0.0], rotation);
+    let mut push = |position: [f64; 3], forward: [f64; 3]| {
+        let side = rotate_float([forward[2], 0.0, -forward[0]], rotation);
+        let position = rotate_float(position, rotation);
+        let position = std::array::from_fn::<_, 3, _>(|j| position[j] + origin[j] as f64);
+        let mut s = sample(position.map(round), rotate_float(forward, rotation), WIDTH as u32, "drift");
+        s.normal = unit(normal);
+        s.ribbon_cm = Some([-1.0, 1.0].map(|sign| std::array::from_fn(|j|
+            round(position[j] + side[j] * WIDTH as f64 * 0.5 * sign))));
+        path.push(s);
+    };
+    // Keep the original straight stations, including their integer division.
+    for i in 0..=3 { push([0.0, 0.0, (400 * i / 3) as f64], [0.0, 0.0, 1.0]); }
+    let mut corner = [0, 0, 400];
+    let mut heading = 0u8;
+    for sign in [-1, 1, 1, -1, 1, -1, -1, 1] {
+        let rotate = |mut v: [f64; 3]| {
+            for _ in 0..heading { v = [v[2], v[1], -v[0]]; }
+            v
+        };
+        for i in 1..=32 {
+            let angle = i as f64 / 32.0 * std::f64::consts::FRAC_PI_2;
+            let (sin, cos) = (libm::sin(angle), libm::cos(angle));
+            let local = rotate([sign as f64 * 300.0 * (1.0 - cos), 0.0, 300.0 * sin]);
+            push(std::array::from_fn(|j| corner[j] as f64 + local[j]),
+                rotate([sign as f64 * sin, 0.0, cos]));
+        }
+        corner = add(corner, super::rotate([sign * 300, 0, 300], heading));
+        heading = (i64::from(heading) + sign).rem_euclid(4) as u8;
+    }
+    for i in 1..=3 { push([0.0, 0.0, (2800 + 400 * i / 3) as f64], [0.0, 0.0, 1.0]); }
+    path
+}
+
 fn pipe_path(id: &str, width: u32) -> Vec<Sample> {
     let mode=if id=="banked_chicane" {"halfpipe"} else {"cylinder"};
     let mut origin=[0.0;3];let mut yaw:f64=0.0;let mut path=vec![];

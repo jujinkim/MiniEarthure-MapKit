@@ -821,11 +821,9 @@ fn build_local_piece(original_id: &str) -> Piece {
             }
         }
         "overpass" => {
-            line(&mut p, [0, 0, 0], [0, 0, 400], "drift");
-            for sign in [-1, 1, 1, -1, 1, -1, -1, 1] {
-                bend(&mut p, 300, 0, 1, sign, "drift");
-            }
-            line(&mut p, [0, 0, 2800], [0, 0, SLOT], "drift");
+            // Its narrow inner bends need the unrounded centre and tangent.
+            // Build the complete ribbon below instead of differencing these
+            // centimetre centres and amplifying their rounding across the lane.
         }
         "roller_waves" => {
             for i in 0..=128 {
@@ -887,7 +885,6 @@ fn build_local_piece(original_id: &str) -> Piece {
             v[0] = -round(80.0 * libm::sin(std::f64::consts::PI * v[2] as f64 / 1600.0).powi(2));
         }
     }
-    let len = p.windows(2).map(|v| distance(v[0].0, v[1].0)).sum::<u64>();
     let mut path = p
         .iter()
         .enumerate()
@@ -913,12 +910,12 @@ fn build_local_piece(original_id: &str) -> Piece {
                     [0, 0, -1_000_000]
                 } else if id == "curve"
                     || id == "sharp_curve"
-                    || (id.contains("curve") && !id.contains("left"))
+                    || (id.starts_with("curve") && !id.contains("left"))
                 {
                     [1_000_000, 0, 0]
                 } else if id == "curve_left"
                     || id == "sharp_curve_left"
-                    || (id.contains("curve") && id.contains("left"))
+                    || (id.starts_with("curve") && id.contains("left"))
                 {
                     [-1_000_000, 0, 0]
                 } else {
@@ -974,6 +971,10 @@ fn build_local_piece(original_id: &str) -> Piece {
             }
         })
         .collect::<Vec<_>>();
+    if id == "overpass" {
+        path = geometry::overpass_path([0; 3], [0; 3]);
+    }
+    let len = path.windows(2).map(|v| distance(v[0].position_cm, v[1].position_cm)).sum::<u64>();
     if narrow {
         let total = path
             .windows(2)
@@ -1204,6 +1205,8 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
         // Transform the analytic centre and edges before the one centimetre
         // quantization, instead of rotating already-rounded local coordinates.
         out.path=geometry::spiral_path(p,p.rotation_mdeg,p.origin_cm);
+    } else if p.id == "overpass" {
+        out.path=geometry::overpass_path(p.rotation_mdeg,p.origin_cm);
     }
     // Connected pieces share an integer port centre and frame. Rotating an
     // already-quantized ribbon vertex separately rounds its centre twice and

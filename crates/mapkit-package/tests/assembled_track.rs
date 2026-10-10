@@ -4,6 +4,38 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn overpass_ribbons_and_course_references_survive_roundtrip() {
+    let mut source = authoring::Source::empty();
+    source.settings.circuit = false;
+    let mut ids = vec![];
+    for (i, preset) in ["straight", "straight", "straight", "overpass", "straight", "straight", "finish_plaza"].iter().enumerate() {
+        let id = format!("piece-{i}");
+        let mut instance = authoring::instance(&id, preset, 400);
+        if let Some(previous) = source.instances.last() {
+            instance = authoring::snap(&instance, previous).unwrap();
+            source.connections.push(authoring::Connection { from: previous.id.clone(), to: id.clone() });
+        }
+        source.instances.push(instance);
+        ids.push(id);
+    }
+    source.paths.push(authoring::Path { id: "base".into(), pieces: ids.clone() });
+    source.checkpoints = vec![
+        authoring::Checkpoint { piece: ids[2].clone(), sample: 0 },
+        authoring::Checkpoint { piece: ids[6].clone(), sample: 2 },
+    ];
+    let document = package::compile_source(&source).unwrap();
+    assert!(document.assembled_track.as_ref().unwrap().issues.is_empty());
+    let before = mapkit_core::assembled_preview(&document).unwrap();
+    let reopened = read_bytes(&pack_bytes(document.clone(), BTreeMap::new()).unwrap()).unwrap();
+    assert_eq!(reopened.document.assembled_track, document.assembled_track);
+    assert_eq!(reopened.document.courses, document.courses);
+    assert_eq!(mapkit_core::assembled_preview(&reopened.document).unwrap().triangles, before.triangles);
+    let overpass = &reopened.document.assembled_track.as_ref().unwrap().pieces[3];
+    assert_eq!((overpass.path.len(), overpass.alternate_path.len()), (263, 65));
+    package::verify(&reopened.document, &reopened.inspection.world_content_hash, &reopened.document.courses[0]).unwrap();
+}
+
+#[test]
 fn air_ring_action_and_explicit_dimensions_roundtrip() {
     let mut source=authoring::shortcut_source();
     source.actions.push(authoring::Action {id:"ring".into(),kind:"air_ring".into(),piece:source.instances[0].id.clone(),sample:4,height_cm:370,panel_width_percent:50,panel_alignment:authoring::PanelAlignment::Center,landing:None});

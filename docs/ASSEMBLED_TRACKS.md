@@ -18,10 +18,30 @@ Jolt/CCD could shorten actual travel while reported velocity stayed normal and
 excite vertical rocking. `track_winding` checks top/bottom orientation, exact
 shared join vertices and closed wall orientation. Runtime's `vehicle_seam_validator`
 uses actual generated straight/practice joins with both directions, RC sedan and
-monster truck against an identical-material plane. The three Rust `track_winding`
-tests pass. Current driving counts, expanded internal-boundary coverage and
+monster truck against an identical-material plane. Current driving counts, expanded internal-boundary coverage and
 platform limits belong to Runtime's vehicle physics document; these geometry
 checks do not establish a Windows driving fix.
+
+The compact `overpass` lower road uses analytic quarter-circle tangents and lane
+edges, transformed before centimetre quantization. Differencing rounded 15 cm
+centre chords previously reversed short inner edges and folded overlapping road
+triangles; correcting only face winding did not remove the vehicle bounce.
+The corrected ribbon is shared by road, walls, collision and occupancy. Its
+263 lower-road stations, 65 shortcut stations, action/checkpoint indices, ports,
+width and shortcut height are preserved. Empty-control `free_curve` and
+`flight_curve` defaults also keep their straight exit tangent instead of
+inheriting an ordinary 90-degree curve endpoint.
+
+All seven `track_winding` tests pass on macOS: catalogue road orientation across
+972 preset/width/rotation conditions, lower-road edge progression and triangle
+overlap, preserved stations/ports and free/flight-curve endpoint frames. Package
+roundtrip checks preserve the generated ribbons and course references. Runtime
+checks the actual lower road with both cars at 60/120Hz; results belong to its
+vehicle physics document. This fix applies to newly generated or recompiled
+geometry. Loading or sharing a saved `.memap` preserves its stored interior
+geometry. Export alone does not regenerate it, and normal export can require
+explicit source recompilation: regenerate/recompile first, then export to a new
+file to receive the correction. Original packages are never rewritten on load.
 
 Snapped pieces rebuild their first/last ribbon from the final integer centre and
 frame, avoiding a second rounding of already rounded local edges. Geometry
