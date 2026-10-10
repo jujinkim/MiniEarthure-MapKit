@@ -347,6 +347,14 @@ fn ground_tile_part(
         }
         Err(e) => return Err(e),
     };
+    // Centroid classification needs only patches whose integer bounds contain
+    // the centroid. Preserve source priority by the index's ordered results.
+    // Tripled coordinates keep the original exact (unrounded) triangle centre.
+    tick(work, nearby.len().saturating_mul(nearby.len().max(1).ilog2() as usize + 1))?;
+    let patch_index = crate::bounds_index::BoundsIndex::new(&nearby.iter().map(|p|
+        crate::bounds_index::bounds(&p.v.map(|v| [v[0]*3,v[2]*3]))).collect::<Vec<_>>());
+    let fitted: Vec<_> = nearby.iter().filter(|p| p.road.design.as_ref()
+        .is_some_and(|d|d.terrain_policy==crate::road_design::TerrainPolicy::AutoFit)).collect();
     let height = |p: Point| {
         let t = if (p[0] - v[0][0]) * (v[2][2] - v[0][2])
             >= (p[1] - v[0][2]) * (v[2][0] - v[0][0])
@@ -355,8 +363,7 @@ fn ground_tile_part(
         } else {
             terrain[1]
         };
-        if let Some(patch) = nearby.iter().find(|patch| patch.road.design.as_ref().is_some_and(|d|d.terrain_policy==crate::road_design::TerrainPolicy::AutoFit)
-            && point_in_polygon(p,&patch.v.map(xy))) {
+        if let Some(patch) = fitted.iter().find(|patch| point_in_polygon(p,&patch.v.map(xy))) {
             return designed_plane(&patch.v,[p[0],0,p[1]]);
         }
         let terrain=on_plane(&t,[p[0],0,p[1]]);
@@ -384,7 +391,8 @@ fn ground_tile_part(
             let mut selected = Some((Surface::Grass, "terrain"));
             let mut road = false;
             let mut designed = None;
-            for patch in &nearby {
+            for index in patch_index.query(&Bounds { min: center, max: center }, work)? {
+                let patch = nearby[index];
                 tick(work, 1)?;
                 if !point_in_polygon(center, &patch.v.map(|p| [p[0] * 3, p[2] * 3])) {
                     continue;

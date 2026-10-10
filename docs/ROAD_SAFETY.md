@@ -97,6 +97,10 @@ are identical to the complete plan. Dense bend regressions compare every retaine
 road face with independent per-road plans without raising the local workspace cap.
 Safety cost estimation uses that same surface plan; unmarked imports skip the
 unused exterior paint plan as well.
+Terrain face classification queries an ordered spatial index of road triangles
+using exact tripled integer centroids. Surface precedence and terrain fitting are
+unchanged; only nearby candidates consume exact containment checks. Roads without
+terrain fitting also avoid rescanning unrelated design records for every vertex.
 Direct courtyard predicates are compared with the triangulated solid, including
 wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
 Dense terrain arrangements split into spatial quarters only when their local
