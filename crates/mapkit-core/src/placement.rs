@@ -752,9 +752,15 @@ fn vegetation(
         if !overlaps(&area, &b.bounds) || zone.density_per_mille == 0 {
             continue;
         }
+        // Eligibility requires the complete tree footprint to stay in its zone.
+        // Clip the visited lattice to that envelope, retaining the one-spacing
+        // halo for forest jitter. Global lattice coordinates/order and seam
+        // competitors are unchanged; empty cell area consumes no candidate work.
+        let min: Point = std::array::from_fn(|a| area.min[a].max(b.bounds.min[a]));
+        let max: Point = std::array::from_fn(|a| area.max[a].min(b.bounds.max[a]));
         let mut count = 0;
-        for y in b.bounds.min[1].div_euclid(s) - 1..=b.bounds.max[1].div_euclid(s) + 1 {
-            for x in b.bounds.min[0].div_euclid(s) - 1..=b.bounds.max[0].div_euclid(s) + 1 {
+        for y in min[1].div_euclid(s) - 1..=max[1].div_euclid(s) + 1 {
+            for x in min[0].div_euclid(s) - 1..=max[0].div_euclid(s) + 1 {
                 count += 1;
                 tick(work, 1)?;
                 if count > 300_000 {

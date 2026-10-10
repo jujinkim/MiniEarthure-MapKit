@@ -189,6 +189,31 @@ fn full_vegetation_footprint_spacing_boundary_ownership_and_order() {
     }
 }
 #[test]
+fn small_scaled_zone_keeps_global_candidates_in_a_large_cell() {
+    for offset in [0, -12800] {
+        let mut d = document();
+        d.nodes.clear(); d.roads.clear(); d.buildings.clear();
+        d.placements.clear(); d.repetitions.clear();
+        d.zones.truncate(1);
+        d.bounds = Bounds { min: [offset, offset], max: [offset + 51200, offset + 51200] };
+        let zone = &mut d.zones[0];
+        zone.kind = ZoneKind::Forest;
+        zone.polygon = vec![[3000 + offset,3000 + offset], [7000 + offset,3000 + offset],
+            [7000 + offset,7000 + offset], [3000 + offset,7000 + offset]];
+        zone.exclusions.clear();
+        zone.spacing_cm = 75; // 6 m source spacing at 1:8.
+        zone.density_per_mille = 700;
+        d.cell_size_cm = 12800;
+        let expected = generated(&d, Cell {x:0, y:0}).chunk.objects;
+        assert!(!expected.is_empty());
+        d.cell_size_cm = 51200;
+        let actual = generated(&d, Cell {x:0, y:0}).chunk.objects;
+        assert_eq!(actual, expected, "same global seed, positions and ownership across empty cell area");
+        let cost = estimate_generation(&d, Cell {x:0,y:0}, 500_000).unwrap();
+        assert!(cost.objects >= actual.len() as u64);
+    }
+}
+#[test]
 fn seam_tree_has_one_complete_trunk_and_repetitions_have_unique_stable_ids() {
     let mut d = document();
     d.zones.truncate(1);

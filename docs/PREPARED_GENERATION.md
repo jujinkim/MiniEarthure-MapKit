@@ -5,6 +5,9 @@ immutable `PreparedMap`. Authored proxy footprints, accepted repetitions and the
 complete occupied sequence retain normalized source order. A deterministic bounds
 index limits cell emission; separate road/building/occupied indices accelerate
 vegetation eligibility while retaining exact predicates and cross-cell competitors.
+Vegetation visits the cell/zone envelope intersection with its lattice halo, so a
+small 1:8 zone does not scan the empty remainder of a large cell. Global candidate
+seeds, ordering, jitter, eligibility, thinning and all work/output limits remain.
 An anchor is included in placement bounds even when its collision proxy is offset.
 Asset and heightmap descriptor lookups have immutable indices. No complete map
 geometry or quality-reduced substitute is cached.
@@ -31,3 +34,7 @@ Validation: affected core placement/occupancy/road/cost/zone and archive regress
 prepared/raw boundary parity, independent tokens and controlled running-worker
 cancellation; package indexed closure/input defense/contract tests. Existing v1
 format numbers and generated geometry/hash ordering are unchanged.
+The envelope optimization passes placement10/spatial4/zone-assets4/obstacles1/
+cost6 checks and the four behavioral determinism checks. All 28 current vector
+cells are byte-identical to pre-optimization `ffe7768`; the separate stale frozen
+vector failure is recorded in [DETERMINISM](../spec/DETERMINISM.md).

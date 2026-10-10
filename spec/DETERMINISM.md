@@ -12,10 +12,10 @@ invalidate caches without changing format numbers or adding old decoders.
 
 ## Reproducible vectors and checks
 
-`determinism-vectors.json` freezes 13 original synthetic fixtures / 52 cells:
+`determinism-vectors.json` records 7 original synthetic fixtures / 28 cells:
 the public map examples, signed/offset placement with maximum exact JSON
-seed, four negative-height partial terrain variants and four oblique sloped bridge
-variants. Each records input identity (including decoded grid values), generated,
+seed, current-v1 negative-height partial terrain and an oblique sloped bridge.
+Each records input identity (including decoded grid values), generated,
 triangle, object, occupied-sidecar and archive digests, counts and integer surface
 probe positions/normals. Sidecar JSON is test-only; it creates no public wire format.
 The audit archive key uses the complete vector-input digest in the world-hash slot.
@@ -65,8 +65,12 @@ trajectory determinism, renderer pixel identity or sustained frame/memory target
 
 ## Current vector check
 
-All five reproducibility checks pass. The minimal fixture's stale input/archive
-expectations were corrected against the unchanged pre-sharing CLI output:
-sharing preserves that fixture's exact bytes and driving hash. This expectation
-correction does not change the fixture, generator or saved maps, and does not
-establish native cross-platform parity.
+The four behavioral reproducibility checks pass. The frozen-vector equality
+check currently fails: current input identities/archives and some road triangle/
+surface-probe fields differ from the committed vectors. All object and occupancy
+digests still match. This also reproduces at `ffe7768`, before the vegetation
+envelope optimization; complete current vectors before/after that optimization
+are byte-identical (SHA-256 `34fea3e4a97016703346a3f5ac7843ef99187772c240fac363021095ae6d1b6d`).
+The baseline has not been silently replaced. Reconcile the earlier road/source
+contract changes with the frozen expectations separately; this is not a passing
+golden check or native cross-platform acceptance.
