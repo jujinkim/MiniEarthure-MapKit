@@ -216,6 +216,7 @@ fn widest_road(d: &MapDocument) -> Option<usize> {
 /// Clone metadata without allocating a transient copy of world geometry.
 pub fn source_metadata(d: &MapDocument) -> MapDocument {
     MapDocument {
+        pois: d.pois.clone(),
         surface_attachments:d.surface_attachments.clone(),
         free_roam: d.free_roam,
         assembled_track: d.assembled_track.clone(),

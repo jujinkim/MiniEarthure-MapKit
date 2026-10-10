@@ -25,6 +25,7 @@ pub struct OverviewSource<'a> {
 }
 #[derive(Debug, Serialize)]
 pub struct MapOverview<'a> {
+    pub pois: Vec<&'a poi::PointOfInterest>,
     pub version: u32,
     pub map_id: &'a str,
     pub bounds: &'a Bounds,
@@ -63,17 +64,17 @@ impl MapOverview<'_> {
         Ok(OverviewCost {
             json_bytes: count.0,
             points_3d: self.roads.iter().map(|r| r.points.len() as u64).sum(),
-            points_2d: self
+            points_2d: self.pois.len() as u64 + self
                 .buildings
                 .iter()
                 .map(|b| (b.footprint.len() + b.holes.iter().map(Vec::len).sum::<usize>()) as u64)
-                .sum(),
-            records: (self.roads.len()
+                .sum::<u64>(),
+            records: (self.pois.len() + self.roads.len()
                 + self.buildings.len()
                 + self.attributions.len()
                 + self.buildings.iter().map(|b| b.holes.len()).sum::<usize>())
                 as u64,
-            text_bytes: self.map_id.len() as u64
+            text_bytes: self.pois.iter().map(|p| (p.id.len() + p.name.len() + p.category.len() + p.source.source.len() + p.source.license.len() + p.source.notice.len()) as u64).sum::<u64>() + self.map_id.len() as u64
                 + self
                     .roads
                     .iter()
@@ -154,6 +155,7 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
     buildings.sort_by_key(|b| b.id);
     attributions.sort_by_key(|a| (a.source, a.license));
     Ok(MapOverview {
+        pois: { let mut pois: Vec<_> = d.pois.iter().collect(); pois.sort_by_key(|p| &p.id); pois },
         version: 1,
         map_id: &d.map_id,
         bounds: &d.bounds,

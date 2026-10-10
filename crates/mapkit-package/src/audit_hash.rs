@@ -16,6 +16,7 @@ use std::{cell::RefCell, cmp::Ordering};
 /// payload digest and final 64-byte result, rather than scaling with JSON bytes.
 pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
     let max_records = [
+        document.pois.len(),
         document.heightmaps.len(),
         document.nodes.len(),
         document.roads.len(),
@@ -122,6 +123,7 @@ macro_rules! by_id {
     )+};
 }
 by_id!(
+    mapkit_core::poi::PointOfInterest,
     RoadNode,
     Road,
     SurfaceArea,
@@ -220,6 +222,7 @@ impl Serialize for Document<'_> {
         fields!(m, d, map_id);
         m.serialize_entry("nodes", &Normalized(&d.nodes, self.1))?;
         m.serialize_entry("placements", &Normalized(&d.placements, self.1))?;
+        if !d.pois.is_empty() { m.serialize_entry("pois", &Normalized(&d.pois, self.1))?; }
         fields!(m, d, recipe_version);
         if !d.repetitions.is_empty() {
             m.serialize_entry("repetitions", &Normalized(&d.repetitions, self.1))?;
@@ -239,6 +242,10 @@ impl Serialize for Document<'_> {
 }
 record!(Bounds, d, m, {
     fields!(m, d, max, min);
+});
+record!(mapkit_core::poi::PointOfInterest, d, m, {
+    fields!(m, d, category, id, name, position);
+    m.serialize_entry("source", &Canonical(&d.source))?;
 });
 record!(Cell, d, m, {
     fields!(m, d, x, y);

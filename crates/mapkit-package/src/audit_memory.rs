@@ -117,6 +117,13 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         ..
     } = document;
     let mut retained = Retained(u64::try_from(size_of::<MapDocument>()).map_err(|_| overflow())?);
+    retained.vector(&document.pois)?;
+    for poi in &document.pois {
+        retained.string(&poi.id)?;
+        retained.string(&poi.name)?;
+        retained.string(&poi.category)?;
+        retained.attribution(&poi.source)?;
+    }
     retained.vector(&document.courses)?;
     for c in &document.courses {
         for text in [
@@ -932,6 +939,7 @@ mod tests {
             .into_keys()
             .collect();
         let expected: BTreeSet<_> = [
+            "pois",
             "map_id",
             "revision",
             "bounds",

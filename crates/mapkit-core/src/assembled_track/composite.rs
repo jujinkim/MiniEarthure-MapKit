@@ -74,7 +74,7 @@ pub fn apply_source(document: &MapDocument, source: &authoring::Source) -> Resul
     align(document,&mut source)?;
     let assembly = authoring::compile(&source)?;
     if !assembly.pieces.is_empty() && next.roads.iter().map(|v|&v.id)
-        .chain(next.buildings.iter().map(|v|&v.id)).chain(next.placements.iter().map(|v|&v.id))
+        .chain(next.buildings.iter().map(|v|&v.id)).chain(next.pois.iter().map(|v|&v.id)).chain(next.placements.iter().map(|v|&v.id))
         .chain(next.surface_areas.iter().map(|v|&v.id)).chain(next.gimmicks.iter().map(|v|&v.id))
         .any(|id|id.starts_with("assembled-")) {
         return Err(error("E_TRACK_OWNERSHIP","an independent object occupies the assembled geometry namespace"));

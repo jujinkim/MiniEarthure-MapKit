@@ -1,5 +1,6 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod water;
+pub mod poi;
 pub mod assembled_track;
 pub mod road_design;
 pub use generation::assembled_preview;
@@ -280,6 +281,10 @@ pub struct Repetition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MapDocument {
+    /// Informational, terrain-relative facilities; never collision geometry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(length(max = 20000))]
+    pub pois: Vec<poi::PointOfInterest>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub surface_attachments: Vec<assembled_track::surface::Attachment>,
     /// Post-finish presentation policy. Required in the current v1 source.
@@ -435,6 +440,7 @@ mod courtyard;
 
 impl MapDocument {
     pub fn normalize(&mut self) {
+        self.pois.sort_by(|a, b| a.id.cmp(&b.id));
         self.water_bodies.sort_by(|a,b| a.id.cmp(&b.id));
         self.grind_lines.sort_by(|a,b|a.id.cmp(&b.id));
         self.gimmicks.sort_by(|a, b| a.id.cmp(&b.id));
@@ -464,6 +470,7 @@ impl MapDocument {
         self.validate_inner(true)
     }
     fn validate_inner(&self, source_topology: bool) -> Result<()> {
+        poi::validate(&self.pois, &self.bounds)?;
         if self.courses.len() > course::MAX_COURSES {
             return Err(error("E_COURSE_LIMIT", "too many map courses"));
         }
@@ -517,7 +524,7 @@ impl MapDocument {
         if !source_topology && self.cell_count()? > 16_384 {
             return Err(error("E_LIMIT", "too many map cells"));
         }
-        let count = self.water_bodies.len() + self.surface_areas.len()
+        let count = self.pois.len() + self.water_bodies.len() + self.surface_areas.len()
             + self.nodes.len()
             + self.roads.len()
             + self.buildings.len()
@@ -567,6 +574,7 @@ impl MapDocument {
             .chain(self.water_bodies.iter().map(|x| &x.id))
             .chain(self.surface_areas.iter().map(|x| &x.id))
             .chain(self.buildings.iter().map(|x| &x.id))
+            .chain(self.pois.iter().map(|x| &x.id))
             .chain(self.zones.iter().map(|x| &x.id))
             .chain(self.assets.iter().map(|x| &x.id))
             .chain(self.placements.iter().map(|x| &x.id))

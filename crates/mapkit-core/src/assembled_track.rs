@@ -1735,6 +1735,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
         }}
     }
     let mut d = MapDocument {
+        pois: vec![],
         free_roam: false,
         surface_attachments: vec![],
         assembled_track: Some(a.clone()),

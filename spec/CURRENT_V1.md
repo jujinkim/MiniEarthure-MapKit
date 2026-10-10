@@ -6,6 +6,28 @@ Original files remain preserved; active packages are
 exported anew from authored source. Build fingerprints invalidate disposable
 geometry caches and world hashes separate changed content.
 
+## Facility points of interest
+
+Optional `MapDocument.pois` contains at most 20,000 informational facilities.
+Each has a unique object `id`, bounded nonempty `name` (256 characters) and
+`category` (128), local-centimetre `[x, y]` `position` inside map bounds, and a
+`source` attribution (source, license, notice). Heights are unspecified: POIs
+create no collision, road connections, spawn authority or inferred buildings.
+Names, category, coordinates and provenance survive source/package/regional
+round trips and participate in canonical document hashing and retained-memory
+accounting. The current format remains v1; no migration reader is added.
+
+Bounded overview output includes facilities. `godot/poi_renderer.gd` shares
+screen-space pins and labels between consumers, suppressing overlapping pins and
+labels and drawing at most 128 visible entries. A consumer's full facility list
+preserves entries hidden by overlap. Source coordinates/accuracy remain in the
+attribution notice; coordinate precision does not imply surveyed accuracy.
+
+Scoped validation covers Korean facility text, invalid coordinates/IDs, package
+and regional round trips, canonical hashes, audit memory, overview byte limits,
+and the shared renderer overlap/culling behavior. Editor/Client import and UI
+acceptance are recorded by their owning applications.
+
 ## In-memory authoring snapshots
 
 `mapkit_package::working::WorkingSnapshot` owns copy-on-write height arrays and a

@@ -115,6 +115,14 @@
         "$ref": "#/definitions/Placement"
       }
     },
+    "pois": {
+      "description": "Informational, terrain-relative facilities; never collision geometry.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/PointOfInterest"
+      },
+      "maxItems": 20000
+    },
     "provenance": {
       "$ref": "#/definitions/Provenance"
     },
@@ -1937,6 +1945,46 @@
         "free",
         "road_snap"
       ]
+    },
+    "PointOfInterest": {
+      "type": "object",
+      "required": [
+        "category",
+        "id",
+        "name",
+        "position",
+        "source"
+      ],
+      "properties": {
+        "category": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 256,
+          "minLength": 1
+        },
+        "position": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "source": {
+          "$ref": "#/definitions/Attribution"
+        }
+      },
+      "additionalProperties": false
     },
     "Provenance": {
       "type": "object",
