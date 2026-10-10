@@ -544,7 +544,7 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
                 }
             }
             for (v, owner) in faces {
-                if orient(v[0], v[1], v[2]) != 0 {
+                if orient(v[0], v[1], v[2]) != 0 && hit(&v, bounds, 0) {
                     let owner = &arms[owner];
                     patches.push(Patch {
                         v,
@@ -596,6 +596,10 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
             let c = mouths[&(r.id.as_str(), i, 1)];
             let v = [a[0], c[1], c[0], a[1]];
             for t in [[v[0], v[1], v[2]], [v[0], v[2], v[3]]] {
+                // These faces were already discarded at the end of planning.
+                // Do not retain invisible/degenerate faces against the local
+                // workspace while complete outside endpoint stars are resolved.
+                if !hit(&t, bounds, 0) || orient(t[0],t[1],t[2]) == 0 { continue; }
                 patches.push(Patch {
                     v: t,
                     road: r,

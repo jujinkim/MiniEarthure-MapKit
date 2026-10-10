@@ -86,6 +86,8 @@ checks packed presentation, metal rendering, convex contact and non-recovery;
 
 Focused city regressions compare indexed and full plans, including remote widest
 roads, endpoint stars, designed approaches, input reversal and 6,000 sparse roads.
+Invisible or degenerate plan faces are discarded before workspace admission,
+using the same predicates as the final plan filter; returned geometry is unchanged.
 Direct courtyard predicates are compared with the triangulated solid, including
 wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
 Dense terrain arrangements split into spatial quarters only when their local
