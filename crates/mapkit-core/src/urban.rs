@@ -63,8 +63,15 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         );
     }
     let mut work = 0;
+    let bounds: Vec<_> = d.surface_areas.iter()
+        .map(|a| crate::bounds_index::bounds(&a.polygon)).collect();
+    tick(&mut work, bounds.len().saturating_mul(bounds.len().max(1).ilog2() as usize + 1))?;
+    let index = crate::bounds_index::BoundsIndex::new(&bounds);
     for (i, a) in triangles.iter().enumerate() {
-        for b in &triangles[..i] {
+        for j in index.query(&bounds[i], &mut work)?.into_iter().filter(|&j| j < i) {
+            if (0..2).any(|axis| bounds[j].max[axis] < bounds[i].min[axis]
+                || bounds[j].min[axis] > bounds[i].max[axis]) { continue; }
+            let b = &triangles[j];
             for ta in a {
                 for tb in b {
                     tick(&mut work, 1)?;

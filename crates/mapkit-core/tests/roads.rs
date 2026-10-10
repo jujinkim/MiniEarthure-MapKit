@@ -422,3 +422,26 @@ fn recipe_nine_partial_cells_keep_exact_domain_edges() {
         assert_eq!(n, if outer { 1 } else { 2 }, "partial edge {a:?}..{b:?}");
     }
 }
+
+#[test]
+fn remote_surface_polygons_do_not_spend_every_terrain_tiles_work_budget() {
+    let mut d = document_recipe(1);
+    d.cell_size_cm = 51200;
+    d.bounds.max = [102400, 51200];
+    d.roads.retain(|r| r.id == "ground-west");
+    d.nodes.retain(|n| ["ground-west-from", "junction"].contains(&n.id.as_str()));
+    d.heightmaps.push(Heightmap { cell: Cell { x: 0, y: 0 }, path: "flat.png".into(),
+        spacing_cm: 1600, offset_cm: 0, step_cm: 1, source_accuracy_cm: None });
+    let grid = HeightGrid { side: 33, heights_cm: vec![0;33*33] };
+    let expected = chunk(&d, Cell { x: 0, y: 0 }, Some(&grid));
+    for i in 0..4096 {
+        let x = 60000 + (i % 64) * 500;
+        let y = (i / 64) * 500;
+        d.surface_areas.push(SurfaceArea {
+            id: format!("remote-{i}"), surface: Surface::Gravel,
+            polygon: vec![[x,y],[x+100,y],[x+100,y+100],[x,y+100]],
+        });
+    }
+    let actual = chunk(&d, Cell { x: 0, y: 0 }, Some(&grid));
+    assert_eq!(actual.triangles, expected.triangles);
+}

@@ -97,6 +97,10 @@ are identical to the complete plan. Dense bend regressions compare every retaine
 road face with independent per-road plans without raising the local workspace cap.
 Safety cost estimation uses that same surface plan; unmarked imports skip the
 unused exterior paint plan as well.
+Terrain tiles query ordered bounds indexes of road patches and surface polygons;
+remote polygons are not rescanned or recharged for each tile. Surface overlap
+validation also rejects distant polygon pairs before its exact triangle tests. Adaptive children
+reuse their parent candidates. Exact hit tests and surface order are preserved.
 Terrain face classification queries an ordered spatial index of road triangles
 using exact tripled integer centroids. Surface precedence and terrain fitting are
 unchanged; only nearby candidates consume exact containment checks. Roads without

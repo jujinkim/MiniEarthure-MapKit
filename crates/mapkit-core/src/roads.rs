@@ -197,9 +197,9 @@ pub(crate) fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
 }
 // The current arrangement cuts each terrain tile once, before assigning surface identities.
 fn ground_tile(
-    d: &MapDocument,
     v: [Vertex; 4],
-    patches: &[Patch],
+    patches: &[&Patch],
+    paint: &[&SurfaceArea],
     track: &[[Vertex;3]],
     b: &mut Builder,
     work: &mut usize,
@@ -211,7 +211,7 @@ fn ground_tile(
     if (0..2).any(|i| bounds.min[i] >= bounds.max[i]) {
         return Ok(());
     }
-    ground_tile_part(d, v, bounds, patches, track, b, work, 0)
+    ground_tile_part(v, bounds, patches, paint, track, b, work, 0)
 }
 
 // Dense city terrain is divided spatially before an arrangement can exceed its
@@ -219,19 +219,19 @@ fn ground_tile(
 // planes; subdivision never bilinearly invents a different slope or elevation.
 #[allow(clippy::too_many_arguments)]
 fn ground_tile_part(
-    d: &MapDocument, v: [Vertex;4], bounds: Bounds, patches: &[Patch],
+    v: [Vertex;4], bounds: Bounds, patches: &[&Patch], paint: &[&SurfaceArea],
     track: &[[Vertex;3]], b: &mut Builder, work: &mut usize, depth: u8,
 ) -> Result<()> {
     tick(
         work,
         patches.len()
-            + d.surface_areas
+            + paint
                 .iter()
                 .map(|a| a.polygon.len())
                 .sum::<usize>(),
     )?;
     let terrain = [[v[0], v[1], v[2]], [v[0], v[2], v[3]]];
-    let nearby: Vec<_> = patches.iter().filter(|p| hit(&p.v, &bounds, 2)).collect();
+    let nearby: Vec<_> = patches.iter().copied().filter(|p| hit(&p.v, &bounds, 2)).collect();
     let nearby_track:Vec<_>=track.iter().filter(|f|hit(&f[..],&bounds,2)
         && f.iter().map(|p|p[1]).min().unwrap()<=v.iter().map(|p|p[1]).max().unwrap()+50
         && f.iter().map(|p|p[1]).max().unwrap()>=v.iter().map(|p|p[1]).min().unwrap()-50).collect();
@@ -315,9 +315,8 @@ fn ground_tile_part(
             }
         }
     }
-    let paint: Vec<_> = d
-        .surface_areas
-        .iter()
+    let paint: Vec<_> = paint
+        .iter().copied()
         .filter(|a| {
             let verts: Vec<_> = a.polygon.iter().map(|p| [p[0], 0, p[1]]).collect();
             hit(&verts, &bounds, 2)
@@ -341,7 +340,7 @@ fn ground_tile_part(
                     min:[if x==0 {bounds.min[0]} else {mid[0]},if y==0 {bounds.min[1]} else {mid[1]}],
                     max:[if x==0 {mid[0]} else {bounds.max[0]},if y==0 {mid[1]} else {bounds.max[1]}],
                 };
-                ground_tile_part(d,v,part,patches,track,b,work,depth+1)?;
+                ground_tile_part(v,part,&nearby,&paint,track,b,work,depth+1)?;
             }}
             return Ok(());
         }
@@ -482,6 +481,16 @@ pub(crate) fn generate(
         [bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing],
         crate::terrain_height(bounds,source_spacing,source_side,grid,d.terrain_base_cm,[bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing]));
     let mut work = 0;
+    // Each terrain tile queries only local geometry. Previously every tile
+    // rescanned all painted polygons in the document, including remote cities.
+    // Ordered index results retain the exact surface precedence and hit tests.
+    let index_items = patches.len() + d.surface_areas.len();
+    tick(&mut work, index_items.saturating_mul(index_items.max(1).ilog2() as usize + 1)
+        + d.surface_areas.iter().map(|a| a.polygon.len()).sum::<usize>())?;
+    let patch_index = crate::bounds_index::BoundsIndex::new(&patches.iter()
+        .map(|p| crate::bounds_index::bounds(&p.v.map(xy))).collect::<Vec<_>>());
+    let paint_index = crate::bounds_index::BoundsIndex::new(&d.surface_areas.iter()
+        .map(|a| crate::bounds_index::bounds(&a.polygon)).collect::<Vec<_>>());
     for y in 0..side - 1 {
         for x in 0..side - 1 {
             let px = bounds.min[0] + x as i64 * spacing;
@@ -493,7 +502,12 @@ pub(crate) fn generate(
                 [px, height(x, y + 1), py + spacing],
             ];
 
-            ground_tile(d, v, &patches, &track, b, &mut work)?;
+            let tile_bounds = Bounds { min: [px - 2, py - 2], max: [px + spacing + 2, py + spacing + 2] };
+            let local_patches: Vec<_> = patch_index.query(&tile_bounds, &mut work)?.into_iter()
+                .map(|i| &patches[i]).collect();
+            let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
+                .map(|i| &d.surface_areas[i]).collect();
+            ground_tile(v, &local_patches, &local_paint, &track, b, &mut work)?;
         }
     }
     for patch in &patches {
