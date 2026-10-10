@@ -149,7 +149,14 @@ The miniature kit and climate ground palette are renderer/source assets; surface
 identities and physical material behavior do not change.
 
 File-backed `read_with_budget(path, allowance)` bounds compressed input before
-allocation and checks the existing validation peak before inflation. Godot exposes
+allocation and checks the validation peak before retaining inflated payloads.
+Cost inspection streams JSON through a64KiB buffer: the first256 encoded bytes
+of each string retain the structural rate, while longer tails reserve four retained
+and eight temporary byte copies. Input buffers, typed nodes, preparation caches,
+geometry and image workspace remain charged. This distinguishes long import
+receipts from JSON tree structure without changing budgets, syntax/hash validation
+or package contents. Incomplete string syntax keeps the conservative rate.
+Godot exposes
 `open_package_budgeted(path, allowance)` and `unpack_source(destination)`. Restore
 uses the already validated immutable package, retains every original payload and
 requires a new destination directory. Failed opens clear prior native state.

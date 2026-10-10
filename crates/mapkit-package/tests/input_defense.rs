@@ -479,3 +479,31 @@ fn bounded_asset_prefix_planning_retains_decode_and_malformed_input_gates() {
         );
     }
 }
+
+#[test]
+fn long_source_receipts_keep_string_costs_and_all_validation_gates() {
+    let baseline = pack_bytes(document(), BTreeMap::new()).unwrap();
+    let baseline_cost = inspect_read_cost(&baseline).unwrap();
+    let mut source = document();
+    let notice = "한글 출처 \\\"structured receipt\\\"\n".repeat(20_000);
+    source.attributions.push(Attribution { source: "Synthetic city source".into(), license: "MIT".into(), notice: notice.clone() });
+    let package = pack_bytes(source, BTreeMap::new()).unwrap();
+    let cost = inspect_read_cost(&package).unwrap();
+    // Two copies appear in document/manifest. Large opaque receipt strings must
+    // not reserve a typed JSON node for every byte, while their storage is paid.
+    let delta = cost.validation_peak_bytes - baseline_cost.validation_peak_bytes;
+    assert!(delta > notice.len() as u64 * 2);
+    // Source-sized track workspace remains conservative even for a long notice.
+    assert!(delta < notice.len() as u64 * 64 + 96 * 1024 * 1024);
+    assert!(cost.retained_memory_bytes - baseline_cost.retained_memory_bytes < notice.len() as u64 * 20);
+    let opened = read_bytes_with_budget(&package, cost.validation_peak_bytes).unwrap();
+    assert!(opened.document.attributions.iter().any(|a| a.source == "Synthetic city source" && a.notice == notice), "complete receipt survives normalized attribution order");
+    assert_eq!(read_bytes_with_budget(&package, cost.validation_peak_bytes - 1).err().unwrap().code, "E_MEMORY_BUDGET");
+    let mut rows = entries(&package);
+    let document = &mut rows.iter_mut().find(|(name, _)| name == "document.json").unwrap().1;
+    let offset = document.windows(9).position(|s| s == b"Synthetic").unwrap();
+    document[offset] = b's';
+    let corrupt = zip_entries(rows);
+    let corrupt_cost = inspect_read_cost(&corrupt).unwrap();
+    assert_eq!(read_bytes_with_budget(&corrupt, corrupt_cost.validation_peak_bytes).err().unwrap().code, "E_HASH");
+}

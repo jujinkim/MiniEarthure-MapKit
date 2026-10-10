@@ -52,7 +52,8 @@ Independent authored road decks and terrain fitting follow CURRENT_V1.
 
 The package limit is 512 MiB, expanded inventory 1 GiB, entry 128 MiB,
 manifest 4 MiB, document 32 MiB and inventory 8,192 files. Decoder/workspace and
-caller memory reservations apply before inflation/allocation, independently of
+caller memory reservations apply before retaining inflated payloads and typed
+allocation, independently of
 these disk limits. Static assets use the bounded GLB/PNG/WebP profiles; code,
 external URLs and executable dependencies are rejected. See [errors](ERRORS.md),
 [assets](WORLD_ASSETS.md) and [memory](../RENDER_MEMORY.md).
@@ -100,3 +101,6 @@ source/no-overwrite preservation, metadata/path/size/hash rejection, cancellatio
 and edited-course admission. The current minimal-fixture golden hashes were
 corrected against the unchanged pre-sharing CLI output. Native Godot/CLI build
 passed on macOS; this does not claim mobile or detailed gameplay acceptance.
+The long-receipt cost refinement separately passes13 input-defense cases, four
+budget/restore checks and two fixed-buffer string/cancellation checks. It keeps
+the same admission boundary, corruption checks and original payload bytes.

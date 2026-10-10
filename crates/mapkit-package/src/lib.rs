@@ -556,7 +556,8 @@ pub fn read_with_budget(path: &Path, memory_limit: u64) -> Result<Package> {
 pub fn read_bytes(bytes: &[u8]) -> Result<Package> {
     read_bytes_with_budget(bytes, u64::MAX)
 }
-/// Reject conservative validation working-set estimates before inflating payloads.
+/// Reject conservative validation working-set estimates before retaining inflated
+/// payloads or parsing their typed structures. Inspection uses fixed-buffer scans.
 /// This policy limit supplements, and never relaxes, the format's hard limits.
 pub fn read_bytes_with_budget(bytes: &[u8], memory_limit: u64) -> Result<Package> {
     // Bound central-directory setup too, before ZipArchive allocates its index.
