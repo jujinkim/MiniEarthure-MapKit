@@ -113,7 +113,7 @@ impl<'a> PlanIndex<'a> {
             }
         }
         let roads: Vec<_> = selected.into_iter().map(|i| &self.document.roads[i]).collect();
-        plan_selected(&roads, &self.nodes, bounds, self.margin)
+        plan_selected(&roads, &self.nodes, bounds, self.margin, true)
     }
 }
 
@@ -207,6 +207,56 @@ mod index_tests {
         assert!(patches.iter().flat_map(|p| p.v).any(|p| p[0] > 0));
         assert_same(&d, area);
     }
+
+    #[test]
+    fn surface_plan_keeps_exact_faces_and_structural_boundary_stationing() {
+        let mut d = fixture(false);
+        d.roads[1].kind = RoadKind::Bridge;
+        d.roads[2].kind = RoadKind::Bridge;
+        // Separate structural endpoint stars from the ground road.
+        for road in &mut d.roads[1..3] {
+            road.from = format!("deck-{}", road.from);
+            road.to = format!("deck-{}", road.to);
+            for p in &mut road.points { p[1] = 600; }
+        }
+        let bounds = Bounds { min: [-3000; 2], max: [10000; 2] };
+        let (all, edges) = plan(&d, &bounds).unwrap();
+        let (surface, structural) = surface_plan(&d, &bounds).unwrap();
+        let faces = |v: Vec<Patch>| v.into_iter().map(|p|
+            (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
+        assert_eq!(faces(all), faces(surface));
+        let boundary = |v: Vec<Edge>| v.into_iter().filter(|e| e.road.kind != RoadKind::Ground)
+            .map(|e| (e.a, e.b, e.station_cm.to_bits(), e.road.id.clone())).collect::<Vec<_>>();
+        assert!(!structural.is_empty());
+        assert_eq!(boundary(edges), boundary(structural));
+    }
+
+    #[test]
+    fn dense_ground_bends_do_not_retain_unused_boundary_walls() {
+        let mut d = fixture(false);
+        let template = d.roads[0].clone();
+        d.roads.clear();
+        for row in 0..60 {
+            let mut r = template.clone();
+            r.id = format!("path-{row}"); r.from = format!("a-{row}"); r.to = format!("b-{row}");
+            r.points = (0..10).map(|i| [i * 200, 0, row * 100 + (i % 2) * 40]).collect();
+            r.widths_cm = vec![20; 9]; r.surfaces = vec![Surface::Asphalt; 9];
+            d.roads.push(r);
+        }
+        let bounds = Bounds { min: [-100; 2], max: [7000; 2] };
+        let (patches, edges) = surface_plan(&d, &bounds).unwrap();
+        assert!(!patches.is_empty() && edges.is_empty());
+        assert!(patches.len() <= MAX_LOCAL_PATCHES);
+        assert_eq!(patches.iter().map(|p| &p.road.id).collect::<BTreeSet<_>>().len(), 60);
+        // Compare exact per-road plans without requiring a larger workspace.
+        let expected: Vec<_> = d.roads.iter().flat_map(|road| {
+            let mut one = d.clone(); one.roads = vec![road.clone()];
+            plan(&one, &bounds).unwrap().0.into_iter().map(|p| (p.v, p.road.id.clone())).collect::<Vec<_>>()
+        }).collect();
+        let mut actual: Vec<_> = patches.iter().map(|p| (p.v, p.road.id.clone())).collect();
+        let mut expected = expected; expected.sort(); actual.sort();
+        assert_eq!(actual, expected);
+    }
 }
 
 pub(crate) fn plan<'a>(
@@ -214,10 +264,18 @@ pub(crate) fn plan<'a>(
     bounds: &Bounds,
 ) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let roads: Vec<_> = d.roads.iter().collect();
-    plan_selected(&roads, &node_widths(d), bounds, influence_margin(d))
+    plan_selected(&roads, &node_widths(d), bounds, influence_margin(d), true)
 }
 
-fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bounds: &Bounds, margin: i64)
+/// Ground surface generation consumes no ground boundary walls. Sidewalks have
+/// their own expanded plan; structural walls and fixed safety stationing remain.
+pub(crate) fn surface_plan<'a>(d: &'a MapDocument, bounds: &Bounds)
+    -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+    let roads: Vec<_> = d.roads.iter().collect();
+    plan_selected(&roads, &node_widths(d), bounds, influence_margin(d), false)
+}
+
+fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bounds: &Bounds, margin: i64, ground_edges: bool)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let mut groups: BTreeMap<Key, Vec<Arm>> = BTreeMap::new();
     let chains:BTreeMap<_,Vec<_>>=roads.iter().map(|r| {
@@ -559,7 +617,7 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
                 let a = &rounded[i];
                 let c = &rounded[(i + 1) % rounded.len()];
                 let owner = &arms[a.owner];
-                if !a.seam {
+                if !a.seam && (ground_edges || owner.road.kind != RoadKind::Ground) {
                     walls.push(Edge {
                         a: a.p,
                         b: c.p,
@@ -573,7 +631,8 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
             let arm = &arms[0];
             let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
             // The unconnected end is a real exterior, including the deck cap.
-            if !matches!(arm.road.kind, RoadKind::Tunnel | RoadKind::Underpass) {
+            if !matches!(arm.road.kind, RoadKind::Tunnel | RoadKind::Underpass)
+                && (ground_edges || arm.road.kind != RoadKind::Ground) {
                 walls.push(Edge {
                     a: m[0],
                     b: m[1],
@@ -583,7 +642,7 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
             }
         }
         if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
-            return Err(error("E_BUDGET", "road local junction limit"));
+            return Err(error("E_BUDGET", format!("road local junction limit ({} faces, {} boundaries)", patches.len(), walls.len())));
         }
     }
     for r in roads {
@@ -609,6 +668,7 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
             }
             // Keep the road on the left of every exterior edge.
             for (a, b) in [(v[1], v[0]), (v[3], v[2])] {
+                if !ground_edges && r.kind == RoadKind::Ground { continue; }
                 walls.push(Edge {
                     a,
                     b,

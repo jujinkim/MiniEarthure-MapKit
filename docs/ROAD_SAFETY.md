@@ -91,6 +91,10 @@ using the same predicates as the final plan filter; returned geometry is unchang
 Sidewalk eligibility checks road width/theme before nearby buildings, and a map
 with no eligible sidewalk skips the second expanded road plan. Authored widths
 and automatic sidewalk rules are unchanged, including small-scale imported roads.
+Surface generation also omits unused ground boundary walls from its plan; the
+independent sidewalk plan keeps them. Structural walls and safety post stationing
+are identical to the complete plan. Dense bend regressions compare every retained
+road face with independent per-road plans without raising the local workspace cap.
 Direct courtyard predicates are compared with the triangulated solid, including
 wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
 Dense terrain arrangements split into spatial quarters only when their local

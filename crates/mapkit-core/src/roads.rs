@@ -463,7 +463,7 @@ pub(crate) fn generate(
     side: usize,
     b: &mut Builder,
 ) -> Result<()> {
-    let (patches, walls) = plan(d, bounds)?;
+    let (patches, walls) = crate::road_plan::surface_plan(d, bounds)?;
     let (source_spacing,source_side)=(spacing,side);
     let spacing=if d.assembled_track.as_ref().is_some_and(|a|a.terrain_integration()) {spacing.min(200)} else {spacing};
     let side=d.cell_size_cm as usize/spacing as usize+1;
