@@ -88,6 +88,9 @@ Focused city regressions compare indexed and full plans, including remote widest
 roads, endpoint stars, designed approaches, input reversal and 6,000 sparse roads.
 Invisible or degenerate plan faces are discarded before workspace admission,
 using the same predicates as the final plan filter; returned geometry is unchanged.
+Sidewalk eligibility checks road width/theme before nearby buildings, and a map
+with no eligible sidewalk skips the second expanded road plan. Authored widths
+and automatic sidewalk rules are unchanged, including small-scale imported roads.
 Direct courtyard predicates are compared with the triangulated solid, including
 wall contacts. A retraced narrow ground path verifies a real rounded terminal cap.
 Dense terrain arrangements split into spatial quarters only when their local

@@ -663,6 +663,10 @@ pub(crate) fn sidewalk_width(d: &MapDocument, r: &Road) -> u32 {
     if let Some(width) = r.sidewalk_cm {
         return width;
     }
+    let road_width = r.widths_cm.iter().copied().max().unwrap_or(0);
+    if d.theme == "rural" || road_width < if d.theme == "urban" {400} else {500} {
+        return 0;
+    }
     let nearby = d
         .buildings
         .iter()
@@ -671,7 +675,6 @@ pub(crate) fn sidewalk_width(d: &MapDocument, r: &Road) -> u32 {
             road_overlap(&b.footprint, r, 3000, &mut ignored).unwrap_or(false)
         })
         .count();
-    let road_width = r.widths_cm.iter().copied().max().unwrap_or(0);
     match d.theme.as_str() {
         "urban" if road_width >= 400 => {
             if nearby >= 3 {

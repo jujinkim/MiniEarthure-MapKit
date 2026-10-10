@@ -591,6 +591,11 @@ pub(crate) fn generate(
 /// Widened graph aprons cover corners; only restored ground receives
 /// sidewalk tops. Road carriageways, independent decks and portals are untouched.
 pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
+    // Width rules can exclude all sidewalks (notably small-scale imports).
+    // Such maps need no second expanded road plan or footprint subdivision.
+    if !d.roads.iter().any(|r| crate::placement::sidewalk_width(d,r)>0) {
+        return Ok(());
+    }
     let expanded = Bounds {
         min: b.bounds.min.map(|v| v - 1000),
         max: b.bounds.max.map(|v| v + 1000),
