@@ -322,7 +322,9 @@ fn generate_validated(
         }
     }
     if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) {
-        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b)?;
+        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b).map_err(|mut e| {
+            e.message = format!("ground surfaces: {}", e.message); e
+        })?;
     }
 
     if let Some(track)=d.assembled_track.as_ref().filter(|a|a.terrain_integration()) {
@@ -346,7 +348,9 @@ fn generate_validated(
             face.contact_class = 1;
         }
     }
-    crate::placement::generate(d, input.cell, &mut b, placements)?;
+    crate::placement::generate(d, input.cell, &mut b, placements).map_err(|mut e| {
+        e.message = format!("placements: {}", e.message); e
+    })?;
     if let Some(occupied) = &mut b.occupancy {
         for g in &b.chunk.gimmicks {
             for (min,max) in g.occupancy_bounds() {
