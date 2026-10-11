@@ -3,7 +3,6 @@
 All own format, recipe, generated and scene-unit versions are 1. Only the current
 schema is supported. [CURRENT_V1](CURRENT_V1.md) owns the map domain; generated
 JSON Schemas in this directory and Rust semantic validation define field bounds.
-There are no historical readers, automatic converters or recipe selectors.
 
 ## ZIP and JSON
 
@@ -94,13 +93,6 @@ map-only 384px road/gate thumbnail when no preview exists, and publishes to a ne
 filename. Cancellation checks and atomic no-replace publication apply as for
 other package writes. Consumers own their file picker and worker lifetime.
 
-Scoped checks: package contract27, input defense12, reproducibility5 and package
-unit26 passed; the sharing-specific checks passed again after final bounded
-thumbnail changes. They cover preview/evidence roundtrip, driving identity,
-source/no-overwrite preservation, metadata/path/size/hash rejection, cancellation
-and edited-course admission. The current minimal-fixture golden hashes were
-corrected against the unchanged pre-sharing CLI output. Native Godot/CLI build
-passed on macOS; this does not claim mobile or detailed gameplay acceptance.
-The long-receipt cost refinement separately passes13 input-defense cases, four
-budget/restore checks and two fixed-buffer string/cancellation checks. It keeps
-the same admission boundary, corruption checks and original payload bytes.
+Validation: `package_contract`, input-defense and reproducibility tests cover
+preview/evidence roundtrip, driving identity, no-overwrite publication,
+metadata/path/size/hash rejection, cancellation and edited-course admission.

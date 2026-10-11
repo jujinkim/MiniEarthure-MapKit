@@ -1,7 +1,7 @@
 # Shared world materials and display quality
 
-All current formats remain v1. Original MIT library assets use metre UVs, framed panes, foundations,
-eaves, signs, groves and faceted rocks. Containers now have corrugations and door
+Original MIT library assets use metre UVs, framed panes, foundations,
+eaves, signs, groves and faceted rocks. Containers have corrugations and door
 hardware; lamps have a cap and base, with corresponding collision proxies.
 Built-in fences/trunks/lights use wood/metal detail and the canopy uses a bounded
 LOD mesh with a leaf material. Existing user assets and generated packages survive.
@@ -39,6 +39,5 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `richer_material_validator` covers actual GLB import, retained channels, denied
 admission, shared identity and last-borrower retirement. `display_quality_validator`
 covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
-batches, tight MultiMesh bounds and actual-face occluders. Real Mobile and
-Compatibility shader/preview checks passed. Detailed Editor interaction,
-weather appearance and target-device acceptance remain user checks.
+batches, tight MultiMesh bounds and actual-face occluders. Weather appearance and
+target-device acceptance are user checks.

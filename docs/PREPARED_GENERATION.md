@@ -17,7 +17,7 @@ structured source bytes and 32 MiB for bounded repetition/footprint/index storag
 The existing generated-cell estimate cache, output limits and work budgets remain.
 
 `cancellation::CancellationToken::run(|| prepared.generate(...))` provides a
-job-local cooperative generation path. Existing Editor calls remain valid. Tokens
+job-local cooperative generation path. Tokens
 are never reset; a replacement gets its own token. Checkpoints cover placement
 predicates, triangle emission, source read blocks and regional read tickets,
 archive encode/decode and native presentation/packing loops. They do not interrupt
@@ -33,8 +33,5 @@ outside MapKit.
 Validation: affected core placement/occupancy/road/cost/zone and archive regressions,
 prepared/raw boundary parity, independent tokens and controlled running-worker
 cancellation; package indexed closure/input defense/contract tests. Existing v1
-format numbers and generated geometry/hash ordering are unchanged.
-The envelope optimization passes placement10/spatial4/zone-assets4/obstacles1/
-cost6 checks and the four behavioral determinism checks. All 28 current vector
-cells are byte-identical to pre-optimization `ffe7768`; the separate stale frozen
-vector failure is recorded in [DETERMINISM](../spec/DETERMINISM.md).
+format numbers and generated geometry/hash ordering are unchanged. Vector status:
+[DETERMINISM](../spec/DETERMINISM.md#known-mismatch).

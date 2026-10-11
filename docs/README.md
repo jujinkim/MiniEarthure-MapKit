@@ -1,46 +1,46 @@
 # map-kit documentation
 
-Start with the [map-kit README](../README.md) for setup. Read only the feature
-you are changing. These documents describe current behavior, limits and scoped
-validation; update existing sections instead of appending dated change logs.
-Use Git history for previous implementations and test runs.
+Start with the [map-kit README](../README.md) for setup, then read only the
+feature you are changing. Documents describe current behaviour, limits and
+essential validation; edit existing sections instead of appending dated logs.
 
 ## Contracts
 
 | Topic | Document |
 | --- | --- |
-| Current map contract | [CURRENT_V1](../spec/CURRENT_V1.md) |
-| MEMAP v1 container contract | [FORMAT](../spec/FORMAT.md) |
-| Current v1 regional source storage | [REGIONAL_SOURCE](../spec/REGIONAL_SOURCE.md) |
-| Determinism and boundary audit | [DETERMINISM](../spec/DETERMINISM.md) |
+| Current map contract (index of invariants) | [CURRENT_V1](../spec/CURRENT_V1.md) |
+| MEMAP v1 container, sharing, preview | [FORMAT](../spec/FORMAT.md) |
+| Regional source storage | [REGIONAL_SOURCE](../spec/REGIONAL_SOURCE.md) |
+| Determinism and known vector mismatch | [DETERMINISM](../spec/DETERMINISM.md) |
 | Public error catalog | [ERRORS](../spec/ERRORS.md) |
-| Language-neutral world library and sign surface | [WORLD_ASSETS](../spec/WORLD_ASSETS.md) |
+| World library, placement yaw, sign surface | [WORLD_ASSETS](../spec/WORLD_ASSETS.md) |
 
 ## Generation and geometry
 
 | Topic | Document |
 | --- | --- |
-| Category generation and free track authoring — current v1 | [TRACK_AUTHORING](TRACK_AUTHORING.md) |
-| Assembled track geometry and package validation | [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md) |
-| Road snow and generated contact identity (current v1) | [ROAD_CONTACT](ROAD_CONTACT.md) |
-| Rounded streets and automatic deck safety | [ROAD_SAFETY](ROAD_SAFETY.md) |
-| Parametric special driving structures | [SPECIAL_DRIVING](SPECIAL_DRIVING.md) |
-| Prepared generation and job cancellation | [PREPARED_GENERATION](PREPARED_GENERATION.md) |
+| Track source, compiler and manual authoring | [TRACK_AUTHORING](TRACK_AUTHORING.md) |
+| Seeded track generation and geometry | [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md) |
+| Special structures, air rings, pipes | [SPECIAL_DRIVING](SPECIAL_DRIVING.md) |
+| Designed roads and composite worlds | [ROAD_DESIGN](ROAD_DESIGN.md) |
+| Rounded streets and deck safety | [ROAD_SAFETY](ROAD_SAFETY.md) |
+| Road snow and contact identity | [ROAD_CONTACT](ROAD_CONTACT.md) |
+| Prepared generation and cancellation | [PREPARED_GENERATION](PREPARED_GENERATION.md) |
 
 ## Shared rendering
 
 | Topic | Document |
 | --- | --- |
 | Environment, weather and lighting | [ENVIRONMENT](ENVIRONMENT.md) |
-| Current v1 water and arcade presentation | [WATER](WATER.md) |
-| Shared world materials and display quality | [RICHER_MATERIALS](RICHER_MATERIALS.md) |
+| Water and arcade presentation | [WATER](WATER.md) |
+| Materials and display quality | [RICHER_MATERIALS](RICHER_MATERIALS.md) |
 | Distant display products | [DISTANT_RENDERING](DISTANT_RENDERING.md) |
-| Incremental renderer resource ownership | [RENDER_MEMORY](../RENDER_MEMORY.md) |
-| Current vegetation assets | [VEGETATION](../VEGETATION.md) |
+| Renderer resource ownership | [RENDER_MEMORY](../RENDER_MEMORY.md) |
+| Vegetation assets | [VEGETATION](../VEGETATION.md) |
 
 ## Boundaries and licenses
 
 | Topic | Document |
 | --- | --- |
 | Current boundaries and open validation | [LIMITATIONS](../LIMITATIONS.md) |
-| Integer geometry dependencies | [THIRD_PARTY](../THIRD_PARTY.md) |
+| Third-party licenses | [THIRD_PARTY](../THIRD_PARTY.md) |

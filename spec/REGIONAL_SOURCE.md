@@ -1,8 +1,7 @@
 # Current v1 regional source storage
 
 `.mkregions` uses magic `MKREGN01`, a bounded front index and independently
-compressed/hash-bound source records. All own versions are 1; old readers,
-conversion and alternate version paths do not exist. Storage regions group
+compressed/hash-bound source records. All own versions are 1. Storage regions group
 execution cells without changing world coordinates, cell geometry or source IDs.
 Source/assets and the canonical original document are preserved.
 

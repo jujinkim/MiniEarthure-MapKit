@@ -69,7 +69,8 @@ roughness 0.18 and modest specular response. There is no planar reflection pass
 or fluid simulation. Shader includes expand before context-owned duplication for
 compatibility rendering. Rain contrasts with cloud/direct/ambient lighting;
 a curved noise dome handles clouds. The sky shader owns horizon haze and cloud
-occlusion, preserving sun and moon visibility.
+occlusion, preserving sun and moon visibility; the horizon haze blends
+continuously into the lower hemisphere (`sky_horizon_validator`).
 
 `set_display_distance(metres)` opts into depth fog. Zero restores weather fog;
 negative/nonfinite values are ignored. Fog starts at 60% of range and reaches full
@@ -80,8 +81,7 @@ grants no loading readiness. Standalone Editor defaults to weather fog.
 ## Essential validation
 
 `environment_contract` covers authoring, canonical identity, roundtrip and invalid
-inputs. `light_group_validator` covers ordering, atomic groups, culling, removal,
-reentry, static fallback, falloff reset and platform pool bounds. Scoped Godot
-4.7.2/macOS checks passed weather/roof transitions, 24/64-slot and ray bounds,
-resource retirement, day/night surfaces, celestial occlusion and depth-fog range
-updates/teardown. Detailed aesthetics and device performance remain user checks.
+inputs. `light_group_validator` covers ordering, atomic groups, culling, reentry,
+static fallback, falloff reset and pool bounds. Weather, splash pool, celestial
+occlusion and depth-fog checks run in Godot 4.7.2. Aesthetics and device
+performance are user checks.

@@ -1,34 +1,24 @@
 # Determinism and boundary audit
 
-Only the current v1 algorithms run. Integer centimetres, exact predicates,
-stable ID ordering, bounded work, pinned portable math and source/cell-derived
-randomness define generation. There is no clock, platform path, global RNG or
-cell arrival order in content identity. Ordered geometry arrays are not sorted
-as sets. Display quality never changes collision or generation hashes.
+Integer centimetres, exact predicates, stable ID ordering, bounded work, pinned
+portable math and source/cell-derived randomness define generation. No clock,
+platform path, global RNG or cell arrival order enters content identity. Ordered
+geometry arrays are not sorted as sets. Display quality never changes collision or
+generation hashes. Generated caches bind source/schema/dependency fingerprints and
+world/cell/contract identity.
 
-Generated caches bind source/schema/dependency fingerprints and current world,
-cell and contract identity. Original packages are preserved. Source changes can
-invalidate caches without changing format numbers or adding old decoders.
+## Vectors
 
-## Reproducible vectors and checks
+`determinism-vectors.json` records 7 synthetic fixtures / 28 cells (public
+examples, signed/offset placement with maximum exact seed, negative-height partial
+terrain, an oblique sloped bridge). Each records input identity, generated,
+triangle, object, occupied-sidecar and archive digests, counts and surface probes.
+Sidecar JSON is test-only. The golden is a regression baseline, not proof of
+correct geometry; behavioural checks separately cover terrain/bridge seams,
+duplicate faces, permutations, seed isolation, failed budgets, query interleaving
+and archive restoration.
 
-`determinism-vectors.json` records 7 original synthetic fixtures / 28 cells:
-the public map examples, signed/offset placement with maximum exact JSON
-seed, current-v1 negative-height partial terrain and an oblique sloped bridge.
-Each records input identity (including decoded grid values), generated,
-triangle, object, occupied-sidecar and archive digests, counts and integer surface
-probe positions/normals. Sidecar JSON is test-only; it creates no public wire format.
-The audit archive key uses the complete vector-input digest in the world-hash slot.
-Native archive tests separately use the real package world hash.
-
-The initial golden is a regression baseline, not independent proof of correct
-geometry. Behavioral checks independently test 9,480 signed terrain seam points,
-all centimetres of oblique bridge seams, duplicate faces and anchor ownership,
-source/cell permutations, unrelated-object seed isolation, failed budgets,
-spawn/query interleaving, optional occupancy and exact archive restoration.
-Existing road/placement/convex tests retain domain-specific shape expectations.
-
-From this public repository, with native Rust and Godot 4.7.2 installed:
+## Commands
 
 ```sh
 rtk cargo test --locked -p mapkit-core
@@ -39,38 +29,26 @@ rtk proxy python3 scripts/check_determinism.py --release --output /new/path/rele
 rtk proxy python3 scripts/verify_godot_layout.py --godot /absolute/Godot --probe determinism --probe assets
 ```
 
-The checker compares two fresh processes with different timezones to the committed
-golden; it never updates expectations. Debug and optimized results must be equal.
-The native probe compares 16 example cells in reverse order against the same core
-goldens through JSON, occupied packed geometry, real package cache keys, restored
-archives and presentation, then verifies post-query generation and COW isolation.
-The asset probe changes actual mesh LOD/shadow/material filtering and verifies
-the immutable physical arrays and generation hash remain exact.
+The checker runs two fresh processes with different timezones against the golden
+and never updates it; debug and release must match. The native probe compares
+example cells in reverse order through JSON, packed geometry, cache keys, archives
+and presentation. The asset probe changes LOD/shadow/material filtering and checks
+that physical arrays and generation hashes stay exact.
 
-On Windows/Linux run the commands at the same locked revision and compare exported
-JSON byte-for-byte, including hashes/normals/archives. On Android provision the NDK
-target and matching Godot/device runner, build the `determinism` example with that
-target linker, run it on the device and capture stdout as the comparable JSON;
-run the native packed/cache/asset probe in a device project too. Cross-compilation
-alone, emulation and desktop resource exports do not prove native device parity.
-Record OS/CPU/toolchain/revision, build profile, command, stderr and vector digest.
-A differing component is a failure to investigate, never a reason to bless new
-goldens or rewrite saved maps. Semantic changes require an explicit replacement decision; own formats stay v1.
+Cross-platform: run the same commands at the same revision on Windows/Linux and
+compare JSON byte-for-byte. On Android build the `determinism` example for the
+device target, run it on the device and run the native probe in a device project.
+Cross-compilation or emulation is not device parity. Record OS/CPU/toolchain,
+revision, profile, command and vector digest. A differing component is a failure
+to investigate, never a reason to bless new goldens.
 
-Reference maps still need continuous rendered/collision traversal across seams,
-rotated/partial structures, cancel/retry and cache cold/warm on supported hardware.
-These small exact tests do not prove universal absence of cracks, physics-engine
-trajectory determinism, renderer pixel identity or sustained frame/memory targets.
+## Known mismatch
 
+The behavioural reproducibility checks pass, but the frozen-vector equality check
+fails: input identities/archives and some road triangle/surface-probe fields
+differ from the committed vectors, while object and occupancy digests match. The
+baseline has not been replaced. Reconcile earlier road/source contract changes
+with the frozen expectations before changing them.
 
-## Current vector check
-
-The four behavioral reproducibility checks pass. The frozen-vector equality
-check currently fails: current input identities/archives and some road triangle/
-surface-probe fields differ from the committed vectors. All object and occupancy
-digests still match. This also reproduces at `ffe7768`, before the vegetation
-envelope optimization; complete current vectors before/after that optimization
-are byte-identical (SHA-256 `34fea3e4a97016703346a3f5ac7843ef99187772c240fac363021095ae6d1b6d`).
-The baseline has not been silently replaced. Reconcile the earlier road/source
-contract changes with the frozen expectations separately; this is not a passing
-golden check or native cross-platform acceptance.
+These tests do not prove absence of cracks on all maps, physics trajectory
+determinism, renderer pixel identity or frame/memory targets.

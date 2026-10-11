@@ -40,3 +40,25 @@ batch planning are documented in [RENDER_MEMORY.md](../RENDER_MEMORY.md). No
 specific distance, physics interest, admission cap or gameplay ACK is imposed by
 MapKit. Renderer roots carry diagnostic `mapkit_render_root` metadata so a caller
 can count cell resources independently of scene-generated node names.
+
+## Authored distant meshes and water
+
+- An `Asset` may declare `distant_path`, a second safe package-relative `.glb` using
+  the primary model's origin, metre scale and placement transform. Both files join
+  package references, manifest hashes, byte counts, validation workspace and memory
+  estimates. Only the primary asset defines collision; display LOD never changes
+  surface probes, collision, execution cells or admission budgets.
+- The distant model emits its authored triangles, node hierarchy, materials and
+  vertex tint; quarter turns, yaw and reflected node transforms apply once. Assets
+  without one keep the generic proxy.
+- Packed distant colours are sRGB: linear GLTF PBR/vertex colours convert once;
+  explicit sRGB overrides keep their values. Emissive signs keep their hue in both
+  LODs and follow the daylight schedule.
+- Small authored props form a contiguous batch tail under the quality distance
+  limit. Workspace and triangle bounds are charged before allocation.
+- Packed display kind byte: 0 solids, 1 small-prop tail, 2 water. The two UV
+  channels carry flow for water and light identity/role for solids. Distant water
+  uses the same quality-selected shader as near water (depth, refraction, flow) and
+  keeps clipped shorelines/islands without physical triangles. Batches split on kind
+  and share at most two job materials within the fixed 64 KiB far overhead.
+- Terrain uses the same broad colour variation in near and distant shaders.

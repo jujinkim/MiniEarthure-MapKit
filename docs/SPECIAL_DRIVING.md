@@ -1,89 +1,84 @@
 # Parametric special driving structures
 
-The current contract adds `target_speed`, `jump_height` and `air_ring` motion
-kinds with an `effect` object. `strength_percent` is 1–100 (default 100),
-`jump_height_cm` is 10–1000 (default 300), and `ring_radius_cm` is 75–600
-(default 180). Height describes a still-air, horizontal launch; a physics
-consumer must account for its gravity and body drag. The forward axis is local
-+Z in map coordinates, and launch normal is local +Y. Existing `boost`/`launch`
-impulses retain their meaning. Activation, aperture crossing, cooldown and
-vehicle speed remain the consumer's responsibility.
+Owner of effect kinds, parametric tracks, air-ring defaults and pipe dimensions.
+General gimmick records follow [CURRENT_V1](../spec/CURRENT_V1.md#declarative-driving-structures).
 
-A static definition can instead contain `track` with `kind: loop|cylinder`,
-`radius_cm: 150..600`, `width_cm: 140..600`, `length_cm: 600..3200`. Tracks have
-empty `parts` and identity scale. Radius controls both shapes, width controls
-the loop ribbon, and length controls the cylinder axis. Other dimensions are
-retained for switching templates. Defaults are radius 250, width 220, length
-1600 cm. Position and pitch/yaw/roll still apply. Loop ends are separated;
-its floor radius is 1.6 times the radius parameter and crown radius 0.4 times.
-Cylinders have a flared entrance and exit, a hollow interior, and no end caps.
+## Effects
 
-`special_track.rs` produces the only geometry used for presentation, collision
-and per-tile occupied bounds. Inner faces and the outer shell/sides are distinct;
-only inner faces may provide curved wheel support. Neither is a spawn/recovery
-surface. Spawn APIs also exclude underlying ordinary surfaces inside the track.
-Material and curved-driving role are independent.
+`target_speed`, `jump_height` and `air_ring` motion kinds carry an `effect`:
 
-Faces use deterministic integer tenths of a millimetre, explicitly marked
-`units_per_metre: 10000`; authored coordinates and occupied bounds remain cm.
-Fixed libm sampling, 256 angular sections and 16/32/64 adaptive cylinder bands
-keep adjacent normals within 5 degrees and analytic approximation error below
-1 cm throughout the supported parameter range. Source/archive records contain
-parameters, not expanded faces. Godot `resolve_gimmick` and packed output expand
-`track_mesh` plus `memory_bytes` for consumers. This is a bridge view, not an
-alternate file format or parser fallback.
+| Field | Range | Notes |
+| --- | --- | --- |
+| `strength_percent` | 1–100 | default 100 |
+| `jump_height_cm` | 10–1000 | default 300; still-air horizontal launch height |
+| `ring_radius_cm` | 75–600 | inner radius; see [air rings](#air-ring-defaults) |
 
-Cost is 16 KiB per definition + 32 KiB per ordinary convex part + 4 KiB per
-track tile. Spatial selection, regional dependencies, occupied bounds and the
-pre-entry driving window include the authored safety rectangle. No ordinary
-32-part, memory or cell limit is raised; oversized placements are rejected.
-The 2026-09-26 arcade decision sets every own format, including `.memap`, to 1. Build fingerprints
-invalidate generated caches after these changes.
+Forward is local +Z in map coordinates; launch normal is local +Y. Physics
+consumers account for gravity and body drag. `boost`/`launch` impulses keep their
+meaning. Activation, aperture crossing, cooldown and vehicle speed belong to the
+consumer.
 
-Focused validation (2026-09-26): special-track shape/range/cost/archive/order,
-5-degree/1-cm bounds, spawn exclusions, occupancy, spatial/chunk hashes,
-package/region/schema contracts and Godot native build. The consumer separately
-verifies physical driving and effects. Detailed application acceptance is not
-claimed here.
+## Parametric tracks
+
+A static definition may contain `track` instead of parts (empty `parts`, identity
+scale):
+
+| Kind | Radius | Other |
+| --- | --- | --- |
+| `loop` | 150–600 cm | `width_cm` 140–600 controls the ribbon |
+| `cylinder` | see [pipe dimensions](#pipe-dimensions) | `length_cm` 600–3200 controls the axis |
+| `swept_cylinder` | see [pipe dimensions](#pipe-dimensions) | 2–512 `centerline` floor/normal/forward frames |
+
+- Unused dimensions are retained for switching templates. Editor template
+  defaults: loop radius 250 cm, cylinder radius 125 cm, width 220 cm, length 1600 cm.
+- Loop ends are separated; floor radius is 1.6× and crown radius 0.4× the radius
+  parameter. Cylinders have flared entrance/exit, a hollow interior and no caps.
+- `special_track.rs` produces the only geometry for presentation, collision and
+  per-tile occupied bounds. Inner faces and outer shell/sides are distinct; only
+  inner faces may provide curved wheel support. Neither is a spawn/recovery
+  surface, and spawn APIs exclude ordinary surfaces inside the track. Material
+  and curved-driving role are independent.
+- Faces use integer tenths of a millimetre (`units_per_metre: 10000`); authored
+  coordinates and occupied bounds stay in cm. Fixed libm sampling, 256 angular
+  sections and 16/32/64 adaptive cylinder bands keep adjacent normals within
+  5° and approximation error below 1 cm.
+- Source/archive records store parameters, not faces. Godot `resolve_gimmick` and
+  packed output expand `track_mesh` plus `memory_bytes`; this is a bridge view, not
+  a file format.
+- Cost: 16 KiB per definition + 32 KiB per convex part + 4 KiB per track tile.
+  Spatial selection, regional dependencies, occupied bounds and the driving window
+  include the safety rectangle. No 32-part, memory or cell limit is raised.
+
+## Pipe dimensions
+
+- Cylinder and swept-cylinder radius is at least 100 cm (2 m bore). Tube ports are
+  at least 200 cm.
+- Authored pipe bores: 2/3/4/6 m. Generated pipes choose 2/3/4 m uniformly with one
+  RNG draw at every difficulty.
+- The track catalogue exposes `pipe_min_radius_cm` for Editor controls.
+- Undersize source data fails with `E_PIPE_DIMENSIONS`; it is never converted.
+- Road, loop and halfpipe ranges, wide presets, internal open sections and portal
+  grade are separate.
 
 ## Pipe material
 
 New assembled cylinders and the standalone straight-cylinder template use
-`#596168`. Shared `gimmick_geometry.pipe_material` sets roughness 0.82, metallic
-0.65 and emission off in both production display and prepared Editor previews.
-Explicit stored colours are authoritative; loading/rendering never recolours a
-saved object. Loops, halfpipes and panels retain their existing materials.
-Geometry, collision and contact/friction properties are unchanged. Pipe selection
-highlights the private preview material and restores its stored colour on deselect.
-
-Scoped macOS arm64 / Godot 4.7.2 checks passed: native/CLI build, five special-track
-Rust tests and `pipe_material_validator` with strict diagnostics. The validator
-compares production/preview vertices and material properties, custom saved colour,
-selection/restoration, resource reuse and weak-reference release after node disposal.
-Fixed-camera/light synthetic comparison: previous colour/material
-and matte metal. The prior material
-is recreated on the same geometry for comparison. Detailed art preference and
-real driving remain user verification. Development-only validator errors (panel
-shader treated as StandardMaterial, JSON numeric array equality) were corrected;
-final validation is clean. Execution logs stay in root local `docs/tasks/pipes-03-08/`.
-
-All formats stay v1. The assembly source fingerprint changes with its generated
-default colour; active generated packages are refreshed with the 08 delivery
-while preserving original artifacts.
+`#596168`. `gimmick_geometry.pipe_material` sets roughness 0.82, metallic 0.65 and
+no emission in production display and Editor previews. Stored colours are
+authoritative; loading never recolours a saved object. Geometry, collision and
+contact properties are unaffected. Selection highlights a private preview material
+and restores the stored colour on deselect.
 
 ## Air ring defaults
 
-New automatic track rings, manual air-ring actions and the standalone template
-use a 150cm inner radius (3m opening) and 100% target speed. The square track
-rim retains 50cm width / 30cm depth; the standalone 24-sector round rim retains
-20cm width / depth. Placement, rotation, colour and 1500ms cooldown are unchanged.
-The existing declared vertices drive display, authoring preview and collision.
-Explicit saved dimensions and strengths are preserved; no conversion, new fields
-or format change is introduced (all own formats remain v1).
+- New automatic track rings, manual air-ring actions and the standalone template use
+  a 150 cm inner radius (3 m opening) and 100% target speed.
+- Square track rim: 50 cm width / 30 cm depth. Standalone 24-sector round rim:
+  20 cm width / depth. Cooldown is 1500 ms.
+- The declared vertices drive display, preview and collision. Explicit saved
+  dimensions and strengths are preserved.
 
-Scoped Rust/native results pass seven core cases
-and one package case: automatic/manual geometry and pose, standalone quantization,
-effect limits, costs/occupancy, deterministic compilation, source/package roundtrip,
-explicit 6m/37% preservation and derived-radius tamper rejection. CLI and Godot
-extension builds pass on macOS arm64. Consumer trigger/preview and standalone
-startup are recorded by their owning repositories. Detailed driving is user verification.
+## Validation
+
+Focused `special_tracks`, `pipe_dimensions` and gimmick Rust tests plus the Godot
+`pipe_material_validator`. Physical driving and effects are consumer/user checks.

@@ -16,9 +16,8 @@ of game transport, physics, progress and release acceptance.
   arbitrary density, source LRU and network region requests are not provided here.
 - Logical estimates and decoder caps are not complete allocator/RSS/GPU accounting.
   Engine GLB import is not preemptible. Callers retain leases through real retirement.
-- Portable frozen input/archive vectors had a known expectation mismatch in the
-  2026-10-05 check; compared output matched the prior revision. Other determinism
-  checks passed. Investigate the fixture contract before changing expectations.
+- The frozen determinism vector check has a known mismatch; see
+  [determinism](spec/DETERMINISM.md#known-mismatch).
 - `scripts/check_architecture.py` flags `std::thread` in the test-only cancellation
   module. This known audit issue is separate from production ownership.
 - Native Windows/Android parity, detailed application driving, hardware rendering

@@ -15,27 +15,15 @@ traits survive cell hashes, the bounded disposable archive, packed Godot views
 and collision reordering. Authored ordinary roads use their cubic design surface
 and analytic tangent frames; their collision is independent of raw terrain bumps.
 
-All own formats remain v1. Build fingerprints invalidate generated caches; no
-previous archive reader or automatic source converter is provided. Existing source
-packages remain immutable. Runtime adapters reserve the two packed trait bytes
+Runtime adapters reserve the two packed trait bytes
 and two retained collision trait bytes per triangle.
 
-Validation covers contact properties, archive corruption/budgets, roads, road
-safety, independent designed surfaces, cell seams, surface probes, hashes,
-costs, packages and schemas. Structural top winding is normalized for the
-shared one-sided Godot collision adapter. Shared shader capture checks road/terrain contrast and
-yellow/white markings at snow stages 0, 1 and 2. Application/device art acceptance
-is user verification.
-
-Current independent-road delivery checks pass on macOS ARM64: nine core
-independent-road regressions, road safety/urban geometry, package/composite,
-source/schema/hash/region/cost suites and matching Godot native builds. The public
-`mapkit audit-roads PACKAGE` command samples actual generated collision every
-0.5 m on five width lines against the designed triangular surface (≤1 cm),
-checks junction overlap and duplicate terrain contacts, analytic design grade
-(≤12% for default worlds) and per-cell road-paint caps. The seven authored default
-worlds pass 17,600 cells and 380,491 collision samples, with maximum 0.5 cm error.
-Broad elevation change remains; detailed real driving is user verification.
+Structural top winding is normalized for the shared one-sided Godot collision
+adapter. Validation covers contact properties, archive corruption/budgets, seams,
+surface probes, hashes and costs; a shader capture checks road/terrain contrast and
+markings at snow stages 0–2. Designed-road collision is audited by
+`mapkit audit-roads` ([ROAD_DESIGN](ROAD_DESIGN.md#cli-and-audit)). Device art
+acceptance is user verification.
 
 ## Sidewalk boundaries and shared geometry
 
@@ -57,9 +45,5 @@ by `scripts/driving_structures.py`; saved objects and example packages are prese
 Junction terrain errors report road ID and map coordinate without weakening the
 1cm terrain match requirement.
 
-The exposed-boundary regression checks a two-cell road, absence of walls inside
-supported sidewalks and at shared seams, and presence of the exterior step.
-Road/cost/package tests and Godot `surface_geometry_validator` cover bend/prop/
-slope geometry, clockwise normals and materials. These scoped checks passed;
-detailed driving and appearance remain user verification. Vegetation rendering
-is described in [VEGETATION](../VEGETATION.md).
+Validation: the exposed-boundary regression and Godot `surface_geometry_validator`.
+Vegetation rendering is described in [VEGETATION](../VEGETATION.md).

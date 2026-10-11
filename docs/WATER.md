@@ -1,9 +1,5 @@
 # Current v1 water and arcade presentation
 
-The 2026-09-26 contract replaces the previous `.memap` reader version 2. All own
-format numbers are 1. The current schema and implementation fingerprint identify
-the definition; there are no previous readers or automatic conversions.
-
 `MapDocument.water_bodies` is optional and empty by default. Each body has a unique
 document-wide `id`, a simple `polygon`, zero or more dry `islands`, `surface_cm`,
 `bottom_cm`, and horizontal map-space `flow_cm_s: [x,y]`. Heights and coordinates
@@ -41,12 +37,6 @@ are bytes; they do not change collision, friction or weather authority.
 `assets/arcade-library` contains original MIT scenery, reproducible with
 `scripts/arcade_assets.py`; no game code or external datasets are included.
 
-Focused core water, cost, query, surface-probe and archive tests, package/schema/
-indexed audits, and the Godot consumer's compatibility-renderer load passed.
-See `crates/mapkit-core/tests/water.rs` and
-`crates/mapkit-package/tests/water_contract.rs` for the contract fixtures.
-
-On 2026-10-03 the stale bridge fixture's missing contact/snow fields were repaired;
-all three core water tests passed. Production water code did not change.
-Reproduction, source revision and final logs
-supersede the earlier compile failure for this target only.
+Validation: `crates/mapkit-core/tests/water.rs` and
+`crates/mapkit-package/tests/water_contract.rs`. Distant water display follows
+[DISTANT_RENDERING](DISTANT_RENDERING.md#authored-distant-meshes-and-water).

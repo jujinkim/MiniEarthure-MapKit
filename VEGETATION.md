@@ -34,8 +34,7 @@ cell allowance checks still apply before allocation. Source-region derivation
 keeps zone-referenced assets and material dependencies. Cost planning counts all
 box/convex shapes, and the source ownership audit accounts for the new asset ID.
 
-Omitting `tree` selects the builtin asset. All own package, indexed, recipe and
-generated versions are 1; old recipe branches are not supported. Core `zone_assets` and
+Omitting `tree` selects the builtin asset. Core `zone_assets` and
 `zone_obstacles` tests cover opt-in, rejected references/footprints, zero density,
 spacing/exclusions, no relocation, road/obstacle clearance, seam ownership,
 regular/indexed metadata queries, regional asset retention and output budgets.

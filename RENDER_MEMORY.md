@@ -9,14 +9,14 @@ previews. MapKit contains no game admission, physics or network policy.
 
 `render_memory.gd` plans validated output without allocating GPU resources.
 `supports_batches` excludes image proxies whose alpha/order needs individual rendering.
-`prepare_batches` groups opaque triangle surfaces by material and 32m spatial bucket into at most512
+`prepare_batches` groups opaque triangle surfaces by material and 32 m spatial bucket into at most 512
 triangles, preserving coordinates, normals, UVs, winding and hidden-proxy exclusion.
-Its packed buffers cost96 bytes per visible triangle plus bounded grouping metadata.
+Its packed buffers cost 96 bytes per visible triangle plus bounded grouping metadata.
 The caller must account for source and preparation buffers before worker execution.
 An empty batch list must not replace an unsupported source; use `supports_batches`.
 
-`estimate` includes64KiB per job (another64KiB for urban surfaces),768 bytes per
-visible triangle,12KiB per batch,64KiB per object and the validated native asset
+`estimate` includes 64 KiB per job (another 64 KiB for urban surfaces), 768 bytes per
+visible triangle, 12 KiB per batch, 64 KiB per object and the validated native asset
 allowance. Hidden collision proxies do not allocate visible mesh batches. These are
 conservative logical allowances, not allocator measurements. `upper_bound` is a
 pre-generation safety bound; the exact plan can be admitted after worker completion
@@ -26,7 +26,7 @@ Current v1 native presentation records add `content_hash` and `memory_bytes` fro
 validated package. They are excluded from package serialization/generated hashes.
 The cache key includes content, declarative material settings and referenced image
 content. Views without shareable records retain independent per-job ownership.
-The cache claims resources before import and holds at most256 entries/128MiB by
+The cache claims resources before import and holds at most 256 entries/128 MiB by
 default, including its urban shader. The caller supplies independent admission.
 Each model imports once while cached; materials, mesh surfaces and decoded images
 are shared. Import, MultiMesh setup, individual placement and mesh upload are
@@ -37,10 +37,15 @@ Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
 transforms, mesh surfaces, material overrides, original colours and shadow mode
 survive. Transparent models, overlays and per-surface overrides use ordinary
 instances. ImporterMesh LOD indices are generated once per cached template. Small decorations
-use quality-controlled distance/LOD with 8m hysteresis; large occluding structures
+use quality-controlled distance/LOD with 8 m hysteresis; large occluding structures
 remain visible until normal cell/frustum retirement. MultiMesh bounds include only
 populated transformed instances, not unused capacity. Actual upright opaque
-triangles (at most64, inset1cm) form occluders; an AABB never fills an opening.
+triangles (at most 64, inset 1 cm) form occluders; an AABB never fills an opening.
+
+Opaque shared rendering emits each multi-material mesh once. Single-object groups
+also use MultiMesh custom data; exceptional material overrides get an owned seed
+binding while sharing shaders/textures, so there is no global per-instance shader
+slot ceiling. Small-prop distance classification includes authored root scale.
 
 ## Lifetimes
 
@@ -73,23 +78,23 @@ failed replacement, worker cancellation and delayed retirement.
 Views without validated content hashes and positive memory bounds retain their
 full per-cell reservation and job-local importer ownership. A supplied session
 cache cannot subtract an unproven shared allowance. This is a resource-accounting
-rule within current v1, not support for historical package readers.
+rule within current v1.
 
 ## Shared miniature material tiles
 
 The current cache remains 128 MiB / 256 entries. The admitted weather context
-reserves 4.75/16/61 MiB for ten 128/256/512px packed tiles, mipmaps and
-import/CPU/GPU/retirement overlap (2026-10-02 replacement).
+reserves 4.75/16/61 MiB for ten 128/256/512 px packed tiles, mipmaps and
+import/CPU/GPU/retirement overlap.
 Its bytes are also included in diagnostics without an admission callback.
 Normal, AO, roughness and metallic shader bindings join albedo in asset-lease
 tracking. See [material implementation and verification](docs/RICHER_MATERIALS.md).
 
 ## LOD and occlusion admission
 
-Each shared template reserves twice the validated native asset bound plus128KiB
+Each shared template reserves twice the validated native asset bound plus 128 KiB
 before import/LOD generation, covering transient source/output meshes and retained
-LOD indices. Spatial batches use768 bytes/triangle and12KiB/batch; objects retain
-64KiB for instance/occluder nodes and arrays. `upper_bound` includes the same
+LOD indices. Spatial batches use 768 bytes/triangle and 12 KiB/batch; objects retain
+64 KiB for instance/occluder nodes and arrays. `upper_bound` includes the same
 worst-case per-triangle batch overhead. Profile changes reuse map textures, and
 retiring leases remain charged through final borrowers and the consumer grace.
 No physics, AI, scheduling authority or network data depends on display quality.
