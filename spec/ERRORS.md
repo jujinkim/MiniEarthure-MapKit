@@ -79,6 +79,19 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_TRACK_ASSEMBLY` | Invalid track assembly or connectivity. |
 | `E_TRACK_MODIFIED` | Stored/generated track no longer matches its authoring source. |
 | `E_TRACK_COURSE` | Track course cannot be built from the selected route. |
+| `E_TRACK_SOURCE` | Malformed or invalid manual track source, piece preset, width or panel alignment. |
+| `E_TRACK_DRAFT` | Track still has unresolved authoring issues; it cannot be compiled, packed or driven. |
+| `E_TRACK_GEOMETRY` | Composite track geometry is invalid (overlap, gap or unsupported join). |
+| `E_TRACK_SURFACE` | Generated road surface cannot meet the 1 cm diagonal tolerance within its lateral budget. |
+| `E_TRACK_BUDGET` | Track curve or compiled output exceeds its sample/resource budget. |
+| `E_TRACK_BOUNDS` | A track piece or driving surface leaves the map. |
+| `E_TRACK_OWNERSHIP` | An independent object occupies the assembled track's ID or geometry namespace. |
+| `E_TRACK_ENVIRONMENT` | Terrain or an environment solid penetrates or crowds the track's driving space. |
+| `E_TRACK_SUPPORT` | No clear terrain support site or support that keeps the driving/flight space and 110 cm passage. |
+| `E_TRACK_CHECKPOINT_LIMIT` | Final routes need more than 64 shared checkpoints. |
+| `E_TRACK_DURATION` | No connected seed layout within ±10% of the requested duration in 24 candidates. |
+| `E_TRACK_PANEL_SUPPORT` | Panel has no supporting production road triangles or no representable convex surface. |
+| `E_TRACK_PANEL_BUDGET` | Panel exceeds the 32-part limit. |
 | `E_CHECKPOINT` | Invalid or unsupported authored checkpoint. |
 | `E_RACE_SIZE` | Unsupported race participant count. |
 | `E_COURSE` | Invalid course definition or requested operation. |
