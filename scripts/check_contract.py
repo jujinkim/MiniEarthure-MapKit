@@ -144,7 +144,7 @@ def main():
         run('validate', work / 'absent', error='E_IO')
 
     emitted = set()
-    for path in (ROOT / 'crates').glob('*/src/*.rs'):
+    for path in (ROOT / 'crates').glob('*/src/**/*.rs'):
         emitted.update(re.findall(r'"(E_[A-Z_]+)"', path.read_text()))
     for path in (ROOT / 'godot').glob('*.gd'):
         emitted.update(re.findall(r'"(E_[A-Z_]+)"', path.read_text()))

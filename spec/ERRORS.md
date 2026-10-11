@@ -67,6 +67,12 @@ Additional current v1 authoring/runtime input diagnostics:
 | Code | Meaning / corrective action |
 | --- | --- |
 | `E_ROAD` | Invalid road profile, connection or surface input. |
+| `E_ROAD_DESIGN` | Invalid road design alignment: 2..1025 anchors, empty alignment or stored samples differ from controls. |
+| `E_ROAD_SURFACE` | Invalid road/sample surface input, or a terrain-following road without an actual collision probe. |
+| `E_ROAD_INTERSECTION` | Crossing roads need an explicit junction or a separated bridge/tunnel. |
+| `E_ROAD_GRADE` | Road design grade exceeds the allowed maximum. |
+| `E_ROAD_AUDIT` | Road has no authored profile or its design/collision ribbon has a gap. |
+| `E_ROAD_ENVIRONMENT` | Preserved terrain penetrates a road driving surface. |
 | `E_PLACEMENT` | Invalid placement transform or asset use. |
 | `E_WATER` | Invalid water geometry/profile. |
 | `E_GIMMICK` | Invalid driving structure/effect declaration. |
@@ -92,6 +98,12 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_TRACK_DURATION` | No connected seed layout within ±10% of the requested duration in 24 candidates. |
 | `E_TRACK_PANEL_SUPPORT` | Panel has no supporting production road triangles or no representable convex surface. |
 | `E_TRACK_PANEL_BUDGET` | Panel exceeds the 32-part limit. |
+| `E_SURFACE_REFERENCE` | Surface attachment target track, editable source or instance is missing. |
+| `E_SURFACE_CONNECTION` | Invalid ordinary-road port connection or missing connected road/instance. |
+| `E_SURFACE_ATTACHMENT` | Invalid attachment settings, unsupported target surface or insufficient obstacle clearance. |
+| `E_SURFACE_OWNERSHIP` | Attachment product or interaction line ID collides or is missing. |
+| `E_POI` | Facility name/category is not bounded nonempty text, or its coordinate is outside the map. |
+| `E_POI_LIMIT` | Too many points of interest. |
 | `E_CHECKPOINT` | Invalid or unsupported authored checkpoint. |
 | `E_RACE_SIZE` | Unsupported race participant count. |
 | `E_COURSE` | Invalid course definition or requested operation. |
@@ -105,3 +117,8 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_COURSE_VALIDATION` | Invalid course completion reference or evidence. |
 | `E_PREVIEW` | Invalid menu preview input or identity. |
 | `E_THREAD` | Native background task could not be created or joined. |
+| `E_BRUSH` | Invalid terrain brush options or timed input. |
+| `E_HEIGHT` | Height sample outside the working grid or allowed range. |
+| `E_RESOURCE` | Native working-document resource has no bytes. |
+| `E_STALE` | Working height history changed since the request; retry from current state. |
+| `E_CONFLICT` | Source file changed on disk since it was read; reload before saving. |
