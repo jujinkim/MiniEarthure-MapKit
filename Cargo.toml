@@ -19,3 +19,6 @@ schemars = "0.8"
 # Use CARGO_PROFILE_DEV_OPT_LEVEL=0 for instruction-by-instruction debugging.
 [profile.dev]
 opt-level = 2
+# Bound rebuild storage; preserve full symbols in packed debug artifacts.
+incremental = false
+split-debuginfo = "packed"

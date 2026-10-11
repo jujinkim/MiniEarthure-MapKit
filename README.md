@@ -28,7 +28,9 @@ Native Windows uses its own Rust build; Android needs the Android Rust target an
 toolchain. Headless/host code must not load `godot/chunk_renderer.gd`.
 
 The dev profile uses `opt-level = 2` (debug symbols, assertions and overflow checks
-stay on). Set `CARGO_PROFILE_DEV_OPT_LEVEL=0` for instruction-level debugging and
+stay on), disables incremental compilation and packs debug information (macOS
+`.dSYM`) instead of retaining generations of separate debug objects. The test
+profile inherits these settings. Set `CARGO_PROFILE_DEV_OPT_LEVEL=0` for instruction-level debugging and
 record the profile in performance comparisons.
 
 ## Crates and boundaries
