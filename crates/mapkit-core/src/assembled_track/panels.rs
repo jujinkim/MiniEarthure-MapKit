@@ -101,6 +101,17 @@ pub(super) fn fit_road(d:&MapDocument,id:&str,g:&mut Gimmick,lateral:u32,width:u
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn automatic_jump_pieces_have_no_acceleration_panel() {
+        for id in ["jump_panel", "jump", "offset_jump", "air_ring"] {
+            let a=assembly(id);
+            let gimmicks=road_gimmicks(&a).unwrap();
+            assert_eq!(gimmicks.iter().filter(|g|g.motion.kind==MotionKind::JumpHeight).count(),1,"{id}");
+            assert!(!gimmicks.iter().any(|g|g.motion.kind==MotionKind::TargetSpeed),"{id}");
+            assert_eq!(gimmicks.len(),if id=="air_ring" {2} else {1});
+            if id=="air_ring" { assert_eq!(gimmicks[1].position[1]-a.pieces[0].origin_cm[1],300); }
+        }
+    }
     fn assembly(id: &str) -> Assembly {
         let mut source=authoring::Source::empty();
         source.instances.push(authoring::instance("road",id,400));

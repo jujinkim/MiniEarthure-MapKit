@@ -1519,10 +1519,9 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
             id if id.starts_with("cylinder") => vec![("cylinder", 0)],
             "banked_chicane" => vec![("halfpipe", 0)],
             "jump" | "offset_jump" | "jump_panel" => {
-                vec![("acceleration_panel", 350), ("jump", 950)]
+                vec![("jump", 950)]
             }
             "air_ring" => vec![
-                ("acceleration_panel", 350),
                 ("jump", 950),
                 ("air_ring", 1600),
             ],
@@ -1606,7 +1605,9 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                     })
                 }
                 "air_ring" => {
-                    g.position[1] += 200;
+                    // Keep the full vehicle aperture on the unboosted approach
+                    // trajectory at the piece's declared minimum entry speed.
+                    g.position[1] += 300;
                     for side in [-1, 1] {
                         g.parts.push(box_part([side * 175, 0, 0], [50, 400, 30]));
                         g.parts.push(box_part([0, side * 175, 0], [300, 50, 30]));

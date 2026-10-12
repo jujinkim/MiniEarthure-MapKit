@@ -15,6 +15,16 @@ pub(super) fn overlaps(a: &Piece, b: &Piece) -> bool {
 }
 
 pub(super) fn valid_runs(pieces: &[Piece], circuit: bool) -> bool {
+    // This is a generation constraint, not a restriction on authored actions or
+    // stored packages. A normal driving piece separates acceleration and jump.
+    for i in 0..pieces.len() {
+        if !circuit && i + 1 == pieces.len() { break; }
+        if ["acceleration_panel", "boost_chain"].contains(&pieces[i].id.as_str())
+            && ["jump_panel", "jump", "offset_jump", "air_ring"]
+                .contains(&pieces[(i + 1) % pieces.len()].id.as_str()) {
+            return false;
+        }
+    }
     let seq: Vec<_> = pieces
         .iter()
         .filter(|p| {
@@ -433,6 +443,27 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn acceleration_cannot_lead_directly_into_generated_jump() {
+        for boost in ["acceleration_panel", "boost_chain"] {
+            for jump in ["jump_panel", "jump", "offset_jump", "air_ring"] {
+                let pair = vec![variant(boost,400,400,400),variant(jump,400,400,400)];
+                assert!(!valid_runs(&pair,false));
+                let mut seam = pair.clone(); seam.reverse();
+                assert!(valid_runs(&seam,false));
+                assert!(!valid_runs(&seam,true));
+                let mut separated = pair.clone();
+                separated.insert(1,variant("straight",400,400,400));
+                assert!(valid_runs(&separated,true));
+                let mut pieces = vec![materialize(&pair[0])];
+                let before = pieces.clone();
+                assert!(!append(&mut pieces,jump,400));
+                assert_eq!(pieces,before);
+                assert!(append(&mut pieces,"straight",400));
+                assert!(append(&mut pieces,jump,400));
+            }
+        }
+    }
     #[test]
     fn pipe_draws_uniform_bores_and_preserve_road_ports_and_budgets() {
         for difficulty in 0..3 {

@@ -14,6 +14,14 @@ reimplement the generator. Authored sources and the compiler API are owned by
   minimum occurrence (start, finish, width transitions, required approaches and
   closure excepted). Identical gimmick families repeat at most twice in a row,
   including across a circuit seam. Enabled category tickets are 26:9:5.
+- Jump panels, gap/offset jumps and air-ring pieces contain a standalone jump
+  panel. Generated acceleration-panel and boost-chain pieces cannot connect
+  directly to any of these jump pieces, including across a circuit seam; an
+  intervening ordinary driving piece permits the sequence. Manual actions remain
+  independent. New generation/recompilation uses this rule; saved packages keep
+  their declared panels and geometry.
+  Automatic air rings sit 3 m above the approach to clear the unboosted jump
+  trajectory at the declared minimum entry speed.
 - Circuit (one lap) and sprint offer 60/90/120 s. The base route length at
   900 cm/s must be within ±10%; alternative routes are estimated separately. This
   is a reference estimate, not a measured lap time.

@@ -4,6 +4,21 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn manual_acceleration_and_jump_remain_independent_on_reload() {
+    let mut source=authoring::shortcut_source();
+    let mut boost=source.actions[0].clone();
+    boost.id="manual-boost".into(); boost.kind="acceleration_panel".into();
+    boost.sample=0; boost.landing=None;
+    source.actions.push(boost);
+    let d=package::compile_source(&source).unwrap();
+    let reopened=read_bytes(&pack_bytes(d.clone(),BTreeMap::new()).unwrap()).unwrap();
+    assert_eq!(reopened.document.gimmicks,d.gimmicks);
+    assert_eq!(reopened.document.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap(),&source);
+    assert!(d.gimmicks.iter().any(|g|g.id=="action-manual-boost" && g.motion.kind==mapkit_core::gimmick::MotionKind::TargetSpeed));
+    assert!(d.gimmicks.iter().any(|g|g.motion.kind==mapkit_core::gimmick::MotionKind::JumpHeight));
+}
+
+#[test]
 fn extra_wide_tracks_export_reload_with_routes_and_collision() {
     let mut source = authoring::Source::empty();
     source.settings.circuit = false;
