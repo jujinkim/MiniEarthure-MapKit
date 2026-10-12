@@ -15,3 +15,18 @@ fn each_start_row_uses_its_actual_runway_piece() {
     assert_eq!(start_surface_at(assembly, [end[0],end[2]+1]), None);
     assert_eq!(start_surface_at(assembly, [i64::MAX,i64::MIN]), None);
 }
+
+#[test]
+fn new_seed_start_keeps_eight_full_size_rows_on_the_runway() {
+    let d = mapkit_package::assembled_track::generate(&Settings {seed:7,circuit:false,..Default::default()}).unwrap();
+    let a = d.assembled_track.as_ref().unwrap();
+    let source = a.seed_source.as_ref().unwrap();
+    assert_eq!(source.checkpoints[0].sample,a.pieces[2].path.len()-1);
+    assert_eq!(d.courses[0].definition.checkpoints[0].position_cm,a.pieces[2].path.last().unwrap().position_cm);
+    for row in 0..4 {
+        let z=1830-500*row-132;
+        for x in [-243,243] {for dz in [-90,90] {
+            assert!(start_surface_at(a,[x,z+dz]).is_some());
+        }}
+    }
+}

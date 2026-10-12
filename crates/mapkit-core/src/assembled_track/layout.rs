@@ -398,7 +398,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
                     Err(_) => Ok(None),
                 };
             }
-            return Ok(Some(a));
+            return Ok(Some(authoring::seed_runway(&a)?));
         }
     }
     Ok(None)

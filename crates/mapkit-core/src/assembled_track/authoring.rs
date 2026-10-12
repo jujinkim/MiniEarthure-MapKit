@@ -1084,6 +1084,19 @@ pub fn shortcut_source() -> Source {
     s
 }
 
+// New generated tracks store the start gate at the runway end. Stored assemblies
+// retain their own source/checkpoints; their automatic midpoint contract is unchanged.
+pub(super) fn seed_runway(a: &Assembly) -> Result<Assembly> {
+    let mut source = from_assembly(a);
+    source.checkpoints[0].sample = a.pieces[2].path.len()-1;
+    let mut out = compile(&source)?;
+    executable(&out)?;
+    checkpoint_budget(&out)?;
+    out.authoring = None;
+    out.seed_source = Some(source);
+    Ok(out)
+}
+
 pub(super) fn seed_shortcut(a: &Assembly) -> Result<Assembly> {
     let mut source = from_assembly(a);
     let example = shortcut_source();
@@ -1128,6 +1141,7 @@ pub(super) fn seed_shortcut(a: &Assembly) -> Result<Assembly> {
     source.actions.push(example.actions[0].clone());
     let compiled = compile(&source)?;
     source.checkpoints=automatic_checkpoints(&compiled).into_iter().map(|(piece,sample)|Checkpoint{piece:source.instances[piece].id.clone(),sample}).collect();
+    source.checkpoints[0].sample = compiled.pieces[2].path.len()-1;
     let mut out = compile(&source)?;
     executable(&out)?;
     checkpoint_budget(&out)?;

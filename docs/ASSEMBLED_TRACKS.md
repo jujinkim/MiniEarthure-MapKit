@@ -7,6 +7,10 @@ reimplement the generator. Authored sources and the compiler API are owned by
 [TRACK_AUTHORING](TRACK_AUTHORING.md); pipes and air rings by
 [SPECIAL_DRIVING](SPECIAL_DRIVING.md).
 
+New generated source stores gate zero at the end of the third 8 m-wide runway
+piece, leaving room for eight vehicle envelopes behind its trigger. Saved source
+and package checkpoints retain their explicit positions.
+
 ## Generation settings
 
 - `categories: ["driving", "gimmick", "action"]`, all enabled by default; empty or
