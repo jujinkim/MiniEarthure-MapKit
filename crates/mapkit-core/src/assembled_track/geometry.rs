@@ -431,10 +431,10 @@ pub(super) fn volume_overlap(a: &Sample, b: &Sample) -> bool {
 /// ribbons. All quantized edges are enclosed; the existing wall and vehicle
 /// margins extend both the sides and the ends. Other geometry keeps the sample
 /// volume check, including banks, tubes, flights, tapers and alternate paths.
-fn straight_footprint(p: &Piece) -> Option<[[f64; 2]; 4]> {
+fn straight_footprint(p: &Piece, allow_taper: bool) -> Option<[[f64; 2]; 4]> {
     let first = p.path.first()?;
     if p.path.len() < 2 || !p.alternate_path.is_empty()
-        || p.width_cm != p.entry_width_cm || p.width_cm != p.exit_width_cm
+        || (!allow_taper && (p.width_cm != p.entry_width_cm || p.width_cm != p.exit_width_cm))
         || first.forward[1] != 0
     {
         return None;
@@ -454,7 +454,7 @@ fn straight_footprint(p: &Piece) -> Option<[[f64; 2]; 4]> {
         let station = project(s.position_cm, forward);
         if !s.safe || s.mode != "drive" || s.tube_radius_cm != 0
             || s.normal != [0, 1_000_000, 0] || s.forward != first.forward
-            || s.lateral_cm != first.lateral_cm || s.position_cm[1] != first.position_cm[1]
+            || (!allow_taper && s.lateral_cm != first.lateral_cm) || s.position_cm[1] != first.position_cm[1]
             // Allow only the quantization error of a straight centreline.
             || project(s.position_cm, side).abs() > 1.0 || station < previous
         {
@@ -483,7 +483,7 @@ fn straight_footprint(p: &Piece) -> Option<[[f64; 2]; 4]> {
 /// clearance keeps the same open intervals as the sample-volume predicate.
 /// None leaves unsupported geometry on the existing sampled path.
 pub(super) fn straight_overlap(a: &Piece, b: &Piece) -> Option<bool> {
-    let (af, bf) = (straight_footprint(a)?, straight_footprint(b)?);
+    let (af, bf) = (straight_footprint(a, false)?, straight_footprint(b, false)?);
     let (_, _, alo, ahi) = volume(&a.path[0]);
     let (_, _, blo, bhi) = volume(&b.path[0]);
     Some(alo < bhi && blo < ahi && !footprints_separated(af, bf))
@@ -492,18 +492,52 @@ pub(super) fn straight_overlap(a: &Piece, b: &Piece) -> Option<bool> {
 /// Prove separation from a finite straight runway using the other ribbon's
 /// actual vertices. A wide endpoint is not a sphere extending behind its port.
 pub(super) fn separated_from_straight(a: &Piece, b: &Piece) -> bool {
-    let Some(footprint) = straight_footprint(a) else { return false; };
+    if let Some(footprint) = straight_footprint(a, false) {
+        if b.path.iter().chain(&b.alternate_path).any(|s| s.tube_radius_cm > 0 || s.mode == "loop" || s.mode == "flight") { return false; }
+        return footprint.windows(2).take(2).any(|edge| {
+            let delta=[edge[1][0]-edge[0][0],edge[1][1]-edge[0][1]];
+            let length=libm::hypot(delta[0],delta[1]);
+            if length<1.0 { return false; }
+            let axis=[-delta[1]/length,delta[0]/length];
+            let project=|v:[f64;2]| v[0]*axis[0]+v[1]*axis[1];
+            let (alo,ahi)=footprint.iter().map(|v|project(*v)).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
+            let (blo,bhi)=b.path.iter().chain(&b.alternate_path).flat_map(|s|ribbon_edges(s,0))
+                .map(|v|project([v[0] as f64,v[2] as f64])).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
+            let margin=(WALL_THICKNESS_CM+ROAD_CLEARANCE_CM) as f64;
+            ahi+margin+1.0<blo || bhi+margin+1.0<alo
+        });
+    }
+    if straight_footprint(a, true).is_none() { return false; }
     if b.path.iter().chain(&b.alternate_path).any(|s| s.tube_radius_cm > 0 || s.mode == "loop" || s.mode == "flight") { return false; }
-    footprint.windows(2).take(2).any(|edge| {
-        let delta=[edge[1][0]-edge[0][0],edge[1][1]-edge[0][1]];
+    let wall_edges = |s: &Sample| {
+        let mut edge = ribbon_edges(s,0);
+        let across: [f64;3] = std::array::from_fn(|i|(edge[1][i]-edge[0][i]) as f64);
+        let length=libm::sqrt(across.iter().map(|v|v*v).sum());
+        if length>0.0 { for i in 0..3 {
+            let offset=libm::round(across[i]/length*WALL_THICKNESS_CM as f64) as i64;
+            edge[0][i]-=offset; edge[1][i]+=offset;
+        }}
+        edge
+    };
+    let edges: Vec<_> = a.path.iter().map(wall_edges).collect();
+    let other: Vec<_> = b.path.iter().chain(&b.alternate_path).flat_map(wall_edges).collect();
+    // End caps and longitudinal taper edges supply separating axes. Project
+    // every actual vertex; this can only prove separation, never hide overlap.
+    let axes = std::iter::once((edges[0][0],edges[0][1])).chain(
+        edges.windows(2).flat_map(|w| [(w[0][0],w[1][0]),(w[0][1],w[1][1])]));
+    let vertices: Vec<_> = edges.iter().flatten().copied().collect();
+    let mut seen = std::collections::BTreeSet::new();
+    axes.into_iter().any(|(start,end)| {
+        let delta=[(end[0]-start[0]) as f64,(end[2]-start[2]) as f64];
         let length=libm::hypot(delta[0],delta[1]);
         if length<1.0 { return false; }
         let axis=[-delta[1]/length,delta[0]/length];
-        let project=|v:[f64;2]| v[0]*axis[0]+v[1]*axis[1];
-        let (alo,ahi)=footprint.iter().map(|v|project(*v)).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
-        let (blo,bhi)=b.path.iter().chain(&b.alternate_path).flat_map(|s|ribbon_edges(s,0))
-            .map(|v|project([v[0] as f64,v[2] as f64])).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
-        let margin=(WALL_THICKNESS_CM+ROAD_CLEARANCE_CM) as f64;
+        if !seen.insert(axis.map(|v|libm::round(v*1e6) as i64)) {return false;}
+        let project=|v:Vertex| v[0] as f64*axis[0]+v[2] as f64*axis[1];
+        let range=|vertices: &[Vertex]| vertices.iter().copied().map(project).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
+        let (alo,ahi)=range(&vertices);
+        let (blo,bhi)=range(&other);
+        let margin=2.0*ROAD_CLEARANCE_CM as f64;
         ahi+margin+1.0<blo || bhi+margin+1.0<alo
     })
 }

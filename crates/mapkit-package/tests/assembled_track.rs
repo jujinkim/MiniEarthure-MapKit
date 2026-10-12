@@ -692,6 +692,8 @@ fn stored_narrow_v1_packages_open_exactly_but_recompile_is_rejected() {
         assert_eq!(source,&original);
         assert!(verify_document(document).is_err());
         package::verify(document,&loaded.inspection.world_content_hash,&document.courses[0]).unwrap();
+        let preview=mapkit_package::pack_stored_preview((**document).clone(),BTreeMap::new()).unwrap();
+        assert_eq!(read_bytes(&preview).unwrap().document.assembled_track,document.assembled_track);
         let reopened=read_bytes(bytes).unwrap();
         assert_eq!(reopened.document.gimmicks,document.gimmicks);
         assert_eq!(reopened.document.assembled_track,document.assembled_track);

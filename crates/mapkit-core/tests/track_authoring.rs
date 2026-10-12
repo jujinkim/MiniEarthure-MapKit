@@ -399,3 +399,21 @@ fn invalid_action_and_landing_sample_still_rejected() {
         assert_eq!(compile(&source).unwrap_err().code, "E_TRACK_SOURCE");
     }
 }
+
+#[test]
+fn tapered_approach_and_exit_beside_four_metre_turn_are_separate() {
+    let mut source = Source::empty();
+    let mut approach = instance("approach", "free_curve", 600);
+    approach.entry_width_cm = 800;
+    approach.control_points = vec![[0,0,-3000],[0,0,-2000],[0,0,-1000],[0,0,0]];
+    let mut turn = instance("turn", "free_curve", 600);
+    turn.control_points = vec![[0,0,0],[0,0,221],[179,0,400],[400,0,400]];
+    let mut exit = instance("exit", "free_curve", 800);
+    exit.entry_width_cm = 600;
+    exit.control_points = vec![[400,0,400],[1200,0,400],[2000,0,400],[2800,0,400]];
+    source.instances = vec![approach,turn,exit];
+    let assembly = compile(&source).unwrap();
+    assert!(!assembly.issues.iter().any(|issue|issue.contains("collision")), "{:?}", assembly.issues);
+    source.instances[2].control_points.iter_mut().for_each(|p|p[2]-=200);
+    assert!(compile(&source).unwrap().issues.iter().any(|issue|issue.contains("collision")));
+}

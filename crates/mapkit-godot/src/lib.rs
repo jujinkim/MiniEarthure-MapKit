@@ -417,7 +417,7 @@ impl MapKitBridge {
                 self.draft=Some(d);
                 return Ok(info);
             }
-            let p=read_bytes(&pack_bytes(d,f)?)?;
+            let p=read_bytes(&mapkit_package::pack_stored_preview(d,f)?)?;
             let info=serde_json::to_value(&p.inspection).unwrap();
             self.visual_margin_cm=p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
             self.package=Some(p);

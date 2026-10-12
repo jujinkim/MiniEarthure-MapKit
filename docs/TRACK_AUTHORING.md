@@ -15,6 +15,9 @@ Seeded generation settings, categories, catalogue and geometry are owned by
 - New roads, loop ribbons and ports require at least 400 cm. Pipe bores use
   400/600 cm with a 400 cm default; the catalogue publishes every minimum, size
   and default for consumers. Stored v1 validation is separate from compilation.
+  Project opening materializes a preview from validated saved geometry; it does not
+  recompile or resize old sources. Explicit execution export uses current authoring
+  verification and reports narrow instances and fields.
 - Port snapping aligns position, tangent, normal and width, including named pipe
   portal drops along the road normal. Other disconnected ports are draft issues.
 

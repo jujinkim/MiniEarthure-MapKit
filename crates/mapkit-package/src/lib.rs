@@ -453,6 +453,11 @@ pub fn pack_bytes(
 ) -> Result<Vec<u8>> {
     pack_inner(document.into(), files, true)
 }
+/// Materialize already validated saved geometry for a project preview. Export
+/// uses `pack_bytes` and its current authoring verification instead.
+pub fn pack_stored_preview(document: MapDocument, files: BTreeMap<String, Vec<u8>>) -> Result<Vec<u8>> {
+    pack_inner(document, files, false)
+}
 fn pack_inner(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>, bind_overlay: bool) -> Result<Vec<u8>> {
     mapkit_core::cancellation::progress("package_validation", 0, Some(5), "checks");
     d.normalize();
