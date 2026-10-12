@@ -32,17 +32,17 @@ reimplement the generator. Authored sources and the compiler API are owned by
   variant. Family weights (easy/normal/hard): straight 34/16/8, grade 12/10/6,
   gentle corner 34/24/14, right angle 16/18/18, zigzag 4/8/12, sharp135 0/8/12,
   hairpin 0/6/12, spiral90 0/6/8, spiral180 0/3/6, spiral360 0/1/4.
-- Width weights for 2/4/6/8/12 m: easy 0/20/40/30/10, normal 10/30/30/20/10, hard
-  30/40/20/8/2. Obstacle spacing is 64/32/16 m. API default seed is 1; settings
+- Width weights for 4/6/8/12 m: easy 20/40/30/10, normal 40/30/20/10, hard
+  70/20/8/2. The first three straight grid pieces are 8 m wide. Obstacle spacing is 64/32/16 m. API default seed is 1; settings
   have no weather field.
 
 ## Catalogue and dimensions
 
-- Ordinary widths: 200/400/600/800/1200 cm with eased entry/exit widths. Loops,
+- New ordinary widths: 400/600/800/1200 cm (manual default 400 cm) with eased entry/exit widths. Loops,
   halfpipes and the compact overpass use 400 cm. The public catalogue reports
   category, supported dimensions and ports.
 - Extra-wide presets (fixed 1200 cm body, default 1200 cm ports, ports editable
-  200–1200 cm): `straight_extra_wide` (8 m), `gentle90_extra_wide`/`_left` (90°,
+  400–1200 cm): `straight_extra_wide` (8 m), `gentle90_extra_wide`/`_left` (90°,
   radius 48 m), `right90_extra_wide`/`_left` (90°, radius 8 m). A generated 12 m
   draw of one of those five shapes publishes the extra-wide ID with no extra RNG
   draw. Saved IDs are not rewritten.
@@ -54,7 +54,8 @@ reimplement the generator. Authored sources and the compiler API are owned by
   (minimum 0.65r, crown 0.8r); height is 2r. Quintic feet match position, slope and
   curvature to flat road. The acceleration panel sits on the final straight.
 - The overpass lower road uses analytic quarter-circle tangents; empty-control
-  `free_curve`/`flight_curve` keep a straight exit tangent.
+  `free_curve`/`flight_curve` keep a straight exit tangent. The 4 m upper ribbon
+  uses smooth lateral curvature at both ports while retaining its span and height.
 
 ## Circuit returns
 
@@ -97,8 +98,11 @@ reference seconds of growth, and stops early within 1% of the target. Equivalent
   footprint plus 50 cm wall and 30 cm vehicle margin; boundary contact counts as
   overlap. Other pairs use sampled volumes. Failures are draft issues
   (`E_TRACK_DRAFT` on export).
-- RC ramps are 160 cm wide; rail tops are 40 cm with an explicit grind line. Venue
+- RC ramps are 320 cm wide, retaining their heights and lengths; rail tops are 40 cm with an explicit grind line. Venue
   decoration has no driving collision.
+- Automatic attachments are skipped unless their swept footprint and a continuous
+  220 cm bypass fit the actual ribbon. Manual placement reports the piece and
+  station in `E_TRACK_CLEARANCE`. Grind rails and air-ring dimensions are unchanged.
 - Up to 64 display-only direction chevrons per stage at 24 m intervals on flat road
   (no collision, occupancy, spawn role or shadow).
 
@@ -111,7 +115,7 @@ reference seconds of growth, and stops early within 1% of the target. Equivalent
   airborne underside; its flat cap uses the minimum clipped underside over the
   square. Candidates are deterministic, centre-first, longitudinal and lateral.
   Pure flight has no support.
-- Columns may cross lower roads only if a continuous 110 cm lane remains with
+- Columns may cross lower roads only if a continuous 220 cm lane remains with
   nearby columns and obstacle sweeps. Start runways, bores, flight, launch and
   landing space are protected. No valid placement yields `E_TRACK_SUPPORT`; the
   generator rejects that candidate.
@@ -139,7 +143,9 @@ also check payload hashes, manifest, world identity and resource limits.
 `verify_track` binds the candidate to the saved course; a changed generator or
 catalogue fingerprint does not invalidate a sound package. `pack_bytes`,
 `pack_source` and authoring `verify_document` require current-source equality.
-Loading never edits a file.
+Loading never edits a file. Existing narrow v1 roads, ports, loops and pipes retain
+their stored dimensions. Recompilation applies the new catalogue minima and reports
+the instance ID and width fields; it never widens source data automatically.
 
 Validation: focused `mapkit-core` assembled/track_winding/wall/special-track tests
 and `mapkit-package` assembled-track tests. Detailed driving is user verification.

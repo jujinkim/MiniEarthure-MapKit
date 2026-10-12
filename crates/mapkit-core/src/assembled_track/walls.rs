@@ -126,7 +126,7 @@ fn outward_from_edges(path: &[Sample], at: usize, side: i64, edge: impl Fn(usize
         let error=|v:Vertex|local.iter().map(|n|((0..3).map(|j|n[j]*v[j] as f64).sum::<f64>().abs()-WALL_THICKNESS_CM as f64).abs()).fold(0.0,f64::max);
         if error(result)>1.0 {
             let original=result;let mut best=error(result);
-            for x in -1..=1 {for y in -1..=1 {for z in -1..=1 {
+            for x in -2..=2 {for y in -2..=2 {for z in -2..=2 {
                 let candidate=add(original,[x,y,z]);let cost=error(candidate);
                 if cost<best {best=cost;result=candidate;}
             }}}
@@ -161,26 +161,43 @@ fn tetrahedra(rings: [Ring; 2]) -> Vec<CollisionConvex> {
         let j = (i + 1) % 4;
         quads.push([a[i], a[j], b[j], b[i]]);
     }
-    let mut boundary = vec![];
-    for quad in quads { boundary.extend(triangulate(quad)); }
+    let mut boundary: Vec<_> = quads.iter().flat_map(|q|triangulate(*q)).collect();
     let points: std::collections::BTreeSet<_> = a.into_iter().chain(b).collect();
     if boundary.iter().all(|&[a,b,c]| points.iter().all(|&p|determinant([a,b,c,p])==0)) {
         return vec![];
     }
-    let visible = |p| boundary.iter().all(|&[a,b,c]| determinant([a,b,c,p]) <= 0);
-    let pivot = points.iter().copied().find(|p|
-        rings.iter().all(|r| !r.contains(p) || triangulate(*r).iter().all(|t| t.contains(p) || normal(*t)==[0;3]))
-        && visible(*p))
-        .or_else(|| {
-            // A twisted section may have an interior kernel but no visible
-            // corner. Quantize once, then require exact containment in it.
-            let center=std::array::from_fn(|j| (points.iter().map(|p|i128::from(p[j])).sum::<i128>() / points.len() as i128) as i64);
-            visible(center).then_some(center)
-        })
-        // Folded centimetre sections still contain nonzero occupied wedges.
-        // Keep their independently outward-oriented tetrahedra as well; never
-        // drop occupied material because the unsplit strip has no kernel.
-        .unwrap_or_else(|| *points.first().unwrap());
+    let kernel = |boundary: &[[Vertex;3]]| {
+        let visible = |p| boundary.iter().all(|&[a,b,c]| determinant([a,b,c,p]) <= 0);
+        points.iter().copied().find(|p|
+            rings.iter().all(|r| !r.contains(p) || triangulate(*r).iter().all(|t| t.contains(p) || normal(*t)==[0;3]))
+            && visible(*p))
+            .or_else(|| {
+                let center=std::array::from_fn(|j| (points.iter().map(|p|i128::from(p[j])).sum::<i128>() / points.len() as i128) as i64);
+                visible(center).then_some(center)
+            })
+    };
+    let mut pivot=kernel(&boundary);
+    if pivot.is_none() {
+        // A wide, twisted loop can put one diagonal outside the section's
+        // kernel. Keep the shared ring caps fixed and try the sixteen bounded
+        // side-face triangulations before accepting conservative wedges.
+        for mask in 1..16 {
+            let mut candidate=Vec::with_capacity(12);
+            for (i,q) in quads.iter().enumerate() {
+                let mut faces=triangulate(*q);
+                if i>=2 && mask&(1<<(i-2))!=0 {
+                    let mut q=*q;
+                    let first=(0..4).min_by_key(|&j|q[j]).unwrap();q.rotate_left(first);
+                    let [a,b,c,d]=q;
+                    faces=if faces==[[a,b,c],[a,c,d]] {[[a,b,d],[b,c,d]]} else {[[a,b,c],[a,c,d]]};
+                }
+                candidate.extend(faces);
+            }
+            if let Some(found)=kernel(&candidate) { boundary=candidate;pivot=Some(found);break; }
+        }
+    }
+    // Exact nonzero folded sections still own occupied material.
+    let pivot=pivot.unwrap_or_else(|| *points.first().unwrap());
     let mut parts = std::collections::BTreeSet::new();
     for face in boundary {
         let mut vertices = [pivot, face[0], face[1], face[2]];
@@ -313,8 +330,8 @@ mod tests {
         }
         let digest=format!("{:x}",Sha256::digest(serde_json::to_vec(&transcript.0).unwrap()));
         println!("GEOMETRY_TRANSCRIPT count={} sha256={digest}",transcript.0.len());
-        assert_eq!(transcript.0.len(),90620);
-        assert_eq!(digest,"704f8e52a95fa305bfc15972a67e1646665fe5b6896ce2f9301b7e56ee841f13");
+        assert_eq!(transcript.0.len(),83620);
+        assert_eq!(digest,"324959cea8d4fa588963ed1877e08a20425725d1855158d9b4e59c794da9012a");
     }
     #[derive(Default)]
     struct Mesh { triangles: Vec<[Vertex;3]>, solids: Vec<CollisionConvex>, spawnable: bool }
@@ -342,7 +359,7 @@ mod tests {
                 *exterior.entry(face).or_default()+=sign;
             }}
             exterior.retain(|_,sign|*sign!=0);
-            assert!(exterior.values().all(|sign|sign.abs()==1), "{id}: overlapping boundary faces");
+            assert!(exterior.values().all(|sign|sign.abs()==1), "{id}: overlapping boundary faces {:?}", exterior.iter().filter(|(_,v)|v.abs()>1).collect::<Vec<_>>());
             let rendered: std::collections::BTreeSet<_>=out.triangles.iter().map(|face|{let mut f=*face;f.sort();f}).collect();
             assert_eq!(rendered,exterior.keys().copied().collect(),"{id}: render/collision and occupied exterior");
             assert!(!out.spawnable,"wall tops must never add spawn candidates");

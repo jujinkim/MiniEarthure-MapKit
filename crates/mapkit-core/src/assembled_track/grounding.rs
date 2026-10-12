@@ -323,7 +323,7 @@ fn safe_without(a: &Assembly, candidate: &Support, placed: &[Support], objects: 
                         }
                     }
                 }
-                if clear_width(s.lateral_cm.min(t.lateral_cm) as f64, intervals) < 110.0 {
+                if clear_width(s.lateral_cm.min(t.lateral_cm) as f64, intervals) < PASSAGE_CM as f64 {
                     return false;
                 }
             }
@@ -439,7 +439,7 @@ pub(super) fn apply(a: &mut Assembly) -> Result<()> {
         if let Some(s) = selected {
             supports.push(s);
         } else if airborne {
-            return Err(error("E_TRACK_SUPPORT",format!("piece {index} ({}): no 20cm support preserving the start/flight/landing space and continuous 110cm passage",p.id)));
+            return Err(error("E_TRACK_SUPPORT",format!("piece {index} ({}): no 20cm support preserving the start/flight/landing space and continuous 220cm passage",p.id)));
         }
     }
     a.supports = supports;
@@ -550,21 +550,21 @@ mod tests {
     }
     #[test]
     fn partial_road_intrusion_combines_columns_and_obstacle_sweeps() {
-        let mut a = fixture(&[("straight", [0, 0, 0], 200)]);
+        let mut a = fixture(&[("straight", [0, 0, 0], 400)]);
         a.routes.clear();
         let center = column(1, 0, 400, -10, 500);
         assert!(
             !safe(&a, &center, &[], &[]),
-            "two 90cm gaps are not a 110cm passage"
+            "two 190cm gaps are not a 220cm passage"
         );
-        let side = column(1, 65, 400, -10, 500);
+        let side = column(1, 120, 400, -10, 500);
         assert!(
             safe(&a, &side, &[], &[]),
             "partial road intrusion is allowed"
         );
-        let exact = column(2, -65, 550, -10, 500);
-        assert!(safe(&a, &side, &[exact], &[]), "exactly 110cm stays open");
-        let other = column(2, -55, 550, -10, 500);
+        let exact = column(2, -120, 550, -10, 500);
+        assert!(safe(&a, &side, &[exact], &[]), "exactly 220cm stays open");
+        let other = column(2, -110, 550, -10, 500);
         assert!(
             !safe(&a, &side, &[other], &[]),
             "nearby opposite columns must retain a connected lane"

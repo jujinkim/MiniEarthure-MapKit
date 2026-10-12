@@ -57,7 +57,7 @@ fn append(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
         libm::atan2(last.forward[0] as f64, last.forward[2] as f64) * 180000.0
             / std::f64::consts::PI,
     ) as i32;
-    // Preserve ordinary-road port sizes while narrowing the generated tube.
+    // The exit transition widens back into an ordinary road.
     let exit = if id == "tube_exit" && pieces.last().is_some_and(|p| p.id.starts_with("cylinder")) { w * 2 } else { w };
     let mut p = variant(id, w, last.lateral_cm * 2, exit);
     p.rotation_mdeg = [0, yaw, 0];
@@ -86,7 +86,7 @@ fn append(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
 }
 fn add_block(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
     let size = pieces.len();
-    if ["loop", "banked_chicane"].contains(&id)
+    if ["loop", "banked_chicane", "overpass"].contains(&id)
         && end(pieces).lateral_cm != 200
         && !append(pieces, "straight", 400)
     {
@@ -253,10 +253,10 @@ const FAMILY_WEIGHTS: [[u32; 10]; 3] = [
     [16, 10, 24, 18, 8, 8, 6, 6, 3, 1],
     [8, 6, 14, 18, 12, 12, 12, 8, 6, 4],
 ];
-const WIDTH_WEIGHTS: [[u32; 5]; 3] = [
-    [0, 20, 40, 30, 10],
-    [10, 30, 30, 20, 10],
-    [30, 40, 20, 8, 2],
+const WIDTH_WEIGHTS: [[u32; 4]; 3] = [
+    [20, 40, 30, 10],
+    [40, 30, 20, 10],
+    [70, 20, 8, 2],
 ];
 fn difficulty_index(difficulty: &str) -> usize {
     match difficulty { "easy" => 0, "hard" => 2, _ => 1 }
@@ -287,8 +287,8 @@ fn driving_piece(rng: &mut u64, difficulty: usize) -> (&'static str, u32) {
     (preset, width)
 }
 fn special_width(rng: &mut u64, id: &str) -> u32 {
-    // One uniform draw at every difficulty; manual 6m bores remain available.
-    let widths = if id.starts_with("cylinder") { &[200, 300, 400] } else { supported_widths(id) };
+    // One uniform draw at every difficulty, with the same manual bore choices.
+    let widths = supported_widths(id);
     widths[next(rng) as usize % widths.len()]
 }
 fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
@@ -325,7 +325,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
     let mut pieces = vec![];
     let mut origin = [0; 3];
     for _ in 0..START_PIECES {
-        push_piece(&mut pieces, &mut origin, 0, "straight", 400, false, [0; 3]);
+        push_piece(&mut pieces, &mut origin, 0, "straight", 800, false, [0; 3]);
     }
     let shortcut = s.categories.len() == 3 && attempt % 3 == 0;
     if shortcut {
@@ -350,7 +350,9 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
             let mut connected = pieces.clone();
             if closure(&mut connected, s)? {
                 let a = finish(connected, s);
-                if best.as_ref().is_none_or(|b| {
+                // Prefer the closest executable duration, retaining an earlier
+                // valid candidate when extra action gates exhaust the budget.
+                if authoring::checkpoint_budget(&a).is_ok() && best.as_ref().is_none_or(|b| {
                     a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
                 }) {
                     best = Some(a);
@@ -470,17 +472,17 @@ mod tests {
             let mut old_rng=42+difficulty;
             let mut new_rng=old_rng;
             for _ in 0..300 {
-                let old=[200,300,400][next(&mut old_rng) as usize%3];
+                let old=[400,600][next(&mut old_rng) as usize%2];
                 assert_eq!(special_width(&mut new_rng,"cylinder_curve"),old);
             }
         }
-        for width in [200,300,400] {
+        for width in [400,600] {
             let mut pieces=vec![];let mut origin=[0;3];
             for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
             assert!(add_block(&mut pieces,"cylinder_curve",width));
             assert_eq!(pieces.last().unwrap().path.last().unwrap().lateral_cm,width);
             assert!(append(&mut pieces,"straight",400));
-            assert!(pieces.last().unwrap().entry_width_cm>=200);
+            assert!(pieces.last().unwrap().entry_width_cm>=400);
             let snapshot=pieces.clone();
             pieces.resize(MAX_PIECES,pieces[0].clone());
             assert!(!add_block(&mut pieces,"cylinder_curve",width));
@@ -498,7 +500,7 @@ mod tests {
             let mut wide_seen = std::collections::BTreeSet::new();
             let mut family_counts = [0u32; 10];
             let mut variant_counts = std::collections::BTreeMap::new();
-            let mut width_counts = [0u32; 5];
+            let mut width_counts = [0u32; 4];
             let mut score = 0u64;
             let mut width_sum = 0u64;
             for _ in 0..100_000 {
@@ -544,6 +546,8 @@ mod tests {
                 assert_eq!(a, assemble(&s).unwrap());
                 a.validate().unwrap();
                 assert!(a.pieces.iter().all(|p| category(&p.id)=="driving"));
+                assert!(a.pieces.iter().take(START_PIECES).all(|p|p.id=="straight" && p.width_cm==800 && p.path.iter().all(|s|s.lateral_cm==400)));
+                assert!(a.estimated_msec.abs_diff(u32::from(s.duration_seconds)*1000)<=u32::from(s.duration_seconds)*100);
                 assert!(a.pieces.len() <= MAX_PIECES);
                 assert!(a.pieces.iter().map(|p|p.path.len()).sum::<usize>() <= MAX_SAMPLES);
                 complexity[index] += a.pieces.iter().filter_map(|p|DRIVING_FAMILIES.iter().position(|v|v.contains(&base_preset(&p.id)))).sum::<usize>();

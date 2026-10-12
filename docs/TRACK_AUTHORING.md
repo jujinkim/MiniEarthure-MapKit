@@ -12,6 +12,9 @@ Seeded generation settings, categories, catalogue and geometry are owned by
   placement restriction.
 - Curve frames parallel-transport through vertical tangents with eased endpoint
   roll; degenerate tangents are rejected.
+- New roads, loop ribbons and ports require at least 400 cm. Pipe bores use
+  400/600 cm with a 400 cm default; the catalogue publishes every minimum, size
+  and default for consumers. Stored v1 validation is separate from compilation.
 - Port snapping aligns position, tangent, normal and width, including named pipe
   portal drops along the road normal. Other disconnected ports are draft issues.
 
@@ -61,7 +64,7 @@ Seeded generation settings, categories, catalogue and geometry are owned by
 - The shared first-wins checkpoint view feeds generation admission, course
   construction and Runtime progress metadata; raw authoring arrays are unchanged.
 - `shortcut_source()` composes a wide lower zigzag, narrow elevated straight, jump
-  approach, flight path and common merge; the 2 m elevated lane and 8 m base road
+  approach, flight path and common merge; the 4 m elevated lane and 8 m base road
   share progress sections.
 
 ## Jumps and panels

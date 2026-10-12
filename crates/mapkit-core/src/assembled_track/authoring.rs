@@ -225,8 +225,8 @@ pub fn instance(id: &str, preset: &str, width: u32) -> Instance {
 }
 pub fn piece(instance: &Instance) -> Result<Piece> {
     if (instance.preset.starts_with("cylinder") || ["tube_entry", "tube_exit"].contains(&instance.preset.as_str()))
-        && [instance.width_cm, instance.entry_width_cm, instance.exit_width_cm].iter().any(|v| *v < 200) {
-        return Err(error("E_PIPE_DIMENSIONS", "Pipe bore and port width must be at least 200 cm (radius 100 cm); source was not modified"));
+        && [instance.width_cm, instance.entry_width_cm, instance.exit_width_cm].iter().any(|v| *v < MIN_WIDTH_CM) {
+        return Err(error("E_PIPE_DIMENSIONS", format!("instance {}: width_cm, entry_width_cm and exit_width_cm require a bore/port of at least 400 cm (radius 200 cm); source was not modified", instance.id)));
     }
     if !catalogue_ids().contains(&instance.preset.as_str())
         || !supported_widths(&instance.preset).contains(&instance.width_cm)
@@ -253,7 +253,7 @@ pub fn piece(instance: &Instance) -> Result<Piece> {
     {
         return Err(error(
             "E_TRACK_SOURCE",
-            "invalid instance dimensions, preset or cubic control points",
+            format!("instance {}: invalid width_cm/entry_width_cm/exit_width_cm (minimum 400 cm; body must use catalogue widths), preset or cubic control points", instance.id),
         ));
     }
     let estimated_samples: usize = instance
@@ -355,6 +355,9 @@ pub(super) fn within_source_limits(source: &Source) -> bool {
 
 fn compile_uncached(source: &Source) -> Result<Assembly> {
     crate::grind::validate(&source.grind_lines)?;
+    for structure in &source.structures {
+        if let Some(track) = &structure.track { track.validate_authoring(&structure.id)?; }
+    }
     if source.structures.len() > 32 || source.structures.iter().any(|g| !g.valid() || g.motion.kind != MotionKind::Static || g.effect.is_some() || !g.id.starts_with("authored-")) {
         return Err(error("E_TRACK_SOURCE", "at most 32 valid authored- static structures required"));
     }
@@ -694,9 +697,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         if let Some(o) = obstacles::authored(&assembly, index, attachment) {
             assembly.obstacles.push(o);
         } else {
-            let issue = format!("{}: obstacle no longer has safe clearance", attachment.piece);
-            assembly.issues.push(issue.clone());
-            assembly.geometry_issues.push(issue);
+            return Err(error("E_TRACK_CLEARANCE", format!("{}: {} at station_cm {} needs its full footprint and a continuous 220 cm bypass", attachment.piece, attachment.kind, attachment.station_cm)));
         }
     }
     if source.grounded_supports && !source.terrain_integration { grounding::apply(&mut assembly)?; }
@@ -736,6 +737,7 @@ pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
             joints.push(start);
         }
     }
+    if geometry::separated_from_straight(a,b) || geometry::separated_from_straight(b,a) { return false; }
     let straight_overlap = geometry::straight_overlap(a, b);
     if joints.is_empty() {
         if let Some(overlap) = straight_overlap {
@@ -952,12 +954,12 @@ pub fn shortcut_source() -> Source {
     let mut s = Source::empty();
     s.settings.circuit = false;
     for i in 0..3 {
-        let mut p = instance(&format!("start-{i}"), "straight", 400);
+        let mut p = instance(&format!("start-{i}"), "straight", 800);
         p.position_cm = [0, 0, i * 800];
         s.instances.push(p);
     }
     let mut lower = instance("lower-zigzag", "free_curve", 800);
-    lower.entry_width_cm = 400;
+    lower.entry_width_cm = 800;
     lower.exit_width_cm = 400;
     lower.control_points = vec![
         [0, 0, 2400],
@@ -978,11 +980,11 @@ pub fn shortcut_source() -> Source {
     let mut finish = instance("finish", "finish_plaza", 400);
     finish.position_cm = [0, 0, 11200];
     s.instances.push(finish);
-    let mut approach = instance("jump-approach", "free_curve", 200);
-    approach.entry_width_cm = 400;
+    let mut approach = instance("jump-approach", "free_curve", 400);
+    approach.entry_width_cm = 800;
     approach.control_points = vec![[0, 0, 2400], [0, 0, 3000], [800, 0, 3000], [800, 0, 3600]];
     s.instances.push(approach);
-    let mut jump = instance("jump-entry", "flight_curve", 200);
+    let mut jump = instance("jump-entry", "flight_curve", 400);
     jump.control_points = vec![
         [800, 0, 3600],
         [800, 900, 4000],
@@ -990,7 +992,7 @@ pub fn shortcut_source() -> Source {
         [800, 500, 5600],
     ];
     s.instances.push(jump);
-    let mut upper = instance("upper-shortcut", "free_curve", 200);
+    let mut upper = instance("upper-shortcut", "free_curve", 400);
     upper.control_points = vec![
         [800, 500, 5600],
         [800, 500, 6200],
@@ -998,7 +1000,7 @@ pub fn shortcut_source() -> Source {
         [800, 500, 7500],
     ];
     s.instances.push(upper);
-    let mut exit = instance("landing-merge", "free_curve", 200);
+    let mut exit = instance("landing-merge", "free_curve", 400);
     exit.exit_width_cm = 400;
     exit.control_points = vec![
         [800, 500, 7500],

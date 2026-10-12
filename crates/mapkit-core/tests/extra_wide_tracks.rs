@@ -38,7 +38,7 @@ fn extra_wide_catalogue_dimensions_and_fixed_body_contract() {
 fn extra_wide_preserves_base_geometry_rotations_tapers_and_terrain_policy() {
     for (preset, base, _) in PRESETS {
         for rotation in [[0, 0, 0], [0, 37000, 0], [27000, 17000, 11000]] {
-            for [entry, exit] in [[1200, 1200], [200, 1200], [1200, 200], [400, 600]] {
+            for [entry, exit] in [[1200, 1200], [400, 1200], [1200, 400], [400, 600]] {
                 let mut road = instance("a", preset, 1200);
                 road.rotation_mdeg = rotation;
                 road.position_cm = [137, 211, 389];

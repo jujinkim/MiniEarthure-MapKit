@@ -40,7 +40,21 @@ pub(crate) const fn loop_offset_cm(width_cm: u32) -> i64 {
 }
 
 impl SpecialTrack {
-    pub const MIN_PIPE_RADIUS_CM: u32 = 100;
+    /// New authoring only. Stored v1 geometry keeps the bounds in valid().
+    pub const MIN_PIPE_RADIUS_CM: u32 = 200;
+    pub const DEFAULT_PIPE_RADIUS_CM: u32 = 200;
+    pub const PIPE_RADII_CM: &'static [u32] = &[200, 300];
+    pub fn validate_authoring(&self, location: &str) -> Result<()> {
+        if matches!(self.kind, TrackKind::Cylinder | TrackKind::SweptCylinder)
+            && !Self::PIPE_RADII_CM.contains(&self.radius_cm) {
+            return Err(error("E_PIPE_DIMENSIONS", format!("{location}: radius_cm must be 200 or 300 cm (4 or 6 m bore); source was not modified")));
+        }
+        if self.kind == TrackKind::Loop && self.width_cm < crate::assembled_track::MIN_WIDTH_CM {
+            return Err(error("E_TRACK_SOURCE", format!("{location}: loop width_cm must be at least 400 cm; source was not modified")));
+        }
+        if !self.valid() { return Err(error("E_GIMMICK", format!("{location}: invalid special track"))); }
+        Ok(())
+    }
     pub fn pipe_dimension_error(&self) -> bool {
         matches!(self.kind, TrackKind::Cylinder | TrackKind::SweptCylinder) && self.radius_cm < Self::MIN_PIPE_RADIUS_CM
     }
@@ -49,7 +63,7 @@ impl SpecialTrack {
             self.kind,
             TrackKind::SweptCylinder | TrackKind::SweptHalfPipe
         ) {
-            return (if self.kind == TrackKind::SweptCylinder { Self::MIN_PIPE_RADIUS_CM } else { 100 }..=600).contains(&self.radius_cm)
+            return (100..=600).contains(&self.radius_cm)
                 && (140..=600).contains(&self.width_cm)
                 && (2..=512).contains(&self.centerline.len())
                 && self.centerline.iter().all(|f| {
@@ -74,7 +88,7 @@ impl SpecialTrack {
                 });
         }
         self.centerline.is_empty()
-            && (if self.kind == TrackKind::Cylinder { Self::MIN_PIPE_RADIUS_CM } else { 150 }..=600).contains(&self.radius_cm)
+            && (if self.kind == TrackKind::Cylinder { 100 } else { 150 }..=600).contains(&self.radius_cm)
             && (140..=600).contains(&self.width_cm)
             && (600..=3200).contains(&self.length_cm)
     }

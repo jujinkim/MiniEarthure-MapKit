@@ -138,7 +138,7 @@ fn all_catalogue_road_tops_face_the_authored_surface_at_supported_widths_and_pla
             }
         }
     }
-    assert_eq!(cases, 987, "every catalogue width and placement is audited");
+    assert_eq!(cases, 747, "every catalogue width and placement is audited");
     println!("CATALOGUE_ROAD_WINDING cases={cases} faces={faces}");
 }
 
@@ -228,7 +228,7 @@ fn overpass_keeps_sample_indices_branch_dimensions_and_shared_ports() {
     let p = piece(&road).unwrap();
     assert_eq!((p.path.len(), p.alternate_path.len()), (263, 65));
     assert!(p.path.iter().all(|s| s.position_cm[1] == 0 && s.lateral_cm == 200));
-    assert!(p.alternate_path.iter().all(|s| s.lateral_cm == 100));
+    assert!(p.alternate_path.iter().all(|s| s.lateral_cm == 200));
     assert_eq!(p.alternate_path[32].position_cm, [0, 200, 1600]);
     for (index, position) in [
         (3, [0, 0, 400]), (35, [-300, 0, 700]), (67, [-600, 0, 1000]),
@@ -351,7 +351,7 @@ fn extra_wide_tapers_rotations_surfaces_and_connected_walls() {
         ("gentle90_extra_wide_left", "gentle90_left"), ("right90_extra_wide", "right90"),
         ("right90_extra_wide_left", "right90_left")] {
         for rotation in PLACEMENTS {
-            for [entry, exit] in [[1200, 1200], [200, 1200], [1200, 200]] {
+            for [entry, exit] in [[1200, 1200], [400, 1200], [1200, 400]] {
                 let mut road = instance("wide", preset, 1200);
                 road.rotation_mdeg = rotation;
                 road.position_cm = [137, 211, 389];
@@ -449,7 +449,7 @@ fn catalogue_geometry_audit_includes_tapers_editor_curves_and_special_surfaces()
             let taper_supported = !preset.starts_with("cylinder")
                 && !["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&preset);
             let mut ports = vec![[width, width]];
-            if taper_supported { ports.extend([[200, 1200], [1200, 200]]); }
+            if taper_supported { ports.extend([[400, 1200], [1200, 400]]); }
             let mut controls = vec![vec![]];
             if ["free_curve", "flight_curve"].contains(&preset) {
                 controls.push(vec![[0, 0, 0], [0, 0, 600], [600, 0, 1200], [1200, 0, 1200]]);

@@ -539,7 +539,7 @@ fn authored_source_roundtrip_draft_export_and_tampering() {
 }
 #[test]
 fn small_and_existing_authored_pipe_sizes_roundtrip_without_conversion() {
-    for width in [200,300,400,600] {
+    for width in [400,600] {
         let mut source=authoring::Source::empty();source.settings.circuit=false;
         for (i,preset) in ["straight","tube_entry","cylinder_curve","tube_exit","straight"].iter().enumerate() {
             let mut item=authoring::instance(&format!("p-{i}"),preset,if *preset=="straight" {400} else {width});
@@ -670,5 +670,30 @@ fn generated_course_and_recovery_metadata_share_effective_checkpoint_order() {
         let metadata=track::runtime_metadata(assembly);
         assert_eq!(metadata["progress_checkpoints"].as_array().unwrap().len(),effective.len());
         read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
+    }
+}
+
+#[test]
+fn stored_narrow_v1_packages_open_exactly_but_recompile_is_rejected() {
+    for (width, bytes) in [
+        (200, include_bytes!("fixtures/stored-pipe-200-v1.memap").as_slice()),
+        (300, include_bytes!("fixtures/stored-pipe-300-v1.memap").as_slice()),
+    ] {
+        let loaded=read_bytes(bytes).unwrap();
+        let document=&loaded.document;
+        let assembly=document.assembled_track.as_ref().unwrap();
+        assert_eq!(assembly.pieces[2].width_cm,width);
+        assert!(assembly.pieces[2].path.iter().all(|s|s.tube_radius_cm==width/2 && s.lateral_cm==width/2));
+        let source=assembly.authoring.as_ref().unwrap();
+        let original=source.clone();
+        let failure=package::compile_source(source).unwrap_err();
+        assert_eq!(failure.code,"E_PIPE_DIMENSIONS");
+        assert!(failure.message.contains("p-1") && failure.message.contains("400 cm"));
+        assert_eq!(source,&original);
+        assert!(verify_document(document).is_err());
+        package::verify(document,&loaded.inspection.world_content_hash,&document.courses[0]).unwrap();
+        let reopened=read_bytes(bytes).unwrap();
+        assert_eq!(reopened.document.gimmicks,document.gimmicks);
+        assert_eq!(reopened.document.assembled_track,document.assembled_track);
     }
 }

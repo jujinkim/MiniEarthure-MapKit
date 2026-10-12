@@ -9,17 +9,23 @@ fn tube(p: &track::Piece) -> SpecialTrack {
         centerline: p.path.iter().map(|s| TubeFrame { floor_cm:s.position_cm,normal:s.normal,forward:s.forward }).collect() }
 }
 #[test]
-fn all_pipe_variants_keep_body_paths_and_share_small_bores() {
+fn all_pipe_variants_share_bores_and_keep_inside_bend_clearance() {
     let catalogue = track::catalogue();
     for entry in catalogue["entries"].as_array().unwrap().iter().filter(|e| e["id"].as_str().unwrap().starts_with("cylinder")) {
         let id=entry["id"].as_str().unwrap();
-        assert_eq!(entry["widths_cm"], serde_json::json!([200,300,400,600]));
+        assert_eq!(entry["widths_cm"], serde_json::json!([400,600]));
         let reference=piece(&instance("pipe",id,600)).unwrap();
-        for width in [200,300,400,600] {
+        for width in [400,600] {
             let p=piece(&instance("pipe",id,width)).unwrap();
             assert_eq!(p.path.first().unwrap().position_cm,reference.path.first().unwrap().position_cm);
-            assert_eq!(p.path.last().unwrap().position_cm,reference.path.last().unwrap().position_cm);
-            assert!((length(&p)-length(&reference)).abs()<3.0,"{id}/{width}: {} vs {}",length(&p),length(&reference));
+            assert!(length(&p) <= length(&reference) + 3.0);
+            if id.contains("curve") || id.contains("uturn") {
+                let radius = 400.max(width / 2 + 200) as f64;
+                assert!(radius - width as f64 / 2.0 >= 200.0);
+                let end = p.path.last().unwrap().position_cm;
+                if id.contains("uturn") { assert_eq!(end[0].unsigned_abs(), (2.0 * radius) as u64); }
+                else { assert_eq!(end[0].unsigned_abs(), (radius + 400.0) as u64); }
+            }
             assert!(p.path.iter().all(|s| s.tube_radius_cm==width/2 && s.lateral_cm==width/2 && !s.safe));
             let t=tube(&p); assert!(t.valid());
             let mesh=t.mesh();
@@ -37,13 +43,13 @@ fn all_pipe_variants_keep_body_paths_and_share_small_bores() {
             }
         }
     }
-    assert_eq!(track::supported_widths("straight"), &[200,400,600,800,1200]);
+    assert_eq!(track::supported_widths("straight"), &[400,600,800,1200]);
     for id in ["loop","banked_chicane"] { assert_eq!(track::supported_widths(id), &[400]); }
 }
 
 #[test]
 fn small_pipe_portals_and_internal_connections_preserve_grade_and_section() {
-    for width in [200,300,400,600] {
+    for width in [400,600] {
         let mut previous=instance("road","straight",400);
         for (id,preset) in [("entry","tube_entry"),("pipe-a","cylinder_curve"),("pipe-b","cylinder_curve"),("exit","tube_exit"),("road-end","straight")] {
             let mut next=instance(id,preset,if preset=="straight" {400} else {width});
@@ -77,7 +83,7 @@ fn small_pipe_portals_and_internal_connections_preserve_grade_and_section() {
 fn standalone_radius_limits_do_not_relax_loop_or_halfpipe() {
     let templates: std::collections::BTreeMap<String,gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
     let t=templates["cylinder"].track.as_ref().unwrap();
-    assert_eq!((t.radius_cm,t.length_cm),(125,1600));
+    assert_eq!((t.radius_cm,t.length_cm),(200,1600));
     let mut t=t.clone();t.radius_cm=100;assert!(t.valid());t.radius_cm=99;assert!(!t.valid());
     let mut l=templates["loop"].track.clone().unwrap();l.radius_cm=149;assert!(!l.valid());
     let p=piece(&instance("half","banked_chicane",400)).unwrap();
@@ -90,9 +96,64 @@ fn undersize_authoring_reports_dimensions_without_conversion() {
     let snapshot=serde_json::to_value(&old).unwrap();
     let failure=piece(&old).unwrap_err();
     assert_eq!(failure.code,"E_PIPE_DIMENSIONS");
-    assert!(failure.message.contains("200 cm"));
+    assert!(failure.message.contains("400 cm"));
     assert_eq!(serde_json::to_value(&old).unwrap(),snapshot);
     let templates: std::collections::BTreeMap<String,gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
     let mut g=templates["cylinder"].clone();g.track.as_mut().unwrap().radius_cm=99;
     assert!(g.track.as_ref().unwrap().pipe_dimension_error());
+}
+
+#[test]
+fn catalogue_and_all_ribbons_obey_new_authoring_minimum() {
+    let catalogue=track::catalogue();
+    assert_eq!(catalogue["min_width_cm"],400);
+    assert_eq!(catalogue["pipe_radii_cm"],serde_json::json!([200,300]));
+    for entry in catalogue["entries"].as_array().unwrap() {
+        let id=entry["id"].as_str().unwrap();
+        assert_eq!(entry["min_port_width_cm"],400);
+        assert!(entry["default_width_cm"].as_u64().unwrap()>=400);
+        for width in entry["widths_cm"].as_array().unwrap() {
+            let width=width.as_u64().unwrap() as u32;
+            let p=piece(&instance("ribbon",id,width)).unwrap();
+            assert!(p.path.iter().chain(&p.alternate_path).all(|s|s.lateral_cm>=200), "{id}/{width}: internal bottleneck");
+        }
+    }
+    for (preset,width) in [("straight",200),("straight",300),("cylinder",200),("cylinder",300)] {
+        let item=instance("narrow-source",preset,width);
+        let failure=piece(&item).unwrap_err();
+        assert!(failure.message.contains("narrow-source") && failure.message.contains("width_cm"));
+    }
+}
+
+#[test]
+fn stored_special_dimensions_and_new_authoring_are_separate() {
+    let templates: std::collections::BTreeMap<String,gimmick::Gimmick>=serde_json::from_str(include_str!("../../../godot/driving_templates.json")).unwrap();
+    for radius in [100,125,150,200,300] {
+        let mut t=templates["cylinder"].track.clone().unwrap();t.radius_cm=radius;
+        assert!(t.valid(),"stored v1 radius {radius}");
+        assert_eq!(t.validate_authoring("fixture").is_ok(),[200,300].contains(&radius));
+    }
+    let mut t=templates["loop"].track.clone().unwrap();t.width_cm=220;
+    assert!(t.valid());assert!(t.validate_authoring("narrow-loop").unwrap_err().message.contains("narrow-loop"));
+    t.width_cm=400;assert!(t.validate_authoring("loop").is_ok());
+}
+
+#[test]
+fn ramp_footprint_needs_a_continuous_bypass_and_preserves_source_on_failure() {
+    for width in [400,600,800] {
+        for kind in ["ramp_low","ramp_standard","ramp_triple"] {
+            let mut source=Source::empty();source.instances.push(instance("ramp-road","sprint_lane",width));
+            source.attachments.push(Attachment {kind:kind.into(),piece:"ramp-road".into(),path:"main".into(),station_cm:800,side:1});
+            let before=source.clone();let result=compile(&source);
+            assert_eq!(source,before);
+            if width==400 {
+                let err=result.unwrap_err();assert_eq!(err.code,"E_TRACK_CLEARANCE");
+                assert!(err.message.contains("ramp-road") && err.message.contains("220 cm"));
+            } else {
+                let a=result.unwrap();let o=&a.obstacles[0];
+                assert_eq!(o.half_width_cm,160);
+                assert!(width as i64/2+o.lateral_cm-o.half_width_cm as i64>=220);
+            }
+        }
+    }
 }

@@ -271,6 +271,7 @@ pub(super) fn overpass_path(rotation: [i32; 3], origin: Vertex) -> Vec<Sample> {
 }
 
 fn pipe_path(id: &str, width: u32) -> Vec<Sample> {
+    let radius = 400.max(width / 2 + 200) as f64;
     let mode=if id=="banked_chicane" {"halfpipe"} else {"cylinder"};
     let mut origin=[0.0;3];let mut yaw:f64=0.0;let mut path=vec![];
     let mut segment=|distance:f64,turn:f64| {
@@ -278,14 +279,14 @@ fn pipe_path(id: &str, width: u32) -> Vec<Sample> {
         let at=|t:f64| {
             let (x,z,dx,dz)=if turn==0.0 {(0.0,distance*t,0.0,distance)} else {
                 let a=turn.abs()*t;let sign=turn.signum();
-                (sign*400.0*(1.0-libm::cos(a)),400.0*libm::sin(a),sign*400.0*libm::sin(a)*turn.abs(),400.0*libm::cos(a)*turn.abs())
+                (sign*radius*(1.0-libm::cos(a)),radius*libm::sin(a),sign*radius*libm::sin(a)*turn.abs(),radius*libm::cos(a)*turn.abs())
             };
             let pos=[origin[0]+cs*x+sn*z,0.0,origin[2]-sn*x+cs*z];
             let mut f=[cs*dx+sn*dz,0.0,-sn*dx+cs*dz];let mut p=pos;
             if id.ends_with("_s_rise") {
-                let a=std::f64::consts::PI*p[2]/SLOT as f64;
+                let a=std::f64::consts::PI*p[2]/(1600.0 + 4.0*radius);
                 p[1]=80.0*libm::sin(a).powi(2);
-                f[1]=80.0*std::f64::consts::PI/SLOT as f64*libm::sin(2.0*a)*f[2];
+                f[1]=80.0*std::f64::consts::PI/(1600.0 + 4.0*radius)*libm::sin(2.0*a)*f[2];
             }
             (p,f)
         };
@@ -488,6 +489,25 @@ pub(super) fn straight_overlap(a: &Piece, b: &Piece) -> Option<bool> {
     Some(alo < bhi && blo < ahi && !footprints_separated(af, bf))
 }
 
+/// Prove separation from a finite straight runway using the other ribbon's
+/// actual vertices. A wide endpoint is not a sphere extending behind its port.
+pub(super) fn separated_from_straight(a: &Piece, b: &Piece) -> bool {
+    let Some(footprint) = straight_footprint(a) else { return false; };
+    if b.path.iter().chain(&b.alternate_path).any(|s| s.tube_radius_cm > 0 || s.mode == "loop" || s.mode == "flight") { return false; }
+    footprint.windows(2).take(2).any(|edge| {
+        let delta=[edge[1][0]-edge[0][0],edge[1][1]-edge[0][1]];
+        let length=libm::hypot(delta[0],delta[1]);
+        if length<1.0 { return false; }
+        let axis=[-delta[1]/length,delta[0]/length];
+        let project=|v:[f64;2]| v[0]*axis[0]+v[1]*axis[1];
+        let (alo,ahi)=footprint.iter().map(|v|project(*v)).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
+        let (blo,bhi)=b.path.iter().chain(&b.alternate_path).flat_map(|s|ribbon_edges(s,0))
+            .map(|v|project([v[0] as f64,v[2] as f64])).fold((f64::INFINITY,f64::NEG_INFINITY),|(lo,hi),v|(lo.min(v),hi.max(v)));
+        let margin=(WALL_THICKNESS_CM+ROAD_CLEARANCE_CM) as f64;
+        ahi+margin+1.0<blo || bhi+margin+1.0<alo
+    })
+}
+
 fn footprints_separated(a: [[f64; 2]; 4], b: [[f64; 2]; 4]) -> bool {
     [a, b].iter().any(|corners| {
         corners.windows(2).take(2).any(|edge| {
@@ -580,7 +600,7 @@ mod straight_clearance_tests {
         let mut mismatches=vec![];
         for preset in ["straight","gentle90","hairpin","curve_up","curve_down","slope_up","spiral90_left_up"] {
             for yaw in [0,17000,37000,90000,123000] {
-              for width in [200,400,600,1200] { for (pitch,roll) in [(0,0),(27000,0),(-17000,11000)] {
+              for width in [400,600,1200] { for (pitch,roll) in [(0,0),(27000,0),(-17000,11000)] {
                 let mut a=authoring::instance("a",preset,width);
                 a.rotation_mdeg=[pitch,yaw,roll];a.position_cm=[137,211,389];
                 let b=authoring::snap(&authoring::instance("b","straight",width),&a).unwrap();
@@ -628,7 +648,8 @@ mod straight_clearance_tests {
             }
             assert_eq!(straight_overlap(&uncertain, &b), None, "fallback case {case}");
             assert_eq!(straight_overlap(&b, &uncertain), None, "reverse fallback case {case}");
-            assert!(authoring::conflict(&uncertain, &b), "sample collision retained: {case}");
+            if [4,5].contains(&case) { assert!(authoring::conflict(&uncertain, &b), "special-volume fallback: {case}"); }
+            else { assert!(!authoring::conflict(&uncertain,&b), "finite road separation: {case}"); }
         }
         let mut edges = a;
         // Bounds must enclose the delivered ribbon, not just width metadata.

@@ -61,7 +61,7 @@ fn assembled_loop_connectors_share_exact_edges_without_overlap() {
     for face in geometry.triangles.iter().filter(|f|f.object_id=="assembled-road-0") {
         assert!(face.vertices.iter().all(|v|v[2]<=start[2]) || face.vertices.iter().all(|v|v[2]>=end[2]),"ordinary road must not overlap the loop");
     }
-    for (z,expected) in [(start[2],[start,[start[0]+220,start[1],start[2]]]),(end[2],[[end[0]-220,end[1],end[2]],end])] {
+    for (z,expected) in [(start[2],[start,[start[0]+400,start[1],start[2]]]),(end[2],[[end[0]-400,end[1],end[2]],end])] {
         let edge:std::collections::BTreeSet<_>=geometry.triangles.iter().filter(|f|f.object_id=="assembled-road-0").flat_map(|f|f.vertices).filter(|v|v[2]==z).collect();
         assert_eq!(edge,expected.into_iter().collect(),"ordinary and loop mesh use identical external edges");
     }
@@ -249,11 +249,7 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
         let samples: Vec<_> = p.path.iter().filter(|s| s.mode == "cylinder").collect();
         let t = special_track::SpecialTrack {
             kind: special_track::TrackKind::SweptCylinder,
-            radius_cm: if p.id.starts_with("cylinder_wide") {
-                200
-            } else {
-                100
-            },
+            radius_cm: p.width_cm / 2,
             width_cm: 400,
             length_cm: 1600,
             centerline: samples

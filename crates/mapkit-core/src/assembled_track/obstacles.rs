@@ -112,7 +112,7 @@ fn eligible_piece(index: usize, p: &Piece) -> bool {
         ]
         .contains(&p.id.as_str())
 }
-// A rail is a chord across one supported corner. The 110cm corridor remains
+// A rail is a chord across one supported corner. The 220cm corridor remains
 // inside its road, so the lower rail never sends a vehicle through an outer wall.
 fn chord_distance(point: Vertex, a: Vertex, b: Vertex) -> (f64,f64) {
     let delta=std::array::from_fn::<_,3,_>(|j|(b[j]-a[j]) as f64);
@@ -137,6 +137,7 @@ fn rail_chord(path: &[Sample], station: u64) -> Option<(Sample,i64)> {
                 if w.iter().any(|s|!s.safe || s.normal[1]<999_000) {return false;}
                 let (across,height)=chord_distance(point,w[0].position_cm,w[1].position_cm);
                 height<=3.0 && across+55.0<=w[0].lateral_cm.min(w[1].lateral_cm) as f64
+                    && w[0].lateral_cm.min(w[1].lateral_cm) as i64 >= PASSAGE_CM + 20
             })
         });
         if !covered {continue;}
@@ -222,24 +223,21 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
         half = half.min(t.lateral_cm as i64);
     }
     let sweep = match kind {
-        "ramp_low" | "ramp_standard" | "ramp_triple" => 80,
+        "ramp_low" | "ramp_standard" | "ramp_triple" => 160,
         "quarterpipe_left" | "quarterpipe_right" => 200,
         "grind_rail" => 20,
         "fixed_obstacle" => 20,
         "moving_obstacle" => 40, // 40cm box plus 40cm translation, centred on sweep
         "rotating_obstacle" => 37, // sqrt(20²+30²), full rotation
-        "jump_barrier" => half - 10,
-        _ => 70.min((half * 2 - 110) / 2),
+        "jump_barrier" => (half * 2 - PASSAGE_CM - 10) / 2,
+        "slalom_gates" => 70.min((half * 2 - PASSAGE_CM - 20) / 4),
+        _ => 70.min((half * 2 - PASSAGE_CM - 10) / 2),
     };
-    if sweep < 20 || (!jump && sweep * 2 + 110 > half * 2) {
+    if sweep < 20 || sweep * 2 + PASSAGE_CM + 10 > half * 2 {
         return None;
     }
-    let lateral = if jump {
-        0
-    } else {
-        side * (half - sweep - 10).min(100)
-    };
-    let avoid = if jump { 0 } else { -side * (half - 50).min(60) };
+    let lateral = side * (half - sweep - 10);
+    let avoid = if slalom { 0 } else { -side * (half - PASSAGE_CM / 2) };
     let o = Obstacle {
         kind: kind.into(),
         piece_index: site.piece,
@@ -278,12 +276,19 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
             let r = right(&t);
             let d: Vertex = std::array::from_fn(|i| at[i] - t.position_cm[i]);
             let across: f64 = (0..3).map(|i| d[i] as f64 * r[i] as f64 / 1e6).sum();
-            if across.abs() + 5.0 > t.lateral_cm as f64 {
+            let clear = if slalom {
+                // The same centre lane stays open past both alternating gates.
+                across.abs() >= PASSAGE_CM as f64 / 2.0
+            } else {
+                t.lateral_cm as f64 + side as f64 * across >= PASSAGE_CM as f64
+            };
+            if !clear || across.abs() + 5.0 > t.lateral_cm as f64 {
                 return None;
             }
         }
     }
     let g = gimmick(a, &o, 0);
+    let occupied = g.occupancy_bounds();
     // Protect other roads/branches (especially the 2m overpass clearance) and
     // existing action/landing volumes. Safety envelopes enclose the full cycle.
     for (i, other) in a.pieces.iter().enumerate() {
@@ -292,12 +297,12 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
                 continue;
             }
             if samples.iter().any(|t| {
-                t.position_cm[1] + 15 >= g.safety_min_cm[1]
-                    && t.position_cm[1] - 15 <= g.safety_max_cm[1]
+                occupied.iter().any(|(lo,hi)| t.position_cm[1] + 15 >= lo[1]
+                    && t.position_cm[1] - 15 <= hi[1]
                     && [0, 2].iter().all(|&j| {
-                        t.position_cm[j] + t.lateral_cm as i64 >= g.safety_min_cm[j]
-                            && t.position_cm[j] - t.lateral_cm as i64 <= g.safety_max_cm[j]
-                    })
+                        t.position_cm[j] + t.lateral_cm as i64 >= lo[j]
+                            && t.position_cm[j] - t.lateral_cm as i64 <= hi[j]
+                    }))
             }) {
                 return None;
             }
@@ -505,7 +510,7 @@ mod tests {
         let mut pieces = vec![];
         let mut origin = [0; 3];
         for _ in 0..3 {
-            push_piece(&mut pieces, &mut origin, 0, "straight", 400, false, [0; 3]);
+            push_piece(&mut pieces, &mut origin, 0, "straight", width, false, [0; 3]);
         }
         push_piece(&mut pieces, &mut origin, 0, id, width, true, [0; 3]);
         layout::finish(
@@ -528,11 +533,11 @@ mod tests {
     }
     #[test]
     fn resolved_attachments_fit_three_widths_and_use_real_motion_geometry() {
-        for width in [200, 400, 600, 800] {
+        for width in [400, 600, 800] {
             let a = fixture("sprint_lane", width);
             for kind in KINDS {
                 if *kind=="grind_rail" {continue;}
-                if (kind.starts_with("quarterpipe") && width<800) || (kind.starts_with("ramp") && width<400) {continue;}
+                if (kind.starts_with("quarterpipe") && width<800) || (kind.starts_with("ramp") && width<600) {continue;}
                 let o = safe_site(
                     &a,
                     &Site {
@@ -569,12 +574,12 @@ mod tests {
     fn wider_ramps_and_low_corner_rail_share_geometry() {
         for kind in ["ramp_low","ramp_standard","ramp_triple"] {
             for part in rc_parts(kind).unwrap() {
-                assert_eq!(part.vertices.iter().map(|v|v[0]).max().unwrap()-part.vertices.iter().map(|v|v[0]).min().unwrap(),160);
+                assert_eq!(part.vertices.iter().map(|v|v[0]).max().unwrap()-part.vertices.iter().map(|v|v[0]).min().unwrap(),320);
             }
         }
         assert!(rail_chord(&fixture("sprint_lane",400).pieces[3].path,800).is_none());
         for id in ["right90","right90_left","gentle90","gentle90_left"] {
-            let mut a=fixture(id,400);
+            let mut a=fixture(id,600);
             let station=length(&a.pieces[3].path)/2;
             let o=rail_site(&a,&Site{piece:3,branch:false,station}).unwrap_or_else(||panic!("corner rail {id}"));
             a.obstacles=vec![o.clone()];
@@ -702,9 +707,9 @@ fn rail_parts(length: i64) -> Vec<CollisionConvex> {
 }
 fn rc_parts(kind: &str) -> Option<Vec<CollisionConvex>> {
     Some(match kind {
-        "ramp_low" => vec![wedge(0,0,160,160,25)],
-        "ramp_standard" => vec![wedge(0,0,160,220,60)],
-        "ramp_triple" => [-250,0,250].map(|z|wedge(0,z,160,160,25)).to_vec(),
+        "ramp_low" => vec![wedge(0,0,320,160,25)],
+        "ramp_standard" => vec![wedge(0,0,320,220,60)],
+        "ramp_triple" => [-250,0,250].map(|z|wedge(0,z,320,160,25)).to_vec(),
         "grind_rail" => rail_parts(600),
         "quarterpipe_left" | "quarterpipe_right" => {
             let sign=if kind.ends_with("left") {-1.0} else {1.0};

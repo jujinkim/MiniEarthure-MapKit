@@ -25,12 +25,12 @@ scale):
 
 | Kind | Radius | Other |
 | --- | --- | --- |
-| `loop` | 150–600 cm | `width_cm` 140–600 controls the ribbon |
+| `loop` | 150–600 cm | stored `width_cm` 140–600; new ribbons 400–600 cm |
 | `cylinder` | see [pipe dimensions](#pipe-dimensions) | `length_cm` 600–3200 controls the axis |
 | `swept_cylinder` | see [pipe dimensions](#pipe-dimensions) | 2–512 `centerline` floor/normal/forward frames |
 
 - Unused dimensions are retained for switching templates. Editor template
-  defaults: loop radius 250 cm, cylinder radius 125 cm, width 220 cm, length 1600 cm.
+  defaults: loop radius 250 cm, cylinder radius 200 cm, width 400 cm, length 1600 cm.
 - Loop ends are separated; floor radius is 1.6× and crown radius 0.4× the radius
   parameter. Cylinders have flared entrance/exit, a hollow interior and no caps.
 - `special_track.rs` produces the only geometry for presentation, collision and
@@ -51,14 +51,18 @@ scale):
 
 ## Pipe dimensions
 
-- Cylinder and swept-cylinder radius is at least 100 cm (2 m bore). Tube ports are
-  at least 200 cm.
-- Authored pipe bores: 2/3/4/6 m. Generated pipes choose 2/3/4 m uniformly with one
-  RNG draw at every difficulty.
-- The track catalogue exposes `pipe_min_radius_cm` for Editor controls.
-- Undersize source data fails with `E_PIPE_DIMENSIONS`; it is never converted.
-- Road, loop and halfpipe ranges, wide presets, internal open sections and portal
-  grade are separate.
+- New cylinder and swept-cylinder bores are 4/6 m (radii 200/300 cm), default 4 m.
+  New road and pipe ports have a 400 cm minimum. Generation draws the two bores
+  uniformly at every difficulty.
+- Curved pipes use centreline radius `max(400, bore/2 + 200)` cm. General corners
+  and spiral radius/rise formulas keep their existing definitions.
+- The catalogue publishes `min_width_cm`, `loop_min_width_cm`,
+  `loop_default_width_cm`, `pipe_min_radius_cm`, `pipe_default_radius_cm` and
+  `pipe_radii_cm`. New standalone loops/pipes and geometry edits call
+  `SpecialTrack::validate_authoring` / Godot `validate_special_track_authoring`.
+- Stored v1 parameters keep their original accepted ranges (pipe radius 100–600 cm).
+  Loading, preview, bounds and Undo/Redo use stored-data validation. New authoring
+  errors name the location and dimension; no implicit resize or conversion occurs.
 
 ## Pipe material
 

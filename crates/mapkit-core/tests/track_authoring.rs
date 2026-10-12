@@ -40,7 +40,7 @@ fn composed_shortcut_is_connected_with_shared_progress() {
     assert!(a.routes[1].estimated_msec < a.routes[0].estimated_msec);
     assert!(a.pieces.iter().any(|p| p.id == "flight_curve"));
     assert_eq!(a.pieces[3].width_cm, 800);
-    assert_eq!(a.pieces[7].width_cm, 200);
+    assert_eq!(a.pieces[7].width_cm, 400);
     a.validate().unwrap();
 }
 
@@ -98,9 +98,9 @@ fn widths_curves_helices_and_continuous_jump() {
     let gap = piece(&instance("gap", "jump", 400)).unwrap();
     assert!(gap.path.iter().any(|s| s.mode == "flight"));
     let mut wide = instance("wide", "straight", 1200);
-    wide.entry_width_cm = 200;
+    wide.entry_width_cm = 400;
     let p = piece(&wide).unwrap();
-    assert_eq!(p.path[0].lateral_cm, 100);
+    assert_eq!(p.path[0].lateral_cm, 200);
     assert_eq!(p.path.last().unwrap().lateral_cm, 600);
 }
 #[test]
@@ -160,7 +160,7 @@ fn category_combinations_time_bounds_and_exclusion() {
 
 #[test]
 fn full_orientation_snap_and_pipe_portals() {
-    for width in [200, 400, 600] {
+    for width in [400, 600] {
         let mut source = Source::empty();
         source.settings.circuit = false;
         let mut previous = instance("road", "straight", width);

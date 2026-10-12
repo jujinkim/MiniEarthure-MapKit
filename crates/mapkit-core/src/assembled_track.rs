@@ -5,6 +5,8 @@ use crate::special_track::{SpecialTrack, TrackKind, TubeFrame};
 use crate::*;
 
 pub const WIDTH: i64 = 400;
+pub const MIN_WIDTH_CM: u32 = 400;
+pub const PASSAGE_CM: i64 = 220;
 pub const WALL: i64 = 60;
 pub const TILE_CM: i64 = 800;
 pub const START_PIECES: usize = 3;
@@ -15,7 +17,7 @@ pub const FINISH_WALL_CM: i64 = 120;
 pub const WALL_THICKNESS_CM: i64 = 50;
 const SLOT: i64 = TILE_CM * 4;
 const LOOP_RADIUS: u32 = 350;
-const LOOP_WIDTH: u32 = 220;
+const LOOP_WIDTH: u32 = MIN_WIDTH_CM;
 const LOOP_OFFSET: i64 = crate::special_track::loop_offset_cm(LOOP_WIDTH);
 const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
@@ -30,7 +32,7 @@ mod panels;
 mod junction;
 mod walls;
 mod layout;
-pub const WIDTHS: &[u32] = &[200, 400, 600, 800, 1200];
+pub const WIDTHS: &[u32] = &[400, 600, 800, 1200];
 mod grounding;
 pub use grounding::Support;
 pub(crate) use grounding::terrain_supports;
@@ -444,7 +446,7 @@ pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
 }
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,"wall_thickness_cm":WALL_THICKNESS_CM,
-        "pipe_min_radius_cm":crate::special_track::SpecialTrack::MIN_PIPE_RADIUS_CM,"tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
+        "min_width_cm":MIN_WIDTH_CM,"loop_min_width_cm":MIN_WIDTH_CM,"pipe_default_radius_cm":SpecialTrack::DEFAULT_PIPE_RADIUS_CM,"pipe_radii_cm":SpecialTrack::PIPE_RADII_CM,"loop_default_width_cm":MIN_WIDTH_CM,"pipe_min_radius_cm":crate::special_track::SpecialTrack::MIN_PIPE_RADIUS_CM,"tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
         "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
         "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
@@ -474,19 +476,17 @@ pub fn supported_widths(id: &str) -> &'static [u32] {
     } else if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
         &[400]
     } else if id.starts_with("cylinder") {
-        &[200, 300, 400, 600]
+        &[400, 600]
     } else if ["tube_entry", "tube_exit"].contains(&id) {
-        &[200, 300, 400, 600, 800, 1200]
+        WIDTHS
     } else {
         WIDTHS
     }
 }
-pub fn minimum_port_width(_id: &str) -> u32 { 200 }
+pub fn minimum_port_width(_id: &str) -> u32 { MIN_WIDTH_CM }
 fn catalogue_width(id: &str) -> u32 {
     if base_preset(id) != id {
         1200
-    } else if id.ends_with("_narrow") || (id.starts_with("cylinder") && !id.starts_with("cylinder_wide")) {
-        200
     } else {
         400
     }
@@ -637,7 +637,6 @@ fn spiral_rise(t: f64) -> f64 {
     }) / 0.875
 }
 fn build_local_piece(original_id: &str) -> Piece {
-    let narrow = original_id.ends_with("_narrow");
     let id = base_preset(original_id).trim_end_matches("_narrow");
     let tube_radius = if id.starts_with("cylinder_wide") || id == "banked_chicane" {
         200
@@ -793,7 +792,10 @@ fn build_local_piece(original_id: &str) -> Piece {
                 if i == 0 {
                     continue;
                 }
-                let pos = std::array::from_fn(|a| (faces[0][0][a] + faces[1][2][a]) / 200);
+                let pos = std::array::from_fn(|a| round((faces[0][0][a] + faces[1][2][a]) as f64 / 200.0));
+                // The inner mesh keeps its fine adaptive sampling. Centimetre
+                // wall rings need a finite chord to avoid quantized folds.
+                if distance(p.last().unwrap().0, add(pos, [0,0,1000])) < 20 { continue; }
                 p.push((
                     add(pos, [0, 0, 1000]),
                     unit(track.loop_normal(parameters[i])),
@@ -1001,20 +1003,6 @@ fn build_local_piece(original_id: &str) -> Piece {
         path = geometry::overpass_path([0; 3], [0; 3]);
     }
     let len = path.windows(2).map(|v| distance(v[0].position_cm, v[1].position_cm)).sum::<u64>();
-    if narrow {
-        let total = path
-            .windows(2)
-            .map(|w| distance(w[0].position_cm, w[1].position_cm))
-            .sum::<u64>() as f64;
-        let mut station = 0.0;
-        for i in 0..path.len() {
-            if i > 0 {
-                station += distance(path[i - 1].position_cm, path[i].position_cm) as f64;
-            }
-            let t = (station.min(total - station) / 300.0).clamp(0.0, 1.0);
-            path[i].lateral_cm = 200 - round(100.0 * t * t * (3.0 - 2.0 * t)) as u32;
-        }
-    }
     let alternate_path = if id == "overpass" {
         (0..=64)
             .map(|i| {
@@ -1022,22 +1010,12 @@ fn build_local_piece(original_id: &str) -> Piece {
                 let edge = z.min(3200 - z) as f64;
                 let direction = if z < 1600 { 1.0 } else { -1.0 };
                 let t = ((edge - 400.0) / 600.0).clamp(0.0, 1.0);
-                let lateral = (edge / 400.0).clamp(0.0, 1.0);
-                // Separated ramps lead to a straight diagonal deck, crossing the
-                // ground chicane at its centre with 2m vertical clearance.
-                let (x, dx) = if (800..=2400).contains(&z) {
-                    let u = (z - 800) as f64 / 1600.0;
-                    (320.0 - 640.0 * spiral_rise(u), -0.4 * spiral_pitch(u))
-                } else {
-                    (
-                        320.0 * lateral * lateral * (3.0 - 2.0 * lateral) * direction,
-                        if lateral < 1.0 {
-                            320.0 * 6.0 * lateral * (1.0 - lateral) / 400.0
-                        } else {
-                            0.0
-                        },
-                    )
-                };
+                // A 4m upper ribbon needs smooth lateral curvature at its
+                // ports. Keep the 32m span, 3.2m offsets and 2m deck height.
+                let angle = std::f64::consts::TAU * z as f64 / 3200.0;
+                let sn = libm::sin(angle);
+                let x = 320.0 * sn.powi(3);
+                let dx = 960.0 * sn * sn * libm::cos(angle) * std::f64::consts::TAU / 3200.0;
                 let dy = if t > 0.0 && t < 1.0 {
                     200.0 * 6.0 * t * (1.0 - t) / 600.0 * direction
                 } else {
@@ -1051,7 +1029,7 @@ fn build_local_piece(original_id: &str) -> Piece {
                     mode: "bridge".into(),
                     safe: true,
                     min_speed_cmps: 0,
-                    lateral_cm: 100,
+                    lateral_cm: MIN_WIDTH_CM / 2,
                     tube_radius_cm: 0,
                     below_cm: 35,
                     above_cm: 300,
@@ -1081,7 +1059,7 @@ fn build_local_piece(original_id: &str) -> Piece {
         rotation_mdeg: [0; 3],
         control_points: vec![],
         id: original_id.into(),
-        width_cm: if narrow { 200 } else { WIDTH as u32 },
+        width_cm: WIDTH as u32,
         entry_width_cm: WIDTH as u32,
         exit_width_cm: WIDTH as u32,
         chain_id: 0,
@@ -1406,7 +1384,7 @@ impl Assembly {
                 || geometry::self_intersects(p)
                 || !geometry::ordinary_grade_valid(p)
             {
-                return Err(fail());
+                return Err(error("E_TRACK_ASSEMBLY", format!("invalid piece {} at {:?}: materialized={} self_intersects={} grade={}", p.id, p.origin_cm, *p==materialize(p),geometry::self_intersects(p),geometry::ordinary_grade_valid(p))));
             }
         }
         for route in &self.routes {
@@ -1419,7 +1397,7 @@ impl Assembly {
                 let mut end = a.path.last().unwrap().clone();
                 end.position_cm[1] -= portal_drop(&a.id, &b.id, b.width_cm);
                 if !authoring::joined(&end, &b.path[0]) {
-                    return Err(fail());
+                    return Err(error("E_TRACK_ASSEMBLY", format!("disconnected ports: {} -> {}",a.id,b.id)));
                 }
             }
             if self.settings.circuit
@@ -1440,7 +1418,7 @@ impl Assembly {
                     continue;
                 }
                 if authoring::conflict(&self.pieces[i], &self.pieces[j]) {
-                    return Err(fail());
+                    return Err(error("E_TRACK_ASSEMBLY", format!("piece clearance: {i} {} / {j} {}",self.pieces[i].id,self.pieces[j].id)));
                 }
             }
         }
