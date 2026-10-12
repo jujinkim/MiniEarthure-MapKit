@@ -45,3 +45,9 @@ with two materials. MultiMesh instances explicitly use white instance color so
 compatibility rendering preserves the mesh tint (16 bytes per instance within
 existing reservations). `street_tree_validator` passed green-coverage checks for
 the original tree and both instances. Existing saved models remain unchanged.
+
+Authored default-world vegetation uses faceted crown rings, compact branches and
+crossed wheat stalk planes. Near tree, cedar, beech, shrub and 8×8 m crop modules
+have fixed triangle ceilings in `test_authored_assets.py`; distant models keep the
+principal crown tiers and openings. Collision proxies are unchanged. Only newly
+generated packages receive these model bytes; original saved packages survive.

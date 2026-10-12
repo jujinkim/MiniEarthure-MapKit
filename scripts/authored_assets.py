@@ -64,7 +64,7 @@ def beam(m,a,b,r,color,sides=8,r2=None):
     m.hull(points,faces,color)
 
 def crown(m,center,size,seed,color):
-    r=random.Random(seed);sides=6 if m.distant else 9;rings=3 if m.distant else 5
+    r=random.Random(seed);sides=5 if m.distant else 7;rings=2 if m.distant else 3
     points=[(center[0],center[1]-size[1]/2,center[2])]
     for row in range(1,rings):
         angle=-math.pi/2+math.pi*row/rings
@@ -254,14 +254,14 @@ def tree(variant=0,distant=False):
     m=Mesh(distant);r=random.Random(802+variant)
     height=[12.5,15.2,10.6,8.0,4.8][variant];radius=[4.6,4,4.4,3.5,1.8][variant]
     bark=(.48,.49,.41,1) if variant==1 else WOOD
-    beam(m,(0,-.28,0),(.25,height*.72,.1),.26 if variant!=4 else .10,bark,6 if distant else 9,r2=.11)
+    beam(m,(0,-.28,0),(.25,height*.72,.1),.26 if variant!=4 else .10,bark,5 if distant else 6,r2=.11)
     m.collision=[dict(center=cm((0,height*.26,0)),size_cm=cm((.55 if variant!=4 else .22,height*.57,.55 if variant!=4 else .22)))]
     count=8
     for i in range(count):
         angle=math.tau*i/count+r.uniform(-.23,.23)
         ring=radius*r.uniform(.28,.70)
         y=height*(.68+r.uniform(-.16,.15));x=math.cos(angle)*ring;z=math.sin(angle)*ring
-        if not distant:beam(m,(.1,height*.36,0),(x,y,z),.10,bark,6,r2=.035)
+        if not distant:beam(m,(.1,height*.36,0),(x,y,z),.10,bark,4,r2=.035)
         color=[(.23,.35,.15,1),(.30,.42,.19,1),(.19,.31,.17,1),(.35,.44,.22,1)][(i+variant)%4]
         crown(m,(x,y,z),(radius*.98,height*.38,radius*.98),i+variant*51,color)
     crown(m,(.3,height*.85,-.25),(radius*1.25,height*.31,radius*1.12),910+variant,(.29,.40,.17,1))
@@ -287,6 +287,42 @@ def fence(distant=False):
     m=Mesh(distant)
     for x in (-2,2):m.solid((x,.64,0),(.13,1.5,.13),WOOD,True)
     for y in (.5,1.05):m.solid((0,y,0),(4.1,.11,.10),TRIM,True)
+    return m
+
+def boundary(kind,distant=False):
+    """Four-metre modules. One simple solid proxy; gateways are placement gaps."""
+    m=Mesh(distant)
+    if kind=='stone-wall':
+        m.solid((0,.46,0),(4,.92,.48),STONE)
+        m.solid((0,.94,0),(4.08,.12,.56),TRIM)
+        if not distant:
+            for x in (-1.5,-.5,.5,1.5):m.solid((x,.47,-.247),(.025,.72,.02),DARK)
+        m.collision=[dict(center=[0,50,0],size_cm=[408,106,56])]
+    else:
+        wood=kind in ('timber-fence','snow-fence')
+        color=WOOD if wood else DARK
+        height=1.45 if kind=='snow-fence' else 1.15
+        for x in (-1.92,1.92):m.solid((x,height*.5,0),(.16,height+.12,.16),color)
+        for y in (.24,height-.12):m.solid((0,y,0),(4,.10,.12),TRIM if kind=='park-railing' else color)
+        count=8 if wood else 10
+        # The far silhouette retains the same openings and grounded outline.
+        for i in range(count):
+            x=-1.7+i*3.4/(count-1)
+            m.solid((x,height*.5,0),(.18 if wood else .05,height-.28,.07),color)
+        if kind=='safety-barrier':
+            m.solid((0,.72,-.08),(3.4,.34,.05),(.73,.54,.12,1))
+            if not distant:
+                for x in (-1.2,-.4,.4,1.2):m.solid((x,.72,-.11),(.22,.34,.02),DARK)
+        m.collision=[dict(center=[0,round(height*50),0],size_cm=[400,round((height+.12)*100),16])]
+    return m
+
+def trail_sign(distant=False):
+    m=Mesh(distant)
+    m.solid((0,.85,0),(.13,1.7,.13),WOOD)
+    m.solid((0,1.5,0),(1.15,.36,.12),GREEN)
+    if not distant:
+        m.hull([(.1,1.39,-.07),(.1,1.61,-.07),(.43,1.5,-.07)],[(0,1,2)],TRIM)
+    m.collision=[dict(center=[0,87,0],size_cm=[16,174,16])]
     return m
 
 def prop(kind,distant=False):
@@ -371,8 +407,11 @@ def crop(kind=0,distant=False):
                 if kind:
                     crown(m,(x,.23,z),(.65,.5,.62),row*11+col,(.34,.43,.19,1))
                 else:
-                    beam(m,(x,0,z),(x+.06,.96,z),.023,(.55,.53,.27,1),4)
-                    beam(m,(x+.06,.74,z),(x+.08,1.07,z),.067,(.65,.58,.29,1),5)
+                    # Crossed opaque stalk planes and a triangular seed head;
+                    # individual plants retain parallax without tiny cylinders.
+                    m.panel([(x-.02,0,z),(x+.02,0,z),(x+.08,.96,z),(x+.04,.96,z)],(0,0,1),(.55,.53,.27,1))
+                    m.panel([(x,0,z-.02),(x,0,z+.02),(x+.06,.96,z+.02),(x+.06,.96,z-.02)],(1,0,0),(.55,.53,.27,1))
+                    beam(m,(x+.06,.74,z),(x+.08,1.07,z),.067,(.65,.58,.29,1),3)
     return m
 
 def bridge_support(distant=False,height=6.8):
@@ -388,10 +427,11 @@ def library():
         **{'tree-'+str(i):lambda far,i=i:tree(i,far) for i in range(5)},
         **{'rock-'+str(i):lambda far,i=i:rock(i,far) for i in range(3)},
         'market-hall':market_hall,'barn':barn,'shed':shed,'shrub':shrub,'hedge':lambda far:shrub(far,True),
-        'fence':fence,'bridge-support':bridge_support,'bridge-support-high':lambda far:bridge_support(far,17.8),
+        'fence':fence,'trail-sign':trail_sign,'bridge-support':bridge_support,'bridge-support-high':lambda far:bridge_support(far,17.8),
         'tractor':lambda far:vehicle(True,far),'parked-car':lambda far:vehicle(False,far),
         'wheat':lambda far:crop(0,far),'cabbage':lambda far:crop(1,far)}
     factories.update({name:lambda far,name=name:prop(name,far) for name in ('bench','lamp','hay','crate','table','planter','bin','log','reeds','grass')})
+    factories.update({name:lambda far,name=name:boundary(name,far) for name in ('stone-wall','timber-fence','metal-fence','snow-fence','safety-barrier','park-railing')})
     return assemble_library(factories)
 
 def assemble_library(factories,source='authored_assets.py'):

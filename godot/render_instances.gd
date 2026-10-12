@@ -20,7 +20,7 @@ static func parts(template: Node3D) -> Array:
 		for child: Node3D in node.get_children(): pending.append({"node": child, "transform": transform})
 	return result
 
-static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounted) -> Dictionary:
+static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounted, solid := true) -> Dictionary:
 	var pieces := parts(template)
 	# A single opaque object still uses INSTANCE_CUSTOM for its seed. Falling
 	# back to an instance uniform exhausts the hardware's shared shader buffer
@@ -41,7 +41,7 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 		node.material_override = piece.material
 		node.cast_shadow = piece.shadow
 		var authored_bounds: AABB=piece.transform * piece.mesh.get_aabb()
-		node.set_meta("mapkit_decoration", authored_bounds.size.length() <= 6.0)
+		node.set_meta("mapkit_decoration", not solid and authored_bounds.size.length() <= 6.0)
 		preload("./display_quality.gd").apply_node(node,preload("./display_quality.gd").active())
 		parent.add_child(node)
 		if lease != null:
@@ -58,7 +58,7 @@ static func append(group: Dictionary, transform: Transform3D, object_id: String,
 		var bounds: AABB = pose * part.multi.mesh.get_aabb()
 		part.bounds = part.bounds.merge(bounds) if part.bounded else bounds
 		part.bounded = true
-		part.multi.custom_aabb = part.bounds
+		part.multi.custom_aabb = part.bounds.grow(.08) # bounded leaf motion at the highest tier
 		if bounds.size.length() > 6.0:
 			var occluder := preload("./display_quality.gd").occluder(part.multi.mesh,group.lease)
 			if occluder != null:

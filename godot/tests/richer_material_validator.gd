@@ -55,7 +55,17 @@ func run() -> void:
 	var assets={"shop":{"path":"shop.glb","bytes":bytes,"material_json":"null","content_hash":bytes.hex_encode().sha256_text(),"memory_bytes":4194304}}
 	cache.environment_profile={"lights":[{"asset_id":"shop","window_materials":[4],"bulb_materials":[]}]}
 	var key: String=cache.claim("shop",assets)
+	var shared_key: String=cache.claim("shop",assets)
+	check(shared_key==key,"simultaneous cells share the preparation claim")
+	check(not cache.prepare_template(key,"shop",assets),"import yields before LOD/material/GPU preparation")
+	var stages := []
+	while cache.entries[key].stage != "done":
+		stages.append(cache.entries[key].stage)
+		cache.prepare_template(key,"shop",assets)
 	var template: Node3D=cache.template(key,"shop",assets)
+	check(stages.has("lod") and stages.has("materials") and cache.imports==1,"phased preparation imports shared GLB exactly once")
+	cache.release(shared_key)
+	check(cache.template(key,"shop",assets)==template and cache.imports==1,"second consumer reuses prepared resources")
 	check(template!=null,"actual GLB imports with shared textured materials")
 	if template!=null:
 		var pending: Array[Node]=[template];var details:=0

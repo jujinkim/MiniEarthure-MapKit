@@ -29,17 +29,22 @@ content. Views without shareable records retain independent per-job ownership.
 The cache claims resources before import and holds at most 256 entries/128 MiB by
 default, including its urban shader. The caller supplies independent admission.
 Each model imports once while cached; materials, mesh surfaces and decoded images
-are shared. Import, MultiMesh setup, individual placement and mesh upload are
-separate `advance` steps. Timings expose cumulative import/attachment/release costs
-and peak single-step/import durations; synchronous engine import cannot be preempted.
+are shared. GLB import, shared texture context, per-mesh LOD generation, material binding,
+MultiMesh setup, placement and mesh upload are separate admitted steps. Concurrent
+claims advance one shared template and reuse its completed phases. Diagnostics
+include each phase total/peak and attachment/release costs; individual synchronous
+engine operations cannot be preempted and their peaks remain visible.
 
 Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
 transforms, mesh surfaces, material overrides, original colours and shadow mode
 survive. Transparent models, overlays and per-surface overrides use ordinary
-instances. ImporterMesh LOD indices are generated once per cached template. Small decorations
-use quality-controlled distance/LOD with 8 m hysteresis; large occluding structures
+instances. ImporterMesh LOD indices are generated once per cached template. Only assets without collision at/above their local origin may enter the small
+decoration distance tier (buried root beds remain decorative). The validated
+`solid` presentation flag and cache key preserve small fences, walls and props in
+near and distant views at every preset. Decorations use 8 m distance hysteresis; structures
 remain visible until normal cell/frustum retirement. MultiMesh bounds include only
-populated transformed instances, not unused capacity. Actual upright opaque
+populated transformed instances, not unused capacity, with an 8 cm margin for leaf
+motion. Leaf faces never act as static occluders. Actual upright opaque
 triangles (at most 64, inset 1 cm) form occluders; an AABB never fills an opening.
 
 Opaque shared rendering emits each multi-material mesh once. Single-object groups

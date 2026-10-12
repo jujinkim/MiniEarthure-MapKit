@@ -32,10 +32,10 @@ void fragment() {
     float noise=fract(sin(dot(floor(p*150.0),vec2(12.9898,78.233)))*43758.5453);
     vec3 color=base_color.rgb*(0.96+0.08*noise);
     float tile_roughness=0.9;
-    if(detail_enabled && length(VERTEX)<48.0) {
+    if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
         color*=detail.r;tile_roughness=detail.g;
-        NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
+        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
         AO=mix(1.0,detail.r,0.5);
     }
     if (paving) {

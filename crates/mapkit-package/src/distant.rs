@@ -325,7 +325,8 @@ impl Package {
                 let mesh = &silhouettes[&asset.id];
                 let mut low = [f32::INFINITY;3];let mut high = [f32::NEG_INFINITY;3];
                 for p in &mesh.vertices { for a in 0..3 { low[a]=low[a].min(p[a]);high[a]=high[a].max(p[a]); } }
-                let small = (0..3).map(|a| (high[a]-low[a]).powi(2)).sum::<f32>() <= 36.;
+                let small = !asset.has_visible_collision()
+                    && (0..3).map(|a| (high[a]-low[a]).powi(2)).sum::<f32>() <= 36.;
                 let target = if small { &mut decorations } else { &mut result };
                 target.vertices.extend(mesh.vertices.iter().map(|&p| placed(p,object.position,object.quarter_turns,object.yaw_offset_mdeg)));
                 target.colors.extend_from_slice(&mesh.colors);

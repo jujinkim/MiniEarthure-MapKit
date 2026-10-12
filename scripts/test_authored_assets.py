@@ -58,6 +58,14 @@ class AuthoredAssets(unittest.TestCase):
                 self.assertLess(len(far),len(near),name)
             reductions[name]=[len(near),len(far)]
         print('Authored triangle counts (near/far):',json.dumps(reductions,sort_keys=True))
+    def test_repeated_near_geometry_budgets(self):
+        # Fixed triangle ceilings preserve the accepted >=50% reduction.
+        from authored_assets import tree,shrub,crop
+        from forest_assets import cedar,beech
+        for factory,ceiling in [(tree,420),(shrub,180),(crop,840),(lambda:crop(1),2160),(cedar,1114),(beech,238)]:
+            model=factory()
+            self.assertLessEqual(sum(len(faces) for _,faces in model.groups.values()),ceiling)
+
     def test_open_arcades_and_equipment_bays_survive_both_lods(self):
         for name,x,front,wall in [('market-hall',0,4.2,0),('shed',2,2.5,-2.4)]:
             record,payloads,_=self.assets[name]

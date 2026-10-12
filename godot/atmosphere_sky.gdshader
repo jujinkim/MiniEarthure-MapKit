@@ -5,6 +5,7 @@ uniform float daylight = 1.0;
 uniform float moon_phase = 1.0;
 uniform float cloud_cover = 0.15;
 uniform float cloud_motion = 0.0;
+uniform int quality_level = 1;
 uniform float aurora = 0.0;
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float noise(vec2 p) {
@@ -40,9 +41,20 @@ void sky() {
     // Sample a curved dome instead of a clamped plane. No horizon projection
     // discontinuity; rotated octaves and broad filtered edges suppress grids.
     vec3 p=normalize(EYEDIR+vec3(0.0,0.35,0.0))*4.2+vec3(cloud_motion,0.0,cloud_motion*0.19);
-    float n=dome_noise(p)*0.64+dome_noise(p.zxy*2.03+vec3(7.1,13.7,2.5))*0.26+dome_noise(p.yzx*3.97)*0.1;
+    float n=dome_noise(p);
+    if(quality_level>0) n=n*0.71+dome_noise(p.zxy*2.03+vec3(7.1,13.7,2.5))*0.29;
+    if(quality_level>1) n=n*0.90+dome_noise(p.yzx*3.97)*0.1;
     float edge=0.10+0.06*horizon;
     float clouds=smoothstep(1.0-cloud_cover-edge,1.0-cloud_cover+edge,n)*smoothstep(-0.04,0.12,EYEDIR.y);
+    // A second high cloud layer and forward sunlight scattering stay in the
+    // shared sky shader, requiring no full-screen bloom pass on mobile.
+    if(quality_level>0) {
+        float high=dome_noise(p*0.62+vec3(9.0,cloud_motion*0.2,3.0));
+        float veil=smoothstep(0.60,0.83,high)*smoothstep(0.03,0.5,EYEDIR.y)*cloud_cover*0.35;
+        clouds=max(clouds,veil);
+        float halo=pow(max(0.0,dot(EYEDIR,sun_direction)),quality_level>1?48.0:64.0);
+        color+=vec3(0.38,0.25,0.12)*halo*daylight*(1.0-clouds);
+    }
     float curtain=exp(-pow((EYEDIR.y-(0.3+0.05*sin(EYEDIR.x*14.0+cloud_motion*0.3)))*12.0,2.0));
     color+=aurora*curtain*(0.45+0.55*sin(EYEDIR.z*45.0+cloud_motion))*vec3(0.04,0.35,0.2)*(1.0-daylight);
     color*=1.0-cloud_cover*0.20;

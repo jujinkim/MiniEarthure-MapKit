@@ -70,3 +70,9 @@ the same frame, roof forms, crowns and real openings while dropping fine detail.
 Ground-cover patches follow the quality distance limits; trunks and structures
 keep primary collision. Physical hulls stay within the 32-vertex/60-face and
 32-hull limits. Validate with `scripts/test_authored_assets.py`.
+
+The authored library also provides four-metre timber/metal/snow fences, low stone
+walls, safety barriers, park railings and trail signs. Modules use simple box
+collision; recipes leave explicit gateway gaps and validate road clearance. Near
+and distant models share the same metre origin. Display quality preserves these
+solid obstacles regardless of their small dimensions.

@@ -12,6 +12,8 @@ var imports := 0
 var hits := 0
 var import_usec := 0
 var peak_import_usec := 0
+var preparation_usec: Dictionary = {}
+var preparation_peak_usec: Dictionary = {}
 var _shader: Shader
 var _shader_lease: RefCounted
 var closed := false
@@ -45,7 +47,7 @@ static func key_for(id: String, sources: Dictionary) -> String:
 		if not texture_id.is_empty():
 			if not sources.has(texture_id) or not sources[texture_id].has("content_hash"): return ""
 			texture_hash = str(sources[texture_id].content_hash)
-	return str(asset.content_hash) + ":" + str(asset.material_json) + ":" + texture_hash
+	return str(asset.content_hash) + ":" + str(asset.material_json) + ":" + texture_hash + ":" + str(asset.get("solid",true))
 
 func environment_key_for(id: String, sources: Dictionary) -> String:
 	var key := key_for(id, sources)
@@ -74,43 +76,74 @@ func claim(id: String, sources: Dictionary) -> String:
 	if bytes() + amount > limit_bytes or entries.size() >= 256: return ""
 	var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null
 	if reserve.is_valid() and lease == null: return ""
-	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "last_used": Time.get_ticks_msec()}
+	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "stage":"import", "pending":[], "failed":false, "last_used": Time.get_ticks_msec()}
 	return key
 
-func template(key: String, id: String, sources: Dictionary) -> Node3D:
-	if not entries.has(key): return null
+func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
+	# One admitted phase per call; the scheduler owns the shared frame budget.
+	# Claims prevent eviction until every cell waiting on this template finishes.
+	if not entries.has(key): return true
 	var item: Dictionary = entries[key]
-	if item.template == null:
-		var started := Time.get_ticks_usec()
+	if item.stage == "done": return true
+	var stage: String = item.stage
+	var started := Time.get_ticks_usec()
+	if stage == "import":
 		item.template = ASSETS.template(id, sources, item.materials)
-		var elapsed := Time.get_ticks_usec() - started
-		import_usec += elapsed
-		peak_import_usec = maxi(peak_import_usec, elapsed)
 		imports += 1
-		if item.template != null:
-			var context := environment_context()
-			if context != null:
-				var binding := {}
-				for light: Dictionary in environment_profile.get("lights",[]):
-					if light.asset_id == id: binding = light
-				var pending: Array = [item.template]
-				while not pending.is_empty():
-					var node: Node3D = pending.pop_back()
-					if node is MeshInstance3D:
-						node.set_meta("mapkit_decoration",node.mesh.get_aabb().size.length() <= 6.0)
-						node.set_meta("mapkit_occluder",node.mesh.get_aabb().size.length() > 6.0)
-						node.mesh = preload("./display_quality.gd").prepare_lods(node.mesh)
-						node.mesh = context.style_mesh(node.mesh,binding)
-						var water: bool = node.mesh.get_surface_count() > 0
-						for index in node.mesh.get_surface_count():
-							var material: Material = node.mesh.surface_get_material(index)
-							water = water and material != null and material.get_meta("mapkit_water",false)
-						if water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-						if node.material_override != null:
-							node.material_override = context.surface_material(node.material_override,0)
-					pending.append_array(node.get_children())
+		item.failed = item.template == null
+		if item.failed: item.stage = "done"
+		else:
 			_track_node(item.lease, item.template)
-	return item.template
+			item.pending = [item.template]
+			item.stage = "context"
+	elif stage == "context":
+		# Shared texture upload/context setup is separate from GLB and LOD work.
+		environment_context()
+		item.stage = "lod"
+	elif stage == "lod":
+		if item.pending.is_empty(): item.stage = "done"
+		else:
+			var node: Node3D = item.pending.pop_back()
+			item.pending.append_array(node.get_children())
+			if node is MeshInstance3D:
+				node.set_meta("mapkit_decoration",not bool(sources[id].get("solid",true)) and node.mesh.get_aabb().size.length() <= 6.0)
+				node.set_meta("mapkit_occluder",node.mesh.get_aabb().size.length() > 6.0)
+				node.mesh = preload("./display_quality.gd").prepare_lods(node.mesh)
+				_track_node(item.lease,node)
+				item.styling = node
+				item.stage = "materials"
+	elif stage == "materials":
+		var node: MeshInstance3D = item.styling
+		item.erase("styling")
+		if _environment != null:
+			var binding := {}
+			for light: Dictionary in environment_profile.get("lights",[]):
+				if light.asset_id == id: binding = light
+			node.mesh = _environment.style_mesh(node.mesh,binding)
+			node.extra_cull_margin = .08
+			var water: bool = node.mesh.get_surface_count() > 0
+			for index in node.mesh.get_surface_count():
+				var material: Material = node.mesh.surface_get_material(index)
+				water = water and material != null and material.get_meta("mapkit_water",false)
+			if water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if node.material_override != null: node.material_override = _environment.surface_material(node.material_override,0)
+		_track_node(item.lease,node)
+		item.stage = "lod"
+	var elapsed := Time.get_ticks_usec() - started
+	if stage != "context":
+		preparation_usec[stage] = int(preparation_usec.get(stage,0)) + elapsed
+		preparation_peak_usec[stage] = maxi(int(preparation_peak_usec.get(stage,0)),elapsed)
+	if stage == "import":
+		import_usec += elapsed
+		peak_import_usec = maxi(peak_import_usec,elapsed)
+	return item.stage == "done"
+
+func template(key: String, id: String, sources: Dictionary) -> Node3D:
+	# Synchronous convenience for standalone previews. Streaming calls the phased
+	# API first; no phase is repeated when another cell shares the same claim.
+	if not entries.has(key): return null
+	while not prepare_template(key,id,sources): pass
+	return entries[key].template
 
 func material(key: String, id: String, sources: Dictionary) -> Material:
 	if not entries.has(key): return null
@@ -145,6 +178,8 @@ func _evict(key: String) -> void:
 	entries.erase(key)
 	if is_instance_valid(item.template): item.template.free()
 	item.materials.clear()
+	item.pending.clear()
+	item.erase("styling")
 	if item.lease != null:
 		item.lease.seal()
 		retiring.append(item.lease)
@@ -187,9 +222,17 @@ static func _track_material(lease: RefCounted, material: Material) -> void:
 			if texture != null: lease.track(texture)
 
 func diagnostics() -> Dictionary:
-	return {"entries": entries.size(), "bytes": bytes(), "imports": imports, "hits": hits, "import_usec": import_usec, "peak_import_usec": peak_import_usec}
+	return {"entries": entries.size(), "bytes": bytes(), "imports": imports, "hits": hits, "import_usec": import_usec, "peak_import_usec": peak_import_usec, "preparation_usec":preparation_usec.duplicate(), "preparation_peak_usec":preparation_peak_usec.duplicate()}
 
 func environment_context() -> RefCounted:
+	var started := Time.get_ticks_usec()
+	var result := _environment_context()
+	var elapsed := Time.get_ticks_usec() - started
+	preparation_usec["context"] = int(preparation_usec.get("context",0)) + elapsed
+	preparation_peak_usec["context"] = maxi(int(preparation_peak_usec.get("context",0)),elapsed)
+	return result
+
+func _environment_context() -> RefCounted:
 	if closed or environment_profile.is_empty(): return null
 	if _environment == null:
 		if bytes() + _context_bytes() > limit_bytes: trim()

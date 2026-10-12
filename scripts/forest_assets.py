@@ -18,7 +18,7 @@ def cedar(variant=0,distant=False):
             a=j*math.tau/(3 if distant else 4)+i*.7+variant
             x=math.cos(a)*spread*.28;z=math.sin(a)*spread*.28
             crown(m,(x,y,z),(spread,3.5,spread*.83),41+i*13+j,NEEDLES if i%2 else GREEN)
-            if not distant:beam(m,(.1,y-.7,0),(x*2.4,y-.2,z*2.4),.10,BARK,5,.035)
+            if not distant:beam(m,(.1,y-.7,0),(x*2.4,y-.2,z*2.4),.10,BARK,4,.035)
     for j in range(5):
         a=j*math.tau/5
         beam(m,(0,.2,0),(math.cos(a)*1.6,-.2,math.sin(a)*1.6),.20,BARK,5,.10)
@@ -28,7 +28,7 @@ def beech(distant=False):
     m=Mesh(distant);beam(m,(0,-.3,0),(.6,10,.3),.57,BARK,6 if distant else 10,.22)
     m.collision=[dict(center=[0,390,0],size_cm=[90,840,90])]
     for i,(x,y,z,s) in enumerate([(-3,10,-1,8),(3,11,1,8),(1,14,-2,9),(-2,14,2,8),(0,17,0,6)]):
-        beam(m,(.3,5+i*.8,0),(x,y,z),.22,BARK,5,.08)
+        if not distant:beam(m,(.3,5+i*.8,0),(x,y,z),.22,BARK,4,.08)
         crown(m,(x,y,z),(s,s*.65,s*.83),810+i,GREEN if i%2 else MOSS)
     return m
 

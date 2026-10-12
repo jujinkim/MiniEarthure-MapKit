@@ -34,7 +34,14 @@ func run() -> void:
 	check(importer.get_surface_lod_count(0)>0,"template cache contains actual engine LOD index buffers")
 	check(QUALITY.prepare_lods(lod)==lod,"immutable LOD mesh reused")
 	var template := MeshInstance3D.new();template.mesh=lod
-	var group := INSTANCES.begin(template,2,scene,null)
+	var obstacle := INSTANCES.begin(template,1,scene,null,true)
+	for level in 3:
+		QUALITY.apply_tree(scene,QUALITY.profile(level))
+		check(obstacle.groups[0].node.visibility_range_end==0.0,"small collision object remains visible at every quality")
+	var group := INSTANCES.begin(template,2,scene,null,false)
+	QUALITY.apply_tree(scene,QUALITY.profile(0))
+	check(group.groups[0].node.visibility_range_end==64.0,"explicit soft decoration uses the low distance")
+	obstacle.clear()
 	INSTANCES.append(group,Transform3D(Basis.IDENTITY,Vector3(10,0,0)),"a")
 	INSTANCES.append(group,Transform3D(Basis.IDENTITY,Vector3(12,0,0)),"b")
 	check(group.groups[0].multi.custom_aabb.has_point(Vector3(10,0,0)) and group.groups[0].multi.custom_aabb.size.x<5.0,"MultiMesh bounds follow only populated instances")
@@ -51,7 +58,7 @@ func run() -> void:
 	check(single.groups[0].multi.get_instance_transform(0).is_equal_approx(pose),"single-object arbitrary yaw and translation survive")
 	check(single.groups[0].multi.get_instance_custom_data(0).r>0 and single.groups[0].multi.mesh.get_surface_count()==2,"seed custom data and both material surfaces survive")
 	single_template.scale=Vector3.ONE*4
-	var metre_scaled := INSTANCES.begin(single_template,1,scene,null)
+	var metre_scaled := INSTANCES.begin(single_template,1,scene,null,false)
 	check(not metre_scaled.groups[0].node.get_meta("mapkit_decoration"),"actual-metre root scale keeps buildings out of small-prop distance culling")
 	metre_scaled.clear()
 	single_template.free();single.clear()
@@ -72,6 +79,15 @@ func run() -> void:
 	var occluder := QUALITY.occluder(box,null)
 	check(occluder!=null and occluder.occluder.vertices.size()<=192,"bounded actual face occluder")
 	if occluder!=null: scene.add_child(occluder)
+	var leaves := StandardMaterial3D.new();leaves.resource_name="mk_leaf"
+	var weather := MATERIALS.new()
+	var moving: ShaderMaterial=weather.surface_material(leaves,0)
+	for level in 3:
+		QUALITY.apply_material(moving,QUALITY.profile(level))
+		check(int(moving.get_shader_parameter("detail_quality"))==level,"material detail follows live preset")
+		check(is_equal_approx(moving.get_shader_parameter("wind_strength"),QUALITY.profile(level).vegetation_motion),"leaf motion follows live preset, disabled on low")
+	check(moving.get_shader_parameter("vegetation"),"only leaf material opts into motion")
+	moving=null;weather=null;leaves=null
 	var record := {"body":{"id":"fixture","flow_cm_s":[25,5]},"surface":[[[-300,0,-300],[300,0,-300],[300,0,300]],[[-300,0,-300],[300,0,300],[-300,0,300]]]}
 	var water := WATER.mesh(record,0,2);scene.add_child(water)
 	var floor_mesh := MeshInstance3D.new();floor_mesh.mesh=BoxMesh.new();floor_mesh.mesh.size=Vector3(8,.5,8);floor_mesh.position.y=-.8;scene.add_child(floor_mesh)

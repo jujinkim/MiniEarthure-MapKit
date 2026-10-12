@@ -66,6 +66,10 @@ func surface_material(source: Material, role: int, use_instances := false) -> Ma
 	result.set_shader_parameter("ao_light_affect",source.ao_light_affect)
 	var kind := source.resource_name.trim_prefix("mk_")
 	bind_detail(result,kind)
+	result.set_meta("mapkit_surface",true)
+	result.set_meta("mapkit_vegetation",kind == "leaf")
+	result.set_shader_parameter("vegetation",kind == "leaf")
+	preload("./display_quality.gd").apply_material(result,preload("./display_quality.gd").active())
 	result.set_shader_parameter("terrain_surface",kind in ["grass","earth"])
 	if kind.begins_with("water_"):
 		result.set_shader_parameter("water_kind",1 if kind == "water_flow" else 2)
@@ -82,6 +86,8 @@ static func channel(value: int) -> Vector4:
 
 func bind_detail(material: ShaderMaterial, kind: String) -> void:
 	if not tiles.has(kind): return
+	material.set_meta("mapkit_detail",true)
+	material.set_shader_parameter("detail_quality",int(preload("./display_quality.gd").active().material_detail))
 	material.set_shader_parameter("detail_enabled",true)
 	material.set_shader_parameter("detail_tile",tiles[kind])
 	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass","metal","leaf"] else 1.0)

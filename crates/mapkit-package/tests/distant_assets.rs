@@ -35,6 +35,7 @@ fn water_and_small_props_have_bounded_display_only_geometry() {
     let (mut d, mut files) = fixture();
     files.insert("near.glb".into(),scaled_portal(false,0.2));
     files.insert("far.glb".into(),scaled_portal(false,0.2));
+    d.assets[0].collision[0].center[1] = -1000; // buried soft root-bed
     d.water_bodies.push(mapkit_core::water::WaterBody {
         id:"pond".into(),polygon:vec![[1000,1000],[4000,1000],[4000,4000],[1000,4000]],
         islands:vec![vec![[2000,2000],[2000,3000],[3000,3000],[3000,2000]]],
@@ -126,4 +127,21 @@ fn distant_references_hashes_cost_and_validation_are_complete() {
     let cost=inspect_read_cost(&bytes).unwrap();
     assert!(read_bytes_with_budget(&bytes,cost.validation_peak_bytes).is_ok());
     assert_eq!(read_bytes_with_budget(&bytes,cost.validation_peak_bytes-1).err().unwrap().code,"E_MEMORY_BUDGET");
+}
+
+#[test]
+fn small_collision_structures_never_enter_the_decoration_tail() {
+    let (mut d, mut files) = fixture();
+    files.insert("near.glb".into(),scaled_portal(false,0.2));
+    files.insert("far.glb".into(),scaled_portal(false,0.2));
+    let p=read_bytes(&pack_bytes(d.clone(),files.clone()).unwrap()).unwrap();
+    let mesh=p.generate_distant(Cell{x:0,y:0}).unwrap();
+    assert!(mesh.decoration.iter().all(|&kind| kind == 0));
+    assert!(d.assets[0].has_visible_collision());
+    d.assets[0].collision[0].center[1] = -1000;
+    assert!(!d.assets[0].has_visible_collision());
+    d.assets[0].convex_collision.push(CollisionConvex {
+        vertices:vec![[0,-10,0],[10,-10,0],[0,0,10]], faces:vec![[0,1,2]],
+    });
+    assert!(d.assets[0].has_visible_collision());
 }

@@ -288,6 +288,7 @@ func update_dynamic_lights(camera_position: Vector3, groups: Array) -> void:
 
 func apply_display_quality(value: Dictionary) -> void:
 	quality = value.duplicate()
+	if sky_material != null: sky_material.set_shader_parameter("quality_level",int(value.sky))
 	low = int(value.level) == 0
 	if sun != null: sun.directional_shadow_max_distance = float(value.shadow_distance)
 	if moon != null: moon.directional_shadow_max_distance = float(value.shadow_distance)

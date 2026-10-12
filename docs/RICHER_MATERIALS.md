@@ -9,7 +9,8 @@ LOD mesh with a leaf material. Existing user assets and generated packages survi
 `scripts/richer_assets.py` generates ten shared tiles (brick, plaster, wood, stone,
 asphalt, concrete, earth, grass, metal, leaf) at 128/256/512px. Channels contain
 shaded luminance/AO, roughness, and baked normal XY; a normal costs one texture
-sample instead of neighboring height fetches. Near detail stops at 48m. Muted
+sample instead of neighboring height fetches. Near detail stops at 48m. Low omits material relief, medium uses packed colour/AO
+and roughness, and high also samples the normal detail. Muted
 material colours and subtle warm grading preserve vehicle colours, hazards and
 weather/night distinctions; Control/HUD rendering is unaffected.
 
@@ -24,7 +25,10 @@ consumer limits still govern admission; borrowers retain charges after shutdown.
 `godot/display_quality.gd` provides `profile(level)`, `active()`, and
 `apply(viewport, profile)`. Low/medium/high use 75/100/100% 3D scale, 256/512/768
 combined vehicle particle slots, 48/96/160m directional shadows, 4/6/8 selected
-local lights, and progressively stronger water. Client owns preferences and
+local lights, and progressively stronger water. Sky quality selects one, two or three cloud
+noise layers with a high cloud veil and sun halo above low. Leaf-only wind is
+disabled on low and uses bounded 7 cm motion on medium/high; trunks and collision
+remain fixed. These fields update live along with surface material detail. Client owns preferences and
 automatic adaptation. Profiles never enter map files or authoritative race state.
 The texture tier is captured by each new map resource cache; live changes update
 resolution, water, effects, shadows, LOD and optional low-tier occlusion.
@@ -39,5 +43,7 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `richer_material_validator` covers actual GLB import, retained channels, denied
 admission, shared identity and last-borrower retirement. `display_quality_validator`
 covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
-batches, tight MultiMesh bounds and actual-face occluders. Weather appearance and
+batches, tight MultiMesh bounds, solid-versus-decoration classification, live material/wind
+levels and actual-face occluders. Template preparation tests include shared phased
+LOD/material setup and final-borrower retirement. Weather appearance and
 target-device acceptance are user checks.

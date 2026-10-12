@@ -6,7 +6,7 @@ static func profile(level: int) -> Dictionary:
 	level = clampi(level, 0, 2)
 	return {"level":level, "scale":[.75,1.0,1.0][level], "texture_size":[128,256,512][level],
 		"particles":[256,512,768][level], "shadow_distance":[48.0,96.0,160.0][level],
-		"water":level, "lod_bias":[.55,.8,1.0][level], "decoration_distance":[64.0,112.0,192.0][level],
+		"water":level, "sky":level, "material_detail":level, "vegetation_motion":[0.0,.5,1.0][level], "lod_bias":[.55,.8,1.0][level], "decoration_distance":[64.0,112.0,192.0][level],
 		"occlusion":level > 0, "light_count":[4,6,8][level]}
 
 static func active() -> Dictionary:
@@ -34,10 +34,17 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 			node.visibility_range_end_margin = 8.0
 		if node is MeshInstance3D or node is MultiMeshInstance3D:
 			apply_material(node.material_override, value)
+			var mesh: Mesh = node.mesh if node is MeshInstance3D else node.multimesh.mesh
+			if mesh != null:
+				for index in mesh.get_surface_count(): apply_material(mesh.surface_get_material(index),value)
 	if node is OccluderInstance3D: node.visible = bool(value.occlusion)
 
 static func apply_material(material: Material, value: Dictionary) -> void:
 	if not material is ShaderMaterial: return
+	if material.get_meta("mapkit_surface",false):
+		material.set_shader_parameter("detail_quality",int(value.material_detail))
+		material.set_shader_parameter("wind_strength",float(value.vegetation_motion))
+	elif material.get_meta("mapkit_detail",false): material.set_shader_parameter("detail_quality",int(value.material_detail))
 	if material.get_meta("mapkit_water", false):
 		material.shader = preload("./water_surface_high.gdshader") if int(value.water) == 2 else preload("./water_surface.gdshader")
 		material.set_shader_parameter("quality_level",int(value.water))
@@ -63,6 +70,7 @@ static func occluder(mesh: Mesh, lease: RefCounted) -> OccluderInstance3D:
 	for surface in mesh.get_surface_count():
 		var material := mesh.surface_get_material(surface)
 		if material is BaseMaterial3D and material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED: continue
+		if material != null and material.get_meta("mapkit_vegetation",false): continue
 		var arrays := mesh.surface_get_arrays(surface)
 		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()

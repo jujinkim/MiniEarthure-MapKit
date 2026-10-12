@@ -285,7 +285,8 @@ fn decorate_inner(
         assets.set(
             id.as_str(),
             &vdict! {"path"=>a.path.as_str(),"bytes"=>&bytes,
-            "material_json"=>serde_json::to_string(&a.material).unwrap().as_str()},
+            "material_json"=>serde_json::to_string(&a.material).unwrap().as_str(),
+            "solid"=>a.has_visible_collision()},
         );
     }
     if document.assembled_track.is_some() { hidden.push("assembled-venue-floor"); }

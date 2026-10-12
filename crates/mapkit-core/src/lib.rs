@@ -240,6 +240,13 @@ impl Asset {
     pub fn paths(&self) -> impl Iterator<Item = &String> {
         std::iter::once(&self.path).chain(self.distant_path.iter())
     }
+
+    /// Internal display classification, never serialized. Buried vegetation root
+    /// beds may fade; any contact at/above the authored origin must stay visible.
+    pub fn has_visible_collision(&self) -> bool {
+        self.collision.iter().any(|b| b.center[1] * 2 + i64::from(b.size_cm[1]) >= 0)
+            || self.convex_collision.iter().any(|c| c.vertices.iter().any(|v| v[1] >= 0))
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]

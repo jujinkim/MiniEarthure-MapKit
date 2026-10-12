@@ -15,6 +15,8 @@ const STREETLIGHT_ANGLE := rad_to_deg(atan(tan(deg_to_rad(48.0)) * STREETLIGHT_S
 static var _advance_usec := 0
 static var _release_usec := 0
 static var _steps := 0
+static var _phase_usec: Dictionary = {}
+static var _phase_peak_usec: Dictionary = {}
 
 static func scene_position(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.01
@@ -68,8 +70,13 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 
 static func advance(job: Dictionary) -> bool:
 	var started := Time.get_ticks_usec()
+	job.last_phase = "retirement"
 	var done := _advance(job)
-	_advance_usec += Time.get_ticks_usec() - started
+	var phase: String = job.last_phase
+	var elapsed := Time.get_ticks_usec() - started
+	_phase_usec[phase] = int(_phase_usec.get(phase,0)) + elapsed
+	_phase_peak_usec[phase] = maxi(int(_phase_peak_usec.get(phase,0)),elapsed)
+	_advance_usec += elapsed
 	_steps += 1
 	job.steps = int(job.get("steps", 0)) + 1
 	job.peak_step_usec = maxi(int(job.get("peak_step_usec", 0)), Time.get_ticks_usec() - started)
@@ -83,12 +90,14 @@ static func _advance(job: Dictionary) -> bool:
 		dispose(job)
 		return true
 	if int(job.grind) < job.grind_records.size():
+		job.last_phase = "special_upload"
 		job.root.add_child(preload("./grind_geometry.gd").visual(job.grind_records[job.grind], job.lease, JSON.parse_string(job.chunk.get("presentation",{}).get("cell_bounds_json","{}"))))
 		job.grind += 1
 		return false
 	var chunk: Dictionary = job.chunk
 	var presentation: Dictionary = chunk.get("presentation", {})
 	var sources: Dictionary = presentation.get("assets", {})
+	job.last_phase = "mesh_upload"
 	var offset := int(job.triangle)
 	if chunk.has("render_batches"):
 		if offset < chunk.render_batches.size(): return _prepared_batch(job, chunk.render_batches[offset])
@@ -158,6 +167,7 @@ static func _advance(job: Dictionary) -> bool:
 		job.root.add_child(mesh)
 		job.triangle = offset
 	elif int(job.water) < job.water_records.size():
+		job.last_phase = "water_upload"
 		var record: Dictionary = job.water_records[job.water]
 		var count := mini(TRIANGLES_PER_BATCH, record.surface.size()-int(job.water_face))
 		if count > 0:
@@ -167,6 +177,7 @@ static func _advance(job: Dictionary) -> bool:
 		job.water_face += count
 		if int(job.water_face) >= record.surface.size(): job.water += 1; job.water_face = 0
 	elif int(job.object) < chunk.objects.size():
+		job.last_phase = "instance_upload"
 		var finish := mini(int(job.object) + 1, chunk.objects.size())
 		while int(job.object) < finish:
 			var object: Dictionary = chunk.objects[job.object]
@@ -177,6 +188,10 @@ static func _advance(job: Dictionary) -> bool:
 				if not sources.has(id): return fail(job, "E_RENDER_ASSET", "Presentation bytes are missing")
 				if not str(sources[id].path).ends_with(".glb"): continue # textured proxy faces
 				if not job.templates.has(id):
+					job.last_phase = "template_preparation"
+					if job.get("resources") != null and not job.resources.prepare_template(job.claims[id],id,sources):
+						job.object -= 1
+						return false
 					var template: Node3D = job.resources.template(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.template(id, sources, job.asset_materials)
 					if template == null: return fail(job, "E_RENDER_ASSET", "Validated GLB could not be displayed")
 					if job.get("resources") == null: track_resources(job, template)
@@ -186,7 +201,8 @@ static func _advance(job: Dictionary) -> bool:
 					return false
 				if job.get("resources") != null:
 					if not job.instances.has(group):
-						job.instances[group] = INSTANCES.begin(job.templates[id], int(job.counts.get(group, 0)), job.root, job.lease)
+						job.last_phase = "multimesh_setup"
+						job.instances[group] = INSTANCES.begin(job.templates[id], int(job.counts.get(group, 0)), job.root, job.lease, bool(sources[id].get("solid",true)))
 						job.object -= 1
 						return false
 					if not job.instances[group].is_empty():
@@ -199,6 +215,7 @@ static func _advance(job: Dictionary) -> bool:
 				while not pending.is_empty():
 					var piece: Node3D = pending.pop_back()
 					if piece is MeshInstance3D:
+						if bool(sources[id].get("solid",true)): piece.set_meta("mapkit_decoration",false)
 						_seed_fallback_materials(piece,float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0,job.lease)
 						if piece.get_meta("mapkit_occluder",false):
 							var occluder := QUALITY.occluder(piece.mesh,job.lease)
@@ -375,7 +392,7 @@ static func cancel(job: Dictionary) -> void:
 	_release_usec += Time.get_ticks_usec() - started
 
 static func diagnostics() -> Dictionary:
-	return {"advance_usec": _advance_usec, "release_usec": _release_usec, "steps": _steps}
+	return {"advance_usec": _advance_usec, "release_usec": _release_usec, "steps": _steps, "phase_usec":_phase_usec.duplicate(), "phase_peak_usec":_phase_peak_usec.duplicate()}
 
 static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 	# Synchronous convenience for existing small editor previews; same renderer source.

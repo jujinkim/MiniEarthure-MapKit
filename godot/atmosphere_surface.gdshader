@@ -22,6 +22,8 @@ uniform vec4 metallic_channel = vec4(0.0,0.0,1.0,0.0);
 uniform vec3 uv_scale = vec3(1.0);
 uniform vec3 uv_offset = vec3(0.0);
 uniform int water_kind = 0; // 1 flowing, 2 still; authored vertex colours encode depth
+uniform bool vegetation = false;
+uniform float wind_strength = 0.5;
 uniform bool terrain_surface = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform float roughness = 0.85;
@@ -39,6 +41,12 @@ varying float seed;
 void vertex() {
     UV=UV*uv_scale.xy+uv_offset.xy;
     world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz;
+    // Small leaf-only motion; rooted trunks and collision remain fixed.
+    if(vegetation && wind_strength>0.0) {
+        float bend=min(max(VERTEX.y,0.0)*0.02,0.07)*wind_strength;
+        VERTEX.xz+=vec2(sin(TIME*1.3+world_position.x*0.7+world_position.z*0.3),cos(TIME*0.9+world_position.z*0.8))*bend;
+        world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz;
+    }
     world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
     seed = distant ? UV.x : (INSTANCE_CUSTOM.a > 0.5 ? INSTANCE_CUSTOM.x : building_seed);
 }
@@ -57,12 +65,12 @@ void fragment() {
     if(roughness_enabled) surface_roughness*=dot(texture(roughness_texture,UV),roughness_channel);
     if(normal_enabled) { NORMAL_MAP=texture(normal_texture,UV).rgb; NORMAL_MAP_DEPTH=normal_strength; }
     if(ao_enabled) { AO=dot(texture(ao_texture,ao_uv2 ? UV2 : UV),ao_channel); AO_LIGHT_AFFECT=ao_light_affect; }
-    if(detail_enabled && length(VERTEX)<48.0) {
+    if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
         color*=detail.r;
         surface_roughness*=detail.g;
         AO=mix(1.0,detail.r,0.5);
-        NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
+        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
     }
     // Large, restrained variation remains stable when the camera moves.
     float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);

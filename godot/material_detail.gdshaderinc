@@ -1,6 +1,7 @@
 // Shared modest relief. Packed tile: shaded luminance/AO, roughness, pre-baked normal XY.
 uniform sampler2D detail_tile : filter_linear_mipmap, repeat_enable;
 uniform bool detail_enabled = false;
+uniform int detail_quality = 1;
 uniform float detail_scale = 1.0;
 vec2 detail_uv(vec3 p, vec3 n) {
     vec3 a=abs(n);
