@@ -15,11 +15,6 @@ static func begin(data: Dictionary, parent: Node3D, lease: RefCounted, resources
 	material.vertex_color_use_as_albedo = true
 	material.roughness = 1.0
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	if resources != null:
-		var context: RefCounted = resources.environment_context()
-		if context != null:
-			material = context.surface_material(material,0)
-			material.set_shader_parameter("distant",true)
 	lease.track(material)
 	# Two bounded shared materials per job. Water retains the existing depth,
 	# refraction and quality path, so cell LOD does not create square colour seams.
@@ -30,15 +25,26 @@ static func begin(data: Dictionary, parent: Node3D, lease: RefCounted, resources
 	water.set_shader_parameter("flow_from_uv",true)
 	lease.track(water)
 	return {"root": root, "owner": data.geometry, "view": data.geometry.view(), "offset": 0,
-		"material": material, "water_material":water, "lease": lease, "done": false, "cancelled": false}
+		"resources":resources, "environment_ready":false, "material": material, "water_material":water, "lease": lease, "done": false, "cancelled": false}
 
 static func advance(job: Dictionary) -> bool:
 	if job.done or job.cancelled: return true
+	if job.resources != null and not job.environment_ready:
+		if not job.resources.begin_environment(): cancel(job); return true
+		if not job.resources.prepare_environment(): return false
+		var context: RefCounted = job.resources.environment_context()
+		if context != null:
+			job.material = context.surface_material(job.material,0)
+			job.material.set_shader_parameter("distant",true)
+			job.lease.track(job.material)
+		job.environment_ready = true
+		return false
 	var count: int = job.view.vertices.size()
 	if job.offset >= count:
 		job.done = true
 		job.view = {}
 		job.owner = null
+		job.resources = null
 		return true
 	var end := mini(count, int(job.offset) + BATCH_VERTICES)
 	var kind: int = 0 if job.view.get("decoration", PackedByteArray()).is_empty() else int(job.view.decoration[job.offset])
@@ -68,6 +74,7 @@ static func advance(job: Dictionary) -> bool:
 
 static func cancel(job: Dictionary) -> void:
 	job.cancelled = true
+	job.resources = null
 	job.view = {}
 	job.owner = null
 	job.material = null

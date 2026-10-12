@@ -59,7 +59,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 				fail(job, "E_MEMORY_BUDGET", "Shared display resources exceed memory allowance: %s (%d bytes cached)" % [id,resources.bytes()])
 				return job
 			job.claims[id] = key
-		if resources.environment_context() == null:
+		if not resources.begin_environment():
 			fail(job, "E_MEMORY_BUDGET", "Shared material tiles exceed memory allowance")
 			return job
 		for object: Dictionary in view.objects:
@@ -89,6 +89,12 @@ static func _advance(job: Dictionary) -> bool:
 		job.cancelled = true
 		dispose(job)
 		return true
+	if job.get("resources") != null and not job.get("environment_ready",false):
+		job.last_phase = "environment_preparation"
+		if not job.resources.prepare_environment(): return false
+		if job.resources.environment_context() == null: return fail(job,"E_RENDER_ASSET","Shared material preparation failed")
+		job.environment_ready = true
+		return false
 	if int(job.grind) < job.grind_records.size():
 		job.last_phase = "special_upload"
 		job.root.add_child(preload("./grind_geometry.gd").visual(job.grind_records[job.grind], job.lease, JSON.parse_string(job.chunk.get("presentation",{}).get("cell_bounds_json","{}"))))

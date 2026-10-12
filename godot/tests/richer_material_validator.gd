@@ -18,6 +18,14 @@ func run() -> void:
 	denied.environment_profile={"lights":[]}
 	check(denied.environment_context()==null and denied.bytes()==0,"denial allocates no tiles or context")
 	denied.shutdown()
+	var phased := CACHE.new(func(bytes): return Lease.new(bytes))
+	phased.environment_profile={"lights":[]}
+	check(phased.begin_environment() and phased._environment.tiles.is_empty(),"streaming admission allocates no tile uploads")
+	check(not phased.prepare_environment() and phased._environment.tile_image!=null,"one step decodes one tile")
+	check(phased.environment_context()==null and phased._environment.tiles.is_empty(),"observer cannot synchronously finish partial preparation")
+	phased.shutdown()
+	for i in 3: await process_frame
+	check(phased.bytes()==0,"partial tile cancellation retires decoded image and shared lease")
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
 	cache.environment_profile={"lights":[]}
 	var context: RefCounted=cache.environment_context()

@@ -18,6 +18,8 @@ var _shader: Shader
 var _shader_lease: RefCounted
 var closed := false
 var _environment: RefCounted
+var _environment_pending := false
+var _environment_failed := false
 var _environment_lease: RefCounted
 var environment_profile: Dictionary = {}
 var quality_profile: Dictionary = preload("./display_quality.gd").active()
@@ -98,7 +100,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			item.stage = "context"
 	elif stage == "context":
 		# Shared texture upload/context setup is separate from GLB and LOD work.
-		environment_context()
+		if not prepare_environment(): return false
 		item.stage = "lod"
 	elif stage == "lod":
 		if item.pending.is_empty(): item.stage = "done"
@@ -224,30 +226,45 @@ static func _track_material(lease: RefCounted, material: Material) -> void:
 func diagnostics() -> Dictionary:
 	return {"entries": entries.size(), "bytes": bytes(), "imports": imports, "hits": hits, "import_usec": import_usec, "peak_import_usec": peak_import_usec, "preparation_usec":preparation_usec.duplicate(), "preparation_peak_usec":preparation_peak_usec.duplicate()}
 
-func environment_context() -> RefCounted:
-	var started := Time.get_ticks_usec()
-	var result := _environment_context()
-	var elapsed := Time.get_ticks_usec() - started
-	preparation_usec["context"] = int(preparation_usec.get("context",0)) + elapsed
-	preparation_peak_usec["context"] = maxi(int(preparation_peak_usec.get("context",0)),elapsed)
-	return result
+func begin_environment() -> bool:
+	if closed or _environment_failed: return false
+	if environment_profile.is_empty(): return true
+	if _environment != null: return true
+	if bytes() + _context_bytes() > limit_bytes: trim()
+	if bytes() + _context_bytes() > limit_bytes: return false
+	_environment_lease = reserve.call(_context_bytes()) if reserve.is_valid() else null
+	if reserve.is_valid() and _environment_lease == null: return false
+	_environment = ENVIRONMENT.new(int(quality_profile.texture_size),true)
+	_environment.track(_environment_lease)
+	_environment_pending = true
+	return true
 
-func _environment_context() -> RefCounted:
-	if closed or environment_profile.is_empty(): return null
-	if _environment == null:
-		if bytes() + _context_bytes() > limit_bytes: trim()
-		if bytes() + _context_bytes() > limit_bytes: return null
-		_environment_lease = reserve.call(_context_bytes()) if reserve.is_valid() else null
-		if reserve.is_valid() and _environment_lease == null: return null
-		_environment = ENVIRONMENT.new(int(quality_profile.texture_size))
-		_environment.track(_environment_lease)
-		if _environment.tiles.size() != ENVIRONMENT.TILE_KINDS.size():
+func prepare_environment() -> bool:
+	if not begin_environment(): return true
+	if not _environment_pending: return true
+	var phase := "texture_load" if _environment.tile_image == null else "mipmap_upload"
+	var started := Time.get_ticks_usec()
+	var done: bool = _environment.prepare_tile(_environment_lease)
+	var elapsed := Time.get_ticks_usec() - started
+	preparation_usec[phase] = int(preparation_usec.get(phase,0)) + elapsed
+	preparation_peak_usec[phase] = maxi(int(preparation_peak_usec.get(phase,0)),elapsed)
+	if done:
+		_environment_pending = false
+		if _environment.load_failed:
+			_environment_failed = true
 			_environment = null
 			if _environment_lease != null:
 				_environment_lease.seal()
 				retiring.append(_environment_lease)
 				_environment_lease = null
-			return null
+	return done
+
+func environment_context() -> RefCounted:
+	# Observers must not collapse streaming preparation into a single frame.
+	if _environment_pending: return null
+	if _environment == null:
+		if not begin_environment(): return null
+		while not prepare_environment(): pass # standalone synchronous convenience
 	return _environment
 
 static func wet_urban_shader() -> Shader:

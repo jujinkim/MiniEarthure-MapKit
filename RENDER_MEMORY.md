@@ -34,6 +34,9 @@ MultiMesh setup, placement and mesh upload are separate admitted steps. Concurre
 claims advance one shared template and reuse its completed phases. Diagnostics
 include each phase total/peak and attachment/release costs; individual synchronous
 engine operations cannot be preempted and their peaks remain visible.
+Each shared tile decodes and uploads with mipmaps in separate steps. Environment
+observers return no context until preparation completes and cannot drain that queue.
+Partial preparation keeps its full lease until the decoded image/resources retire.
 
 Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
 transforms, mesh surfaces, material overrides, original colours and shadow mode

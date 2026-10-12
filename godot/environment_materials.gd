@@ -10,8 +10,13 @@ var pixels: Image
 var texture: ImageTexture
 var materials: Dictionary = {}
 var shader: Shader
+var tile_size := 256
+var tile_cursor := 0
+var tile_image: Image
+var load_failed := false
 
-func _init(size := 256) -> void:
+func _init(size := 256, deferred_tiles := false) -> void:
+	tile_size = size
 	pixels = Image.create(2,1,false,Image.FORMAT_RGBAF)
 	pixels.set_pixel(0,0,Color(0,0,0,0))
 	pixels.set_pixel(1,0,Color(43200,0,1,64800))
@@ -19,16 +24,27 @@ func _init(size := 256) -> void:
 	shader = Shader.new()
 	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
 	shader.code = shader.code.replace('#include "material_detail.gdshaderinc"',DETAIL.code)
-	for kind: String in TILE_KINDS:
-		var path: String = get_script().resource_path.get_base_dir().path_join("textures/"+(str(size)+"/" if size != 256 else "")+kind+".png")
-		# Trusted library resources use Godot's import remap in exported packages.
-		# Load only after the context lease; never pin bitmaps with script preloads.
+	if not deferred_tiles:
+		while not prepare_tile(): pass
+
+func prepare_tile(lease: RefCounted = null) -> bool:
+	if tile_cursor >= TILE_KINDS.size() or load_failed: return true
+	var kind: String = TILE_KINDS[tile_cursor]
+	if tile_image == null:
+		var path: String = get_script().resource_path.get_base_dir().path_join("textures/"+(str(tile_size)+"/" if tile_size != 256 else "")+kind+".png")
+		# Trusted engine import remapping also works in exports. Decode and GPU
+		# upload are separate admitted steps; never preload texture owners.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
-		if tile != null:
-			var image := tile.get_image()
-			if image == null or image.is_empty(): continue
-			image.generate_mipmaps()
-			tiles[kind] = ImageTexture.create_from_image(image)
+		tile_image = tile.get_image() if tile != null else null
+		load_failed = tile_image == null or tile_image.is_empty()
+		if lease != null and tile_image != null: lease.track(tile_image)
+		return load_failed
+	tile_image.generate_mipmaps()
+	tiles[kind] = ImageTexture.create_from_image(tile_image)
+	if lease != null: lease.track(tiles[kind])
+	tile_image = null
+	tile_cursor += 1
+	return tile_cursor >= TILE_KINDS.size()
 
 func update(seconds: float, wet: float, snow: float, sun_altitude: float, sunset_minutes: int) -> void:
 	pixels.set_pixel(0,0,Color(wet,snow,0,0))
