@@ -86,19 +86,20 @@ Phase names describe renderer branches, not individual GPU operations.
 placement. Capture object/asset or surface-material identity with the cell and
 attachment generation/frame; a pending object is not the current mesh batch.
 
-Separate mesh creation, array upload, material preparation, resource tracking and
-scene registration. For MultiMesh, separate setup from transforms, bounds,
-occluders, custom data and visibility. Include callee-local reference retirement.
-The bounded Metal fixture exposes long first generated-surface material preparation;
-short GLB placement setters do not explain that cost. Its image proxies select the
-unbatched mesh path; prepared batches require a separate comparison.
+Separate mesh creation/upload, material preparation, tracking and registration;
+MultiMesh setup, transforms, bounds, occluders, custom data and visibility.
+[Material isolation](RICHER_MATERIALS.md#first-use-binding) starts before
+`_environment_surface`, including source creation and last-reference retirement.
+The first urban shader assignment can dominate a bounded Metal upload callback;
+GLB placement is a separate cost. Image proxies select the unbatched mesh path;
+prepared batches require a separate comparison.
 
 Record wall and caller-thread CPU time around the same operation. Their gap can
-include blocking or descheduling; identifying an engine/GPU wait requires aligned
-stack evidence. Short sampling can capture no stacks. Nested costs overlap and
+include blocking or descheduling; identifying an engine/GPU wait requires aligned,
+symbolized stacks. An unsymbolized sample cannot identify that wait. Nested costs overlap and
 instrumentation perturbs timing, so neither moving a peak nor one faster run proves
 an improvement. Compare original/instrumented hashes, display counts, cache reuse,
-pressure retirement and reservation return before changing material preparation.
+pressure retirement and settled reservations before changing material preparation.
 
 ## Ownership and failure
 

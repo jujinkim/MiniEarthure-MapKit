@@ -25,6 +25,36 @@ never script preloads. Shared context reservations are 4.75/16/61MiB respectivel
 (`1MiB + 10 × size² × 24`), including CPU/GPU/mipmap/retirement overlap. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.
 
+## First-use binding
+
+Generated surfaces enter `chunk_renderer.surface_material` before
+`_environment_surface`. Record the material key, actual class and branch with
+cell/frame/generation; GLB import timing does not describe this factory.
+
+| Branch | Operations to isolate |
+| --- | --- |
+| Urban `ShaderMaterial` | Creation, first shader assignment, source parameters, environment texture and `bind_detail`; the same material is returned |
+| RC `ShaderMaterial` | Existing shader and wall parameter, then `bind_detail` |
+| Opaque `StandardMaterial3D` | Shared-wrapper creation, shader/bitmap/parameter binding, quality application and caller's last source-reference release |
+
+The bounded Metal path can stall in the first urban shader assignment before
+`_environment_surface`; its detail setters and source release need not be slow.
+`ShaderMaterial.set_shader` requests the shader RID, creating it lazily from code
+on first use. This identifies a synchronous engine boundary, not which compilation,
+lock or renderer wait caused the wall/CPU gap. Attributing that gap needs matching
+engine symbols and aligned stacks. Parameter reads use the material's
+local cache; texture setters also request texture RIDs and need separate timing.
+Transparent sources pass through unchanged; deferred GLB bindings activate later.
+
+Measure wall and caller-thread CPU within the same call, retaining only primitive
+context. Keep source retirement in that call and compare original/instrumented
+output and resource lifetimes. Observe settled reservations after engine-frame
+retirement separately from completion-time charges. Moving shader work earlier or
+adding frame waits alone does not establish an improvement. See
+[timing scope and controls](RENDER_DIAGNOSTICS.md#attachment-upload-isolation).
+
+## Display quality
+
 `godot/display_quality.gd` provides `profile(level)`, `active()`, and
 `apply(viewport, profile)`. Low/medium/high use 75/100/100% 3D scale, 256/512/768
 combined vehicle particle slots, 48/96/160m directional shadows, 4/6/8 selected
