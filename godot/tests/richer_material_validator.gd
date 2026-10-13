@@ -48,6 +48,16 @@ func run() -> void:
 	check(styled.get_shader_parameter("ao_channel")==Vector4(0,0,1,0) and styled.get_shader_parameter("ao_uv2"),"AO channel and UV2")
 	check(styled.get_shader_parameter("roughness_channel")==Vector4(0,1,0,0) and styled.get_shader_parameter("metallic_channel")==Vector4(1,0,0,0),"packed GLB channels")
 	check(styled.get_shader_parameter("uv_scale")==source.uv1_scale,"UV scale survives weather wrapper")
+	var pending_source: StandardMaterial3D=source.duplicate()
+	var pending_material: ShaderMaterial=context.import_surface(pending_source,0,{})
+	check(pending_material.shader==null and pending_material.get_meta("mapkit_pending_surface",false),"import snapshots bitmap bindings before shader activation")
+	for slot: String in ["albedo","normal","ao","roughness","metallic"]:
+		check(pending_material.get_shader_parameter(slot+"_texture")==bitmap,"deferred "+slot+" preserves texture identity")
+	for parameter in ["normal_strength","ao_channel","ao_uv2","ao_light_affect","roughness_channel","metallic_channel","uv_scale","uv_offset"]:
+		check(pending_material.get_shader_parameter(parameter)==styled.get_shader_parameter(parameter),"deferred parameter preserved: "+parameter)
+	check(context.surface_material(pending_source,0)==pending_material and pending_material.shader==styled.shader,"ordinary cached access activates the same pending binding")
+	check(not pending_material.has_meta("mapkit_pending_surface"),"activated source has no pending marker")
+	pending_source=null;pending_material=null
 	var texture_lease:=Lease.new(128*128*24)
 	CACHE._track_material(texture_lease,styled)
 	check(texture_lease.refs.size()==6,"all five bitmap slots participate in lifetime accounting")

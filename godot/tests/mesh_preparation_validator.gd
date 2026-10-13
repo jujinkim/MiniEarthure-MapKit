@@ -2,6 +2,7 @@ extends SceneTree
 const QUALITY := preload("../display_quality.gd")
 const CACHE := preload("../render_resource_cache.gd")
 const MATERIALS := preload("../environment_materials.gd")
+const ASSET_LIBRARY := preload("../asset_library.gd")
 const BINDING := {"asset_id":"fixture","window_materials":[2],"bulb_materials":[3]}
 const ASSETS := {"fixture":{"content_hash":"synthetic-mesh","memory_bytes":4194304,"material_json":"null","solid":true}}
 var failed := false
@@ -124,6 +125,7 @@ func run() -> void:
 	for boundary in ["surface","generate","get_mesh","materials","material_surface","occluder"]:
 		await cancel_at(boundary)
 	await borrowed_prepared_mesh()
+	await imported_materials()
 	print("mesh_preparation_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
 
@@ -168,3 +170,96 @@ func borrowed_prepared_mesh() -> void:
 	cache.release(key);cache.shutdown();mesh=null
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"borrowed preparation path retires")
+
+func meshes(node: Node) -> Array[MeshInstance3D]:
+	var result: Array[MeshInstance3D] = []
+	if node is MeshInstance3D: result.append(node)
+	for child: Node in node.get_children(): result.append_array(meshes(child))
+	return result
+
+func imported_materials() -> void:
+	# Export a synthetic hierarchy once, then compare the ordinary GLB path with
+	# early parameter capture. Both still use Godot's compressed uploaded arrays.
+	var source := Node3D.new()
+	var mesh := fixture()
+	mesh.surface_get_material(5).resource_name="mk_leaf"
+	mesh.surface_get_material(6).resource_name="mk_water_flow"
+	for index in 2:
+		var node := MeshInstance3D.new();node.mesh=mesh
+		node.position=Vector3(index*3,1,2);node.scale=Vector3(-1,2,1)
+		source.add_child(node)
+	var document := GLTFDocument.new();var state := GLTFState.new()
+	check(document.append_from_scene(source,state)==OK,"synthetic GLB export")
+	var data := document.generate_buffer(state)
+	source.free();source=null;mesh=null;document=null;state=null
+	var assets := {"fixture":{"path":"fixture.glb","bytes":data,"material_json":"null","content_hash":data.hex_encode().sha256_text(),"memory_bytes":4194304,"solid":true}}
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	cache.environment_profile={"lights":[BINDING]};cache.quality_profile=QUALITY.profile(0)
+	var key: String=cache.claim("fixture",assets)
+	while cache.entries[key].stage!="lod": cache.prepare_template(key,"fixture",assets)
+	var context: RefCounted=cache.environment_context()
+	var original_refs := []
+	var capture := func(material: Material,index: int):
+		if material is StandardMaterial3D and material.transparency==BaseMaterial3D.TRANSPARENCY_DISABLED:
+			original_refs.append(weakref(material))
+		return context.import_surface(material,index,BINDING)
+	var captured := ASSET_LIBRARY.template("fixture",assets,{},capture)
+	check(not original_refs.is_empty() and original_refs.all(func(ref): return ref.get_ref()==null),"opaque import sources retire before yielding an engine frame")
+	captured.free();captured=null;capture=Callable()
+	for node: MeshInstance3D in meshes(cache.entries[key].template):
+		for index in node.mesh.get_surface_count():
+			var material := node.mesh.surface_get_material(index)
+			if material is ShaderMaterial:
+				check(material.shader==null and material.get_meta("mapkit_pending_surface",false),"import captures parameters without a transient shader")
+			else: check(material is StandardMaterial3D and material.transparency!=BaseMaterial3D.TRANSPARENCY_DISABLED,"transparent import is untouched")
+	var expected := ASSET_LIBRARY.template("fixture",assets,{})
+	for node: MeshInstance3D in meshes(expected):
+		node.mesh=context.style_mesh(QUALITY.prepare_lods(node.mesh),BINDING)
+	var operations := []
+	cache.mesh_observer=func(phase,_elapsed,surface): operations.append([phase,surface])
+	while cache.entries[key].stage!="done":
+		operations.clear();cache.prepare_template(key,"fixture",assets)
+		check(operations.filter(func(op): return op[0]=="material_bind").size()<=1,"imported shader activation stays surface-admitted")
+	cache.mesh_observer=Callable()
+	var actual_nodes := meshes(cache.entries[key].template)
+	var expected_nodes := meshes(expected)
+	check(actual_nodes.size()==expected_nodes.size(),"import preserves hierarchy mesh count")
+	for index in actual_nodes.size():
+		var actual := actual_nodes[index];var reference := expected_nodes[index]
+		check(actual.transform==reference.transform,"import preserves reflected hierarchy transforms")
+		check(geometry(actual.mesh)==geometry(reference.mesh),"early material capture preserves compressed geometry and every generated LOD")
+		for surface in actual.mesh.get_surface_count():
+			var a := actual.mesh.surface_get_material(surface);var b := reference.mesh.surface_get_material(surface)
+			check(a.get_class()==b.get_class(),"material class and surface order preserved")
+			if a is ShaderMaterial and b is ShaderMaterial:
+				check(a.shader==b.shader and not a.has_meta("mapkit_pending_surface"),"ready template has its final shader")
+				for parameter in ["base_color","roughness","metallic","vertex_tinted","lighting_role","instanced","uv_scale","uv_offset","normal_strength","ao_uv2","ao_light_affect","vegetation","terrain_surface","water_kind","detail_tile","detail_quality","wind_strength"]:
+					check(a.get_shader_parameter(parameter)==b.get_shader_parameter(parameter),"imported parameter preserved: "+parameter)
+			else:
+				check(a.transparency==b.transparency and a.albedo_color==b.albedo_color,"transparent appearance preserved")
+	expected.free();expected=null;actual_nodes.clear();expected_nodes.clear();context=null
+	cache.release(key);cache.shutdown()
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"early material capture releases all template/context resources")
+	for boundary in ["context","import","lod","material_surface"]:
+		await cancel_imported(assets,boundary)
+
+func cancel_imported(assets: Dictionary, boundary: String) -> void:
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	cache.environment_profile={"lights":[BINDING]};cache.quality_profile=QUALITY.profile(0)
+	var key: String=cache.claim("fixture",assets)
+	var shared: String=cache.claim("fixture",assets)
+	while cache.entries[key].stage!=boundary: cache.prepare_template(key,"fixture",assets)
+	var held: Mesh
+	if boundary in ["lod","material_surface"]: held=meshes(cache.entries[key].template)[0].mesh
+	var amount: int=cache.entries[key].bytes+cache._context_bytes() if held!=null else 0
+	cache.release(key);cache.trim()
+	check(cache.entries.has(shared),"partial imported template stays with its other claimant "+boundary)
+	cache.shutdown()
+	check(cache.template(shared,"fixture",assets)==null,"shutdown cannot publish a shaderless template "+boundary)
+	cache.release(shared)
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"partial imported mesh and context keep their full leases "+boundary)
+	held=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"last pending-shader borrower retires "+boundary)

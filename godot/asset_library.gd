@@ -30,7 +30,7 @@ static func material(id: String, source: Dictionary, cache: Dictionary) -> Stand
 	cache[id] = result
 	return result
 
-static func template(id: String, source: Dictionary, materials: Dictionary) -> Node3D:
+static func template(id: String, source: Dictionary, materials: Dictionary, prepare_material := Callable()) -> Node3D:
 	if not source.has(id) or not str(source[id].path).ends_with(".glb"): return null
 	if source[id].bytes.size() < 28: return null
 	var document := GLTFDocument.new()
@@ -40,6 +40,13 @@ static func template(id: String, source: Dictionary, materials: Dictionary) -> N
 	if document.append_from_buffer(source[id].bytes, "", state, GLTFDocument.IMPORT_FLAG_GENERATE_TANGENT_ARRAYS) != OK: return null
 	var imported_materials := state.get_materials()
 	for index in imported_materials.size(): imported_materials[index].set_meta("mapkit_material_index",index)
+	if prepare_material.is_valid():
+		# Only bindings change here. Godot still owns compression, upload and all
+		# geometry conversion. Source materials retire before the next engine frame.
+		for gltf_mesh: GLTFMesh in state.get_meshes():
+			var mesh := gltf_mesh.mesh
+			for index in mesh.get_surface_count():
+				mesh.set_surface_material(index,prepare_material.call(mesh.get_surface_material(index),index))
 	var root := document.generate_scene(state)
 	if root == null: return null
 	var pending: Array[Node] = [root]

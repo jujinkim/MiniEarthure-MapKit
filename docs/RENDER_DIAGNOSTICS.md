@@ -46,8 +46,11 @@ are outside individual stage timers but included in preparation wall time.
 
 Opt-in `mesh/*` timers further isolate LOD input-array retrieval, importer surface
 insertion, `generate_lods`, `get_mesh`, material duplication and surface binding.
-`material_style` includes the whole styling call and its callee-local resource
-retirement; `material_bind` ends before those locals retire. `material_track`
+`material_style` includes the whole styling call; `material_bind` measures binding
+and `material_source_release` measures dropping its local source reference.
+Opaque GLB sources are captured and retired before upload inside `cache/import`;
+their admitted styling step activates the prepared shared-shader binding. Compare
+both import and styling costs to detect displaced work. `material_track`
 measures lease tracking, and `material_finalize` covers node margin, shadow and
 override setup. `occluder_cached_arrays` marks reuse of retained decoded CPU faces;
 `occluder_arrays` marks a mesh readback for independently prepared/preview meshes.

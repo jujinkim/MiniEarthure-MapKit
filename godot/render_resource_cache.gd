@@ -80,7 +80,7 @@ func claim(id: String, sources: Dictionary) -> String:
 	if bytes() + amount > limit_bytes or entries.size() >= 256: return ""
 	var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null
 	if reserve.is_valid() and lease == null: return ""
-	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "stage":"import", "pending":[], "failed":false, "last_used": Time.get_ticks_msec()}
+	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "stage":"context", "pending":[], "failed":false, "last_used": Time.get_ticks_msec()}
 	return key
 
 func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
@@ -93,18 +93,22 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 	var diagnostic_stage := "lod_"+str(item.lod_job.stage) if stage == "lod_prepare" else stage
 	var started := Time.get_ticks_usec()
 	if stage == "import":
-		item.template = ASSETS.template(id, sources, item.materials)
+		var binding := {}
+		for light: Dictionary in environment_profile.get("lights",[]):
+			if light.asset_id == id: binding = light
+		var prepare_material: Callable = _environment.import_surface.bind(binding) if _environment != null else Callable()
+		item.template = ASSETS.template(id, sources, item.materials, prepare_material)
 		imports += 1
 		item.failed = item.template == null
 		if item.failed: item.stage = "done"
 		else:
 			_track_node(item.lease, item.template)
 			item.pending = [item.template]
-			item.stage = "context"
+			item.stage = "lod"
 	elif stage == "context":
 		# Shared texture upload/context setup is separate from GLB and LOD work.
 		if not prepare_environment(): return false
-		item.stage = "lod"
+		item.stage = "import"
 	elif stage == "lod":
 		if item.pending.is_empty(): item.stage = "done"
 		else:

@@ -17,7 +17,10 @@ weather/night distinctions; Control/HUD rendering is unaffected.
 The weather wrapper retains imported albedo, normal/scale, AO/channel/UV2,
 roughness/channel, metallic/channel and UV1 transforms. Night-window/light roles
 and opaque instancing survive. All five bitmap slots stay tracked by the asset
-lease. Textures load after admission through Godot resource remapping with mipmaps,
+lease. Shared GLB templates capture opaque parameters before scene upload and
+activate their shared shader one surface at a time. Source materials retire during
+import; pending bindings retain the same bitmap and context leases. Textures load
+after admission through Godot resource remapping with mipmaps,
 never script preloads. Shared context reservations are 4.75/16/61MiB respectively
 (`1MiB + 10 × size² × 24`), including CPU/GPU/mipmap/retirement overlap. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.

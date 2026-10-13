@@ -51,16 +51,23 @@ func update(seconds: float, wet: float, snow: float, sun_altitude: float, sunset
 	pixels.set_pixel(1,0,Color(fposmod(seconds,86400.0),PROFILE.night_index(seconds),sun_altitude,sunset_minutes*60.0))
 	texture.update(pixels)
 
-func surface_material(source: Material, role: int, use_instances := false) -> Material:
+func surface_material(source: Material, role: int, use_instances := false, defer_shader := false) -> Material:
+	if source is ShaderMaterial and source.get_meta("mapkit_pending_surface",false):
+		if not defer_shader:
+			source.shader = shader
+			source.remove_meta("mapkit_pending_surface")
+		return source
 	if not source is StandardMaterial3D: return source
 	if source.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED: return source
 	var key := "%d/%d/%d" % [source.get_instance_id(),role,int(use_instances)]
-	if materials.has(key) and materials[key].get_ref() != null: return materials[key].get_ref()
+	if materials.has(key) and materials[key].get_ref() != null:
+		return surface_material(materials[key].get_ref(),role,use_instances,defer_shader)
 	if materials.size() >= 256:
 		for retired: String in materials.keys():
 			if materials[retired].get_ref() == null: materials.erase(retired)
 	var result := ShaderMaterial.new()
-	result.shader = shader
+	if defer_shader: result.set_meta("mapkit_pending_surface",true)
+	else: result.shader = shader
 	result.set_shader_parameter("environment_data",texture)
 	result.set_shader_parameter("base_color",source.albedo_color)
 	result.set_shader_parameter("roughness",source.roughness)
@@ -117,14 +124,24 @@ func style_mesh(mesh: Mesh, binding: Dictionary, instances := false, observer :=
 		style_surface(copy,binding,index,instances,observer)
 	return copy
 
+## Snapshot imported parameters before the engine uploads an unused source shader.
+## The unpublished template binds the shared shader in its admitted surface step.
+func import_surface(source: Material, index: int, binding: Dictionary) -> Material:
+	return surface_material(source,surface_role(source,binding,index),false,true)
+
+static func surface_role(source: Material, binding: Dictionary, index: int) -> int:
+	var material_index := int(source.get_meta("mapkit_material_index",index)) if source != null else index
+	return 1 if binding.get("window_materials",[]).any(func(value): return int(value)==material_index) else (2 if binding.get("bulb_materials",[]).any(func(value): return int(value)==material_index) else 0)
+
 ## Mutates only a caller-owned unpublished mesh; previews still use style_mesh.
 func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := false, observer := Callable()) -> void:
 	var started := Time.get_ticks_usec()
 	var source := mesh.surface_get_material(index)
-	var material_index := int(source.get_meta("mapkit_material_index",index)) if source != null else index
-	var role := 1 if binding.get("window_materials",[]).any(func(value): return int(value)==material_index) else (2 if binding.get("bulb_materials",[]).any(func(value): return int(value)==material_index) else 0)
-	mesh.surface_set_material(index, surface_material(source,role,instances))
+	mesh.surface_set_material(index, surface_material(source,surface_role(source,binding,index),instances))
 	preload("./display_quality.gd").observe_mesh(observer,"material_bind",started,index)
+	started = Time.get_ticks_usec()
+	source = null
+	preload("./display_quality.gd").observe_mesh(observer,"material_source_release",started,index)
 
 func track(lease: RefCounted) -> void:
 	if lease == null: return

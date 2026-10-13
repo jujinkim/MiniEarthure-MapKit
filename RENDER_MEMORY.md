@@ -1,9 +1,8 @@
 # Incremental renderer resource ownership
 
-The optional fifth argument to `chunk_renderer.begin(chunk, parent, reserve,
-planned_bytes, resources)` is a session `render_resource_cache.gd` context. Existing
-four/two-argument calls and synchronous `attach` remain supported for standalone
-previews. MapKit contains no game admission, physics or network policy.
+The fifth argument to `chunk_renderer.begin(chunk, parent, reserve, planned_bytes,
+resources)` is an optional session `render_resource_cache.gd` context. Shorter calls
+and synchronous `attach` support standalone previews. Callers own game admission.
 
 ## Planning and shared resources
 
@@ -25,16 +24,21 @@ and before renderer allocation. Compressed file length is never a RAM estimate.
 Current v1 native presentation records add `content_hash` and `memory_bytes` from the
 validated package. They are excluded from package serialization/generated hashes.
 The cache key includes content, declarative material settings and referenced image
-content. Views without shareable records retain independent per-job ownership.
+content.
 The cache claims resources before import and holds at most 256 entries/128 MiB by
-default, including its urban shader. The caller supplies independent admission.
+default, including its urban shader.
 Each model imports once while cached; materials, mesh surfaces, decoded images and
-derived occluder shapes are shared. GLB import, shared texture context, each LOD
+derived occluder shapes are shared. Shared texture context, GLB import, each LOD
 input surface, LOD generation, output mesh upload, each material binding,
 occluder preparation, MultiMesh setup and placement are separate admitted steps. Concurrent
 claims advance one shared template and reuse its completed phases. Diagnostics
-include each phase total/peak and attachment/release costs; individual synchronous
-engine operations cannot be preempted and their peaks remain visible.
+include phase total/peak and attachment/release costs; synchronous engine calls
+cannot be preempted.
+With a ready context, GLB import captures opaque parameters into shaderless
+bindings before scene upload. Original materials retire within import without
+preparing unused shaders. Each unpublished surface activates the shared shader in
+its admitted step. Colours, texture channels/UVs, light roles and transparency
+survive; pending bindings retain full template/context leases through cancellation.
 Private LOD output receives material bindings directly; borrowed prepared meshes
 and previews keep binding copies. Inputs stay immutable and placements use only
 complete templates. Partial importer/output state retains the full lease until
@@ -85,25 +89,20 @@ materials/textures remain charged while scene instances or external consumers
 borrow them. An independently retained occluder shape also keeps the shared
 template lease charged after its mesh and instances retire. Cache shutdown seals
 these leases, including the shared shader.
-The lease provider must retain charges through its last-borrower/retirement rules.
-Completed/failed jobs may retain an invalid root handle for diagnostics.
+The lease provider enforces last-borrower retirement. Completed/failed jobs may
+retain an invalid root handle for diagnostics.
 
 `MapKitBridge.cell_window` and estimates provide a conservative horizontal visual
 anchor margin, including transformed GLB bounds independently of collision proxies.
 
 Validation: `scripts/verify_godot_layout.py --godot <Godot> --probe renderer --probe
-assets --probe binding` checks relocatable standalone use, unchanged generated
-hashes, GLB/images, opaque grouping, cancellation and transforms. Actual GPU
-MultiMesh transform queries require a rendered engine; the dummy headless server
-cannot supply them. Caller integration tests cover admission, shared last borrowers,
-failed replacement, worker cancellation and delayed retirement.
-`display_quality_validator` and `richer_material_validator` cover identical ordered
-occluder faces, open doorways, excluded transparent/vegetation faces, transformed
-instances, shared preparation, partial cancellation and final shape borrowers.
-`mesh_preparation_validator` checks exact surface/LOD output, interleaved claims,
-per-surface admission, immutable inputs, retained CPU face release,
-cancellation/shutdown and final borrowers. Occlusion checks compare retained
-positions against actual compressed-GLB output as well as doorway fixtures.
+assets --probe binding` covers relocation, generated hashes, assets and batching.
+Run `display_quality_validator` and `richer_material_validator` with a rendered
+engine for MultiMesh transforms, compressed-GLB occlusion, openings and excluded
+faces. `mesh_preparation_validator` compares full geometry/LOD/material output,
+early source retirement, surface admission, interleaved claims and immutable inputs.
+These and caller checks cover admission, cancellation, failed replacement,
+shutdown, scratch release and final mesh/context/shape borrowers.
 
 ## Unshareable presentation resources
 
@@ -114,19 +113,14 @@ rule within current v1.
 
 ## Shared miniature material tiles
 
-The current cache remains 128 MiB / 256 entries. The admitted weather context
-reserves 4.75/16/61 MiB for ten 128/256/512 px packed tiles, mipmaps and
-import/CPU/GPU/retirement overlap.
-Its bytes are also included in diagnostics without an admission callback.
-Normal, AO, roughness and metallic shader bindings join albedo in asset-lease
-tracking. See [material implementation and verification](docs/RICHER_MATERIALS.md).
+The weather context reserves 4.75/16/61 MiB for ten 128/256/512 px tiles, mipmaps
+and CPU/GPU/retirement overlap, including diagnostics without admission callbacks.
+All five bitmap slots join asset-lease tracking. See [materials](docs/RICHER_MATERIALS.md).
 
 ## LOD and occlusion admission
 
-Each shared template reserves twice the validated native asset bound plus 128 KiB
-before import/LOD generation, covering transient source/output meshes and retained
-LOD indices. Spatial batches use 768 bytes/triangle and 12 KiB/batch; objects retain
-64 KiB for instance/occluder nodes and arrays. `upper_bound` includes the same
-worst-case per-triangle batch overhead. Profile changes reuse map textures, and
-retiring leases remain charged through final borrowers and the consumer grace.
-No physics, AI, scheduling authority or network data depends on display quality.
+Before import/LOD generation, each template reserves twice the native asset bound
+plus 128 KiB for source/output overlap and LOD indices. Batch/object allowances
+above include occluder arrays/nodes and apply to `upper_bound`. Profile changes reuse
+map textures. Consumer retirement grace remains charged; display quality does not
+affect physics, AI, scheduling authority or network data.
