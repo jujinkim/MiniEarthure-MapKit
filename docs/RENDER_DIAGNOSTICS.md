@@ -44,6 +44,16 @@ zero-duration operations are not counted there. Cache subphases overlap their
 enclosing attachment phase and must not be added to it. These observer snapshots
 are outside individual stage timers but included in preparation wall time.
 
+Opt-in `mesh/*` timers further isolate LOD input-array retrieval, importer surface
+insertion, `generate_lods`, `get_mesh`, material duplication and surface binding.
+They count even zero-duration calls and attach a surface index where applicable.
+New private LOD outputs need no material duplication; borrowed prepared meshes
+still do. The fixed-scene observer is installed only for one attachment advance
+and then cleared; reports retain primitive context only. Observer callbacks are
+outside the inner operation timer and inside the enclosing cache/attachment timer.
+These nested totals overlap. Surface staging cannot interrupt a slow individual
+engine call, including a first-use readback.
+
 `cache_activity` counts imports/hits for this view. The `cache` and `attachment`
 diagnostics retain cache-lifetime and process-lifetime counters/peaks, identified
 by `timing_scopes`; use `preparation_stages` for first-visit/revisit comparisons.
@@ -76,5 +86,5 @@ bounded phase aggregates and primitive peak context, never scene/resource owners
 `godot/tests/render_measurement_validator.gd` covers missing GPU timing, frame
 thresholds, malformed options, missing views, preparation failure/timeout and
 partial-scene teardown, phase peak context and revisit isolation without resetting
-shared lifetime counters. Consumer graphical checks cover renderer metadata, frame
+shared lifetime counters, including inner-operation surface attribution. Consumer graphical checks cover renderer metadata, frame
 sampling, cache retirement and isolated startup.

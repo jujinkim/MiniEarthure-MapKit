@@ -75,4 +75,10 @@ func check_preparation_costs() -> void:
 	cost=revisit.preparation_stages["cache/lod"]
 	check(cost.total_usec==2000 and cost.peak_usec==2000 and cost.samples==1,"new revisit work measures only its own operation")
 	check(cache.preparation_peak_usec.lod==100000 and cache.preparation_usec.lod==102000,"observation preserves shared lifetime diagnostics")
+	first.record_mesh_cost("lod_arrays",0,2,context)
+	first.record_mesh_cost("lod_arrays",500,7,context)
+	context.cell[0]=42
+	cost=first.preparation_stages["mesh/lod_arrays"]
+	check(cost.samples==2 and cost.peak_usec==500 and cost.peak_context.surface==7 and cost.peak_context.cell==[99,3],"inner operations include zero durations and detached surface context")
+	check(not revisit.preparation_stages.has("mesh/lod_arrays"),"inner operations are view-local")
 	first.cache=null;revisit.cache=null;cache.shutdown()

@@ -54,6 +54,11 @@ func record_cache(before: Dictionary, context: Dictionary) -> void:
 		var elapsed := int(cache.preparation_usec[phase])-int(before.get(phase,0))
 		if elapsed>0: record_cost("cache/"+phase,elapsed,context)
 
+func record_mesh_cost(phase: String, elapsed_usec: int, surface: int, context: Dictionary) -> void:
+	var detail := context.duplicate(true)
+	if surface>=0: detail.surface=surface
+	record_cost("mesh/"+phase,elapsed_usec,detail)
+
 static func template_context(job: Dictionary, cell: Dictionary) -> Dictionary:
 	var context := cell.duplicate(true)
 	var objects: Array=job.get("chunk",{}).get("objects",[])
@@ -68,6 +73,8 @@ static func template_context(job: Dictionary, cell: Dictionary) -> Dictionary:
 	if node==null and not item.get("pending",[]).is_empty(): node=item.pending.back()
 	if node is MeshInstance3D:
 		context.mesh=node.name;context.surfaces=node.mesh.get_surface_count()
+		if item.has("lod_job") and item.lod_job.stage=="surface": context.surface=item.lod_job.surface
+		elif item.stage=="material_surface": context.surface=item.material_surface
 	return context
 
 static func scene_point(point: Array) -> Vector3: return Vector3(point[0],point[1],-point[2])
@@ -181,9 +188,11 @@ func _cell(bridge: RefCounted, x: int, y: int, near: bool) -> Dictionary:
 	while true:
 		var cache_before: Dictionary=cache.preparation_usec.duplicate()
 		var detail := template_context(job,context) if near else context
+		cache.mesh_observer=record_mesh_cost.bind(detail)
 		before=Time.get_ticks_usec()
 		var done: bool=renderer.advance(job)
 		var elapsed := Time.get_ticks_usec()-before
+		cache.mesh_observer=Callable()
 		var phase := "near/"+str(job.last_phase) if near else "far/advance"
 		record_cost(phase,elapsed,detail if phase=="near/template_preparation" else context)
 		record_cache(cache_before,detail)

@@ -108,15 +108,23 @@ func bind_detail(material: ShaderMaterial, kind: String) -> void:
 	material.set_shader_parameter("detail_tile",tiles[kind])
 	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass","metal","leaf"] else 1.0)
 
-func style_mesh(mesh: Mesh, binding: Dictionary, instances := false) -> Mesh:
+func style_mesh(mesh: Mesh, binding: Dictionary, instances := false, observer := Callable()) -> Mesh:
 	# Own surface bindings; vertex/index buffers and texture resources remain shared.
+	var started := Time.get_ticks_usec()
 	var copy: Mesh = mesh.duplicate()
+	preload("./display_quality.gd").observe_mesh(observer,"material_duplicate",started)
 	for index in copy.get_surface_count():
-		var source := mesh.surface_get_material(index)
-		var material_index := int(source.get_meta("mapkit_material_index",index)) if source != null else index
-		var role := 1 if binding.get("window_materials",[]).any(func(value): return int(value)==material_index) else (2 if binding.get("bulb_materials",[]).any(func(value): return int(value)==material_index) else 0)
-		copy.surface_set_material(index, surface_material(mesh.surface_get_material(index),role,instances))
+		style_surface(copy,binding,index,instances,observer)
 	return copy
+
+## Mutates only a caller-owned unpublished mesh; previews still use style_mesh.
+func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := false, observer := Callable()) -> void:
+	var started := Time.get_ticks_usec()
+	var source := mesh.surface_get_material(index)
+	var material_index := int(source.get_meta("mapkit_material_index",index)) if source != null else index
+	var role := 1 if binding.get("window_materials",[]).any(func(value): return int(value)==material_index) else (2 if binding.get("bulb_materials",[]).any(func(value): return int(value)==material_index) else 0)
+	mesh.surface_set_material(index, surface_material(source,role,instances))
+	preload("./display_quality.gd").observe_mesh(observer,"material_bind",started,index)
 
 func track(lease: RefCounted) -> void:
 	if lease == null: return

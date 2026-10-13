@@ -29,12 +29,16 @@ content. Views without shareable records retain independent per-job ownership.
 The cache claims resources before import and holds at most 256 entries/128 MiB by
 default, including its urban shader. The caller supplies independent admission.
 Each model imports once while cached; materials, mesh surfaces, decoded images and
-derived occluder shapes are shared. GLB import, shared texture context, per-mesh LOD
-generation, material binding, occluder preparation, MultiMesh setup, placement and
-mesh upload are separate admitted steps. Concurrent
+derived occluder shapes are shared. GLB import, shared texture context, each LOD
+input surface, LOD generation, output mesh upload, each material binding,
+occluder preparation, MultiMesh setup and placement are separate admitted steps. Concurrent
 claims advance one shared template and reuse its completed phases. Diagnostics
 include each phase total/peak and attachment/release costs; individual synchronous
 engine operations cannot be preempted and their peaks remain visible.
+Private LOD output receives material bindings directly; borrowed prepared meshes
+and previews keep binding copies. Inputs stay immutable and placements use only
+complete templates. Partial importer/output state retains the full lease until
+eviction; shutdown rejects late access to partial templates.
 Each shared tile decodes and uploads with mipmaps in separate steps. Environment
 observers return no context until preparation completes and cannot drain that queue.
 Partial preparation keeps its full lease until the decoded image/resources retire.
@@ -67,8 +71,7 @@ slot ceiling. Small-prop distance classification includes authored root scale.
 The cell lease subtracts only the separately admitted shared asset allowance.
 Shared resources have their own lease. Instance nodes/MultiMeshes and private
 surface meshes/materials belong to the cell. Worker/native source owners remain
-independent. The cache conservatively retains the import peak until actual resource
-retirement; it does not claim allocator savings by reducing a multiplier.
+independent. The cache retains the import peak until actual resource retirement.
 
 Claims pin templates during attachment. Completion/cancel releases pins exactly
 once and clears source records. Unpinned templates may be evicted; their meshes,
@@ -81,7 +84,6 @@ Completed/failed jobs may retain an invalid root handle for diagnostics.
 
 `MapKitBridge.cell_window` and estimates provide a conservative horizontal visual
 anchor margin, including transformed GLB bounds independently of collision proxies.
-It is presentation metadata, not a new package, generated or transport version.
 
 Validation: `scripts/verify_godot_layout.py --godot <Godot> --probe renderer --probe
 assets --probe binding` checks relocatable standalone use, unchanged generated
@@ -92,6 +94,8 @@ failed replacement, worker cancellation and delayed retirement.
 `display_quality_validator` and `richer_material_validator` cover identical ordered
 occluder faces, open doorways, excluded transparent/vegetation faces, transformed
 instances, shared preparation, partial cancellation and final shape borrowers.
+`mesh_preparation_validator` checks exact surface/LOD output, interleaved claims,
+per-surface admission, immutable inputs, cancellation/shutdown and final borrowers.
 
 ## Unshareable presentation resources
 

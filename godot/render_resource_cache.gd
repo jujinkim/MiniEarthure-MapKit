@@ -3,6 +3,7 @@ extends RefCounted
 const ASSETS := preload("./asset_library.gd")
 const URBAN := preload("./urban_surface.gdshader")
 const ENVIRONMENT := preload("./environment_materials.gd")
+const QUALITY := preload("./display_quality.gd")
 const CONTEXT_BYTES := ENVIRONMENT.MEMORY_BYTES
 var reserve: Callable
 var limit_bytes := 128 * 1024 * 1024 # Textured templates; still charged to consumer admission.
@@ -14,6 +15,7 @@ var import_usec := 0
 var peak_import_usec := 0
 var preparation_usec: Dictionary = {}
 var preparation_peak_usec: Dictionary = {}
+var mesh_observer: Callable # Opt-in diagnostics; never retains resource owners.
 var _shader: Shader
 var _shader_lease: RefCounted
 var closed := false
@@ -84,10 +86,11 @@ func claim(id: String, sources: Dictionary) -> String:
 func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 	# One admitted phase per call; the scheduler owns the shared frame budget.
 	# Claims prevent eviction until every cell waiting on this template finishes.
-	if not entries.has(key): return true
+	if closed or not entries.has(key): return true
 	var item: Dictionary = entries[key]
 	if item.stage == "done": return true
 	var stage: String = item.stage
+	var diagnostic_stage := "lod_"+str(item.lod_job.stage) if stage == "lod_prepare" else stage
 	var started := Time.get_ticks_usec()
 	if stage == "import":
 		item.template = ASSETS.template(id, sources, item.materials)
@@ -110,26 +113,52 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			if node is MeshInstance3D:
 				node.set_meta("mapkit_decoration",not bool(sources[id].get("solid",true)) and node.mesh.get_aabb().size.length() <= 6.0)
 				node.set_meta("mapkit_occluder",node.mesh.get_aabb().size.length() > 6.0)
-				node.mesh = preload("./display_quality.gd").prepare_lods(node.mesh)
-				_track_node(item.lease,node)
 				item.styling = node
-				item.stage = "materials"
+				item.lod_job = QUALITY.begin_lods(node.mesh)
+				item.stage = "lod_prepare"
+	elif stage == "lod_prepare":
+		if QUALITY.advance_lods(item.lod_job,mesh_observer):
+			item.styling.mesh = item.lod_job.result
+			item.owned_mesh = item.lod_job.owned
+			item.erase("lod_job")
+			_track_node(item.lease,item.styling)
+			item.stage = "materials"
 	elif stage == "materials":
 		var node: MeshInstance3D = item.styling
 		if _environment != null:
 			var binding := {}
 			for light: Dictionary in environment_profile.get("lights",[]):
 				if light.asset_id == id: binding = light
-			node.mesh = _environment.style_mesh(node.mesh,binding)
+			# New LOD output belongs solely to this unpublished template. Rebinding
+			# its surfaces avoids a second whole-mesh GPU readback/copy.
+			if not item.owned_mesh:
+				var copy_started := Time.get_ticks_usec()
+				node.mesh = node.mesh.duplicate()
+				QUALITY.observe_mesh(mesh_observer,"material_duplicate",copy_started)
+				_track_node(item.lease,node)
+			item.material_binding = binding
+			item.material_surface = 0
+			item.water = node.mesh.get_surface_count() > 0
+			item.stage = "material_surface"
+		else: item.stage = "occluder"
+		item.erase("owned_mesh")
+	elif stage == "material_surface":
+		var node: MeshInstance3D = item.styling
+		var index: int = item.material_surface
+		if index < node.mesh.get_surface_count():
+			_environment.style_surface(node.mesh,item.material_binding,index,false,mesh_observer)
+			var material: Material = node.mesh.surface_get_material(index)
+			_track_material(item.lease,material)
+			item.water = item.water and material != null and material.get_meta("mapkit_water",false)
+			item.material_surface += 1
+		if item.material_surface == node.mesh.get_surface_count():
 			node.extra_cull_margin = .08
-			var water: bool = node.mesh.get_surface_count() > 0
-			for index in node.mesh.get_surface_count():
-				var material: Material = node.mesh.surface_get_material(index)
-				water = water and material != null and material.get_meta("mapkit_water",false)
-			if water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			if node.material_override != null: node.material_override = _environment.surface_material(node.material_override,0)
-		_track_node(item.lease,node)
-		item.stage = "occluder"
+			if item.water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if node.material_override != null:
+				node.material_override = _environment.surface_material(node.material_override,0)
+				_track_material(item.lease,node.material_override)
+			item.erase("material_binding");item.erase("material_surface");item.erase("water")
+			item.stage = "occluder"
 	elif stage == "occluder":
 		# Derive once after LOD/material replacement, as its own admitted step.
 		# Root/placement scaling can make even a small mesh an occluder candidate.
@@ -139,8 +168,8 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		item.stage = "lod"
 	var elapsed := Time.get_ticks_usec() - started
 	if stage != "context":
-		preparation_usec[stage] = int(preparation_usec.get(stage,0)) + elapsed
-		preparation_peak_usec[stage] = maxi(int(preparation_peak_usec.get(stage,0)),elapsed)
+		preparation_usec[diagnostic_stage] = int(preparation_usec.get(diagnostic_stage,0)) + elapsed
+		preparation_peak_usec[diagnostic_stage] = maxi(int(preparation_peak_usec.get(diagnostic_stage,0)),elapsed)
 	if stage == "import":
 		import_usec += elapsed
 		peak_import_usec = maxi(peak_import_usec,elapsed)
@@ -149,7 +178,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 func template(key: String, id: String, sources: Dictionary) -> Node3D:
 	# Synchronous convenience for standalone previews. Streaming calls the phased
 	# API first; no phase is repeated when another cell shares the same claim.
-	if not entries.has(key): return null
+	if closed or not entries.has(key): return null
 	while not prepare_template(key,id,sources): pass
 	return entries[key].template
 
@@ -188,12 +217,15 @@ func _evict(key: String) -> void:
 	item.materials.clear()
 	item.pending.clear()
 	item.erase("styling")
+	item.erase("lod_job")
+	item.erase("material_binding")
 	if item.lease != null:
 		item.lease.seal()
 		retiring.append(item.lease)
 
 func shutdown() -> void:
 	closed = true
+	mesh_observer = Callable()
 	_environment = null
 	if _environment_lease != null:
 		_environment_lease.seal()

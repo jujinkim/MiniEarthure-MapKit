@@ -53,15 +53,48 @@ static func tile_bytes(size: int, count: int) -> int:
 	# Mipmaps + generation scratch, CPU/GPU copies and retirement overlap.
 	return 1048576 + count * size * size * 24
 
-static func prepare_lods(mesh: Mesh) -> Mesh:
-	if mesh == null or mesh.get_meta("mapkit_lods",false): return mesh
-	var source := ImporterMesh.new()
-	for index in mesh.get_surface_count():
-		source.add_surface(Mesh.PRIMITIVE_TRIANGLES, mesh.surface_get_arrays(index), [], {}, mesh.surface_get_material(index))
-	source.generate_lods(60.0, 0.0, [])
-	var result := source.get_mesh()
-	result.set_meta("mapkit_lods",true)
-	return result
+static func prepare_lods(mesh: Mesh, observer := Callable()) -> Mesh:
+	var job := begin_lods(mesh)
+	while not advance_lods(job,observer): pass
+	return job.result
+
+static func begin_lods(mesh: Mesh) -> Dictionary:
+	if mesh == null or mesh.get_surface_count()==0 or mesh.get_meta("mapkit_lods",false):
+		return {"stage":"done","result":mesh,"owned":false}
+	return {"stage":"surface","input":mesh,"source":ImporterMesh.new(),"surface":0,"result":null,"owned":true}
+
+## One surface read/add, LOD generation or output upload per admitted call.
+## A single engine operation cannot be preempted; keep its cost observable.
+static func advance_lods(job: Dictionary, observer := Callable()) -> bool:
+	if job.stage == "done": return true
+	var source: ImporterMesh = job.source
+	if job.stage == "surface":
+		var mesh: Mesh = job.input
+		var index: int = job.surface
+		var started := Time.get_ticks_usec()
+		var arrays := mesh.surface_get_arrays(index)
+		observe_mesh(observer,"lod_arrays",started,index)
+		started = Time.get_ticks_usec()
+		source.add_surface(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, mesh.surface_get_material(index))
+		observe_mesh(observer,"lod_add_surface",started,index)
+		job.surface += 1
+		if job.surface == mesh.get_surface_count(): job.stage = "generate"
+	elif job.stage == "generate":
+		var started := Time.get_ticks_usec()
+		source.generate_lods(60.0, 0.0, [])
+		observe_mesh(observer,"lod_generate",started)
+		job.stage = "get_mesh"
+	elif job.stage == "get_mesh":
+		var started := Time.get_ticks_usec()
+		job.result = source.get_mesh()
+		observe_mesh(observer,"lod_get_mesh",started)
+		job.result.set_meta("mapkit_lods",true)
+		job.erase("input");job.erase("source")
+		job.stage = "done"
+	return job.stage == "done"
+
+static func observe_mesh(observer: Callable, phase: String, started: int, surface := -1) -> void:
+	if observer.is_valid(): observer.call(phase,Time.get_ticks_usec()-started,surface)
 
 static func occluder(mesh: Mesh, lease: RefCounted) -> OccluderInstance3D:
 	var prepared: Dictionary = mesh.get_meta("mapkit_occluder_preparation", {})
