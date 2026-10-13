@@ -171,7 +171,9 @@ func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := fal
 	var source := mesh.surface_get_material(index)
 	var material := surface_material(source,surface_role(source,binding,index,roles),instances)
 	var replaced := material != source
-	mesh.surface_set_material(index, material)
+	# Shader activation mutates the existing binding; transparent passthrough
+	# also leaves it in place. Only a new wrapper changes the mesh's surface.
+	if replaced: mesh.surface_set_material(index, material)
 	preload("./display_quality.gd").observe_mesh(observer,"material_bind",started,index)
 	started = Time.get_ticks_usec()
 	source = null

@@ -43,9 +43,9 @@ Import tracks the hierarchy, overrides, overlays and source bitmaps. A local
 visited set scans each shared mesh's materials and each binding's texture slots
 once; node-specific overrides remain independent, and each new traversal reads
 current resources. LOD/shallow copies retain bindings, so replacement tracks only
-the new mesh. Surface and node-override styling track replaced bindings;
-activation/transparent passthrough reuse import tracking. The context tracks the
-shared shader. Mutable previews track unconditionally.
+the new mesh. Surface and node-override styling assign and track replaced bindings;
+activation/transparent passthrough retain their bindings and reuse import tracking.
+The context tracks the shared shader. Mutable previews track unconditionally.
 
 Image/declarative lookups reuse initial tracking. GLB import tracks cached overrides
 even before hierarchy rejection. Failed creation remains retryable; entries own
