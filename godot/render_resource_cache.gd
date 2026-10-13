@@ -175,8 +175,9 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			var node: Node3D = item.pending.pop_back()
 			item.pending.append_array(node.get_children())
 			if node is MeshInstance3D:
-				node.set_meta("mapkit_decoration",not bool(sources[id].get("solid",true)) and node.mesh.get_aabb().size.length() <= 6.0)
-				node.set_meta("mapkit_occluder",node.mesh.get_aabb().size.length() > 6.0)
+				var mesh_size: float = node.mesh.get_aabb().size.length()
+				node.set_meta("mapkit_decoration",not bool(sources[id].get("solid",true)) and mesh_size <= 6.0)
+				node.set_meta("mapkit_occluder",mesh_size > 6.0)
 				item.styling = node
 				item.lod_job = QUALITY.begin_lods(node.mesh,true)
 				item.stage = "lod_prepare"
@@ -199,14 +200,16 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 				QUALITY.observe_mesh(mesh_observer,"material_duplicate",copy_started)
 				_track_node(item.lease,node)
 			item.material_surface = 0
-			item.water = node.mesh.get_surface_count() > 0
+			# LOD output is final; admitted material steps only replace bindings.
+			item.material_count = node.mesh.get_surface_count()
+			item.water = item.material_count > 0
 			item.stage = "material_surface"
 		else: item.stage = "occluder"
 		item.erase("owned_mesh")
 	elif stage == "material_surface":
 		var node: MeshInstance3D = item.styling
 		var index: int = item.material_surface
-		if index < node.mesh.get_surface_count():
+		if index < item.material_count:
 			var style_started := Time.get_ticks_usec()
 			_environment.style_surface(node.mesh,item.light_binding,index,false,mesh_observer,item.light_roles)
 			# Include callee-local retirement after its inner binding timer returns.
@@ -217,14 +220,14 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			QUALITY.observe_mesh(mesh_observer,"material_track",track_started,index)
 			item.water = item.water and material != null and material.get_meta("mapkit_water",false)
 			item.material_surface += 1
-		if item.material_surface == node.mesh.get_surface_count():
+		if item.material_surface == item.material_count:
 			var finalize_started := Time.get_ticks_usec()
 			node.extra_cull_margin = .08
 			if item.water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			if node.material_override != null:
 				node.material_override = _environment.surface_material(node.material_override,0)
 				_track_material(item.lease,node.material_override)
-			item.erase("material_surface");item.erase("water")
+			item.erase("material_surface");item.erase("material_count");item.erase("water")
 			QUALITY.observe_mesh(mesh_observer,"material_finalize",finalize_started)
 			item.stage = "occluder"
 	elif stage == "occluder":
@@ -309,6 +312,7 @@ func _evict(key: String) -> void:
 	item.erase("occluder_arrays")
 	item.erase("light_binding")
 	item.erase("light_roles")
+	item.erase("material_count")
 	item.erase("instance_parts")
 	if item.lease != null:
 		item.lease.seal()

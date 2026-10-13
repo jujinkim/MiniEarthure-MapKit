@@ -126,6 +126,7 @@ func run() -> void:
 	for boundary in ["surface","generate","get_mesh","materials","material_surface","occluder","instance_parts"]:
 		await cancel_at(boundary)
 	await borrowed_prepared_mesh()
+	await empty_prepared_mesh()
 	light_role_lookup()
 	await light_binding_snapshot()
 	await failed_light_import()
@@ -161,7 +162,7 @@ func cancel_at(boundary: String) -> void:
 	cache.shutdown()
 	check(cache.prepare_template(shared,"fixture",ASSETS) and cache.template(shared,"fixture",ASSETS)==null,"late advance after shutdown cannot publish partial materials")
 	cache.release(shared)
-	check(not partial.has("occluder_arrays") and not partial.has("lod_job") and not partial.has("light_binding") and not partial.has("light_roles"),"eviction drops preparation scratch even if diagnostics retain the entry "+boundary)
+	check(not partial.has("occluder_arrays") and not partial.has("lod_job") and not partial.has("light_binding") and not partial.has("light_roles") and not partial.has("material_count"),"eviction drops preparation scratch even if diagnostics retain the entry "+boundary)
 	for frame in 3: await process_frame
 	check(cache.entries.is_empty(),"shutdown removes partial template "+boundary)
 	check(cache.bytes()==(amount if held!=null else 0),"scratch retires while a partial mesh borrower stays charged "+boundary)
@@ -179,6 +180,22 @@ func borrowed_prepared_mesh() -> void:
 	cache.release(key);cache.shutdown();mesh=null
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"borrowed preparation path retires")
+
+func empty_prepared_mesh() -> void:
+	var cache := seeded_cache(ArrayMesh.new())
+	var key: String=cache.entries.keys()[0]
+	var item: Dictionary=cache.entries[key]
+	var operations := []
+	cache.mesh_observer=func(phase,_elapsed,_surface): operations.append(phase)
+	var steps := 0
+	while not cache.prepare_template(key,"fixture",ASSETS) and steps<20: steps+=1
+	check(item.stage=="done" and steps<20,"zero-surface template completes without waiting for a material")
+	check(not operations.has("material_bind") and item.template.mesh.get_surface_count()==0,"empty mesh stays empty without material work")
+	check(item.template.cast_shadow==GeometryInstance3D.SHADOW_CASTING_SETTING_ON,"empty mesh is not classified as all-water")
+	check(not item.has("material_count") and not item.has("material_surface"),"empty material finalization drops its cursor and count")
+	cache.release(key);cache.shutdown()
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"empty prepared mesh retires its full reservation")
 
 func instance_parts(mode: String) -> void:
 	var mesh := ArrayMesh.new()

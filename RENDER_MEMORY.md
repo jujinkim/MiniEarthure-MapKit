@@ -42,7 +42,9 @@ bindings before upload and retires original materials. Each unpublished surface
 activates the shared shader in its admitted step. Colours, texture channels/UVs,
 light roles and transparency survive. Pending bindings retain full template/context
 leases through cancellation. Private LOD outputs bind directly; borrowed meshes
-and previews copy bindings. Placements require complete templates.
+and previews copy bindings. Per-node classification reads mesh bounds once in its
+admitted call. Once LOD output is final, surface steps share its fixed surface count
+until material completion or eviction. Placements require complete templates.
 LOD jobs retain decoded positions/indices until occluder preparation, avoiding a
 second GPU readback with identical faces. Raw GLTF arrays precede compression and
 cannot replace decoded inputs without changing geometry/LOD. Scratch uses the
