@@ -60,9 +60,8 @@ still do. The fixed-scene observer is installed only for one attachment advance
 and then cleared; reports retain primitive context only. Observer callbacks are
 outside the inner operation timer and inside the enclosing cache/attachment timer.
 These nested totals overlap. Surface staging cannot interrupt a slow individual
-engine call, including a first-use readback. Shared LOD jobs avoid the later
-occluder readback, but initial input-array retrieval still decodes the uploaded
-mesh; raw pre-compression GLTF arrays do not preserve the same output.
+engine call. Shared LOD jobs reuse decoded faces for occlusion; initial input
+readback remains a separate engine limit, described below.
 
 `cache_activity` counts imports/hits for this view. The `cache` and `attachment`
 diagnostics retain cache-lifetime and process-lifetime counters/peaks, identified
@@ -70,6 +69,28 @@ by `timing_scopes`; use `preparation_stages` for first-visit/revisit comparisons
 Reused templates produce no new `cache/*` samples. Repeats recreate scene resources
 but keep the process and driver warm. This tool runs generation synchronously;
 its generation costs do not measure Runtime's worker scheduling or driving frames.
+
+### Readback isolation
+
+On RenderingDevice renderers, `surface_get_arrays` retrieves packed buffers before
+restoring CPU arrays. Godot's [buffer readback](https://docs.godotengine.org/en/stable/classes/class_renderingdevice.html#class-renderingdevice-method-buffer-get-data)
+blocks GPU work. Pending uploads/rendering can affect the call; its duration is
+not solely this mesh's upload or decompression. Repeated reads still synchronize.
+
+- Time `RenderingServer.mesh_get_surface` separately to probe packed retrieval.
+  A following `surface_get_arrays` downloads again, so subtracting the two timings
+  cannot isolate restoration. The extra read perturbs preparation.
+- For CPU isolation, replay captured packed buffers through the same engine's
+  headless dummy mesh storage, excluding creation/file I/O. Require every rendered
+  array slot to match. This excludes GPU waits; production ownership stays intact.
+- Matched Metal warehouse probes point to synchronous retrieval rather than CPU
+  restoration. First-use peaks vary across import/readback and fresh processes;
+  frame delays retain readback costs. Individual waits need an engine trace.
+
+Raw GLTF arrays precede compression and change geometry/LOD output. Current script
+bindings expose neither the CPU surface decoder nor ArrayMesh buffer RIDs for
+async retrieval. Check Runtime's shared attachment budget before an engine change;
+fixed scenes do not establish streaming improvement.
 
 ## Ownership and failure
 

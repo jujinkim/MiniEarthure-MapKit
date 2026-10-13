@@ -15,7 +15,9 @@ of game transport, physics, progress and release acceptance.
 - Regional files retain one bounded original authoring document. Sharded authoring,
   arbitrary density, source LRU and network region requests are not provided here.
 - Logical estimates and decoder caps are not complete allocator/RSS/GPU accounting.
-  Engine GLB import is not preemptible. Callers retain leases through real retirement.
+  Engine GLB import and initial mesh readback are not preemptible; see
+  [readback isolation](docs/RENDER_DIAGNOSTICS.md#readback-isolation).
+  Callers retain leases through real retirement.
 - The frozen determinism vector check has a known mismatch; see
   [determinism](spec/DETERMINISM.md#known-mismatch).
 - `scripts/check_architecture.py` flags `std::thread` in the test-only cancellation
