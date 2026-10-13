@@ -321,8 +321,7 @@ func environment_context() -> RefCounted:
 
 static func wet_urban_shader() -> Shader:
 	var result := Shader.new()
-	result.code = URBAN.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
-	result.code = result.code.replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
+	result.code = URBAN.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code).replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
 	return result
 
 func _context_bytes() -> int:

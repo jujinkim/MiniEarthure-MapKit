@@ -156,16 +156,11 @@ static func _advance(job: Dictionary) -> bool:
 				var id := key.substr(6)
 				material = job.resources.material(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.material(id, sources, job.asset_materials)
 				if material != null and job.get("resources") != null: job.borrowed_materials[material.get_instance_id()] = true
-			else: material = surface_material(key, presentation, job.get("urban_shader"))
+				if material != null: material = _environment_surface(job, material)
+			else: material = _generated_material(job, key, presentation)
 			if material == null:
 				mesh.free()
 				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
-			if material is StandardMaterial3D and not key.begins_with("asset:"):
-				material.albedo_color = ground_color(key, presentation)
-				material.roughness = 0.9
-				material.cull_mode = BaseMaterial3D.CULL_DISABLED
-				material.resource_name = "mk_"+detail_kind(key)
-			material = _environment_surface(job, material)
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
 		mesh.set_meta("mapkit_occluder", occluding_surface(key))
@@ -287,17 +282,12 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 			var id := key.substr(6)
 			material = job.resources.material(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.material(id, sources, job.asset_materials)
 			if material != null and job.get("resources") != null: job.borrowed_materials[material.get_instance_id()] = true
+			if material != null: material = _environment_surface(job, material)
 		else:
-			material = surface_material(key, presentation, job.get("urban_shader"))
-			if material is StandardMaterial3D:
-				material.albedo_color = ground_color(key, presentation)
-				material.roughness = 0.9
-				material.cull_mode = BaseMaterial3D.CULL_DISABLED
-				material.resource_name = "mk_"+detail_kind(key)
+			material = _generated_material(job, key, presentation)
 		if material == null:
 			mesh.free()
 			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
-		material = _environment_surface(job, material)
 		job.materials[key] = material
 	mesh.material_override = job.materials[key]
 	mesh.set_meta("mapkit_occluder", occluding_surface(key))
@@ -407,6 +397,21 @@ static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 		pass
 	return job.root
 
+static func _generated_material(job: Dictionary, key: String, presentation: Dictionary) -> Material:
+	var context: RefCounted = job.resources.environment_context() if job.get("resources") != null else null
+	if context != null and not key.begins_with("rc:") and not _urban_surface(key,presentation):
+		return context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0)
+	var material := surface_material(key,presentation,job.get("urban_shader"))
+	if material is StandardMaterial3D:
+		material.albedo_color = ground_color(key,presentation)
+		material.roughness = 0.9
+		material.cull_mode = BaseMaterial3D.CULL_DISABLED
+		material.resource_name = "mk_"+detail_kind(key)
+	return _environment_surface(job,material)
+
+static func _urban_surface(key: String, presentation: Dictionary) -> bool:
+	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete"])
+
 static func surface_material(key: String, presentation: Dictionary, shader: Shader) -> Material:
 	if key.begins_with("rc:"): return preload("./rc_venue.gd").material(key, int(presentation.track_seed))
 	if key == "safety:metal":
@@ -415,7 +420,7 @@ static func surface_material(key: String, presentation: Dictionary, shader: Shad
 		metal.metallic = 0.8
 		metal.roughness = 0.3
 		return metal
-	if not presentation.get("urban_surfaces", false) or not (key.begins_with("road:") or key in ["asphalt", "concrete"]): return StandardMaterial3D.new()
+	if not _urban_surface(key,presentation): return StandardMaterial3D.new()
 	var material := ShaderMaterial.new()
 	material.shader = shader
 	var style: Dictionary = presentation.get("road_styles", {}).get(key, {})
@@ -460,8 +465,7 @@ static func _environment_surface(job: Dictionary, material: Material) -> Materia
 
 static func wet_urban_shader() -> Shader:
 	var result := Shader.new()
-	result.code = URBAN_SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
-	result.code = result.code.replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
+	result.code = URBAN_SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code).replace('#include "material_detail.gdshaderinc"',preload("./material_detail.gdshaderinc").code)
 	return result
 
 static func _object_group(object: Dictionary) -> String:

@@ -22,8 +22,7 @@ func _init(size := 256, deferred_tiles := false) -> void:
 	pixels.set_pixel(1,0,Color(43200,0,1,64800))
 	texture = ImageTexture.create_from_image(pixels)
 	shader = Shader.new()
-	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code)
-	shader.code = shader.code.replace('#include "material_detail.gdshaderinc"',DETAIL.code)
+	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code).replace('#include "material_detail.gdshaderinc"',DETAIL.code)
 	if not deferred_tiles:
 		while not prepare_tile(): pass
 
@@ -88,6 +87,26 @@ func surface_material(source: Material, role: int, use_instances := false, defer
 	result.set_shader_parameter("ao_uv2",source.ao_on_uv2)
 	result.set_shader_parameter("ao_light_affect",source.ao_light_affect)
 	var kind := source.resource_name.trim_prefix("mk_")
+	_finish_surface(result,kind)
+	if source.albedo_texture != null:
+		result.set_shader_parameter("textured",true)
+		result.set_shader_parameter("albedo_texture",source.albedo_texture)
+	materials[key] = weakref(result)
+	return result
+
+## Generated opaque faces already know their appearance. No temporary imported
+## material, texture scan or identity-cache entry is needed; the cell owns this binding.
+func generated_material(color: Color, kind: String, metallic := 0.0) -> ShaderMaterial:
+	var result := ShaderMaterial.new()
+	result.shader = shader
+	result.set_shader_parameter("environment_data",texture)
+	result.set_shader_parameter("base_color",color)
+	result.set_shader_parameter("roughness",0.9)
+	result.set_shader_parameter("metallic",metallic)
+	_finish_surface(result,kind)
+	return result
+
+func _finish_surface(result: ShaderMaterial, kind: String) -> void:
 	bind_detail(result,kind)
 	result.set_meta("mapkit_surface",true)
 	result.set_meta("mapkit_vegetation",kind == "leaf")
@@ -97,12 +116,7 @@ func surface_material(source: Material, role: int, use_instances := false, defer
 	if kind.begins_with("water_"):
 		result.set_shader_parameter("water_kind",1 if kind == "water_flow" else 2)
 		result.set_meta("mapkit_water",true)
-	if source.albedo_texture != null:
-		result.set_shader_parameter("textured",true)
-		result.set_shader_parameter("albedo_texture",source.albedo_texture)
 	result.set_meta("mapkit_opaque",true)
-	materials[key] = weakref(result)
-	return result
 
 static func channel(value: int) -> Vector4:
 	return [Vector4(1,0,0,0),Vector4(0,1,0,0),Vector4(0,0,1,0),Vector4(0,0,0,1),Vector4(0.333333,0.333333,0.333333,0)][clampi(value,0,4)]

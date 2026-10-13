@@ -27,15 +27,24 @@ consumer limits still govern admission; borrowers retain charges after shutdown.
 
 ## First-use binding
 
-Generated surfaces enter `chunk_renderer.surface_material` before
-`_environment_surface`. Record the material key, actual class and branch with
-cell/frame/generation; GLB import timing does not describe this factory.
+Generated opaque terrain, building and built-in faces use
+`chunk_renderer._generated_material` and `environment_materials.generated_material`
+to create their final shader binding directly. They retain cell ownership and share
+the context's shader/textures; absent bitmap, UV and lighting overrides use identical
+shader defaults. Climate tint, safety-metal metallicity and live quality survive.
+Prepared and unbatched meshes use the same factory. Shader includes are expanded
+before assigning the complete source once, with identical final shader code.
+
+Urban/RC surfaces keep their dedicated factory and `_environment_surface` binding;
+standalone previews can use source materials. Record material key, actual class and
+branch with cell/frame/generation; GLB import timing does not describe this factory.
 
 | Branch | Operations to isolate |
 | --- | --- |
+| Generated opaque face | Direct final binding, colour/detail and quality; no source-material conversion or imported identity-cache entry |
 | Urban `ShaderMaterial` | Creation, first shader assignment, source parameters, environment texture and `bind_detail`; the same material is returned |
 | RC `ShaderMaterial` | Existing shader and wall parameter, then `bind_detail` |
-| Opaque `StandardMaterial3D` | Shared-wrapper creation, shader/bitmap/parameter binding, quality application and caller's last source-reference release |
+| Imported opaque `StandardMaterial3D` | Shared-wrapper creation, shader/bitmap/parameter binding, quality application and caller's last source-reference release |
 
 The bounded Metal path can stall in the first urban shader assignment before
 `_environment_surface`; its detail setters and source release need not be slow.
@@ -73,6 +82,9 @@ Depth reconstruction supports Mobile and Compatibility NDC conventions. No
 cosmetic ripple alters buoyancy, water entry or surface height.
 
 `test_richer_assets.py` reproduces all library bytes and three texture tiers.
+`generated_material_validator` compares effective GPU uniforms, live quality,
+rendered pixels, prepared/unbatched geometry and cell/context borrower retirement
+against the source-material path, including climate, urban, RC and preview cases.
 `richer_material_validator` covers actual GLB import, retained channels, denied
 admission, shared identity and last-borrower retirement. `display_quality_validator`
 covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
