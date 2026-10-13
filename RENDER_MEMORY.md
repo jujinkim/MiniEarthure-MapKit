@@ -56,7 +56,10 @@ same call; live updates remain unconditional. Bindings use the cell allowance;
 their last borrower retains shared shader/textures. Previews prepare locally.
 
 Opaque static models use cell-local MultiMesh instances, preserving hierarchy,
-surfaces, overrides, colours and shadows. Immutable templates extract a read-only
+surfaces, overrides, colours and shadows. Capacity counts cover GLB placements;
+spatial group lookup occurs after template preparation in shared attachment.
+Built-in objects, image proxies and standalone previews need no group keys.
+Immutable templates extract a read-only
 part list after all LOD/material/occluder work, including empty fallback results.
 Spatial groups borrow that list without traversing the hierarchy again. Records
 borrow tracked meshes/materials within the doubled native node allowance and are

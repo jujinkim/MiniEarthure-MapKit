@@ -73,8 +73,9 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 					fail(job,"E_MEMORY_BUDGET","Shared tree canopy exceeds memory allowance")
 					return job
 				job.claims[id] = key
-			var group := _object_group(object)
-			job.counts[group] = int(job.counts.get(group, 0)) + 1
+			if not id.begins_with("builtin:") and str(sources.get(id,{}).get("path","")).ends_with(".glb"):
+				var group := _object_group(object)
+				job.counts[group] = int(job.counts.get(group, 0)) + 1
 		job.lamp_bindings = _lamp_bindings(resources.environment_profile,lamp_assets)
 	return job
 
@@ -194,7 +195,6 @@ static func _advance(job: Dictionary) -> bool:
 			var object: Dictionary = chunk.objects[job.object]
 			job.object += 1
 			var id := str(object.asset_id)
-			var group := _object_group(object)
 			if not id.begins_with("builtin:"):
 				if not sources.has(id): return fail(job, "E_RENDER_ASSET", "Presentation bytes are missing")
 				if not str(sources[id].path).ends_with(".glb"): continue # textured proxy faces
@@ -211,6 +211,7 @@ static func _advance(job: Dictionary) -> bool:
 					job.object -= 1
 					return false
 				if job.get("resources") != null:
+					var group := _object_group(object)
 					if not job.instances.has(group):
 						job.last_phase = "multimesh_setup"
 						job.instances[group] = INSTANCES.begin_parts(job.resources.instance_parts(job.claims[id]), int(job.counts.get(group, 0)), job.root, job.lease, bool(sources[id].get("solid",true)))
