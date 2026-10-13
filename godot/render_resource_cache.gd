@@ -5,8 +5,12 @@ const URBAN := preload("./urban_surface.gdshader")
 const ENVIRONMENT := preload("./environment_materials.gd")
 const QUALITY := preload("./display_quality.gd")
 const CONTEXT_BYTES := ENVIRONMENT.MEMORY_BYTES
+# Fixed 16-segment/8-ring canopy: source, importer scratch, CPU/GPU output and
+# LOD indices overlap. Independent of asset content and material bindings.
+const TREE_CANOPY_KEY := "builtin:tree:canopy"
+const TREE_CANOPY_BYTES := 131072
 var reserve: Callable
-var limit_bytes := 128 * 1024 * 1024 # Textured templates; still charged to consumer admission.
+var limit_bytes := 128 * 1024 * 1024 # Shared resources; still charged to consumer admission.
 var entries: Dictionary = {}
 var retiring: Array = []
 var imports := 0
@@ -68,20 +72,61 @@ func claim(id: String, sources: Dictionary) -> String:
 	if closed: return ""
 	var key := environment_key_for(id,sources)
 	if key.is_empty(): return ""
-	if entries.has(key):
-		entries[key].pins += 1
-		hits += 1
-		return key
 	# The native import profile already includes CPU/GPU overlap (256 bytes per
 	# vertex, 32 per index, 24 per image pixel). Replacing template meshes shares
 	# textures and releases the old mesh; add a material/clock binding allowance.
 	var amount := int(sources[id].memory_bytes) * 2 + 131072 # LOD generation, retained indices and occluders, including import overlap.
+	return _claim(key,amount,"context")
+
+func claim_tree_canopy() -> String:
+	return _claim(TREE_CANOPY_KEY,TREE_CANOPY_BYTES,"canopy_source")
+
+func _claim(key: String, amount: int, stage: String) -> String:
+	if closed: return ""
+	if entries.has(key):
+		entries[key].pins += 1
+		hits += 1
+		return key
 	if bytes() + amount > limit_bytes or entries.size() >= 256: trim()
 	if bytes() + amount > limit_bytes or entries.size() >= 256: return ""
 	var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null
 	if reserve.is_valid() and lease == null: return ""
-	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "stage":"context", "pending":[], "failed":false, "last_used": Time.get_ticks_msec()}
+	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "stage":stage, "pending":[], "failed":false, "last_used": Time.get_ticks_msec()}
 	return key
+
+static func tree_canopy_source() -> SphereMesh:
+	var shape := SphereMesh.new()
+	shape.radius = 1.84
+	shape.height = 4.0
+	shape.radial_segments = 16
+	shape.rings = 8
+	return shape
+
+func prepare_tree_canopy(key: String) -> bool:
+	if closed or not entries.has(key): return true
+	var item: Dictionary = entries[key]
+	if item.stage == "done": return true
+	var stage: String = "canopy_source" if item.stage == "canopy_source" else "canopy_lod_"+str(item.lod_job.stage)
+	var started := Time.get_ticks_usec()
+	if item.stage == "canopy_source":
+		item.lod_job = QUALITY.begin_lods(tree_canopy_source())
+		if item.lease != null:
+			item.lease.track(item.lod_job.input)
+			item.lease.track(item.lod_job.source)
+		item.stage = "canopy_lods"
+	elif QUALITY.advance_lods(item.lod_job,mesh_observer):
+		item.mesh = item.lod_job.result
+		if item.lease != null: item.lease.track(item.mesh)
+		item.erase("lod_job")
+		item.stage = "done"
+	var elapsed := Time.get_ticks_usec()-started
+	preparation_usec[stage] = int(preparation_usec.get(stage,0))+elapsed
+	preparation_peak_usec[stage] = maxi(int(preparation_peak_usec.get(stage,0)),elapsed)
+	return item.stage == "done"
+
+func tree_canopy(key: String) -> Mesh:
+	if closed or not entries.has(key) or entries[key].stage != "done": return null
+	return entries[key].get("mesh")
 
 func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 	# One admitted phase per call; the scheduler owns the shared frame budget.
@@ -231,6 +276,7 @@ func _evict(key: String) -> void:
 	item.pending.clear()
 	item.erase("styling")
 	item.erase("lod_job")
+	item.erase("mesh")
 	item.erase("occluder_arrays")
 	item.erase("material_binding")
 	if item.lease != null:

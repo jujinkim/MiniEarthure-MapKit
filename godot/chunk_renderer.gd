@@ -64,6 +64,12 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 			return job
 		for object: Dictionary in view.objects:
 			var id := str(object.asset_id)
+			if id == "builtin:tree" and not job.claims.has(id):
+				var key: String = resources.claim_tree_canopy()
+				if key.is_empty():
+					fail(job,"E_MEMORY_BUDGET","Shared tree canopy exceeds memory allowance")
+					return job
+				job.claims[id] = key
 			var group := _object_group(object)
 			job.counts[group] = int(job.counts.get(group, 0)) + 1
 	return job
@@ -238,20 +244,26 @@ static func _advance(job: Dictionary) -> bool:
 			if id not in ["builtin:tree", "builtin:fence", "builtin:streetlight"]:
 				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
 			if id != "builtin:tree": continue
+			var canopy_mesh: Mesh
+			if job.get("resources") != null:
+				if not job.get("canopy_ready",false):
+					job.last_phase = "canopy_preparation"
+					job.canopy_ready = job.resources.prepare_tree_canopy(job.claims[id])
+					job.object -= 1
+					return false
+				canopy_mesh = job.resources.tree_canopy(job.claims[id])
+				if canopy_mesh == null: return fail(job,"E_RENDER_ASSET","Shared tree canopy is unavailable")
+			else:
+				canopy_mesh = QUALITY.prepare_lods(preload("./render_resource_cache.gd").tree_canopy_source())
 			var canopy := MeshInstance3D.new()
-			var shape := SphereMesh.new()
-			shape.radius = 1.84
-			shape.height = 4.0
-			shape.radial_segments = 16
-			shape.rings = 8
-			canopy.mesh = QUALITY.prepare_lods(shape)
+			canopy.mesh = canopy_mesh
 			canopy.set_meta("mapkit_decoration",true)
 			canopy.position = scene_position(object.position) + Vector3.UP * 4.8
 			var leaf := StandardMaterial3D.new()
 			leaf.albedo_color = Color("486447")
 			leaf.resource_name = "mk_leaf"
 			canopy.material_override = _environment_surface(job,leaf)
-			track_resources(job, canopy)
+			track_resources(job, canopy, job.get("resources") != null)
 			job.root.add_child(canopy)
 	else:
 		job.done = true
@@ -307,14 +319,16 @@ static func track_instance_nodes(lease: RefCounted, node: Node) -> void:
 	lease.track(node)
 	for child: Node in node.get_children(): track_instance_nodes(lease, child)
 
-static func track_resources(job: Dictionary, node: Node) -> void:
+static func track_resources(job: Dictionary, node: Node, shared_mesh := false) -> void:
 	QUALITY.apply_node(node, QUALITY.active())
 	if node is MeshInstance3D and node.get_meta("mapkit_occluder", false) and node.get_child_count() == 0:
 		var occluder := QUALITY.occluder(node.mesh, job.get("lease"))
 		if occluder != null: node.add_child(occluder)
 	if job.get("lease") == null: return
 	if node is MeshInstance3D:
-		job.lease.track(node.mesh)
+		# A cached canopy must not keep every cell's private reservation alive.
+		if shared_mesh: job.lease.track(node)
+		else: job.lease.track(node.mesh)
 		track_material(job, node.material_override)
 		for i in node.mesh.get_surface_count():
 			track_material(job, node.mesh.surface_get_material(i))

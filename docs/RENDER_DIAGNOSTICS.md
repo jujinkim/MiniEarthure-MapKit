@@ -47,11 +47,10 @@ measures lease tracking, and `material_finalize` covers node margin, shadow and
 override setup. `occluder_cached_arrays` marks reuse of retained decoded CPU faces;
 `occluder_arrays` marks a mesh readback for independently prepared/preview meshes.
 They count even zero-duration calls and attach a surface index where applicable.
-Private LOD outputs need no material duplication; borrowed meshes still do.
-Observers are installed for one advance, then cleared; reports retain primitives.
-Callbacks are outside inner timers but inside cache/attachment timers. These totals
-overlap. Staging cannot interrupt an engine call. LOD jobs reuse decoded faces for
-occlusion; initial input readback remains a separate limit.
+Private LOD outputs avoid material copies; borrowed meshes still need them.
+Observers last one advance; reports retain primitives. Callback costs overlap
+cache/attachment timers. Staging cannot interrupt an engine call. Occlusion reuses
+decoded faces; initial input readback remains a separate limit.
 
 `cache_activity` counts this view's imports/hits. `cache` and `attachment` retain
 cache/process-lifetime counters (`timing_scopes`); use `preparation_stages` for
@@ -82,8 +81,10 @@ expose neither the CPU surface decoder nor ArrayMesh buffer RIDs for async retri
 ### Attachment upload isolation
 
 Phase names describe renderer branches, not individual GPU operations.
-`instance_upload` includes built-in canopy LOD generation/readback as well as GLB
-placement. Capture object/asset or surface-material identity with the cell and
+Cached `canopy_preparation` separates tree source/LOD work from `instance_upload`
+placement. `cache/canopy_*` phases occur once per cached mesh; evicted borrowers stay
+charged during replacement. Standalone `instance_upload` also prepares canopies.
+Capture object/asset or surface-material identity with the cell and
 attachment generation/frame; a pending object is not the current mesh batch.
 
 Separate mesh creation/upload, material preparation, tracking and registration;
@@ -103,16 +104,14 @@ pressure retirement and settled reservations before changing material preparatio
 
 ## Ownership and failure
 
-Preparation checks its deadline between native/attachment calls; the caller's
-process timeout bounds a stuck operation. Invalid input/options/cameras, generation,
-admission and cancellation fail explicitly. Partial scenes use normal cancellation
-and cache shutdown. Existing reports/images are not overwritten.
+Preparation checks deadlines between calls; the process timeout bounds stuck work.
+Input, camera, generation, admission and cancellation failures remain explicit.
+Partial scenes cancel/shut down normally. Existing reports/images are not overwritten.
 
-Reports include cache bytes, weak scene references, engine monitors and optional
-consumer reservations. Poll retirement across engine frames before checking zero;
-revisits keep the cache until the final shutdown. Viewport shadow/target reservations
-may survive scene teardown. Logical bytes, engine memory and RSS differ; driver
-and shader caches need not return to a cold-process baseline.
+Reports include cache bytes, weak references, engine monitors and optional consumer
+reservations. Poll retirement across frames; revisits retain the cache until shutdown.
+Viewport reservations may outlive scenes. Logical bytes, engine memory and RSS differ;
+driver/shader caches need not return to a cold-process baseline.
 
 `release/*` times cancellation/queueing calls only; deferred engine destruction is
 covered by the later resource checks, not by those durations. Revisit shutdown is

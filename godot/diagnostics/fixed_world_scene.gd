@@ -194,7 +194,7 @@ func _cell(bridge: RefCounted, x: int, y: int, near: bool) -> Dictionary:
 		var elapsed := Time.get_ticks_usec()-before
 		cache.mesh_observer=Callable()
 		var phase := "near/"+str(job.last_phase) if near else "far/advance"
-		record_cost(phase,elapsed,detail if phase=="near/template_preparation" else context)
+		record_cost(phase,elapsed,detail if phase in ["near/template_preparation","near/canopy_preparation"] else context)
 		record_cache(cache_before,detail)
 		if done: break
 		if expired(): return {"ok":false,"error":"preparation timeout"}
