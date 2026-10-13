@@ -26,7 +26,10 @@ are described by each consumer's owning performance document.
 
 These observations overlap and are not additive. They cannot alone establish a
 CPU/GPU bottleneck. Godot's [render timing API](https://docs.godotengine.org/en/stable/classes/class_renderingserver.html#class-renderingserver-method-viewport-get-measured-render-time-cpu)
-defines the rendering timer boundaries. Fixed FPS/movie recording is rejected;
+defines the rendering timer boundaries. The superproject launcher rejects fixed
+FPS before engine startup; Godot consumes that option before scripts can inspect
+it. Other launchers must enforce the same rule. Movie mode is rejected by its
+engine state;
 optional image readback and encoding occur after measurement. Percentiles use
 nearest rank. Each run reports independent p95/p99 criteria and a `fixed_scene`
 verdict; `driving` remains `not_measured`. Completion PASS means the tool completed,

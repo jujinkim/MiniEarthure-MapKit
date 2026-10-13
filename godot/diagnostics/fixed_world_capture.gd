@@ -72,9 +72,10 @@ func run() -> void:
 	var config := options()
 	if config.has("error"): finish_error(config.error);return
 	if DisplayServer.get_name()=="headless": finish_error("fixed scene measurements require --rendered");return
-	for argument: String in OS.get_cmdline_args():
-		if argument.get_slice("=",0) in ["--fixed-fps","--write-movie"]:
-			finish_error("fixed FPS/movie timing cannot measure wall-clock performance");return
+	# Godot consumes engine CLI options before exposing script arguments. The
+	# launcher must reject --fixed-fps; movie mode has a queryable engine state.
+	if not Engine.get_write_movie_path().is_empty():
+		finish_error("movie timing cannot measure wall-clock performance");return
 	if not configure_window(Vector2i(config.width,config.height)): finish_error("window admission failed");return
 	# Let Client window owners apply their internal cap before scene construction.
 	for frame in 2: await process_frame
