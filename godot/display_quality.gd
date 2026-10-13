@@ -7,6 +7,7 @@ static func profile(level: int) -> Dictionary:
 	return {"level":level, "scale":[.75,1.0,1.0][level], "texture_size":[128,256,512][level],
 		"particles":[256,512,768][level], "shadow_distance":[48.0,96.0,160.0][level],
 		"water":level, "sky":level, "material_detail":level, "vegetation_motion":[0.0,.5,1.0][level], "lod_bias":[.55,.8,1.0][level], "decoration_distance":[64.0,112.0,192.0][level],
+		"detail_distance":[96.0,128.0,160.0][level],
 		"occlusion":level > 0, "light_count":[4,6,8][level]}
 
 static func active() -> Dictionary:

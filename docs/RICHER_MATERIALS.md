@@ -74,6 +74,8 @@ noise layers with a high cloud veil and sun halo above low. Leaf-only wind is
 disabled on low and uses bounded 7 cm motion on medium/high; trunks and collision
 remain fixed. These fields update live along with surface material detail. Client owns preferences and
 automatic adaptation. Profiles never enter map files or authoritative race state.
+Profiles also expose a 96/128/160 m full-detail distance for consumers; Runtime
+owns its optional-cell transitions, margins and replacement lifetime.
 The texture tier is captured by each new map resource cache; live changes update
 resolution, water, effects, shadows, LOD and optional low-tier occlusion.
 
