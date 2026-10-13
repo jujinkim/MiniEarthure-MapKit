@@ -38,7 +38,9 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 			var mesh: Mesh = node.mesh if node is MeshInstance3D else node.multimesh.mesh
 			if mesh != null:
 				for index in mesh.get_surface_count(): apply_material(mesh.surface_get_material(index),value)
-	if node is OccluderInstance3D: node.visible = bool(value.occlusion)
+	if node is OccluderInstance3D:
+		var parent := node.get_parent()
+		node.visible = bool(value.occlusion) and (not parent is MeshInstance3D or node_can_occlude(parent))
 
 static func apply_material(material: Material, value: Dictionary) -> void:
 	if not material is ShaderMaterial: return
@@ -122,13 +124,47 @@ static func prepare_occluder(mesh: Mesh, lease: RefCounted, surface_arrays: Arra
 	mesh.set_meta("mapkit_occluder_preparation", {"shape":shape})
 	if shape != null and lease != null: lease.track(shape)
 
+static func opaque_material(material: Material) -> bool:
+	if material==null: return true
+	if material.get_meta("mapkit_water",false): return false
+	if material is BaseMaterial3D: return material.transparency==BaseMaterial3D.TRANSPARENCY_DISABLED
+	return bool(material.get_meta("mapkit_opaque",false))
+
+static func node_can_occlude(node: MeshInstance3D) -> bool:
+	if not opaque_material(node.material_override): return false
+	for surface in node.mesh.get_surface_count():
+		if not opaque_material(node.get_surface_override_material(surface)): return false
+	return true
+
+static func _offer_occluder_face(faces: Array[Dictionary], sectors: Dictionary, face: Dictionary) -> void:
+	var replace := -1
+	if faces.size()>=64:
+		for index in faces.size():
+			var held: Dictionary=faces[index]
+			# Preserve at least one face in each represented direction/height band.
+			if held.sector!=face.sector and int(sectors[held.sector])<=1: continue
+			if replace<0 or held.area<faces[replace].area: replace=index
+		if replace<0 or (sectors.has(face.sector) and face.area<=faces[replace].area): return
+		var old: int=faces[replace].sector
+		sectors[old]-=1
+		if sectors[old]==0: sectors.erase(old)
+		faces[replace]=face
+	else: faces.append(face)
+	sectors[face.sector]=int(sectors.get(face.sector,0))+1
+
 static func _occluder_shape(mesh: Mesh, surface_arrays: Array = [], observer := Callable()) -> ArrayOccluder3D:
 	# A conservative subset of actual opaque upright faces. Never fill a model
 	# AABB: doors, junction cuts, branches and windows must stay open.
 	var vertices := PackedVector3Array()
-	for surface in mesh.get_surface_count():
+	var faces: Array[Dictionary] = []
+	var sectors := {}
+	var bounds := mesh.get_aabb()
+	var surface_count := mesh.get_surface_count()
+	var per_surface := maxi(4,512/maxi(1,surface_count))
+	var order := 0
+	for surface in surface_count:
 		var material := mesh.surface_get_material(surface)
-		if material is BaseMaterial3D and material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED: continue
+		if not opaque_material(material): continue
 		if material != null and material.get_meta("mapkit_vegetation",false): continue
 		var started := Time.get_ticks_usec()
 		var face_arrays: Array
@@ -140,17 +176,26 @@ static func _occluder_shape(mesh: Mesh, surface_arrays: Array = [], observer := 
 		var points: PackedVector3Array = face_arrays[0]
 		var indices: PackedInt32Array = face_arrays[1] if face_arrays[1] != null else PackedInt32Array()
 		var count := indices.size() if not indices.is_empty() else points.size()
-		for i in range(0,count-2,3):
+		# Bound candidate work while covering the whole surface instead of its
+		# first faces. All selected faces remain a subset of real opaque geometry.
+		var stride := maxi(1,ceili(float(count)/3.0/per_surface)) * 3
+		for i in range(0,count-2,stride):
 			var a := points[indices[i] if not indices.is_empty() else i]
 			var b := points[indices[i+1] if not indices.is_empty() else i+1]
 			var c := points[indices[i+2] if not indices.is_empty() else i+2]
 			var normal := (b-a).cross(c-a)
-			if normal.length_squared() < 4.0 or absf(normal.normalized().y) > .4: continue
-			# Shrink each face a centimetre to avoid false silhouette occlusion.
+			var area := normal.length_squared()
+			if area < 4.0 or absf(normal.normalized().y) > .4: continue
 			var center := (a+b+c)/3.0
-			for p in [a,b,c]: vertices.append(p.move_toward(center,.01))
-			if vertices.size() >= 192: break
-		if vertices.size() >= 192: break
+			var side := (0 if normal.x<0.0 else 1) if absf(normal.x)>=absf(normal.z) else (2 if normal.z<0.0 else 3)
+			var band := clampi(floori((center.y-bounds.position.y)/maxf(.01,bounds.size.y)*4.0),0,3)
+			_offer_occluder_face(faces,sectors,{"a":a,"b":b,"c":c,"area":area,"sector":side*4+band,"order":order})
+			order+=1
+	faces.sort_custom(func(a: Dictionary,b: Dictionary): return a.order<b.order)
+	for face: Dictionary in faces:
+		var center: Vector3=(face.a+face.b+face.c)/3.0
+		# Shrink each face a centimetre to avoid false silhouette occlusion.
+		for p: Vector3 in [face.a,face.b,face.c]: vertices.append(p.move_toward(center,.01))
 	if vertices.is_empty(): return null
 	var indices := PackedInt32Array()
 	for i in vertices.size(): indices.append(i)

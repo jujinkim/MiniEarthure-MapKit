@@ -36,10 +36,14 @@ func run() -> void:
 	check(batches.size()==2 and batches[0].key==batches[1].key,"equal materials in distant spatial buckets stay independently cullable")
 	chunk.render_batches=batches
 	check(planner.upper_bound({"triangles":2,"objects":0})>=planner.estimate(chunk,0),"pre-generation allowance covers spatial batches and occluders")
+	chunk.scene_vertices=PackedVector3Array([Vector3(31,0,1),Vector3(33,0,1),Vector3(31,0,3),Vector3(33,0,3),Vector3(31,0,3),Vector3(33,0,1)])
+	batches=planner.prepare_batches(chunk)
+	check(batches.size()==1 and batches[0].vertices==chunk.scene_vertices,"a face crossing a bucket edge batches together without changing ordered geometry")
 	var scene := Node3D.new();root.add_child(scene)
 	await tracked_quality()
 	await instance_quality()
 	occluder_reuse(scene)
+	occluder_coverage(scene)
 	var mesh := SphereMesh.new();mesh.radial_segments=48;mesh.rings=24
 	var lod := QUALITY.prepare_lods(mesh)
 	var importer := ImporterMesh.from_mesh(lod)
@@ -127,6 +131,7 @@ func tracked_quality() -> void:
 		var material := ShaderMaterial.new();material.shader=Shader.new()
 		material.shader.code="shader_type spatial; uniform int detail_quality = 1; uniform float wind_strength = 0.5;"
 		material.set_meta("mapkit_surface",true)
+		material.set_meta("mapkit_opaque",true)
 		node.material_override=material
 	for level in 3:
 		QUALITY.current=QUALITY.profile(level)
@@ -303,3 +308,35 @@ func occluder_reuse(scene: Node3D) -> void:
 	var after := QUALITY.occluder(mutable,null)
 	check(before.occluder.vertices!=after.occluder.vertices and not mutable.has_meta("mapkit_occluder_preparation"),"uncached preview reflects mesh edits")
 	before.free();after.free()
+
+func occluder_coverage(scene: Node3D) -> void:
+	var vertices := PackedVector3Array()
+	for index in 100:
+		var x := float(index%10)*3.0
+		var y := float(index/10)*2.0
+		vertices.append_array(PackedVector3Array([Vector3(x,y,0),Vector3(x+2,y,0),Vector3(x,y+2,0)]))
+	vertices.append_array(PackedVector3Array([Vector3(0,30,0),Vector3(20,30,0),Vector3(0,45,0)]))
+	var arrays := [];arrays.resize(Mesh.ARRAY_MAX);arrays[Mesh.ARRAY_VERTEX]=vertices
+	var mesh := ArrayMesh.new();mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	var shape := QUALITY._occluder_shape(mesh)
+	check(shape.vertices.size()==192,"occluder selection retains the existing 64-face output bound")
+	var highest := 0.0
+	for vertex: Vector3 in shape.vertices: highest=maxf(highest,vertex.y)
+	check(highest>40.0,"late upper-storey wall survives dense lower facade faces")
+	var node := MeshInstance3D.new();node.mesh=mesh;node.set_meta("mapkit_occluder",true);scene.add_child(node)
+	var alpha := StandardMaterial3D.new();alpha.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+	node.material_override=alpha
+	RENDER.track_resources({},node)
+	check(node.get_child_count()==0,"transparent node override cannot turn an opaque source into a false occluder")
+	node.material_override=null;node.set_surface_override_material(0,alpha)
+	RENDER.track_resources({},node)
+	check(node.get_child_count()==0,"transparent per-surface override also excludes the ordinary-instance occluder")
+	node.set_surface_override_material(0,null)
+	RENDER.track_resources({},node)
+	check(node.get_child_count()==1,"opaque source can create its conservative occluder")
+	node.material_override=alpha
+	QUALITY.apply_tree(node,QUALITY.profile(2))
+	check(not node.get_child(0).visible,"mutable preview override hides a previously created occluder")
+	mesh.surface_set_material(0,ShaderMaterial.new())
+	check(QUALITY._occluder_shape(mesh)==null,"unknown shader opacity never blocks the camera")
+	node.free()

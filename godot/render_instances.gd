@@ -11,11 +11,13 @@ static func parts(template: Node3D) -> Array:
 		var transform: Transform3D = next.transform * node.transform
 		if node is MeshInstance3D:
 			if node.material_overlay != null: return []
-			for i in node.mesh.get_surface_count():
+			var surfaces: int=node.mesh.get_surface_count()
+			var override: Material=node.material_override
+			if surfaces>0 and override!=null and not QUALITY.opaque_material(override): return []
+			for i in surfaces:
 				# MultiMesh cannot carry per-surface instance overrides.
 				if node.get_surface_override_material(i) != null: return []
-				var material: Material = node.get_active_material(i)
-				if material != null and not material.get_meta("mapkit_opaque",false) and (not material is BaseMaterial3D or material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED): return []
+				if override==null and not QUALITY.opaque_material(node.mesh.surface_get_material(i)): return []
 			# One MultiMesh draws all surfaces of this mesh. Appending inside
 			# the surface loop duplicates the entire object for every material.
 			result.append({"mesh": node.mesh, "material": node.material_override, "transform": transform, "shadow": node.cast_shadow})

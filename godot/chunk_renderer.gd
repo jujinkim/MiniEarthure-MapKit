@@ -333,7 +333,7 @@ static func track_resources(job: Dictionary, node: Node, shared_mesh := false) -
 
 static func _track_resources(job: Dictionary, node: Node, shared_mesh: bool, quality: Dictionary) -> void:
 	QUALITY.apply_node(node, quality)
-	if node is MeshInstance3D and node.get_meta("mapkit_occluder", false) and node.get_child_count() == 0:
+	if node is MeshInstance3D and node.get_meta("mapkit_occluder", false) and node.get_child_count() == 0 and QUALITY.node_can_occlude(node):
 		var occluder := QUALITY.occluder(node.mesh, job.get("lease"), quality)
 		if occluder != null: node.add_child(occluder)
 	if job.get("lease") == null: return

@@ -30,7 +30,12 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 	for triangle in DATA.count(chunk):
 		if triangle % TRIANGLES_PER_BATCH == 0 and cancelled.is_valid() and cancelled.call(): return []
 		if DATA.object_id(chunk, triangle) in hidden: continue
-		var point: Vector3 = chunk.scene_vertices[triangle * 3]
+		# Both halves of a rectangular face share these bounds. An arbitrary first
+		# corner split them at bucket boundaries and changed under cyclic winding.
+		var a: Vector3 = chunk.scene_vertices[triangle * 3]
+		var b: Vector3 = chunk.scene_vertices[triangle * 3 + 1]
+		var c: Vector3 = chunk.scene_vertices[triangle * 3 + 2]
+		var point := (a.min(b).min(c) + a.max(b).max(c)) * .5
 		var key := material_key(chunk, triangle) + "|%d,%d,%d" % [floori(point.x/SPATIAL_METRES),floori(point.y/SPATIAL_METRES),floori(point.z/SPATIAL_METRES)]
 		if not groups.has(key): groups[key] = PackedInt32Array()
 		groups[key].append(triangle)

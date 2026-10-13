@@ -8,7 +8,8 @@ callers own game admission.
 
 `render_memory.gd` plans without GPU allocation. `supports_batches` excludes image
 proxies needing individual alpha/order. `prepare_batches` groups opaque faces by
-material and 32 m bucket, at most 512 triangles, preserving geometry/UVs/winding
+material and 32 m triangle-bounds-centre bucket, at most 512 triangles, preserving
+geometry/UVs/winding
 and hidden-proxy exclusion. Packed buffers cost 96 bytes/visible triangle plus
 bounded metadata; callers admit source/preparation before worker execution.
 Check support before using empty batch results.
@@ -63,7 +64,9 @@ detail/wind/node quality once before publication; live updates remain unconditio
 Cell bindings retain shared shader/textures through the last borrower. Previews prepare locally.
 
 Opaque static models use cell-local MultiMeshes, preserving hierarchy, surfaces,
-overrides, colours and shadows. Capacity/group lookup excludes built-ins, image
+overrides, colours and shadows. A node override is classified once while every
+per-surface override still triggers the ordinary-instance fallback.
+Capacity/group lookup excludes built-ins, image
 proxies and previews; shared lookup follows preparation. Final templates publish
 read-only parts, including empty fallbacks. Groups borrow tracked meshes/materials
 within the doubled native node allowance. Eviction clears lists; partial/closed
@@ -84,7 +87,11 @@ preserves collidable fences, walls and props at every preset. Only assets withou
 collision at/above their origin may use decoration distance (buried root beds
 qualify), with 8 m hysteresis. Classification includes authored root scale.
 Structures retire with the cell/frustum. Occluders use actual upright opaque
-triangles (at most 64, inset 1 cm), excluding leaves and preserving openings.
+triangles (at most 64, inset 1 cm), excluding leaves/water/unproven shader opacity
+and preserving openings. Bounded samples span surfaces; selection retains direction/
+height coverage and favours larger faces rather than the first imported faces.
+Transparent node/surface overrides prevent ordinary-instance occluders; mutable
+preview overrides also hide existing shapes when quality is reapplied.
 Immutable templates prepare shapes, including empty results, once after binding
 in a separate admitted phase within their allowance. Placements own occluder
 nodes/transforms/visibility; mutable previews derive current faces on demand.
