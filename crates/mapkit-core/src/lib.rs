@@ -844,6 +844,15 @@ pub struct GeneratedObject {
     #[serde(default, skip_serializing_if = "zero_yaw")]
     pub yaw_offset_mdeg: i32,
 }
+/// Transient display source, deliberately without serialization, hash, archive or
+/// collision-query APIs. Contact fields on its shared triangles are unspecified.
+#[derive(Debug)]
+pub struct DistantSource {
+    pub triangles: Vec<Triangle>,
+    pub objects: Vec<GeneratedObject>,
+    pub water_bodies: Vec<water::WaterCell>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 pub struct GeneratedChunk {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

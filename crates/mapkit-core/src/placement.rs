@@ -599,20 +599,20 @@ fn buildings(d: &MapDocument, b: &mut Builder) -> Result<()> {
             continue;
         }
         for roof in roof_triangles(building)? {
-            let original = BuildingPrism {
+            let original = (!b.distant).then(|| BuildingPrism {
                 object_id: building.id.clone(),
                 material: building.material.clone(),
                 usage: building.usage.clone(),
                 footprint: roof.map(xy),
                 bottom_cm: building.base_cm,
                 top_cm: roof.map(|p| p[1]),
-            };
+            });
             b.solid(
                 &building.id,
                 SolidShape::SlopedPrism {
-                    footprint: original.footprint,
-                    bottom_cm: original.bottom_cm,
-                    top_cm: original.top_cm,
+                    footprint: roof.map(xy),
+                    bottom_cm: building.base_cm,
+                    top_cm: roof.map(|p| p[1]),
                 },
             )?;
             let mut poly = roof.to_vec();
@@ -629,11 +629,11 @@ fn buildings(d: &MapDocument, b: &mut Builder) -> Result<()> {
                 if cross(xy(top[0]), xy(top[1]), xy(top[2])) == 0 {
                     continue;
                 }
-                let part = BuildingPrism {
+                let part = original.as_ref().map(|original| BuildingPrism {
                     footprint: top.map(xy),
                     top_cm: top.map(|p| p[1]),
                     ..original.clone()
-                };
+                });
                 b.triangle(top, Surface::Concrete, &building.id, false)?;
                 let bottom = top.map(|p| [p[0], building.base_cm, p[2]]);
                 b.triangle(
@@ -650,7 +650,9 @@ fn buildings(d: &MapDocument, b: &mut Builder) -> Result<()> {
                         false,
                     )?;
                 }
-                b.chunk.building_prisms.push(part);
+                if let Some(part) = part {
+                    b.chunk.building_prisms.push(part);
+                }
             }
         }
     }
@@ -694,23 +696,32 @@ fn emit_placement(
     p: &Placement,
     b: &mut Builder,
     unclipped: bool,
+    authored: bool,
 ) -> Result<()> {
-    let saved = b.bounds.clone();
-    if unclipped {
-        b.bounds = d.bounds.clone();
-    } // one owner emits the entire small trunk
-    if p.yaw_offset_mdeg == 0 {
-        for proxy in proxies(d, p) { b.box_shape(proxy.center, proxy.size_cm, &p.id)?; }
-    } else {
-        for proxy in local_proxies(d,p) { b.convex_shape(proxy.placed(p), &p.id)?; }
-    }
-    if let Some(asset) = d.assets.iter().find(|a| a.id == p.asset_id) {
-        for shape in &asset.convex_collision {
-            b.convex_shape(shape.placed(p), &p.id)?;
+    let owner = d.cell_at(xy(p.position)) == Some(cell);
+    let asset = d.assets.binary_search_by(|a| a.id.cmp(&p.asset_id)).ok().map(|i| &d.assets[i]);
+    // Match distant_from_generated's omission exactly: authored GLBs in every
+    // touched cell, generated GLBs and builtin trees only in their anchor cell.
+    let omit_proxy = b.distant && ((asset.is_some_and(|a| a.path.ends_with(".glb"))
+        && (authored || owner)) || (p.asset_id == "builtin:tree" && owner));
+    if !omit_proxy {
+        let saved = b.bounds.clone();
+        if unclipped {
+            b.bounds = d.bounds.clone();
+        } // one owner emits the entire small trunk
+        if p.yaw_offset_mdeg == 0 {
+            for proxy in proxies(d, p) { b.box_shape(proxy.center, proxy.size_cm, &p.id)?; }
+        } else {
+            for proxy in local_proxies(d,p) { b.convex_shape(proxy.placed(p), &p.id)?; }
         }
+        if let Some(asset) = asset {
+            for shape in &asset.convex_collision {
+                b.convex_shape(shape.placed(p), &p.id)?;
+            }
+        }
+        b.bounds = saved;
     }
-    b.bounds = saved;
-    if d.cell_at(xy(p.position)) == Some(cell) {
+    if owner {
         b.chunk.objects.push(GeneratedObject {
             id: p.id.clone(),
             asset_id: p.asset_id.clone(),
@@ -914,7 +925,7 @@ fn vegetation(
                     quarter_turns: (c.rank % 4) as u8,
                     yaw_offset_mdeg: 0,
                 };
-                emit_placement(d, cell, &p, b, true)?;
+                emit_placement(d, cell, &p, b, true, false)?;
             }
         }
     }
@@ -1006,7 +1017,7 @@ pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder, prepared: O
     let prepared = if let Some(value)=prepared { value } else { owned=PreparedPlacements::new(d)?; &owned };
     for i in prepared.index.query(&b.bounds, &mut work)? {
         let p=if i < d.placements.len() { &d.placements[i] } else { &prepared.repeated[i-d.placements.len()] };
-        emit_placement(d,cell,p,b,false)?;
+        emit_placement(d,cell,p,b,false,i < d.placements.len())?;
     }
     vegetation(d,cell,b,prepared,&mut work)
 }

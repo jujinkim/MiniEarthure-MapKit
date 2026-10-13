@@ -1,34 +1,8 @@
 use mapkit_core::*;
 use mapkit_package::*;
-use serde_json::json;
-use std::collections::BTreeMap;
-
-fn portal(mirrored: bool) -> Vec<u8> {
-    scaled_portal(mirrored, 1.0)
-}
-fn scaled_portal(mirrored: bool, scale: f32) -> Vec<u8> {
-    // Three separate quads, with a real opening. A material AABB would fill it.
-    let mut points = Vec::<[f32;3]>::new();
-    for (x,y,w,h) in [(0.,0.,1.,4.),(3.,0.,1.,4.),(1.,3.,2.,1.)] {
-        let v = [[x,y,0.],[x+w,y,0.],[x+w,y+h,0.],[x,y+h,0.]];
-        for i in [0,1,2,0,2,3] { points.push(v[i]); }
-    }
-    let bin: Vec<_> = points.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
-    let mut doc = serde_json::to_vec(&json!({
-        "asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],
-        "nodes":[{"translation":[1,2,3],"children":[1]},
-                 {"mesh":0,"translation":[0,1,0],"scale":[if mirrored {-2.0*scale} else {2.0*scale},3.0*scale,4.0*scale]}],
-        "buffers":[{"byteLength":bin.len()}],"bufferViews":[{"buffer":0,"byteLength":bin.len()}],
-        "accessors":[{"bufferView":0,"componentType":5126,"count":18,"type":"VEC3","min":[0,0,0],"max":[4,4,0]}],
-        "materials":[{"pbrMetallicRoughness":{"baseColorFactor":[0.25,0.5,0.75,1]}}],
-        "meshes":[{"primitives":[{"attributes":{"POSITION":0},"material":0}]}]
-    })).unwrap();
-    while doc.len()%4 != 0 {doc.push(b' ');}
-    let mut out = b"glTF".to_vec();
-    out.extend(2u32.to_le_bytes());out.extend(((28+doc.len()+bin.len()) as u32).to_le_bytes());
-    out.extend((doc.len() as u32).to_le_bytes());out.extend(b"JSON");out.extend(doc);
-    out.extend((bin.len() as u32).to_le_bytes());out.extend(b"BIN\0");out.extend(bin);out
-}
+#[path = "support/distant.rs"]
+mod support;
+use support::{fixture, scaled_portal};
 
 #[test]
 fn water_and_small_props_have_bounded_display_only_geometry() {
@@ -44,6 +18,7 @@ fn water_and_small_props_have_bounded_display_only_geometry() {
     let p=read_bytes(&pack_bytes(d,files).unwrap()).unwrap();
     let cell=Cell{x:0,y:0};let chunk=p.generate(cell,500_000).unwrap();
     let far=p.distant_from_generated(&chunk).unwrap();
+    assert_same(&far, &p.generate_distant(cell).unwrap());
     assert_eq!(far.decoration.len(),far.vertices.len());
     let first_small=far.decoration.iter().position(|v| *v==1).unwrap();
     assert!(far.decoration[first_small..].iter().all(|v| *v==1),"one contiguous small-prop tail");
@@ -57,15 +32,6 @@ fn water_and_small_props_have_bounded_display_only_geometry() {
     assert!(chunk.triangles.iter().all(|t| t.object_id!="pond"));
     assert!(p.distant_triangle_bound(cell).unwrap()>=far.vertices.len() as u64/3);
 }
-fn fixture() -> (MapDocument,BTreeMap<String,Vec<u8>>) {
-    let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
-    d.nodes.clear();d.roads.clear();d.zones.clear();d.buildings.clear();
-    d.assets.push(Asset {id:"portal".into(),path:"near.glb".into(),distant_path:Some("far.glb".into()),
-        attribution:Attribution{source:"synthetic portal".into(),license:"MIT".into(),notice:"".into()},
-        collision:vec![CollisionBox{center:[50,200,0],size_cm:[100,400,50]}],convex_collision:vec![],material:None});
-    d.placements.push(Placement{id:"gate".into(),asset_id:"portal".into(),position:[10000,100,10000],quarter_turns:1,yaw_offset_mdeg:30000});
-    (d,BTreeMap::from([("near.glb".into(),portal(false)),("far.glb".into(),portal(false))]))
-}
 
 #[test]
 fn authored_silhouette_preserves_opening_transforms_collision_and_bounds() {
@@ -73,6 +39,7 @@ fn authored_silhouette_preserves_opening_transforms_collision_and_bounds() {
     let p=read_bytes(&pack_bytes(d.clone(),files.clone()).unwrap()).unwrap();
     let cell=Cell{x:0,y:0};let geometry=p.generate(cell,500_000).unwrap();
     let far=p.distant_from_generated(&geometry).unwrap();
+    assert_same(&far, &p.generate_distant(cell).unwrap());
     // GLTF's linear [.25,.5,.75] reaches the same sRGB colour properties as
     // the primary GLTF importer; terrain colours already use display sRGB.
     let vertices:Vec<_>=far.vertices.iter().zip(&far.colors).filter(|(_,c)| **c==[137,188,225,255]).map(|(v,_)| *v).collect();
@@ -119,9 +86,10 @@ fn distant_references_hashes_cost_and_validation_are_complete() {
     assert!(pack_bytes(d.clone(),missing).is_err());
     let mut bad=files.clone();bad.insert("far.glb".into(),b"not a glb".to_vec());
     assert_eq!(pack_bytes(d.clone(),bad).unwrap_err().code,"E_ASSET");
-    let mut changed=files;changed.insert("far.glb".into(),portal(true));
+    let mut changed=files;changed.insert("far.glb".into(),scaled_portal(true, 1.0));
     let q=read_bytes(&pack_bytes(d,changed).unwrap()).unwrap();
     let cell=Cell{x:0,y:0};let mesh=q.generate_distant(cell).unwrap();
+    assert_same(&mesh, &q.distant_from_generated(&q.generate(cell,500_000).unwrap()).unwrap());
     assert!(q.distant_triangle_bound(cell).unwrap()>=mesh.vertices.len() as u64/3);
     assert_ne!(q.inspection.world_content_hash,read_bytes(&bytes).unwrap().inspection.world_content_hash);
     let cost=inspect_read_cost(&bytes).unwrap();
@@ -144,4 +112,33 @@ fn small_collision_structures_never_enter_the_decoration_tail() {
         vertices:vec![[0,-10,0],[10,-10,0],[0,0,10]], faces:vec![[0,1,2]],
     });
     assert!(d.assets[0].has_visible_collision());
+}
+
+fn assert_same(a: &distant::DistantMesh, b: &distant::DistantMesh) {
+    assert_eq!(a.vertices,b.vertices); assert_eq!(a.colors,b.colors);
+    assert_eq!(a.light_data,b.light_data); assert_eq!(a.decoration,b.decoration);
+}
+
+#[test]
+fn reused_small_silhouettes_keep_light_roles_seeds_and_cancel_scope() {
+    let (mut d,mut files)=fixture();
+    files.insert("far.glb".into(),scaled_portal(true,0.2));
+    d.assets[0].collision[0].center[1]=-1000;
+    let mut other=d.placements[0].clone();other.id="other".into();other.position[0]+=2000;
+    d.placements.push(other);
+    d.environment=Some(serde_json::from_value(serde_json::json!({
+        "version":1,"concept":"metropolis","latitude_mdeg":0,"longitude_mdeg":0,
+        "utc_offset_minutes":0,"sunrise_minutes":360,"sunset_minutes":1080,"regions":[],
+        "lights":[{"asset_id":"portal","window_materials":[0],"bulb_materials":[],
+        "position_cm":[0,0,0],"range_cm":1000,"color":[255,200,100]}]
+    })).unwrap());
+    let p=read_bytes(&pack_bytes(d,files).unwrap()).unwrap();let cell=Cell{x:0,y:0};
+    let chunk=p.generate(cell,500_000).unwrap();let far=p.generate_distant(cell).unwrap();
+    assert_same(&far,&p.distant_from_generated(&chunk).unwrap());
+    let small:Vec<_>=far.light_data.iter().zip(&far.decoration).filter(|(_,kind)|**kind==1).map(|(v,_)|v).collect();
+    assert_eq!(small.len(),36);assert!(small.iter().all(|v|v[1]==1.));
+    assert_ne!(small[0][0],small[18][0]);
+    let token=cancellation::CancellationToken::default();
+    assert_eq!(token.run(|| {token.cancel();p.generate_distant(cell)}).unwrap_err().code,"E_CANCELLED");
+    assert_same(&far,&cancellation::CancellationToken::default().run(||p.generate_distant(cell)).unwrap());
 }

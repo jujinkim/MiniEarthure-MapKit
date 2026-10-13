@@ -702,6 +702,7 @@ impl<R: Read + Seek> IndexedReader<R> {
         let (document, files, peak) =
             self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket, profile)?;
         let start = profile.start();
+        let visual_margin_cm = crate::distant::visual_margin_cm(&document, &files)?;
         let overview = mapkit_core::source_overview(&document)?;
         let overview_cost = overview.cost()?;
         let overview_json = overview.to_json(4 * 1024 * 1024)?;
@@ -748,6 +749,7 @@ impl<R: Read + Seek> IndexedReader<R> {
             "audit_source_owned_bytes": audit_memory::document_retained_bytes(&document)?,
             "cell_count": self.index.world.cell_count()?,
             "retained_memory_bytes": self.index_retained + SUMMARY_BYTES,
+            "visual_margin_cm": visual_margin_cm,
             "overview_json": overview_json, "overview_cost": overview_cost
         }))
     }

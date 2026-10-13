@@ -30,9 +30,11 @@ const BUDGET: u64 = 4 * 1024 * 1024 * 1024;
 fn optional_profiles_preserve_complete_audit_and_generated_occupancy() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/assets");
     let (d, f) = read_project(&path).unwrap();
+    let margin = read_bytes(&pack_bytes(d.clone(),f.clone()).unwrap()).unwrap().visual_margin_cm().unwrap();
     let bytes = pack_source(d, f, 1).unwrap();
     let mut reader = IndexedReader::open(Cursor::new(bytes), BUDGET, None).unwrap();
     let expected = reader.audit_summary(BUDGET, &ticket()).unwrap();
+    assert_eq!(expected["visual_margin_cm"],margin,"complete audit retains the same validated visual extent");
     let mut profile = ReadProfile::enabled();
     let actual = reader
         .audit_summary_profiled(BUDGET, &ticket(), &mut profile)

@@ -1,6 +1,6 @@
 //! Display-only, deterministic distant geometry. No collision/archive contract changes.
 use crate::Package;
-use mapkit_core::{Cell, GeneratedChunk, Result, Surface};
+use mapkit_core::{cancellation::checkpoint, Cell, GeneratedChunk, GeneratedObject, Result, Surface, Triangle, water::WaterCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, Default)]
@@ -48,6 +48,7 @@ fn silhouette(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core:
         pending.extend(scene.nodes().map(|node| (node, identity)));
     }
     while let Some((node, parent)) = pending.pop() {
+        checkpoint()?;
         let m = multiply(parent, node.transform().matrix());
         let determinant = m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])
             - m[1][0]*(m[0][1]*m[2][2]-m[0][2]*m[2][1])
@@ -63,6 +64,7 @@ fn silhouette(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core:
                 let index = primitive.material().index().unwrap_or(usize::MAX) as u16;
                 let role = binding.map_or(0, |b| if b.window_materials.contains(&index) {1} else if b.bulb_materials.contains(&index) {2} else {0});
                 for face in indices.chunks_exact(3) {
+                    checkpoint()?;
                     for corner in if determinant < 0. { [0,1,2] } else { [0,2,1] } {
                         let i = face[corner] as usize;
                         result.vertices.push(std::array::from_fn(|r| m[3][r]+(0..3).map(|c| m[c][r]*points[i][c]).sum::<f32>()));
@@ -107,6 +109,7 @@ fn proxies(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core::en
         pending.extend(scene.nodes().map(|node| (node, identity)));
     }
     while let Some((node, parent)) = pending.pop() {
+        checkpoint()?;
         let transform = multiply(parent, node.transform().matrix());
         if let Some(mesh) = node.mesh() {
             // One box per material in a mesh: small details merge, while canopy,
@@ -148,6 +151,25 @@ fn proxies(bytes: &[u8], tint: Option<[u8; 4]>, binding: Option<&mapkit_core::en
     Ok(output)
 }
 
+// Shared with the complete regional audit; no GLB or mutable source is retained.
+pub(crate) fn visual_margin_cm(
+    document: &mapkit_core::MapDocument,
+    files: &BTreeMap<String, Vec<u8>>,
+) -> Result<i64> {
+    let mut radius = 1.84_f32;
+    for asset in &document.assets {
+        if !asset.path.ends_with(".glb") { continue; }
+        for path in asset.paths() {
+            for proxy in proxies(&files[path], None, None)? {
+                let x = proxy.min[0].abs().max(proxy.max[0].abs());
+                let z = proxy.min[2].abs().max(proxy.max[2].abs());
+                radius = radius.max(x.hypot(z));
+            }
+        }
+    }
+    Ok((radius * 100.0).ceil() as i64)
+}
+
 impl Package {
     /// Parsing workspace and retained per-asset silhouette templates. This is
     /// generation scratch, never a near-render cache or collision allocation.
@@ -161,19 +183,9 @@ impl Package {
     }
     /// Conservative anchor-to-visual horizontal extent, independent of collision proxies.
     pub fn visual_margin_cm(&self) -> Result<i64> {
-        let mut radius = 1.84_f32;
-        for asset in &self.document.assets {
-            if !asset.path.ends_with(".glb") { continue; }
-            for path in asset.paths() {
-              for proxy in proxies(&self.files[path], None, None)? {
-                let x = proxy.min[0].abs().max(proxy.max[0].abs());
-                let z = proxy.min[2].abs().max(proxy.max[2].abs());
-                radius = radius.max(x.hypot(z));
-              }
-            }
-        }
-        Ok((radius * 100.0).ceil() as i64)
+        visual_margin_cm(&self.document, &self.files)
     }
+
     /// Conservative upper bound before generation; parsing/import workspace is
     /// charged separately through the existing validated asset allowances.
     pub fn distant_triangle_bound(&self, cell: Cell) -> Result<u64> {
@@ -207,46 +219,44 @@ impl Package {
     }
 
     pub fn generate_distant(&self, cell: Cell) -> Result<DistantMesh> {
-        let chunk = self.generate(cell, 500_000)?;
-        self.distant_from_generated(&chunk)
+        checkpoint()?;
+        let grid = self.generation_heightgrid(cell)?;
+        let source = self.document.generate_distant_source(cell, grid.as_ref(), 500_000)?;
+        self.distant_from_parts(&source.triangles, &source.objects, &source.water_bodies)
     }
 
     pub fn distant_from_generated(&self, chunk: &GeneratedChunk) -> Result<DistantMesh> {
+        self.distant_from_parts(&chunk.triangles, &chunk.objects, &chunk.water_bodies)
+    }
+
+    fn distant_from_parts(&self, triangles: &[Triangle], objects: &[GeneratedObject], water_bodies: &[WaterCell]) -> Result<DistantMesh> {
+        checkpoint()?;
         let mut result = DistantMesh::default();
         // Keep all small props contiguous: at most one additional display batch,
         // covered by the existing fixed display allowance, not one per object.
         let mut decorations = DistantMesh::default();
         let mut omitted = BTreeSet::new();
         for placement in &self.document.placements {
-            if self
-                .document
-                .assets
-                .iter()
-                .any(|a| a.id == placement.asset_id && a.path.ends_with(".glb"))
+            if self.document.asset(&placement.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
                 omitted.insert(placement.id.as_str());
             }
         }
-        for object in &chunk.objects {
+        for object in objects {
+            checkpoint()?;
             if object.asset_id == "builtin:tree"
-                || self
-                    .document
-                    .assets
-                    .iter()
-                    .any(|a| a.id == object.asset_id && a.path.ends_with(".glb"))
+                || self.document.asset(&object.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
                 omitted.insert(object.id.as_str());
             }
         }
-        for triangle in &chunk.triangles {
+        for triangle in triangles {
+            checkpoint()?;
             if omitted.contains(triangle.object_id.as_str()) {
                 continue;
             }
-            let color = if let Some(building) = self
-                .document
-                .buildings
-                .iter()
-                .find(|b| b.id == triangle.object_id)
+            let color = if let Some(building) = self.document.buildings.binary_search_by(|b| b.id.cmp(&triangle.object_id))
+                .ok().map(|i| &self.document.buildings[i])
             {
                 match building.material.as_str() {
                     "brick" => [180, 108, 80, 255],
@@ -278,7 +288,8 @@ impl Package {
         // Distant water keeps the same clipped shoreline and elevation. This
         // tagged surface uses the common water material and never enters
         // collision/physical triangles. Flow uses the existing two UV channels.
-        for water in &chunk.water_bodies {
+        for water in water_bodies {
+            checkpoint()?;
             for triangle in &water.surface {
                 for i in [0, 2, 1] {
                     let p = triangle[i];
@@ -292,7 +303,8 @@ impl Package {
         }
         let mut templates = BTreeMap::new();
         let mut silhouettes = BTreeMap::new();
-        for object in &chunk.objects {
+        for object in objects {
+            checkpoint()?;
             if object.asset_id == "builtin:tree" {
                 add_box(
                     &mut result,
@@ -306,11 +318,7 @@ impl Package {
                 );
                 continue;
             }
-            let Some(asset) = self
-                .document
-                .assets
-                .iter()
-                .find(|a| a.id == object.asset_id && a.path.ends_with(".glb"))
+            let Some(asset) = self.document.asset(&object.asset_id).filter(|a| a.path.ends_with(".glb"))
             else {
                 continue;
             };
@@ -318,15 +326,17 @@ impl Package {
             let seed = u32::from_str_radix(&hash[..6],16).unwrap() as f32 / 16777215.;
             if let Some(path) = &asset.distant_path {
                 if !silhouettes.contains_key(&asset.id) {
-                    silhouettes.insert(&asset.id, silhouette(&self.files[path],
+                    let mesh = silhouette(&self.files[path],
                         asset.material.as_ref().map(|m| m.albedo_rgba),
-                        self.document.environment.as_ref().and_then(|e| e.lights.iter().find(|b| b.asset_id==asset.id)))?);
+                        self.document.environment.as_ref().and_then(|e| e.lights.iter().find(|b| b.asset_id==asset.id)))?;
+                    let mut low = [f32::INFINITY;3];let mut high = [f32::NEG_INFINITY;3];
+                    for p in &mesh.vertices { for a in 0..3 { low[a]=low[a].min(p[a]);high[a]=high[a].max(p[a]); } }
+                    let small = !asset.has_visible_collision()
+                        && (0..3).map(|a| (high[a]-low[a]).powi(2)).sum::<f32>() <= 36.;
+                    silhouettes.insert(&asset.id, (mesh, small));
                 }
-                let mesh = &silhouettes[&asset.id];
-                let mut low = [f32::INFINITY;3];let mut high = [f32::NEG_INFINITY;3];
-                for p in &mesh.vertices { for a in 0..3 { low[a]=low[a].min(p[a]);high[a]=high[a].max(p[a]); } }
-                let small = !asset.has_visible_collision()
-                    && (0..3).map(|a| (high[a]-low[a]).powi(2)).sum::<f32>() <= 36.;
+                let (mesh, small) = &silhouettes[&asset.id];
+                let small = *small;
                 let target = if small { &mut decorations } else { &mut result };
                 target.vertices.extend(mesh.vertices.iter().map(|&p| placed(p,object.position,object.quarter_turns,object.yaw_offset_mdeg)));
                 target.colors.extend_from_slice(&mesh.colors);

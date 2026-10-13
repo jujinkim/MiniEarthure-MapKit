@@ -86,6 +86,22 @@ impl PreparedMap {
         self.generate_with_occupancy(cell, grid, limit, None)
             .map(|v| v.chunk)
     }
+    /// Same cell geometry and placement ownership, without collision sidecars.
+    /// Keeps ordinary admission estimates and limits; the result is display-only.
+    pub fn generate_distant_source(
+        &self,
+        cell: Cell,
+        grid: Option<&HeightGrid>,
+        limit: usize,
+    ) -> Result<DistantSource> {
+        crate::cancellation::checkpoint()?;
+        let cost = self.estimate(cell, limit)?;
+        crate::generation::generate_distant_prepared(
+            GenerationInput { document: &self.document, cell, heightgrid: grid, max_triangles: limit },
+            &cost,
+            &self.placements,
+        )
+    }
     pub fn generate_with_occupancy(
         &self,
         cell: Cell,

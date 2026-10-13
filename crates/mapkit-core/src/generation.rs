@@ -4,6 +4,7 @@ use crate::occupancy::Occupancy;
 pub(super) struct Builder {
     pub(super) chunk: GeneratedChunk,
     pub(super) bounds: Bounds,
+    pub(super) distant: bool,
     max: usize,
     occupancy: Option<Occupancy>,
 }
@@ -131,10 +132,9 @@ impl Builder {
                 false,
             )?;
         }
-        self.chunk.asset_convexes.push(GeneratedConvex {
-            object_id: id.into(),
-            shape,
-        });
+        if !self.distant {
+            self.chunk.asset_convexes.push(GeneratedConvex { object_id: id.into(), shape });
+        }
         Ok(())
     }
     pub(super) fn box_shape(&mut self, center: Vertex, size: [u32; 3], id: &str) -> Result<()> {
@@ -251,6 +251,7 @@ fn generate_internal(
         occupancy,
         &cost,
         None,
+        false,
     )
 }
 
@@ -268,7 +269,21 @@ pub(crate) fn generate_prepared(
         }),
         cost,
         placements,
+        false,
     )
+}
+
+pub(crate) fn generate_distant_prepared(
+    input: GenerationInput<'_>,
+    cost: &GenerationCost,
+    placements: &crate::placement::PreparedPlacements,
+) -> Result<DistantSource> {
+    let generated = generate_validated(input, None, cost, Some(placements), true)?.chunk;
+    Ok(DistantSource {
+        triangles: generated.triangles,
+        objects: generated.objects,
+        water_bodies: generated.water_bodies,
+    })
 }
 
 fn generate_validated(
@@ -276,13 +291,15 @@ fn generate_validated(
     occupancy: Option<Occupancy>,
     cost: &GenerationCost,
     placements: Option<&crate::placement::PreparedPlacements>,
+    distant: bool,
 ) -> Result<GeneratedOccupancy> {
+    crate::cancellation::checkpoint()?;
     let d = input.document;
     let bounds = d.cell_bounds(input.cell)?;
     let mut b = Builder {
         chunk: GeneratedChunk {
             water_bodies: crate::water::generate(d, &bounds)?,
-            grind_lines: d.grind_lines.iter().filter(|g| g.intersects(&bounds)).cloned().collect(),
+            grind_lines: if distant { vec![] } else { d.grind_lines.iter().filter(|g| g.intersects(&bounds)).cloned().collect() },
             gimmicks: d.gimmicks.iter().filter(|g| g.intersects(&bounds)).cloned().collect(),
             asset_convexes: vec![],
             building_prisms: vec![],
@@ -294,6 +311,7 @@ fn generate_validated(
         bounds: bounds.clone(),
         max: { cost.triangles as usize },
         occupancy,
+        distant,
     };
     let descriptor = d.heightmaps.iter().find(|h| h.cell == input.cell);
     if descriptor.is_some() != input.heightgrid.is_some() {
@@ -317,8 +335,10 @@ fn generate_validated(
     }
     if let Some(track) = &d.assembled_track {
         b.assembled(track)?;
-        for face in &mut b.chunk.triangles {
-            if face.object_id.starts_with("assembled-road-") { face.contact_class = 3; }
+        if !distant {
+            for face in &mut b.chunk.triangles {
+                if face.object_id.starts_with("assembled-road-") { face.contact_class = 3; }
+            }
         }
     }
     if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) {
@@ -337,15 +357,17 @@ fn generate_validated(
 
     // Classify generated faces while only terrain/road geometry exists. Authored
     // placements are appended afterwards and always retain obstacle classification.
-    let roads: BTreeMap<_, _> = d.roads.iter().map(|r| (r.id.as_str(), r)).collect();
-    let areas: BTreeSet<_> = d.surface_areas.iter().map(|a| a.id.as_str()).collect();
-    for face in &mut b.chunk.triangles {
-        if !face.spawnable { continue; }
-        if let Some(road) = roads.get(face.object_id.as_str()) {
-            face.contact_class = if road.kind == RoadKind::Ground && road.design.is_none() { 2 } else { 3 };
-            face.snow_retention_percent = road.snow_retention_percent;
-        } else if face.object_id == "terrain" || areas.contains(face.object_id.as_str()) {
-            face.contact_class = 1;
+    if !distant {
+        let roads: BTreeMap<_, _> = d.roads.iter().map(|r| (r.id.as_str(), r)).collect();
+        let areas: BTreeSet<_> = d.surface_areas.iter().map(|a| a.id.as_str()).collect();
+        for face in &mut b.chunk.triangles {
+            if !face.spawnable { continue; }
+            if let Some(road) = roads.get(face.object_id.as_str()) {
+                face.contact_class = if road.kind == RoadKind::Ground && road.design.is_none() { 2 } else { 3 };
+                face.snow_retention_percent = road.snow_retention_percent;
+            } else if face.object_id == "terrain" || areas.contains(face.object_id.as_str()) {
+                face.contact_class = 1;
+            }
         }
     }
     crate::placement::generate(d, input.cell, &mut b, placements).map_err(|mut e| {
@@ -366,14 +388,14 @@ fn generate_validated(
 
 /// Reuse exactly the integer cell clipping used for terrain, without collision.
 pub(crate) fn water_surface(bounds: &Bounds, height: i64, faces: &[[Point; 3]]) -> Result<Vec<[Vertex; 3]>> {
-    let mut builder = Builder { chunk: GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], asset_convexes: vec![], building_prisms: vec![], format_version: GENERATED_VERSION, cell: Cell{x:0,y:0}, triangles: vec![], objects: vec![] }, bounds: bounds.clone(), max: 4096, occupancy: None };
+    let mut builder = Builder { chunk: GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], asset_convexes: vec![], building_prisms: vec![], format_version: GENERATED_VERSION, cell: Cell{x:0,y:0}, triangles: vec![], objects: vec![] }, bounds: bounds.clone(), max: 4096, occupancy: None, distant: false };
     for face in faces { builder.triangle(face.map(|p| [p[0],height,p[1]]), Surface::Concrete, "water", false)?; }
     Ok(builder.chunk.triangles.into_iter().map(|t|t.vertices).collect())
 }
 
 /// Bounded draft display uses the exact executable track tessellator.
 pub fn assembled_preview(d:&MapDocument)->Result<GeneratedChunk> {
-    let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],grind_lines:d.grind_lines.clone(),gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None};
+    let mut b=Builder{chunk:GeneratedChunk{water_bodies:vec![],grind_lines:d.grind_lines.clone(),gimmicks:d.gimmicks.clone(),asset_convexes:vec![],building_prisms:vec![],format_version:1,cell:Cell{x:0,y:0},triangles:vec![],objects:vec![]},bounds:d.bounds.clone(),max:500_000,occupancy:None,distant:false};
     if let Some(a)=&d.assembled_track {
         b.assembled(a)?;
         if a.authoring.as_ref().is_some_and(|s| !s.grounded_supports) {

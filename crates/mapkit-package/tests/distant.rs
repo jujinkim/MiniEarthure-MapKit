@@ -21,6 +21,8 @@ fn distant_display_is_bounded_deterministic_and_preserves_generation() {
             let generated = package.generate_distant(cell).unwrap();
             assert_eq!(view.vertices, generated.vertices);
             assert_eq!(view.colors, generated.colors);
+            assert_eq!(view.light_data, generated.light_data);
+            assert_eq!(view.decoration, generated.decoration);
             assert_eq!(view.vertices.len(), view.colors.len());
             assert!(
                 view.vertices.len() as u64 <= package.distant_triangle_bound(cell).unwrap() * 3

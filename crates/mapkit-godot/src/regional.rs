@@ -1,7 +1,7 @@
 //! The caller owns reservations, worker join and serialized collision commit.
 use super::*;
 use mapkit_package::indexed::{IndexedReader, ReadEpoch};
-use std::{fs::File, sync::Mutex};
+use std::{fs::File, sync::{Mutex, atomic::{AtomicI64, Ordering}}};
 
 #[derive(GodotClass)]
 #[class(base=RefCounted)]
@@ -11,6 +11,7 @@ struct MapKitRegionReader {
     epoch: ReadEpoch,
     world: Option<mapkit_core::MapDocument>,
     regions: Vec<serde_json::Value>,
+    visual_margin_cm: AtomicI64,
 }
 #[godot_api]
 impl IRefCounted for MapKitRegionReader {
@@ -21,6 +22,7 @@ impl IRefCounted for MapKitRegionReader {
             epoch: ReadEpoch::default(),
             world: None,
             regions: Vec::new(),
+            visual_margin_cm: AtomicI64::new(0),
         }
     }
 }
@@ -33,6 +35,7 @@ impl MapKitRegionReader {
         self.reader = None;
         self.world = None;
         self.regions.clear();
+        self.visual_margin_cm.store(0, Ordering::Release);
         response((|| {
             let expected = expected_index.to_string();
             let reader = IndexedReader::open_path(
@@ -161,6 +164,9 @@ impl MapKitRegionReader {
                 .map(|r| r["cost"]["validation_peak_bytes"].as_u64().unwrap())
                 .max()
                 .unwrap_or(0));
+            // Publish the complete-audit visual extent without taking the I/O
+            // lock in cell_window while a region worker is reading.
+            self.visual_margin_cm.store(result["visual_margin_cm"].as_i64().unwrap(), Ordering::Release);
             Ok(result)
         })())
     }
@@ -183,6 +189,7 @@ impl MapKitRegionReader {
             Ok(
                 serde_json::json!({"cell":cell,"cells":d.driving_window([x_cm,y_cm]),"bounds":d.bounds,
                 "cell_bounds":d.cell_bounds(cell)?,"cell_size_cm":d.cell_size_cm,"world_scale":mapkit_core::WORLD_SCALE,
+                "visual_margin_cm":self.visual_margin_cm.load(Ordering::Acquire),
                 "scene_units_version":mapkit_core::SCENE_UNITS_VERSION,"package_format_version":mapkit_core::PACKAGE_VERSION,
                 "recipe_version":d.recipe_version,"generated_format_version":mapkit_core::GENERATED_VERSION}),
             )

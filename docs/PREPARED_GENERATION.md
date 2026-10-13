@@ -16,8 +16,17 @@ Prepared indices are charged by package read planning: an additional eight times
 structured source bytes and 32 MiB for bounded repetition/footprint/index storage.
 The existing generated-cell estimate cache, output limits and work budgets remain.
 
+`PreparedMap::generate_distant_source(cell, grid, limit)` shares the validated
+geometry, clipping and placement generator. It produces transient display triangles,
+objects and water without collision sidecars or contact classification. Triangle
+contact fields are unspecified in this display-only result. Vegetation still uses
+the same terrain height, water and gimmick exclusions, source-global occupied
+footprints and cell ownership. Only proxies omitted by the ordinary distant
+conversion are skipped; neighbouring-cell visible geometry remains exact. The
+ordinary cost/admission limits are retained. See [distant display](DISTANT_RENDERING.md).
+
 `cancellation::CancellationToken::run(|| prepared.generate(...))` provides a
-job-local cooperative generation path. Tokens
+job-local cooperative generation path, including `generate_distant_source`. Tokens
 are never reset; a replacement gets its own token. Checkpoints cover placement
 predicates, triangle emission, source read blocks and regional read tickets,
 archive encode/decode and native presentation/packing loops. They do not interrupt
@@ -31,7 +40,8 @@ Editor callers omit it. Runtime ownership, ACKs, retirement and scheduling are
 outside MapKit.
 
 Validation: affected core placement/occupancy/road/cost/zone and archive regressions,
-prepared/raw boundary parity, independent tokens and controlled running-worker
+prepared/raw and distant-source ordered boundary parity, water/gimmick vegetation
+exclusions, unchanged ordinary hashes, independent tokens and controlled running-worker
 cancellation; package indexed closure/input defense/contract tests. Existing v1
 format numbers and generated geometry/hash ordering are unchanged. Vector status:
 [DETERMINISM](../spec/DETERMINISM.md#known-mismatch).
