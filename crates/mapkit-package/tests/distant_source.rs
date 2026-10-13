@@ -61,7 +61,7 @@ fn frozen_ordinary_and_display_outputs() {
         }
     }
     let expected = serde_json::from_str::<BTreeMap<String,(String,String)>>(include_str!("support/distant-baseline.json")).unwrap();
-    assert_eq!(snapshots,expected,"pre-optimization ordinary hashes and exact packed display bytes");
+    assert_eq!(snapshots,expected,"unchanged ordinary hashes and frozen packed distant display bytes");
 }
 
 #[test]

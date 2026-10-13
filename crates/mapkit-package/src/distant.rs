@@ -22,6 +22,66 @@ struct Proxy {
     role: u8,
 }
 
+/// Native buildings are generated as closed triangular prisms. Adjacent prisms
+/// carry opposite copies of an internal vertical quad (often with different
+/// diagonals). Remove only an exact pair of those quads from the distant product.
+/// Exterior, roof, courtyard, cell-cut and authored-asset geometry stays intact.
+fn internal_building_faces(document: &mapkit_core::MapDocument, triangles: &[Triangle]) -> Result<Vec<bool>> {
+    if document.buildings.is_empty() { return Ok(Vec::new()); }
+    type Face = ([[i64; 3]; 4], usize, bool);
+    // One record per two source triangles, fixed capacity: no geometric growth.
+    let mut faces: Vec<Face> = Vec::with_capacity(triangles.len() / 2);
+    let mut index = 0;
+    while index + 1 < triangles.len() {
+        checkpoint()?;
+        let a = &triangles[index];
+        let b = &triangles[index + 1];
+        if a.object_id != b.object_id || document.buildings.binary_search_by(|v| v.id.cmp(&a.object_id)).is_err() {
+            index += 1;
+            continue;
+        }
+        let direction = |t: &Triangle| -> Option<bool> {
+            let u = std::array::from_fn::<_, 3, _>(|i| i128::from(t.vertices[1][i]) - i128::from(t.vertices[0][i]));
+            let v = std::array::from_fn::<_, 3, _>(|i| i128::from(t.vertices[2][i]) - i128::from(t.vertices[0][i]));
+            let n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+            (n[1] == 0 && (n[0] != 0 || n[2] != 0)).then_some(n[0] < 0 || (n[0] == 0 && n[2] < 0))
+        };
+        let Some(side) = direction(a).filter(|s| Some(*s) == direction(b)) else { index += 1; continue; };
+        let mut points = [a.vertices[0], a.vertices[1], a.vertices[2], b.vertices[0], b.vertices[1], b.vertices[2]];
+        points.sort_unstable();
+        let mut key = [[0; 3]; 4];
+        let mut count = 0;
+        for i in 0..6 {
+            if i > 0 && points[i] == points[i-1] { continue; }
+            if count < 4 { key[count] = points[i]; }
+            count += 1;
+        }
+        if count != 4 { index += 1; continue; }
+        let mut horizontal = key.map(|p| [p[0], p[2]]);
+        horizontal.sort_unstable();
+        if horizontal[0] != horizontal[1] || horizontal[2] != horizontal[3] || horizontal[0] == horizontal[2] {
+            index += 1;
+            continue;
+        }
+        faces.push((key, index, side));
+        index += 2;
+    }
+    faces.sort_unstable_by_key(|face| face.0);
+    let mut hidden = vec![false; triangles.len()];
+    let mut first = 0;
+    while first < faces.len() {
+        checkpoint()?;
+        let mut end = first + 1;
+        while end < faces.len() && faces[end].0 == faces[first].0 { end += 1; }
+        // Ambiguous/nonmanifold groups stay visible rather than guessing a union.
+        if end == first + 2 && faces[first].2 != faces[first+1].2 {
+            for face in &faces[first..end] { hidden[face.1] = true; hidden[face.1+1] = true; }
+        }
+        first = end;
+    }
+    Ok(hidden)
+}
+
 fn multiply(a: [[f32; 4]; 4], b: [[f32; 4]; 4]) -> [[f32; 4]; 4] {
     std::array::from_fn(|c| std::array::from_fn(|r| (0..4).map(|k| a[k][r] * b[c][k]).sum()))
 }
@@ -171,15 +231,17 @@ pub(crate) fn visual_margin_cm(
 }
 
 impl Package {
-    /// Parsing workspace and retained per-asset silhouette templates. This is
+    /// Native face matching, parsing and per-asset silhouette templates. This is
     /// generation scratch, never a near-render cache or collision allocation.
     pub fn distant_workspace_bytes(&self, cell: Cell) -> Result<u64> {
         let mut ids: BTreeSet<_> = self.document.authored_placement_candidates(cell)?
             .into_iter().map(|p| p.asset_id.as_str()).collect();
         ids.extend(self.document.zones.iter().filter_map(|z| z.tree.as_ref().map(|t| t.asset_id.as_str())));
-        Ok(self.document.assets.iter().filter(|a| ids.contains(a.id.as_str()))
+        let building_workspace = if self.document.buildings.is_empty() { 0 }
+            else { self.document.estimate(cell, 500_000)?.triangles.saturating_mul(128) };
+        Ok(building_workspace.saturating_add(self.document.assets.iter().filter(|a| ids.contains(a.id.as_str()))
             .filter_map(|a| a.distant_path.as_ref())
-            .map(|path| crate::assets::presentation_cost(path, &self.files[path])).sum())
+            .map(|path| crate::assets::presentation_cost(path, &self.files[path])).sum::<u64>()))
     }
     /// Conservative anchor-to-visual horizontal extent, independent of collision proxies.
     pub fn visual_margin_cm(&self) -> Result<i64> {
@@ -236,6 +298,7 @@ impl Package {
         // covered by the existing fixed display allowance, not one per object.
         let mut decorations = DistantMesh::default();
         let mut omitted = BTreeSet::new();
+        let internal = internal_building_faces(&self.document, triangles)?;
         for placement in &self.document.placements {
             if self.document.asset(&placement.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
@@ -250,9 +313,9 @@ impl Package {
                 omitted.insert(object.id.as_str());
             }
         }
-        for triangle in triangles {
+        for (index, triangle) in triangles.iter().enumerate() {
             checkpoint()?;
-            if omitted.contains(triangle.object_id.as_str()) {
+            if internal.get(index).copied().unwrap_or(false) || omitted.contains(triangle.object_id.as_str()) {
                 continue;
             }
             let color = if let Some(building) = self.document.buildings.binary_search_by(|b| b.id.cmp(&triangle.object_id))

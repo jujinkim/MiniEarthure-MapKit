@@ -169,6 +169,12 @@ fn spatial_pruning_keeps_seam_buildings_manual_proxies_and_vegetation_competitor
             .unwrap();
         assert_eq!(a.chunk, b.chunk, "cell {cell:?}");
         assert_eq!(a.solids, b.solids);
+        let whole_far = original.generate_distant(cell).unwrap();
+        let regional_far = region.package.generate_distant(cell).unwrap();
+        assert_eq!(whole_far.vertices, regional_far.vertices, "distant seam {cell:?}");
+        assert_eq!(whole_far.colors, regional_far.colors);
+        assert_eq!(whole_far.light_data, regional_far.light_data);
+        assert_eq!(whole_far.decoration, regional_far.decoration);
     }
 }
 

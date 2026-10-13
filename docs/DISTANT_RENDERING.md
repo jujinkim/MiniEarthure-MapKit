@@ -4,7 +4,7 @@ The package's generated/collision archive, recipe and hash remain unchanged.
 `Package::generate_distant(Cell)` uses `PreparedMap::generate_distant_source` and
 converts its transient `DistantSource` to a visual-only `DistantMesh`.
 `distant_from_generated` also accepts an existing ordinary generated chunk. Both
-paths preserve the complete ordered vertices, colours, light data and display kinds.
+paths produce identical ordered vertices, colours, light data and display kinds.
 The source reuses the same geometry and clipping but omits building-prism and
 convex sidecars, contact classification and proxies discarded by the conversion.
 Water and gimmick exclusions still govern vegetation placement. Authored GLBs,
@@ -17,6 +17,16 @@ placement transforms. Built-in trees use a canopy volume. No collision or full
 GLB/texture instance is produced. The traversal is iterative. Building material lookup uses normalized ID order;
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.
+
+Native buildings emit closed triangular prisms. The distant conversion removes
+exactly paired, opposite internal vertical quads, even when their two triangles
+use different diagonals. It keeps source order and coordinates for every surviving
+face. Roofs, exterior walls, courtyard openings and cell-cut faces remain intact;
+ambiguous coincident groups remain visible. Authored landmark silhouettes and
+collision geometry are independent of this reduction. No cross-cell dependency
+is introduced. Native face matching reserves 128 scratch bytes per estimated
+source triangle before generation; documents without native buildings require
+no matching workspace. Triangle/output bounds remain conservative upper limits.
 
 `distant_triangle_bound` supplies a conservative pre-generation triangle bound.
 The Godot bridge exposes `estimate_far_chunk(x,y)` (ordinary generation and asset
@@ -38,9 +48,10 @@ The ordinary chunk renderer also exposes `display_lease` after completion so a
 consumer can transfer an already visible root without allocating new resources.
 No public package format or generated-data identity changes are required.
 
-Validation: run the complete package test targets `distant`, `distant_assets` and
-`distant_source` and the regional `indexed` target, plus core `distant_source` and affected generation/placement/
-occupancy targets. Compare every display array in order, frozen ordinary and display
+Validation: for distant conversion changes, run package targets `distant`,
+`distant_assets`, `distant_source` and the affected regional `indexed` checks.
+Core source-generation changes also require core `distant_source` and affected
+generation/placement/occupancy targets. Compare every display array in order, frozen ordinary and display
 digests, roof/courtyard and cell boundaries, reflected/rotated GLBs and openings,
 repeated placement, water/islands, vegetation exclusions, output limits and cancellation.
 The ignored `short_distant_measurement` test provides bounded synthetic dense-building,
@@ -48,8 +59,8 @@ reused-GLB and open-terrain timings, separating load, estimate, generation and
 conversion with first/repeated passes. It is an explicit local measurement, not a
 wall-clock test threshold. Consumer checks cover far/detail streaming, failed or
 cancelled replacements, stale ACKs, pressure and last-borrower retirement.
-This path preserves display geometry; it does not reduce display triangle or draw counts.
-Existing generation and workspace reservations remain conservative and unchanged.
+Native internal-face removal reduces distant display triangles without changing
+the exterior; its effect on renderer batches depends on the cell's total output.
 
 The bridge also reports `visual_margin_cm` from validated transformed model bounds
 in `cell_window` and cost metadata. The regional reader publishes the same extent
