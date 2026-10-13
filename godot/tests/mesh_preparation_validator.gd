@@ -192,6 +192,7 @@ func instance_parts(mode: String) -> void:
 	template.transform=Transform3D(Basis(Vector3.UP,.3),Vector3(1,2,3))
 	var branch := Node3D.new();branch.scale=Vector3(-1,2,1);template.add_child(branch)
 	var child := MeshInstance3D.new();child.mesh=BoxMesh.new();child.position=Vector3(3,1,2)
+	child.mesh.size=Vector3(8,4,.5)
 	child.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	child.material_override=StandardMaterial3D.new();branch.add_child(child)
 	if mode=="overlay": template.material_overlay=StandardMaterial3D.new()
@@ -205,7 +206,13 @@ func instance_parts(mode: String) -> void:
 	check(steps<100 and not item.has("instance_parts"),"part extraction has its own admitted boundary")
 	check(cache.prepare_template(shared,"fixture",ASSETS),"final part preparation publishes the template")
 	var pieces: Array=cache.instance_parts(key)
-	check(pieces.is_read_only() and pieces==INSTANCES.parts(template),"cached parts preserve final meshes, materials, transforms, shadows and order: "+mode)
+	var reference := INSTANCES.parts(template)
+	check(pieces.is_read_only() and pieces.size()==reference.size(),"cached part count includes empty fallback: "+mode)
+	for index in pieces.size():
+		for field in ["mesh","material","transform","shadow"]:
+			check(pieces[index][field]==reference[index][field],"cached final part field/order: "+field)
+		check(pieces[index].mesh_bounds==reference[index].mesh.get_aabb(),"cached bounds stay in mesh-local coordinates")
+	reference.clear()
 	check(is_same(pieces,cache.instance_parts(shared)),"concurrent claims share the same part list, including empty fallback")
 	var before: Dictionary=cache.preparation_usec.duplicate()
 	check(cache.prepare_template(key,"fixture",ASSETS) and before==cache.preparation_usec,"ready part reuse performs no preparation")
@@ -214,12 +221,24 @@ func instance_parts(mode: String) -> void:
 	var groups := []
 	for index in 3:
 		QUALITY.current=QUALITY.profile(index)
-		var group := INSTANCES.begin_parts(pieces,1,scene,null,false)
+		var group := INSTANCES.begin_parts(pieces,2,scene,null,false)
 		if mode=="opaque":
 			check(pieces.size()==2 and pieces.all(func(piece): return piece.is_read_only()),"one immutable part per mesh, not per surface")
 			check(pieces[0].transform.is_equal_approx(template.transform) and pieces[1].transform.is_equal_approx(template.transform*branch.transform*child.transform),"root and reflected nested transforms keep traversal order")
 			check(pieces[1].shadow==GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and pieces[1].material==child.material_override,"child override and shadow survive preparation")
-			INSTANCES.append(group,Transform3D(Basis.IDENTITY,Vector3(index*32,0,0)),str(index),"map")
+			var placement := Transform3D(Basis(Vector3.UP,.7),Vector3(index*32,0,0))
+			INSTANCES.append(group,placement,str(index),"map")
+			for part: Dictionary in group.groups:
+				var expected_bounds: AABB=(placement*part.transform)*part.multi.mesh.get_aabb()
+				check(part.bounds.is_equal_approx(expected_bounds) and part.multi.custom_aabb.is_equal_approx(expected_bounds.grow(.08)),"cached bounds preserve composed rotations/reflections and populated-only leaf margin")
+				check(part.mesh_bounds==part.multi.mesh.get_aabb(),"each spatial group borrows the mesh-local bounds")
+			var next_placement := Transform3D(Basis(Vector3.UP,-.4),Vector3(index*32+2,1,7))
+			INSTANCES.append(group,next_placement,"next-"+str(index),"map")
+			for part: Dictionary in group.groups:
+				var first_bounds: AABB=(placement*part.transform)*part.multi.mesh.get_aabb()
+				var next_bounds: AABB=(next_placement*part.transform)*part.multi.mesh.get_aabb()
+				check(part.multi.custom_aabb.is_equal_approx(first_bounds.merge(next_bounds).grow(.08)),"subsequent placement merges original-space bounds without extra transform expansion")
+			check(group.groups[1].node.get_child_count()==2,"cached large-mesh bounds retain per-placement occluders")
 			check(group.groups[0].multi.mesh==pieces[0].mesh and group.groups[1].node.material_override==pieces[1].material,"spatial groups borrow final template resources")
 			check(is_equal_approx(group.groups[0].node.lod_bias,QUALITY.current.lod_bias),"reused parts still read current node quality")
 		else: check(group.is_empty(),"unsupported template retains ordinary-instance fallback: "+mode)
@@ -233,7 +252,9 @@ func instance_parts(mode: String) -> void:
 	check(not item.has("instance_parts") and cache.instance_parts(key).is_empty(),"eviction clears cached references even when entry diagnostics survive")
 	cache.shutdown()
 	check(cache.instance_parts(shared).is_empty() and cache.template(shared,"fixture",ASSETS)==null,"late access cannot restore evicted parts")
-	for group: Dictionary in groups: group.clear()
+	for group: Dictionary in groups:
+		for part: Dictionary in group.get("groups",[]): part.clear()
+		group.clear()
 	scene.free();groups.clear();pieces=[];mesh=null;box=null;item={}
 	for frame in 3: await process_frame
 	check(cache.bytes()==amount,"last mesh/material borrowers keep template and context charged: "+mode)
@@ -251,6 +272,9 @@ func instance_parts(mode: String) -> void:
 	preview.position=Vector3(7,1,4)
 	var second := INSTANCES.begin(preview,1,parent,null)
 	check(first.groups[0].transform!=second.groups[0].transform and second.groups[0].transform==preview.transform,"preview edits are extracted on every setup")
+	preview.mesh.size=Vector3(4,2,3)
+	INSTANCES.append(second,Transform3D.IDENTITY,"edited")
+	check(second.groups[0].bounds.is_equal_approx(preview.transform*preview.mesh.get_aabb()),"mutable preview refreshes mesh bounds between setup and placement")
 	preview.material_overlay=StandardMaterial3D.new()
 	check(INSTANCES.begin(preview,1,parent,null).is_empty(),"preview eligibility is not cached")
 	parent.free();preview.free();first.clear();second.clear()

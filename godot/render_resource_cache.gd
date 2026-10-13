@@ -76,7 +76,7 @@ func claim(id: String, sources: Dictionary) -> String:
 	# The native import profile already includes CPU/GPU overlap (256 bytes per
 	# vertex, 32 per index, 24 per image pixel). Replacing template meshes shares
 	# textures and releases the old mesh; add a material/clock binding allowance.
-	# The doubled native 8 KiB/node allowance also covers one four-field part
+	# The doubled native 8 KiB/node allowance also covers one small part/bounds
 	# record per mesh node, borrowing the already tracked mesh/material.
 	var amount := int(sources[id].memory_bytes) * 2 + 131072 # LOD generation, retained indices and occluders, including import overlap.
 	return _claim(key,amount,"context")
@@ -231,7 +231,9 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		# Publish only after all LODs, bindings and occluders are final. Empty
 		# results are reusable too (transparent/override fallback).
 		var pieces := INSTANCES.parts(item.template)
-		for piece: Dictionary in pieces: piece.make_read_only()
+		for piece: Dictionary in pieces:
+			piece.mesh_bounds = piece.mesh.get_aabb()
+			piece.make_read_only()
 		pieces.make_read_only()
 		item.instance_parts = pieces
 		item.stage = "done"

@@ -56,7 +56,10 @@ part list after all LOD/material/occluder work, including empty fallback results
 Spatial groups borrow that list without traversing the hierarchy again. Records
 borrow tracked meshes/materials within the doubled native node allowance and are
 cleared on eviction; partial or closed caches expose no parts. Mutable standalone
-templates are inspected on every setup. Each setup shares one quality snapshot; each
+templates are inspected on every setup. Shared parts retain mesh-local AABBs for
+setup/placement; composed transforms still precede bounds expansion and only placed
+instances enter the merged bounds. Mutable preview meshes refresh bounds at placement.
+Each setup shares one quality snapshot; each
 placement computes its object seed once and reads occluder quality once if needed.
 The next call reads current quality again. Transparent models, overlays and
 per-surface overrides use ordinary instances. LOD indices are generated once per
@@ -109,7 +112,7 @@ anchor margin, including transformed GLB bounds independently of collision proxi
 [material validators](docs/RICHER_MATERIALS.md#display-quality) cover node quality,
 geometry/LOD/material output, phased preparation and shared borrowers. Caller checks
 also cover part order, nested transforms, multi-surface/override fallback, empty
-result reuse, mutable previews and final mesh/material retirement. Consumer checks
+result reuse, composed/merged bounds, mutable previews and final mesh/material retirement. Consumer checks
 cover admission, cancellation, failed replacement, pressure, shutdown and final
 mesh/context/shape retirement.
 

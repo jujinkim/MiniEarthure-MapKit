@@ -46,14 +46,19 @@ static func begin_parts(pieces: Array, count: int, parent: Node3D, lease: RefCou
 		node.multimesh = multi
 		node.material_override = piece.material
 		node.cast_shadow = piece.shadow
-		var authored_bounds: AABB=piece.transform * piece.mesh.get_aabb()
+		var mesh_bounds: AABB=piece.mesh_bounds if piece.has("mesh_bounds") else piece.mesh.get_aabb()
+		var authored_bounds: AABB=piece.transform * mesh_bounds
 		node.set_meta("mapkit_decoration", not solid and authored_bounds.size.length() <= 6.0)
 		QUALITY.apply_node(node,quality)
 		parent.add_child(node)
 		if lease != null:
 			lease.track(multi)
 			lease.track(node)
-		groups.append({"multi": multi, "node":node, "transform": piece.transform, "bounds":AABB(), "bounded":false})
+		var part := {"multi": multi, "node":node, "transform": piece.transform, "bounds":AABB(), "bounded":false}
+		# Only immutable cache records carry mesh-local bounds. Mutable standalone
+		# meshes still refresh them on every placement.
+		if piece.has("mesh_bounds"): part.mesh_bounds = mesh_bounds
+		groups.append(part)
 	return {"groups": groups, "next": 0, "ids": PackedStringArray(), "count": count, "lease":lease}
 
 static func append(group: Dictionary, transform: Transform3D, object_id: String, map_id := "") -> void:
@@ -64,7 +69,8 @@ static func append(group: Dictionary, transform: Transform3D, object_id: String,
 	for part: Dictionary in group.groups:
 		var pose: Transform3D = transform * part.transform
 		part.multi.set_instance_transform(index, pose)
-		var bounds: AABB = pose * part.multi.mesh.get_aabb()
+		var mesh_bounds: AABB = part.mesh_bounds if part.has("mesh_bounds") else part.multi.mesh.get_aabb()
+		var bounds: AABB = pose * mesh_bounds
 		part.bounds = part.bounds.merge(bounds) if part.bounded else bounds
 		part.bounded = true
 		part.multi.custom_aabb = part.bounds.grow(.08) # bounded leaf motion at the highest tier
