@@ -56,21 +56,13 @@ standalone previews can use source materials. Distinguish these from GLB import 
 | RC `ShaderMaterial` | Existing shader and wall parameter, then `bind_detail` |
 | Imported opaque `StandardMaterial3D` | Shared-wrapper creation, shader/bitmap/parameter binding, quality application and caller's last source-reference release |
 
-The bounded Metal path can stall in the first urban shader assignment before
-`_environment_surface`; its detail setters and source release need not be slow.
-`ShaderMaterial.set_shader` requests the shader RID, creating it lazily from code
-on first use. This identifies a synchronous engine boundary, not which compilation,
-lock or renderer wait caused the wall/CPU gap. Attributing that gap needs matching
-engine symbols and aligned stacks. Parameter reads use the material's
-local cache; texture setters also request texture RIDs and need separate timing.
-Transparent sources pass through unchanged; deferred GLB bindings activate later.
-
-Measure wall and caller-thread CPU within the same call, retaining only primitive
-context. Keep source retirement in that call and compare original/instrumented
-output and resource lifetimes. Observe settled reservations after engine-frame
-retirement separately from completion-time charges. Moving shader work earlier or
-adding frame waits alone does not establish an improvement. See
-[timing scope and controls](RENDER_DIAGNOSTICS.md#attachment-upload-isolation).
+The first urban shader assignment can stall on Metal before `_environment_surface`.
+`ShaderMaterial.set_shader` lazily requests the shader RID; the internal cause needs
+matching engine symbols and aligned stacks. Parameter reads use a local cache,
+while texture setters request texture RIDs. Transparent sources pass through;
+deferred GLB bindings activate later. Keep source retirement and wall/thread-CPU
+timing in the same call, compare output/lifetimes, and distinguish settled from
+completion-time reservations. See [timing controls](RENDER_DIAGNOSTICS.md#attachment-upload-isolation).
 
 ## Display quality
 
@@ -114,5 +106,7 @@ batches, tight MultiMesh bounds, solid-versus-decoration classification, live ma
 levels and actual-face occluders. Template preparation tests include shared phased
 LOD/material setup and final-borrower retirement. Recursive resource tracking
 checks per-call quality refresh, same-preset repair, node/occluder state, lease
-callback order and final shape retirement. Weather appearance and
+callback order and final shape retirement. MultiMesh checks cover nested parts,
+setup/placement preset changes, per-object seeds, live repair and borrower retirement
+after empty, partial and completed placement. Weather appearance and
 target-device acceptance are user checks.

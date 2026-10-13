@@ -24,18 +24,17 @@ Current v1 native presentation records add `content_hash` and `memory_bytes` fro
 validated package. They are excluded from package serialization/generated hashes.
 Cache keys include content, declarative materials and referenced image content.
 Claims precede import; the default cap is 256 entries/128 MiB including shaders.
-Each model imports once per cache entry. Texture context, GLB import, each LOD input
-surface, LOD generation, output upload, each material binding, occluder preparation,
-MultiMesh setup and placement are separate admitted steps. Concurrent claims share
-preparation. Diagnostics report phase total/peak and attachment/release costs;
-synchronous engine calls cannot be preempted.
+Concurrent claims share one import/preparation per entry. Texture context, import,
+each LOD input surface, LOD generation/upload, each material binding, occluder
+preparation and MultiMesh setup/placement are separate admitted steps.
+Synchronous engine calls cannot be preempted; [diagnostics](docs/RENDER_DIAGNOSTICS.md)
+report phase total/peak and attachment/release costs.
 With a ready context, GLB import captures opaque parameters into shaderless
-bindings before scene upload. Original materials retire within import without
-preparing unused shaders. Each unpublished surface activates the shared shader in
-its admitted step. Colours, texture channels/UVs, light roles and transparency
-survive; pending bindings retain full template/context leases through cancellation.
-Private LOD outputs bind materials directly; borrowed meshes/previews keep binding
-copies. Placements use complete templates; shutdown rejects partial access.
+bindings before upload and retires original materials. Each unpublished surface
+activates the shared shader in its admitted step. Colours, texture channels/UVs,
+light roles and transparency survive. Pending bindings retain full template/context
+leases through cancellation. Private LOD outputs bind directly; borrowed meshes
+and previews copy bindings. Placements require complete templates.
 LOD jobs retain decoded positions/indices until occluder preparation, avoiding a
 second GPU readback with identical faces. Raw GLTF arrays precede compression and
 cannot replace decoded inputs without changing geometry/LOD. Scratch uses the
@@ -51,14 +50,15 @@ receive detail/wind quality once with node LOD/distance before publication in th
 same call; live updates remain unconditional. Bindings use the cell allowance;
 their last borrower retains shared shader/textures. Previews prepare locally.
 
-Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
-transforms, mesh surfaces, material overrides, original colours and shadow mode
-survive. Transparent models, overlays and per-surface overrides use ordinary
-instances. ImporterMesh LOD indices are generated once per cached template. Only assets without collision at/above their local origin may enter the small
-decoration distance tier (buried root beds remain decorative). The validated
-`solid` presentation flag and cache key preserve small fences, walls and props in
-near and distant views at every preset. Decorations use 8 m distance hysteresis; structures
-remain visible until normal cell/frustum retirement. MultiMesh bounds include only
+Opaque static models use cell-local MultiMesh instances, preserving hierarchy,
+surfaces, overrides, colours and shadows. Each setup shares one quality snapshot; each
+placement computes its object seed once and reads occluder quality once if needed.
+The next call reads current quality again. Transparent models, overlays and
+per-surface overrides use ordinary instances. LOD indices are generated once per
+template. The validated `solid` flag/cache key preserves collidable fences, walls
+and props at every preset. Only assets without collision at/above their origin
+may use decoration distance (buried root beds qualify), with 8 m hysteresis.
+Structures retire with the cell/frustum. MultiMesh bounds include only
 populated transformed instances, not unused capacity, with an 8 cm margin for leaf
 motion. Leaf faces never act as static occluders. Actual upright opaque
 triangles (at most 64, inset 1 cm) form occluders; an AABB never fills an opening.
@@ -67,10 +67,10 @@ empty results too. Placements own occluder nodes/transforms/visibility; mutable
 standalone meshes derive faces on demand. Preparation is separately admitted within
 the template allowance and has its own phase total/peak.
 
-Opaque shared rendering emits each multi-material mesh once. Single-object groups
-also use MultiMesh custom data; exceptional material overrides get an owned seed
-binding while sharing shaders/textures, so there is no global per-instance shader
-slot ceiling. Small-prop distance classification includes authored root scale.
+Each multi-material mesh is emitted once. Single-object groups also use MultiMesh
+custom data; exceptional overrides get a private seed binding with shared
+shaders/textures, avoiding per-instance shader slot limits. Distance classification
+includes authored root scale.
 
 ## Lifetimes
 
@@ -89,12 +89,10 @@ Canopy claims supplement the per-object allowance. Shared meshes do not hold cel
 leases: other trees and the warm cache cannot prevent a dead cell's retirement.
 Evicted copies stay charged through the last mesh/importer borrower.
 
-Claims pin templates during attachment. Completion/cancel releases pins exactly
-once and clears source records. Unpinned templates may be evicted; their meshes,
-materials/textures remain charged while scene instances or external consumers
-borrow them. An independently retained occluder shape also keeps the shared
-template lease charged after its mesh and instances retire. Cache shutdown seals
-these leases, including the shared shader.
+Claims pin templates during attachment. Completion/cancel releases pins once and
+clears source records. Unpinned templates may be evicted; meshes, materials,
+textures and independently retained occluder shapes keep leases charged through
+their last borrower. Shutdown seals these leases, including the shared shader.
 The lease provider enforces last-borrower retirement. Completed/failed jobs may
 retain an invalid root handle for diagnostics.
 
@@ -102,15 +100,11 @@ retain an invalid root handle for diagnostics.
 anchor margin, including transformed GLB bounds independently of collision proxies.
 
 `scripts/verify_godot_layout.py --godot <Godot> --probe renderer --probe assets
---probe binding` checks relocation, hashes, assets and batching.
-Run `display_quality_validator` and `richer_material_validator` with a rendered
-engine for MultiMesh transforms, compressed-GLB occlusion, openings and excluded
-faces. `mesh_preparation_validator` compares full geometry/LOD/material output,
-early source retirement, surface admission, interleaved claims and immutable inputs.
-`tree_canopy_validator` covers geometry/LOD, leaf uniforms and same-frame pixels at
-each preset, independent placements/bindings, cancellation, pressure and borrowers.
-These and caller checks cover admission, cancellation, failed replacement,
-shutdown, scratch release and final mesh/context/shape borrowers.
+--probe binding` checks relocation, hashes, assets and batching. The rendered
+[material validators](docs/RICHER_MATERIALS.md#display-quality) cover node quality,
+geometry/LOD/material output, phased preparation and shared borrowers. Caller checks
+cover admission, cancellation, failed replacement, pressure, shutdown and final
+mesh/context/shape retirement.
 
 ## Unshareable presentation resources
 

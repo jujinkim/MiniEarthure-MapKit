@@ -1,5 +1,7 @@
 extends RefCounted
 ## Cell-local, opaque static instancing. Original mesh surfaces and transforms survive.
+const QUALITY := preload("./display_quality.gd")
+
 static func parts(template: Node3D) -> Array:
 	var result: Array = []
 	var pending: Array = [{"node": template, "transform": Transform3D.IDENTITY}]
@@ -27,6 +29,7 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 	# in dense cells; this path keeps the same meshes, materials and transform.
 	if pieces.is_empty() or count < 1: return {}
 	var groups: Array = []
+	var quality := QUALITY.active()
 	for piece: Dictionary in pieces:
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -42,7 +45,7 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 		node.cast_shadow = piece.shadow
 		var authored_bounds: AABB=piece.transform * piece.mesh.get_aabb()
 		node.set_meta("mapkit_decoration", not solid and authored_bounds.size.length() <= 6.0)
-		preload("./display_quality.gd").apply_node(node,preload("./display_quality.gd").active())
+		QUALITY.apply_node(node,quality)
 		parent.add_child(node)
 		if lease != null:
 			lease.track(multi)
@@ -52,6 +55,9 @@ static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounte
 
 static func append(group: Dictionary, transform: Transform3D, object_id: String, map_id := "") -> void:
 	var index := int(group.next)
+	var custom := Color(float((map_id+"/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0,0,0,1)
+	# Read once when an occluder is needed, never retain quality across placements.
+	var quality: Dictionary = {}
 	for part: Dictionary in group.groups:
 		var pose: Transform3D = transform * part.transform
 		part.multi.set_instance_transform(index, pose)
@@ -60,12 +66,13 @@ static func append(group: Dictionary, transform: Transform3D, object_id: String,
 		part.bounded = true
 		part.multi.custom_aabb = part.bounds.grow(.08) # bounded leaf motion at the highest tier
 		if bounds.size.length() > 6.0:
-			var occluder := preload("./display_quality.gd").occluder(part.multi.mesh,group.lease)
+			if quality.is_empty(): quality=QUALITY.active()
+			var occluder := QUALITY.occluder(part.multi.mesh,group.lease,quality)
 			if occluder != null:
 				occluder.transform = pose
 				part.node.add_child(occluder)
 		part.multi.set_instance_color(index,Color.WHITE)
-		part.multi.set_instance_custom_data(index,Color(float((map_id+"/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0,0,0,1))
+		part.multi.set_instance_custom_data(index,custom)
 		part.multi.visible_instance_count = index + 1
 	group.ids.append(object_id)
 	group.next = index + 1

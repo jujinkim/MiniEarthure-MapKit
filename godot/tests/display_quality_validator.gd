@@ -38,6 +38,7 @@ func run() -> void:
 	check(planner.upper_bound({"triangles":2,"objects":0})>=planner.estimate(chunk,0),"pre-generation allowance covers spatial batches and occluders")
 	var scene := Node3D.new();root.add_child(scene)
 	await tracked_quality()
+	await instance_quality()
 	occluder_reuse(scene)
 	var mesh := SphereMesh.new();mesh.radial_segments=48;mesh.rings=24
 	var lod := QUALITY.prepare_lods(mesh)
@@ -168,6 +169,68 @@ func tracked_quality() -> void:
 	RENDER.track_resources({},preview)
 	check(is_equal_approx(preview.lod_bias,QUALITY.active().lod_bias) and not preview.get_child(0).visible,"lease-free preview applies quality before returning")
 	preview.free()
+
+func instance_quality() -> void:
+	var template := Node3D.new();template.position=Vector3(1,0,2)
+	var branch := Node3D.new();branch.scale=Vector3(-1,1.5,1);template.add_child(branch)
+	for index in 3:
+		var piece := MeshInstance3D.new();piece.mesh=BoxMesh.new()
+		piece.mesh.size=Vector3(8,4,.5) if index<2 else Vector3.ONE
+		piece.position=Vector3(index*10,0,0)
+		var material := ShaderMaterial.new();material.shader=Shader.new()
+		material.shader.code="shader_type spatial; uniform int detail_quality = 1; uniform float wind_strength = 0.5;"
+		material.set_meta("mapkit_surface",true);material.set_meta("mapkit_opaque",true)
+		piece.material_override=material
+		branch.add_child(piece)
+	for level in 3:
+		var scene := Node3D.new();root.add_child(scene)
+		var lease := Lease.new()
+		QUALITY.current=QUALITY.profile(level)
+		var group := INSTANCES.begin(template,2,scene,lease,false)
+		check(group.groups.size()==3,"nested template emits each part once")
+		for part: Dictionary in group.groups:
+			var node: MultiMeshInstance3D=part.node
+			var decoration: bool=node.get_meta("mapkit_decoration")
+			check(is_equal_approx(node.lod_bias,QUALITY.current.lod_bias) and node.visibility_range_end==(QUALITY.current.decoration_distance if decoration else 0.0),"all new parts receive current LOD and decoration distance")
+			check(node.material_override.get_shader_parameter("detail_quality")==level and node.material_override.get_shader_parameter("wind_strength")==QUALITY.current.vegetation_motion,"all new parts receive current material quality")
+		# Zero, one and two placements exercise cancellation before/after append and completion.
+		for index in level:
+			QUALITY.current=QUALITY.profile((level+index+1)%3)
+			var pose := Transform3D(Basis(Vector3.UP,.37+index),Vector3(5+index*20,1,3))
+			var object_id := "object-%d"%index
+			INSTANCES.append(group,pose,object_id,"fixture-map")
+			var expected_seed := float(("fixture-map/"+object_id).sha256_text().substr(0,6).hex_to_int())/16777215.0
+			for part: Dictionary in group.groups:
+				var multi: MultiMesh=part.multi
+				check(multi.get_instance_transform(index).is_equal_approx(pose*part.transform),"every part retains nested reflection and placement transform")
+				check(multi.get_instance_color(index)==Color.WHITE and multi.get_instance_custom_data(index).is_equal_approx(Color(expected_seed,0,0,1)),"all parts retain the map/object seed and white tint")
+				check(multi.visible_instance_count==index+1,"each part publishes the same populated count")
+				if not part.node.get_meta("mapkit_decoration"):
+					var occluder: OccluderInstance3D=part.node.get_child(index)
+					check(occluder.visible==QUALITY.current.occlusion and occluder.transform.is_equal_approx(pose*part.transform),"new occluders read quality at placement and retain each part's pose")
+				else: check(part.node.get_child_count()==0,"small decoration skips occluder creation")
+				multi=null # Do not let the validator itself retain a placement borrower.
+			check(group.next==index+1 and group.ids[index]==object_id,"placement identity and progress remain per object")
+		for part: Dictionary in group.groups:
+			part.node.lod_bias=9.0
+			part.node.material_override.set_shader_parameter("detail_quality",-1)
+		QUALITY.apply_tree(scene,QUALITY.current)
+		for part: Dictionary in group.groups:
+			check(is_equal_approx(part.node.lod_bias,QUALITY.current.lod_bias) and part.node.material_override.get_shader_parameter("detail_quality")==QUALITY.current.material_detail,"live quality repairs existing part state at the same preset")
+			for occluder: OccluderInstance3D in part.node.get_children():
+				check(occluder.visible==QUALITY.current.occlusion,"live quality updates all earlier placements")
+		var held: MultiMesh=group.groups[0].multi
+		check(lease.refs[0].get_ref()==held and lease.refs[1].get_ref()==group.groups[0].node,"MultiMesh and node tracking order preserved")
+		# Drop test-owned part containers before awaiting resource retirement.
+		for part: Dictionary in group.groups: part.clear()
+		group.groups.clear()
+		scene.free();group.clear();lease.seal()
+		for _frame in 4: await process_frame
+		check(not lease.retired(),"retained MultiMesh keeps cancelled/completed group charged")
+		held=null
+		for _frame in 4: await process_frame
+		check(lease.retired(),"group retires with shared template alive: level=%d live=%s"%[level,lease.refs.filter(func(value): return value.get_ref()!=null).map(func(value): return value.get_ref().get_class())])
+	template.free()
 
 func occluder_reuse(scene: Node3D) -> void:
 	# Two walls and a lintel leave a central doorway, with indexed opaque faces.
