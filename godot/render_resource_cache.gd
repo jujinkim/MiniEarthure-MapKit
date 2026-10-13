@@ -187,7 +187,9 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			item.owned_mesh = item.lod_job.owned
 			item.occluder_arrays = item.lod_job.get("occluder_arrays",[])
 			item.erase("lod_job")
-			_track_node(item.lease,item.styling)
+			# Import already tracked the hierarchy and its bindings. LOD output
+			# preserves those material references; only its new mesh needs a lease.
+			if item.owned_mesh and item.lease != null: item.lease.track(item.styling.mesh)
 			item.stage = "materials"
 	elif stage == "materials":
 		var node: MeshInstance3D = item.styling
@@ -198,7 +200,8 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 				var copy_started := Time.get_ticks_usec()
 				node.mesh = node.mesh.duplicate()
 				QUALITY.observe_mesh(mesh_observer,"material_duplicate",copy_started)
-				_track_node(item.lease,node)
+				# Shallow duplication retains the tracked materials and textures.
+				if item.lease != null: item.lease.track(node.mesh)
 			item.material_surface = 0
 			# LOD output is final; admitted material steps only replace bindings.
 			item.material_count = node.mesh.get_surface_count()
@@ -338,6 +341,7 @@ static func _track_node(lease: RefCounted, node: Node) -> void:
 	if node is MeshInstance3D:
 		lease.track(node.mesh)
 		_track_material(lease, node.material_override)
+		_track_material(lease, node.material_overlay)
 		for i in node.mesh.get_surface_count():
 			_track_material(lease, node.mesh.surface_get_material(i))
 			_track_material(lease, node.get_surface_override_material(i))

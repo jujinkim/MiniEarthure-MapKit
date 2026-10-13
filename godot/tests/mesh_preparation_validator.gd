@@ -127,6 +127,8 @@ func run() -> void:
 		await cancel_at(boundary)
 	await borrowed_prepared_mesh()
 	await empty_prepared_mesh()
+	for prepared in [false,true]:
+		await replacement_tracking(prepared)
 	light_role_lookup()
 	await light_binding_snapshot()
 	await failed_light_import()
@@ -196,6 +198,63 @@ func empty_prepared_mesh() -> void:
 	cache.release(key);cache.shutdown()
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"empty prepared mesh retires its full reservation")
+
+func replacement_tracking(prepared: bool) -> void:
+	# Independent references must keep the complete asset charge after the
+	# hierarchy is gone, whether LOD output is new or a borrowed mesh is copied.
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,BoxMesh.new().get_mesh_arrays())
+	var source := StandardMaterial3D.new();source.normal_enabled=true;source.ao_enabled=true
+	var bitmaps: Array[Texture2D] = []
+	for slot in [BaseMaterial3D.TEXTURE_ALBEDO,BaseMaterial3D.TEXTURE_NORMAL,BaseMaterial3D.TEXTURE_AMBIENT_OCCLUSION,BaseMaterial3D.TEXTURE_ROUGHNESS,BaseMaterial3D.TEXTURE_METALLIC]:
+		var bitmap := ImageTexture.create_from_image(Image.create(2,2,false,Image.FORMAT_RGBA8))
+		source.set_texture(slot,bitmap);bitmaps.append(bitmap)
+	mesh.surface_set_material(0,source)
+	if prepared: mesh=QUALITY.prepare_lods(mesh)
+	var cache := seeded_cache(mesh)
+	var key: String=cache.entries.keys()[0]
+	var item: Dictionary=cache.entries[key]
+	var template: MeshInstance3D=item.template
+	var child := MeshInstance3D.new();child.mesh=mesh
+	var branch := Node3D.new();template.add_child(branch);branch.add_child(child)
+	var override := StandardMaterial3D.new();child.material_override=override
+	var overlay := StandardMaterial3D.new();child.material_overlay=overlay
+	var surface_override := StandardMaterial3D.new();child.set_surface_override_material(0,surface_override)
+	CACHE._track_node(item.lease,template)
+	var lease: Lease=item.lease
+	for bitmap: Texture2D in bitmaps:
+		check(lease.refs.any(func(ref): return ref.get_ref()==bitmap),"import tracks each of the five independent source bitmap slots")
+	check(lease.refs.any(func(ref): return ref.get_ref()==surface_override),"initial hierarchy tracks nested surface overrides")
+	var steps := 0
+	while item.stage!="done" and steps<100:
+		var stage: String=item.stage
+		var tracked := lease.refs.size()
+		cache.prepare_template(key,"fixture",ASSETS);steps+=1
+		if stage in ["lod_prepare","materials"]:
+			var added := lease.refs.slice(tracked)
+			check(added.size()<=1 and added.all(func(ref): return ref.get_ref() is Mesh),"mesh replacement never rewalks imported materials or children")
+	check(item.stage=="done","nested tracking fixture completes")
+	check(child.material_overlay==overlay and child.get_surface_override_material(0)==surface_override,"node overlay and surface override identities survive replacement")
+	var held_mesh: Mesh=child.mesh
+	var held_material: Material=template.mesh.surface_get_material(0)
+	var held_override: Material=child.material_override
+	var amount: int=item.bytes
+	cache.release(key);cache.shutdown()
+	mesh=null;source=null;override=null;item={}
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount+cache._context_bytes(),"replacement mesh and binding retain asset/context charges")
+	held_mesh=null;held_material=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount+cache._context_bytes(),"independent styled override retains asset/context charges")
+	held_override=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"original node bindings and source bitmaps retain the asset charge")
+	surface_override=null;bitmaps.clear()
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"independent overlay alone retains the full asset charge")
+	overlay=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"final overlay release retires the replacement lease")
 
 func instance_parts(mode: String) -> void:
 	var mesh := ArrayMesh.new()
