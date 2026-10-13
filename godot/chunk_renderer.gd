@@ -62,8 +62,11 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 		if not resources.begin_environment():
 			fail(job, "E_MEMORY_BUDGET", "Shared material tiles exceed memory allowance")
 			return job
+		var lamp_assets := {}
+		var has_light_bindings: bool = not resources.environment_profile.get("lights",[]).is_empty()
 		for object: Dictionary in view.objects:
 			var id := str(object.asset_id)
+			if has_light_bindings: lamp_assets[id] = true
 			if id == "builtin:tree" and not job.claims.has(id):
 				var key: String = resources.claim_tree_canopy()
 				if key.is_empty():
@@ -72,6 +75,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 				job.claims[id] = key
 			var group := _object_group(object)
 			job.counts[group] = int(job.counts.get(group, 0)) + 1
+		job.lamp_bindings = _lamp_bindings(resources.environment_profile,lamp_assets)
 	return job
 
 static func advance(job: Dictionary) -> bool:
@@ -215,7 +219,7 @@ static func _advance(job: Dictionary) -> bool:
 					if not job.instances[group].is_empty():
 						var transform := Transform3D(Basis(Vector3.UP, (float(object.quarter_turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0))), scene_position(object.position))
 						INSTANCES.append(job.instances[group], transform, str(object.id), str(presentation.get("map_id","")))
-						_environment_lamp(job,id,object,presentation)
+						_environment_lamp(job,id,object)
 						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
 				var pending: Array = [instance]
@@ -228,7 +232,7 @@ static func _advance(job: Dictionary) -> bool:
 							var occluder := QUALITY.occluder(piece.mesh,job.lease)
 							if occluder != null: piece.add_child(occluder)
 					pending.append_array(piece.get_children())
-				_environment_lamp(job,id,object,presentation)
+				_environment_lamp(job,id,object)
 				var anchor := Node3D.new()
 				anchor.set_meta("mapkit_asset_id", id)
 				anchor.set_meta("mapkit_object_id", str(object.id))
@@ -364,6 +368,7 @@ static func dispose(job: Dictionary) -> void:
 	job.asset_materials = {}
 	job.materials = {}
 	job.chunk = {}
+	job.erase("lamp_bindings")
 	job.erase("urban_shader")
 	if job.get("lease") != null:
 		job.lease.seal()
@@ -464,22 +469,34 @@ static func surface_material(key: String, presentation: Dictionary, shader: Shad
 		if name != "surface": material.set_shader_parameter(name, style[name])
 	return material
 
-static func _environment_lamp(job: Dictionary, id: String, object: Dictionary, presentation: Dictionary) -> void:
-	var resources: RefCounted = job.get("resources")
-	if resources == null: return
-	for binding: Dictionary in resources.environment_profile.get("lights",[]):
-		if binding.asset_id != id or binding.get("bulb_materials",[]).is_empty(): continue
-		var lamps: Array = job.root.get_meta("environment_lamps",[])
-		var rotation := Basis(Vector3.UP,(float(object.quarter_turns)*PI/2.0+deg_to_rad(float(object.get("yaw_offset_mdeg",0))/1000.0)))
+static func _lamp_bindings(profile: Dictionary, assets: Dictionary) -> Dictionary:
+	# Cell-local value records: another cell may replace the shared cache profile
+	# between placements. Only placed assets consume the per-object allowance.
+	var result := {}
+	for binding: Dictionary in profile.get("lights",[]):
+		if not assets.has(str(binding.asset_id)) or binding.get("bulb_materials",[]).is_empty(): continue
 		var point: Array = binding.position_cm
-		var position: Vector3 = scene_position(object.position)+rotation*Vector3(point[0],point[1],-point[2])*0.01
 		var rgb: Array = binding.color
-		lamps.append({"position":position,"basis":Basis.looking_at(Vector3.DOWN,Vector3.FORWARD),
+		var lamp := {"offset_cm":Vector3(point[0],point[1],-point[2]),"basis":Basis.looking_at(Vector3.DOWN,Vector3.FORWARD),
 			"range":float(binding.range_cm)*0.01*STREETLIGHT_SPREAD,"angle":STREETLIGHT_ANGLE,
 			"energy":2.0,"attenuation":0.0,"angle_attenuation":0.25,
-			"color":Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0)})
-		job.root.set_meta("environment_lamps",lamps)
-		job.root.add_to_group("mapkit_environment_cells")
+			"color":Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0)}
+		lamp.make_read_only()
+		result[str(binding.asset_id)] = lamp
+	return result
+
+static func _environment_lamp(job: Dictionary, id: String, object: Dictionary) -> void:
+	var bindings: Dictionary = job.get("lamp_bindings",{})
+	if not bindings.has(id): return
+	var lamp: Dictionary = bindings[id].duplicate()
+	var rotation := Basis(Vector3.UP,(float(object.quarter_turns)*PI/2.0+deg_to_rad(float(object.get("yaw_offset_mdeg",0))/1000.0)))
+	# Preserve rotation-before-centimetre conversion for authored mount positions.
+	lamp.position = scene_position(object.position)+rotation*lamp.offset_cm*0.01
+	lamp.erase("offset_cm")
+	var lamps: Array = job.root.get_meta("environment_lamps",[])
+	lamps.append(lamp)
+	job.root.set_meta("environment_lamps",lamps)
+	job.root.add_to_group("mapkit_environment_cells")
 
 ## Only newly generated urban/RC bindings may defer detail quality. Borrowed
 ## assets and imported wrappers keep their normal preparation and live updates.

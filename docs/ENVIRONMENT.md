@@ -22,6 +22,11 @@ standalone Editor previews use their own state.
 - A session-owned 2×1 float texture carries wetness, snow and time. Opaque surfaces
   retain shared textures and instancing. Template caching is bounded to 128MiB
   and charged to the consumer budget; each key includes the asset's light binding.
+- Each cell prepares lamp descriptors once for its placed assets with bulbs.
+  Placements reuse mounting offsets, colour, range and downward basis, then own
+  independent transformed records. Other cells' profile changes cannot alter them.
+  Completion and cancellation discard descriptors within the per-object allowance;
+  the cell's final lamp metadata follows its scene lifetime.
 - `scripts/atmosphere_assets.py` creates separate material assets. Original GLB
   images, UVs, geometry, collision, attribution, sources and generated packages
   remain intact. [Renderer memory](../RENDER_MEMORY.md) owns resource lifetimes.
@@ -82,6 +87,7 @@ grants no loading readiness. Standalone Editor defaults to weather fog.
 
 `environment_contract` covers authoring, canonical identity, roundtrip and invalid
 inputs. `light_group_validator` covers ordering, atomic groups, culling, reentry,
-static fallback, falloff reset and pool bounds. Weather, splash pool, celestial
-occlusion and depth-fog checks run in Godot 4.7.2. Aesthetics and device
+static fallback, falloff reset and pool bounds. It also checks interleaved cell
+profiles, mounted offsets/yaw, opaque/transparent placements and cancellation/retirement.
+Weather, splash pool, celestial occlusion and depth-fog checks run in Godot 4.7.2. Aesthetics and device
 performance are user checks.
