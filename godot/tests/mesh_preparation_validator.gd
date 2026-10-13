@@ -129,6 +129,8 @@ func run() -> void:
 	await empty_prepared_mesh()
 	for prepared in [false,true]:
 		await replacement_tracking(prepared)
+	for complete in [false,true]:
+		await pending_surface_tracking(complete)
 	light_role_lookup()
 	await light_binding_snapshot()
 	await failed_light_import()
@@ -255,6 +257,42 @@ func replacement_tracking(prepared: bool) -> void:
 	overlay=null
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"final overlay release retires the replacement lease")
+
+func pending_surface_tracking(complete: bool) -> void:
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,BoxMesh.new().get_mesh_arrays())
+	var cache := seeded_cache(mesh)
+	var key: String=cache.entries.keys()[0]
+	var item: Dictionary=cache.entries[key]
+	var source := StandardMaterial3D.new();source.normal_enabled=true;source.ao_enabled=true
+	var bitmaps: Array[Texture2D] = []
+	for slot in [BaseMaterial3D.TEXTURE_ALBEDO,BaseMaterial3D.TEXTURE_NORMAL,BaseMaterial3D.TEXTURE_AMBIENT_OCCLUSION,BaseMaterial3D.TEXTURE_ROUGHNESS,BaseMaterial3D.TEXTURE_METALLIC]:
+		var bitmap := ImageTexture.create_from_image(Image.create(2,2,false,Image.FORMAT_RGBA8))
+		source.set_texture(slot,bitmap);bitmaps.append(bitmap)
+	var pending: Material=cache.environment_context().import_surface(source,0,BINDING)
+	mesh.surface_set_material(0,pending);source=null
+	CACHE._track_material(item.lease,pending)
+	check(pending.shader==null,"pending bitmap fixture starts before shader activation")
+	var steps := 0
+	while item.stage!="material_surface" and steps<30:
+		cache.prepare_template(key,"fixture",ASSETS);steps+=1
+	check(item.stage=="material_surface","pending binding reaches its own admitted step")
+	var tracked: int=item.lease.refs.size()
+	cache.prepare_template(key,"fixture",ASSETS)
+	check(item.lease.refs.size()==tracked and item.styling.mesh.surface_get_material(0)==pending,"shader activation keeps the tracked material and all five bitmap identities")
+	check(pending.shader==cache.environment_context().shader and not pending.has_meta("mapkit_pending_surface"),"unchanged binding still activates its shared shader")
+	if complete:
+		while not cache.prepare_template(key,"fixture",ASSETS): pass
+	var amount: int=item.bytes
+	cache.release(key);cache.shutdown();mesh=null;item={}
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount+cache._context_bytes(),"independent activated binding retains asset and context after cancel/completion")
+	pending=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"source bitmaps alone retain the asset without retaining the context")
+	bitmaps.clear()
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"last source bitmap returns the pending binding reservation")
 
 func instance_parts(mode: String) -> void:
 	var mesh := ArrayMesh.new()
@@ -488,8 +526,13 @@ func imported_materials() -> void:
 	var operations := []
 	cache.mesh_observer=func(phase,_elapsed,surface): operations.append([phase,surface])
 	while cache.entries[key].stage!="done":
+		var item: Dictionary=cache.entries[key]
+		var stage: String=item.stage
+		var tracked: int=item.lease.refs.size()
 		operations.clear();cache.prepare_template(key,"fixture",assets)
 		check(operations.filter(func(op): return op[0]=="material_bind").size()<=1,"imported shader activation stays surface-admitted")
+		if stage=="material_surface":
+			check(item.lease.refs.size()==tracked,"imported pending and transparent bindings retain their initial resource tracking")
 	cache.mesh_observer=Callable()
 	var actual_nodes := meshes(cache.entries[key].template)
 	var expected_nodes := meshes(expected)

@@ -164,14 +164,19 @@ static func surface_role(source: Material, binding: Dictionary, index: int, role
 	return 1 if binding.get("window_materials",[]).any(func(value): return int(value)==material_index) else (2 if binding.get("bulb_materials",[]).any(func(value): return int(value)==material_index) else 0)
 
 ## Mutates only a caller-owned unpublished mesh; previews still use style_mesh.
-func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := false, observer := Callable(), roles: Variant = null) -> void:
+## Returns whether the binding changed. In-place shader activation and transparent
+## passthrough retain the source bitmaps already tracked by immutable templates.
+func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := false, observer := Callable(), roles: Variant = null) -> bool:
 	var started := Time.get_ticks_usec()
 	var source := mesh.surface_get_material(index)
-	mesh.surface_set_material(index, surface_material(source,surface_role(source,binding,index,roles),instances))
+	var material := surface_material(source,surface_role(source,binding,index,roles),instances)
+	var replaced := material != source
+	mesh.surface_set_material(index, material)
 	preload("./display_quality.gd").observe_mesh(observer,"material_bind",started,index)
 	started = Time.get_ticks_usec()
 	source = null
 	preload("./display_quality.gd").observe_mesh(observer,"material_source_release",started,index)
+	return replaced
 
 func track(lease: RefCounted) -> void:
 	if lease == null: return

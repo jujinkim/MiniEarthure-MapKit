@@ -1,162 +1,138 @@
 # Incremental renderer resource ownership
 
-The fifth argument to `chunk_renderer.begin(chunk, parent, reserve, planned_bytes,
-resources)` is a session `render_resource_cache.gd` context. Shorter calls
-and synchronous `attach` support standalone previews. Callers own game admission.
+`chunk_renderer.begin(chunk, parent, reserve, planned_bytes, resources)` accepts a
+session `render_resource_cache.gd`. Shorter calls and `attach` support previews;
+callers own game admission.
 
 ## Planning and shared resources
 
-`render_memory.gd` plans validated output without allocating GPU resources.
-`supports_batches` excludes image proxies whose alpha/order needs individual rendering.
-`prepare_batches` groups opaque triangle surfaces by material and 32 m spatial bucket into at most 512
-triangles, preserving coordinates, normals, UVs, winding and hidden-proxy exclusion.
-Its packed buffers cost 96 bytes per visible triangle plus bounded grouping metadata.
-The caller must account for source and preparation buffers before worker execution.
-An empty batch list must not replace an unsupported source; use `supports_batches`.
+`render_memory.gd` plans without GPU allocation. `supports_batches` excludes image
+proxies needing individual alpha/order. `prepare_batches` groups opaque faces by
+material and 32 m bucket, at most 512 triangles, preserving geometry/UVs/winding
+and hidden-proxy exclusion. Packed buffers cost 96 bytes/visible triangle plus
+bounded metadata; callers admit source/preparation before worker execution.
+Check support before using empty batch results.
 
-`estimate` reserves 64 KiB per job (another 64 KiB for urban surfaces), 768 bytes per
-visible triangle, 12 KiB per batch, 64 KiB per object and the validated asset allowance.
-Hidden proxies allocate no visible batches. These are logical bounds, not measured
-allocations. `upper_bound` applies before generation; exact plans are admitted after
-worker completion and before rendering. Compressed length is not a RAM estimate.
+`estimate` reserves 64 KiB/job (+64 KiB urban), 768 bytes/visible triangle,
+12 KiB/batch, 64 KiB/object and validated asset allowances. Hidden proxies have
+no visible batches. These are logical bounds, not measured allocations or compressed
+sizes. `upper_bound` precedes generation; exact plans follow worker completion
+before rendering.
 
-Current v1 native presentation records add `content_hash` and `memory_bytes` from the
-validated package. They are excluded from package serialization/generated hashes.
-Cache keys include content, declarative materials and referenced image content.
-Each new asset claim snapshots the light binding used by its key and builds a
-read-only material-role lookup. Import and all mesh material steps reuse it even
-when another cell replaces the current profile or authored lists change. Window
-roles take precedence; material metadata takes precedence over surface indices.
-Unrelated assets and absent bindings remain independent. Direct preview calls
-read their current binding. Completion, failed import and eviction discard this
-preparation-only metadata. At most 64 window and 16 bulb indices fit within the
-existing material/clock allowance.
+Current v1 presentation records carry validated `content_hash` and `memory_bytes`,
+excluded from package serialization/generated hashes. Cache keys cover content,
+declarative materials, referenced images and the asset's light binding. Each claim
+snapshots that binding and a read-only role lookup, isolating later profile/list
+edits. Windows override bulbs; material metadata overrides surface indices.
+Unrelated/absent bindings stay independent; previews read current bindings.
+Completion, failed import and eviction discard this metadata. The existing
+material/clock allowance covers up to 64 window and 16 bulb indices.
+
 Claims precede import; the default cap is 256 entries/128 MiB including shaders.
-Concurrent claims share one import/preparation per entry. Texture context, import,
-each LOD input surface, LOD generation/upload, each material binding, occluder
-preparation, instance-part extraction and MultiMesh setup/placement are separate admitted steps.
-Synchronous engine calls cannot be preempted; [diagnostics](docs/RENDER_DIAGNOSTICS.md)
-report phase total/peak and attachment/release costs.
-With a ready context, GLB import captures opaque parameters into shaderless
-bindings before upload and retires original materials. Each unpublished surface
-activates the shared shader in its admitted step. Colours, texture channels/UVs,
-light roles and transparency survive. Pending bindings retain full template/context
-leases through cancellation. Private LOD outputs bind directly; borrowed meshes
-and previews copy bindings. Per-node classification reads mesh bounds once in its
-admitted call. Once LOD output is final, surface steps share its fixed surface count
-until material completion or eviction. Placements require complete templates.
-Import tracks the whole hierarchy, including overrides, overlays and source
-bitmaps. LOD output and shallow mesh copies retain those bindings, so replacement
-tracks only the new mesh. Each newly styled binding is still tracked separately;
-mutable preview tracking remains unconditional.
-LOD jobs retain decoded positions/indices until occluder preparation, avoiding a
-second GPU readback with identical faces. Raw GLTF arrays precede compression and
-cannot replace decoded inputs without changing geometry/LOD. Scratch uses the
-doubled asset allowance; eviction clears it before sealing the full template lease.
-Tile decode and mipmap/upload use separate steps. Observers cannot drain preparation
-or read a partial context. Partial resources retain the full lease until retirement.
+Concurrent claims share preparation. Context setup, import, each LOD input surface,
+LOD generation/upload, each material binding, occluders, part extraction and
+MultiMesh setup/placement are separately admitted. Tile decode and mipmap/upload
+also yield separately. Synchronous engine calls cannot be preempted;
+[diagnostics](docs/RENDER_DIAGNOSTICS.md) report phase total/peak and attachment/release costs.
+Observers cannot drain preparation or expose partial contexts/templates.
 
-Built-in trees share an immutable material-free canopy per session cache. Its
-128 KiB claim covers sphere/importer scratch, CPU/GPU output and LOD indices.
-Creation, readback, LOD generation and upload are separately admitted. Nodes,
-transforms, visibility and final leaf bindings remain independent. Fresh leaves
-receive detail/wind quality once with node LOD/distance before publication in the
-same call; live updates remain unconditional. Bindings use the cell allowance;
-their last borrower retains shared shader/textures. Previews prepare locally.
+With a ready context, import captures opaque parameters in shaderless bindings
+and retires originals before upload. Each surface activates the shared shader in
+its admitted step, preserving colours, texture channels/UVs, roles and transparency.
+Pending bindings retain template/context leases through cancellation. Private LOD
+outputs bind directly; borrowed meshes/previews copy. Node classification reads
+bounds once; material steps share the final surface count until completion/eviction.
+Import tracks the hierarchy, overrides, overlays and source bitmaps. LOD output and
+shallow copies retain bindings, so replacement tracks only the new mesh. Styling
+reports binding replacement: new bindings are tracked; shader activation and
+transparent passthrough retain import tracking. The context tracks the shared
+shader. Mutable preview tracking remains unconditional.
 
-Opaque static models use cell-local MultiMesh instances, preserving hierarchy,
-surfaces, overrides, colours and shadows. Capacity counts cover GLB placements;
-spatial group lookup occurs after template preparation in shared attachment.
-Built-in objects, image proxies and standalone previews need no group keys.
-Immutable templates extract a read-only
-part list after all LOD/material/occluder work, including empty fallback results.
-Spatial groups borrow that list without traversing the hierarchy again. Records
-borrow tracked meshes/materials within the doubled native node allowance and are
-cleared on eviction; partial or closed caches expose no parts. Mutable standalone
-templates are inspected on every setup. Shared parts retain mesh-local AABBs for
-setup/placement; composed transforms still precede bounds expansion and only placed
-instances enter the merged bounds. Mutable preview meshes refresh bounds at placement.
-Each setup shares one quality snapshot; each
-placement computes its object seed once and reads occluder quality once if needed.
-The next call reads current quality again. Transparent models, overlays and
-per-surface overrides use ordinary instances. Their hierarchy shares one object
-seed calculation while each mesh keeps its independent material bindings.
-Each ordinary placement shares one current quality snapshot between occluder
-creation and final tree application, refreshing it on the next admitted call.
-Mounted lamps reuse the visual placement transform in both paths; authored
-centimetre offsets are still rotated before metre conversion and translation.
-LOD indices are generated once per
-template. The validated `solid` flag/cache key preserves collidable fences, walls
-and props at every preset. Only assets without collision at/above their origin
-may use decoration distance (buried root beds qualify), with 8 m hysteresis.
-Structures retire with the cell/frustum. MultiMesh bounds include only
-populated transformed instances, not unused capacity, with an 8 cm margin for leaf
-motion. Leaf faces never act as static occluders. Actual upright opaque
-triangles (at most 64, inset 1 cm) form occluders; an AABB never fills an opening.
-Immutable templates prepare each shape once after LOD/material binding, caching
-empty results too. Placements own occluder nodes/transforms/visibility; mutable
-standalone meshes derive faces on demand. Preparation is separately admitted within
-the template allowance and has its own phase total/peak.
+LOD jobs retain decoded positions/indices through occluder preparation, avoiding
+another GPU readback. Raw GLTF arrays precede compression and cannot substitute
+without changing geometry/LOD. Scratch uses the doubled asset allowance; eviction
+clears it before sealing the full lease. Partial resources stay charged until retirement.
 
-Each multi-material mesh is emitted once. Single-object groups also use MultiMesh
-custom data; exceptional overrides get a private seed binding with shared
-shaders/textures, avoiding per-instance shader slot limits. Distance classification
-includes authored root scale.
+Trees share a material-free canopy per session: 128 KiB covers sphere/importer
+scratch, CPU/GPU output and LOD indices. Creation, readback, LOD generation and
+upload are separately admitted. Nodes, transforms, visibility and leaf bindings
+stay independent. Fresh leaves receive detail/wind and node quality once before
+publication; live updates remain unconditional. Cell-owned bindings retain shared
+shader/textures through the last borrower. Previews prepare locally.
+
+Opaque static models use cell-local MultiMeshes, preserving hierarchy, surfaces,
+overrides, colours and shadows. GLB capacity/group lookup excludes built-ins, image
+proxies and previews; shared group lookup follows template preparation. After
+LOD/material/occluder work, immutable templates publish read-only part lists,
+including empty fallback results. Groups borrow tracked meshes/materials within
+the doubled native node allowance. Eviction clears lists; partial/closed caches
+expose none. Mutable previews inspect parts at setup and refresh bounds at placement.
+Shared parts cache mesh-local AABBs. Composed transforms precede bounds expansion;
+only populated instances enter merged bounds, with 8 cm leaf-motion margin.
+
+Each setup shares one quality snapshot. Each placement computes its seed once and
+reads occluder quality once if needed; subsequent calls refresh quality. Transparent
+models, overlays and surface overrides use ordinary instances with independent
+mesh bindings, one hierarchy seed and one quality snapshot for occluders/tree
+application. Both paths reuse visual transforms for lamps: rotate authored cm
+offsets, convert to metres, then translate. Each multi-material mesh emits once;
+single-object groups use MultiMesh custom data. Exceptional overrides use private
+seed bindings with shared shaders/textures, avoiding instance shader slot limits.
+
+LOD indices are generated once per template. The validated `solid` flag/cache key
+preserves collidable fences, walls and props at every preset. Only assets without
+collision at/above their origin may use decoration distance (buried root beds
+qualify), with 8 m hysteresis. Classification includes authored root scale.
+Structures retire with the cell/frustum. Occluders use actual upright opaque
+triangles (at most 64, inset 1 cm), excluding leaves and preserving openings.
+Immutable templates prepare shapes, including empty results, once after binding
+in a separate admitted phase within their allowance. Placements own occluder
+nodes/transforms/visibility; mutable previews derive current faces on demand.
 
 ## Lifetimes
 
-The cell lease subtracts only the separately admitted shared asset allowance.
-Shared resources have their own lease. Instance nodes/MultiMeshes and private
-surface meshes/materials belong to the cell. Worker/native source owners remain
-independent. The cache retains the import peak until actual resource retirement.
+Cell leases subtract only separately admitted shared allowances. Instance
+nodes/MultiMeshes and private meshes/materials belong to the cell; shared resources
+and worker/native sources have independent owners. Import peak stays charged until
+retirement. Canopy claims supplement per-object allowances; shared meshes never
+hold cell leases. Evicted copies remain charged through the last mesh/importer borrower.
+
 Fresh generated opaque and urban/RC bindings receive quality when their node is
-tracked, in the same admitted call before attachment. Reused cell bindings still
-receive live quality on every attachment; direct material factory results are ready for use.
-Resource tracking takes one quality snapshot for its synchronous node traversal,
-including newly created occluders, and reads it again on the next call. Lease
-callbacks only record ownership; they must not change display policy. Nodes and
-materials are still updated before tracking, with occluders created before child traversal.
-Canopy claims supplement the per-object allowance. Shared meshes do not hold cell
-leases: other trees and the warm cache cannot prevent a dead cell's retirement.
-Evicted copies stay charged through the last mesh/importer borrower.
+tracked before attachment. Reused bindings receive live quality on every attachment;
+direct factory results are ready. A synchronous traversal shares one quality
+snapshot, including new occluders, and refreshes next call. Lease callbacks only
+record ownership. Node/material updates precede tracking; occluders precede child traversal.
 
 Claims pin templates during attachment. Completion/cancel releases pins once and
-clears source records. Unpinned templates may be evicted; meshes, materials,
-textures and independently retained occluder shapes keep leases charged through
-their last borrower. Shutdown seals these leases, including the shared shader.
-The lease provider enforces last-borrower retirement. Completed/failed jobs may
-retain an invalid root handle for diagnostics.
+clears source records. Unpinned templates can be evicted; independent mesh,
+material, texture and occluder borrowers retain charges. Shutdown seals leases,
+including the shader; the provider enforces final-borrower retirement. Completed/
+failed jobs may retain invalid root handles for diagnostics.
 
-`MapKitBridge.cell_window` and estimates provide a conservative horizontal visual
-anchor margin, including transformed GLB bounds independently of collision proxies.
+`MapKitBridge.cell_window` and estimates include a conservative horizontal visual
+anchor margin from transformed GLB bounds, independently of collision proxies.
 
 `scripts/verify_godot_layout.py --godot <Godot> --probe renderer --probe assets
---probe binding` checks relocation, hashes, assets and batching. The rendered
-[material validators](docs/RICHER_MATERIALS.md#display-quality) cover node quality,
-geometry/LOD/material output, phased preparation and shared borrowers. Caller checks
-also cover part order, nested transforms, multi-surface/override fallback, empty
-result reuse, composed/merged bounds, mutable previews, claimed light roles across
-profile changes and final mesh/material retirement. Consumer checks
-cover admission, cancellation, failed replacement, pressure, shutdown and final
-mesh/context/shape retirement.
+--probe binding` checks relocation, hashes, assets and batching. Rendered
+[material validators](docs/RICHER_MATERIALS.md#display-quality) cover output,
+phased preparation and previews. Ownership regressions cover bitmap/overlay
+tracking, replacement meshes, shader activation, cancellation and independent
+borrowers. Consumers check admission, failed replacement, pressure and shutdown.
 
 ## Unshareable presentation resources
 
-Views without validated content hashes and positive memory bounds retain their
-full per-cell reservation and job-local importer ownership. A supplied session
-cache cannot subtract an unproven shared allowance. This is a resource-accounting
-rule within current v1.
+Views without validated content hashes and positive memory bounds retain full
+cell reservations and job-local importers; caches cannot subtract unproven allowances.
 
 ## Shared miniature material tiles
 
-The weather context reserves 4.75/16/61 MiB for ten 128/256/512 px tiles, mipmaps
-and CPU/GPU/retirement overlap, including diagnostics without admission callbacks.
-All five bitmap slots join asset-lease tracking. See [materials](docs/RICHER_MATERIALS.md).
+Weather reserves 4.75/16/61 MiB for ten 128/256/512 px tiles and CPU/GPU/mipmap/
+retirement overlap, even without admission callbacks. All five source bitmap
+slots join asset leases. See [materials](docs/RICHER_MATERIALS.md).
 
 ## LOD and occlusion admission
 
-Before import/LOD generation, each template reserves twice the native asset bound
-plus 128 KiB for source/output overlap and LOD indices. Batch/object allowances
-above include occluder arrays/nodes and apply to `upper_bound`. Profile changes reuse
-map textures. Consumer retirement grace remains charged; display quality does not
-affect physics, AI, scheduling authority or network data.
+Before import/LOD work, templates reserve twice the native bound plus 128 KiB
+for overlap/LOD indices. Batch/object allowances include occluder arrays/nodes
+in `upper_bound`. Profile changes reuse textures; retirement grace stays charged.
+Display quality never changes physics, AI, scheduling authority or network data.

@@ -214,12 +214,14 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		var index: int = item.material_surface
 		if index < item.material_count:
 			var style_started := Time.get_ticks_usec()
-			_environment.style_surface(node.mesh,item.light_binding,index,false,mesh_observer,item.light_roles)
+			var replaced: bool = _environment.style_surface(node.mesh,item.light_binding,index,false,mesh_observer,item.light_roles)
 			# Include callee-local retirement after its inner binding timer returns.
 			QUALITY.observe_mesh(mesh_observer,"material_style",style_started,index)
 			var track_started := Time.get_ticks_usec()
 			var material: Material = node.mesh.surface_get_material(index)
-			_track_material(item.lease,material)
+			# Pending shader activation and passthrough keep the imported binding
+			# and source bitmaps. The context already owns the activated shader.
+			if replaced: _track_material(item.lease,material)
 			QUALITY.observe_mesh(mesh_observer,"material_track",track_started,index)
 			item.water = item.water and material != null and material.get_meta("mapkit_water",false)
 			item.material_surface += 1
