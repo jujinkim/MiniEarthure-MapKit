@@ -36,6 +36,7 @@ func geometry(mesh: Mesh) -> Array:
 
 func run() -> void:
 	await leaf_bindings()
+	await attachment_quality()
 	await preparation()
 	for boundary in ["canopy_source","surface","generate","get_mesh","done"]:
 		await cancel_at(boundary)
@@ -214,7 +215,46 @@ func attachment() -> void:
 	RENDER.cancel(preview); parent.queue_free()
 	await process_frame
 
-func pixels(canopy: MeshInstance3D, cache: RefCounted) -> void:
+func attachment_quality() -> void:
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	cache.environment_profile = {"lights":[]}
+	cache.quality_profile = QUALITY.profile(0)
+	for prepared in [false,true]:
+		for level in 3:
+			QUALITY.current = QUALITY.profile(level)
+			var parent := Node3D.new(); root.add_child(parent)
+			var chunk := fixture(prepared)
+			var job := RENDER.begin(chunk,parent,func(bytes): return Lease.new(bytes),RENDER.PLAN.estimate(chunk,0),cache)
+			var count := 0
+			while not job.done:
+				RENDER.advance(job)
+				if job.root.get_child_count() <= count: continue
+				count = job.root.get_child_count()
+				var node: MeshInstance3D = job.root.get_child(count-1)
+				if not node.get_meta("mapkit_decoration",false): continue
+				var value := QUALITY.active()
+				compare_material(node.material_override,reference_leaf(cache),"new attachment %s/%d/%d"%[prepared,level,count])
+				check(is_equal_approx(node.lod_bias,float(value.lod_bias)) and node.visibility_range_end == value.decoration_distance and node.visibility_range_end_margin == 8.0,"fresh node quality before publication: lod=%s/%s distance=%s/%s margin=%s"%[node.lod_bias,value.lod_bias,node.visibility_range_end,value.decoration_distance,node.visibility_range_end_margin])
+				# Change the active preset between admitted placements, not just jobs.
+				QUALITY.current = QUALITY.profile((int(value.level)+1)%3)
+			check(job.error.is_empty() and count == 4,"quality-switch attachment completes: count=%d error=%s"%[count,job.error])
+			var first: MeshInstance3D = job.root.get_child(1)
+			QUALITY.current = QUALITY.profile(level)
+			await pixels(first,cache,level)
+			# A remembered preset must never suppress repair of external edits.
+			first.material_override.set_shader_parameter("detail_quality",-7)
+			first.material_override.set_shader_parameter("wind_strength",-7.0)
+			first.material_override.set_shader_parameter("base_color",Color.RED)
+			QUALITY.apply_node(first,QUALITY.active())
+			check(first.material_override.get_shader_parameter("detail_quality") == level and first.material_override.get_shader_parameter("wind_strength") == float(QUALITY.active().vegetation_motion),"same-preset update repairs externally edited quality")
+			check(first.material_override.get_shader_parameter("base_color") == Color.RED,"quality update preserves independent appearance edits")
+			first = null; RENDER.cancel(job); parent.queue_free()
+			for _frame in 4: await process_frame
+	cache.shutdown()
+	for _frame in 4: await process_frame
+	check(cache.bytes() == 0,"quality-switch attachments release shared resources")
+
+func pixels(canopy: MeshInstance3D, cache: RefCounted, initial_level := -1) -> void:
 	# Compare the same rendered frame: leaf motion intentionally depends on TIME.
 	var viewports := []; var nodes := []
 	for original in [false,true]:
@@ -230,8 +270,10 @@ func pixels(canopy: MeshInstance3D, cache: RefCounted) -> void:
 		var camera := Camera3D.new(); viewport.add_child(camera)
 		camera.position = Vector3(5,3,7); camera.look_at(Vector3.ZERO); camera.current = true
 		var light := DirectionalLight3D.new(); viewport.add_child(light); light.rotation_degrees = Vector3(-40,-30,0)
-	for level in 3:
-		for node: MeshInstance3D in nodes: QUALITY.apply_node(node,QUALITY.profile(level))
+	for level in ([initial_level] if initial_level >= 0 else [0,1,2]):
+		# The initial-attachment comparison must not repair the candidate first.
+		for index in nodes.size():
+			if initial_level < 0 or index == 1: QUALITY.apply_node(nodes[index],QUALITY.profile(level))
 		for _frame in 3: await process_frame
 		await RenderingServer.frame_post_draw
 		var actual: Image = viewports[0].get_texture().get_image()

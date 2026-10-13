@@ -96,22 +96,25 @@ func surface_material(source: Material, role: int, use_instances := false, defer
 
 ## Generated opaque faces already know their appearance. No temporary imported
 ## material, texture scan or identity-cache entry is needed; the cell owns this binding.
-func generated_material(color: Color, kind: String, metallic := 0.0, roughness := 0.9) -> ShaderMaterial:
+## Deferred quality is only for a fresh binding whose caller applies node quality
+## synchronously before publication. Existing or borrowed bindings must use live updates.
+func generated_material(color: Color, kind: String, metallic := 0.0, roughness := 0.9, defer_quality := false) -> ShaderMaterial:
 	var result := ShaderMaterial.new()
 	result.shader = shader
 	result.set_shader_parameter("environment_data",texture)
 	result.set_shader_parameter("base_color",color)
 	result.set_shader_parameter("roughness",roughness)
 	result.set_shader_parameter("metallic",metallic)
-	_finish_surface(result,kind)
+	_finish_surface(result,kind,defer_quality)
 	return result
 
-func _finish_surface(result: ShaderMaterial, kind: String) -> void:
-	bind_detail(result,kind)
+func _finish_surface(result: ShaderMaterial, kind: String, defer_quality := false) -> void:
+	bind_detail(result,kind,not defer_quality)
 	result.set_meta("mapkit_surface",true)
 	result.set_meta("mapkit_vegetation",kind == "leaf")
 	result.set_shader_parameter("vegetation",kind == "leaf")
-	preload("./display_quality.gd").apply_material(result,preload("./display_quality.gd").active())
+	if not defer_quality:
+		preload("./display_quality.gd").apply_material(result,preload("./display_quality.gd").active())
 	result.set_shader_parameter("terrain_surface",kind in ["grass","earth"])
 	if kind.begins_with("water_"):
 		result.set_shader_parameter("water_kind",1 if kind == "water_flow" else 2)
@@ -121,10 +124,11 @@ func _finish_surface(result: ShaderMaterial, kind: String) -> void:
 static func channel(value: int) -> Vector4:
 	return [Vector4(1,0,0,0),Vector4(0,1,0,0),Vector4(0,0,1,0),Vector4(0,0,0,1),Vector4(0.333333,0.333333,0.333333,0)][clampi(value,0,4)]
 
-func bind_detail(material: ShaderMaterial, kind: String) -> void:
+func bind_detail(material: ShaderMaterial, kind: String, apply_quality := true) -> void:
 	if not tiles.has(kind): return
 	material.set_meta("mapkit_detail",true)
-	material.set_shader_parameter("detail_quality",int(preload("./display_quality.gd").active().material_detail))
+	if apply_quality:
+		material.set_shader_parameter("detail_quality",int(preload("./display_quality.gd").active().material_detail))
 	material.set_shader_parameter("detail_enabled",true)
 	material.set_shader_parameter("detail_tile",tiles[kind])
 	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass","metal","leaf"] else 1.0)

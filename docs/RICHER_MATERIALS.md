@@ -38,6 +38,11 @@ Built-in canopy leaves also create final bindings directly, with their own colou
 source roughness of 1.0, leaf detail and wind role. The shared shader retains the
 wrapper's double-sided rendering. Every canopy owns an independent mutable binding;
 its shader/textures keep the shared context charged through the last borrower.
+Fresh canopy attachments defer detail/wind quality until their node is tracked in
+the same admitted call, before publication. This applies the active preset once;
+LOD and decoration distance still update with it. Direct material factory calls
+remain ready for use. Live updates always reapply quality, including after external
+uniform edits; no remembered preset substitutes for the material's current state.
 
 Urban/RC surfaces keep their dedicated factory and `_environment_surface` binding;
 standalone previews can use source materials. Record material key, actual class and
@@ -92,7 +97,9 @@ rendered pixels, prepared/unbatched geometry and cell/context borrower retiremen
 against the source-material path, including climate, urban, RC and preview cases.
 `tree_canopy_validator` also compares leaf GPU uniforms and same-frame pixels at
 each preset, live quality, independent bindings and final leaf/context retirement
-after partial cancellation or completed attachment.
+after partial cancellation or completed attachment. Initial-pixel comparisons run
+before any corrective quality update; admission-step preset changes and same-preset
+repair of externally edited uniforms are also covered.
 `richer_material_validator` covers actual GLB import, retained channels, denied
 admission, shared identity and last-borrower retirement. `display_quality_validator`
 covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial

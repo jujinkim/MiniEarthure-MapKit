@@ -43,12 +43,13 @@ doubled asset allowance; eviction clears it before sealing the full template lea
 Tile decode and mipmap/upload use separate steps. Observers cannot drain preparation
 or read a partial context. Partial resources retain the full lease until retirement.
 
-Built-in trees share one immutable material-free canopy mesh per session cache.
-A 128 KiB claim covers the sphere, importer scratch, CPU/GPU output and LOD indices.
-Source creation, readback, LOD generation and upload are separate admitted steps.
-Trees keep independent nodes, transforms, visibility and direct final leaf bindings.
-Leaf bindings use the cell allowance; their last borrower retains the shared
-shader/textures. Standalone previews retain local preparation and source materials.
+Built-in trees share an immutable material-free canopy per session cache. Its
+128 KiB claim covers sphere/importer scratch, CPU/GPU output and LOD indices.
+Creation, readback, LOD generation and upload are separately admitted. Nodes,
+transforms, visibility and final leaf bindings remain independent. Fresh leaves
+receive detail/wind quality once with node LOD/distance before publication in the
+same call; live updates remain unconditional. Bindings use the cell allowance;
+their last borrower retains shared shader/textures. Previews prepare locally.
 
 Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
 transforms, mesh surfaces, material overrides, original colours and shadow mode

@@ -259,7 +259,9 @@ static func _advance(job: Dictionary) -> bool:
 			canopy.mesh = canopy_mesh
 			canopy.set_meta("mapkit_decoration",true)
 			canopy.position = scene_position(object.position) + Vector3.UP * 4.8
-			canopy.material_override = _leaf_material(job)
+			# A new private binding receives quality once in track_resources below,
+			# in this same admitted call, before the node becomes visible.
+			canopy.material_override = _leaf_material(job, true)
 			track_resources(job, canopy, job.get("resources") != null)
 			job.root.add_child(canopy)
 	else:
@@ -408,12 +410,12 @@ static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 		pass
 	return job.root
 
-static func _leaf_material(job: Dictionary) -> Material:
+static func _leaf_material(job: Dictionary, defer_quality := false) -> Material:
 	var context: RefCounted = job.resources.environment_context() if job.get("resources") != null else null
 	if context != null:
 		# Leaves keep the original source roughness, not the generated-face value.
 		# The shared shader already uses the wrapper's double-sided rendering.
-		return context.generated_material(Color("486447"),"leaf",0.0,1.0)
+		return context.generated_material(Color("486447"),"leaf",0.0,1.0,defer_quality)
 	var leaf := StandardMaterial3D.new()
 	leaf.albedo_color = Color("486447")
 	leaf.resource_name = "mk_leaf"
