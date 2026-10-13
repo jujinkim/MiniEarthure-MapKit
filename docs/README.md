@@ -36,6 +36,7 @@ essential validation; edit existing sections instead of appending dated logs.
 | Materials and display quality | [RICHER_MATERIALS](RICHER_MATERIALS.md) |
 | Distant display products | [DISTANT_RENDERING](DISTANT_RENDERING.md) |
 | Renderer resource ownership | [RENDER_MEMORY](../RENDER_MEMORY.md) |
+| Fixed-scene timing and consumer scope | [RENDER_DIAGNOSTICS](RENDER_DIAGNOSTICS.md) |
 | Vegetation assets | [VEGETATION](../VEGETATION.md) |
 
 ## Boundaries and licenses
