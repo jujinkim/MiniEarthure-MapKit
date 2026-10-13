@@ -91,7 +91,10 @@ func run() -> void:
 			if node is MeshInstance3D:
 				check(node.mesh.has_meta("mapkit_occluder_preparation"),"every styled template mesh has a prepared result")
 				var occluder := QUALITY.occluder(node.mesh,null)
+				var reference := QUALITY._occluder_shape(node.mesh)
+				check((occluder==null)==(reference==null),"actual GLB CPU preparation preserves empty/nonempty occlusion")
 				if occluder!=null:
+					check(reference!=null and occluder.occluder.vertices==reference.vertices and occluder.occluder.indices==reference.indices,"actual compressed GLB keeps exact post-LOD occluder geometry")
 					held_shape=occluder.occluder
 					occluder.free()
 				for i in node.mesh.get_surface_count():

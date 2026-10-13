@@ -96,9 +96,13 @@ func run() -> void:
 		cache.prepare_template(shared if steps%2 else key,"fixture",ASSETS)
 		cache.mesh_observer=Callable()
 		if item.stage=="materials": lod_output=item.styling.mesh
-		check(operations.size()<=2,"interleaved claims cannot drain multiple surfaces")
+		if operations.any(func(op): return op[0]=="occluder_cached_arrays"):
+			check(operations.all(func(op): return op[0]=="occluder_cached_arrays"),"occlusion reads only retained CPU positions/indices")
+		check(operations.filter(func(op): return op[0]=="lod_arrays").size()<=1 and operations.filter(func(op): return op[0]=="material_bind").size()<=1,"interleaved claims cannot drain multiple input/material surfaces")
+		check(not operations.any(func(op): return op[0]=="occluder_arrays"),"new LOD output needs no occluder GPU readback")
 		steps+=1
 	check(item.stage=="done" and steps<100,"interleaved claims complete a single template")
+	check(not item.has("occluder_arrays"),"ready template releases retained CPU faces")
 	var styled: Mesh=item.template.mesh
 	check(styled==lod_output and styled!=source,"new private LOD mesh is styled without a duplicate")
 	check(geometry(styled)==expected_geometry,"direct styling preserves every geometry/LOD buffer")
@@ -137,6 +141,8 @@ func cancel_at(boundary: String) -> void:
 			if boundary!="surface" or item.lod_job.surface>0: break
 	check(steps<100,"reached cancellation boundary "+boundary)
 	var held: Mesh=cache.entries[key].styling.mesh if boundary=="material_surface" else null
+	var partial: Dictionary=cache.entries[key]
+	check(partial.lod_job.has("occluder_arrays") if partial.has("lod_job") else partial.has("occluder_arrays"),"CPU faces stay with the admitted partial template "+boundary)
 	var amount: int=cache.entries[key].bytes
 	if held!=null: amount+=cache._context_bytes() # Its styled surface also borrows context resources.
 	cache.release(key);cache.trim()
@@ -144,6 +150,7 @@ func cancel_at(boundary: String) -> void:
 	cache.shutdown()
 	check(cache.prepare_template(shared,"fixture",ASSETS) and cache.template(shared,"fixture",ASSETS)==null,"late advance after shutdown cannot publish partial materials")
 	cache.release(shared)
+	check(not partial.has("occluder_arrays") and not partial.has("lod_job"),"eviction drops CPU faces even if diagnostics retain the entry "+boundary)
 	for frame in 3: await process_frame
 	check(cache.entries.is_empty(),"shutdown removes partial template "+boundary)
 	check(cache.bytes()==(amount if held!=null else 0),"scratch retires while a partial mesh borrower stays charged "+boundary)

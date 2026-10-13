@@ -58,10 +58,12 @@ static func prepare_lods(mesh: Mesh, observer := Callable()) -> Mesh:
 	while not advance_lods(job,observer): pass
 	return job.result
 
-static func begin_lods(mesh: Mesh) -> Dictionary:
+static func begin_lods(mesh: Mesh, retain_occluder_arrays := false) -> Dictionary:
 	if mesh == null or mesh.get_surface_count()==0 or mesh.get_meta("mapkit_lods",false):
 		return {"stage":"done","result":mesh,"owned":false}
-	return {"stage":"surface","input":mesh,"source":ImporterMesh.new(),"surface":0,"result":null,"owned":true}
+	var job := {"stage":"surface","input":mesh,"source":ImporterMesh.new(),"surface":0,"result":null,"owned":true}
+	if retain_occluder_arrays: job.occluder_arrays=[]
+	return job
 
 ## One surface read/add, LOD generation or output upload per admitted call.
 ## A single engine operation cannot be preempted; keep its cost observable.
@@ -74,6 +76,11 @@ static func advance_lods(job: Dictionary, observer := Callable()) -> bool:
 		var started := Time.get_ticks_usec()
 		var arrays := mesh.surface_get_arrays(index)
 		observe_mesh(observer,"lod_arrays",started,index)
+		# Keep only positions/indices already decoded by the renderer. Raw GLTF
+		# importer arrays precede compression and can change geometry/LOD results.
+		# Our LOD output uses no vertex compression, so these faces stay exact.
+		if job.has("occluder_arrays"):
+			job.occluder_arrays.append([arrays[Mesh.ARRAY_VERTEX],arrays[Mesh.ARRAY_INDEX]])
 		started = Time.get_ticks_usec()
 		source.add_surface(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, mesh.surface_get_material(index))
 		observe_mesh(observer,"lod_add_surface",started,index)
@@ -108,13 +115,13 @@ static func occluder(mesh: Mesh, lease: RefCounted) -> OccluderInstance3D:
 
 ## Only immutable, fully styled shared-template meshes opt in. Mutable preview
 ## meshes keep deriving their current faces on demand. Cache empty results too.
-static func prepare_occluder(mesh: Mesh, lease: RefCounted) -> void:
+static func prepare_occluder(mesh: Mesh, lease: RefCounted, surface_arrays: Array = [], observer := Callable()) -> void:
 	if mesh.has_meta("mapkit_occluder_preparation"): return
-	var shape := _occluder_shape(mesh)
+	var shape := _occluder_shape(mesh,surface_arrays,observer)
 	mesh.set_meta("mapkit_occluder_preparation", {"shape":shape})
 	if shape != null and lease != null: lease.track(shape)
 
-static func _occluder_shape(mesh: Mesh) -> ArrayOccluder3D:
+static func _occluder_shape(mesh: Mesh, surface_arrays: Array = [], observer := Callable()) -> ArrayOccluder3D:
 	# A conservative subset of actual opaque upright faces. Never fill a model
 	# AABB: doors, junction cuts, branches and windows must stay open.
 	var vertices := PackedVector3Array()
@@ -122,9 +129,15 @@ static func _occluder_shape(mesh: Mesh) -> ArrayOccluder3D:
 		var material := mesh.surface_get_material(surface)
 		if material is BaseMaterial3D and material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED: continue
 		if material != null and material.get_meta("mapkit_vegetation",false): continue
-		var arrays := mesh.surface_get_arrays(surface)
-		var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		var started := Time.get_ticks_usec()
+		var face_arrays: Array
+		if surface_arrays.is_empty():
+			var arrays := mesh.surface_get_arrays(surface)
+			face_arrays=[arrays[Mesh.ARRAY_VERTEX],arrays[Mesh.ARRAY_INDEX]]
+		else: face_arrays=surface_arrays[surface]
+		observe_mesh(observer,"occluder_arrays" if surface_arrays.is_empty() else "occluder_cached_arrays",started,surface)
+		var points: PackedVector3Array = face_arrays[0]
+		var indices: PackedInt32Array = face_arrays[1] if face_arrays[1] != null else PackedInt32Array()
 		var count := indices.size() if not indices.is_empty() else points.size()
 		for i in range(0,count-2,3):
 			var a := points[indices[i] if not indices.is_empty() else i]

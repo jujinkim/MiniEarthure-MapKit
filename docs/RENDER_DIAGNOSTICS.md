@@ -46,13 +46,20 @@ are outside individual stage timers but included in preparation wall time.
 
 Opt-in `mesh/*` timers further isolate LOD input-array retrieval, importer surface
 insertion, `generate_lods`, `get_mesh`, material duplication and surface binding.
+`material_style` includes the whole styling call and its callee-local resource
+retirement; `material_bind` ends before those locals retire. `material_track`
+measures lease tracking, and `material_finalize` covers node margin, shadow and
+override setup. `occluder_cached_arrays` marks reuse of retained decoded CPU faces;
+`occluder_arrays` marks a mesh readback for independently prepared/preview meshes.
 They count even zero-duration calls and attach a surface index where applicable.
 New private LOD outputs need no material duplication; borrowed prepared meshes
 still do. The fixed-scene observer is installed only for one attachment advance
 and then cleared; reports retain primitive context only. Observer callbacks are
 outside the inner operation timer and inside the enclosing cache/attachment timer.
 These nested totals overlap. Surface staging cannot interrupt a slow individual
-engine call, including a first-use readback.
+engine call, including a first-use readback. Shared LOD jobs avoid the later
+occluder readback, but initial input-array retrieval still decodes the uploaded
+mesh; raw pre-compression GLTF arrays do not preserve the same output.
 
 `cache_activity` counts imports/hits for this view. The `cache` and `attachment`
 diagnostics retain cache-lifetime and process-lifetime counters/peaks, identified

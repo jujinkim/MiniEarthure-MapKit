@@ -127,6 +127,17 @@ func occluder_reuse(scene: Node3D) -> void:
 	var expected_vertices: PackedVector3Array=original.occluder.vertices
 	var expected_indices: PackedInt32Array=original.occluder.indices
 	check(expected_vertices.size()==18,"only opaque doorway walls contribute occlusion")
+	var lod_job := QUALITY.begin_lods(facade,true)
+	while not QUALITY.advance_lods(lod_job): pass
+	var operations := []
+	QUALITY.prepare_occluder(lod_job.result,null,lod_job.occluder_arrays,func(phase,_elapsed,surface): operations.append([phase,surface]))
+	var retained := QUALITY.occluder(lod_job.result,null)
+	check(retained.occluder.vertices==expected_vertices and retained.occluder.indices==expected_indices,"retained LOD positions preserve doorway faces, ordering and inset exactly")
+	check(operations==[["occluder_cached_arrays",0]],"opaque faces use CPU arrays and excluded surfaces perform no readback")
+	for surface in facade.get_surface_count():
+		var displayed: Array=lod_job.result.surface_get_arrays(surface)
+		check(lod_job.occluder_arrays[surface]==[displayed[Mesh.ARRAY_VERTEX],displayed[Mesh.ARRAY_INDEX]],"retained CPU faces match uploaded LOD output exactly")
+	retained.free();lod_job={}
 	QUALITY.prepare_occluder(facade,null)
 	var first := QUALITY.occluder(facade,null)
 	QUALITY.prepare_occluder(facade,null)

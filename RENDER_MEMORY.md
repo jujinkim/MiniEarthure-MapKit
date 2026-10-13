@@ -39,6 +39,12 @@ Private LOD output receives material bindings directly; borrowed prepared meshes
 and previews keep binding copies. Inputs stay immutable and placements use only
 complete templates. Partial importer/output state retains the full lease until
 eviction; shutdown rejects late access to partial templates.
+Shared LOD jobs retain only their already decoded CPU positions/indices until
+occluder preparation, then release them. The uncompressed LOD output preserves
+these faces exactly, avoiding a second GPU readback. Raw GLTF importer arrays
+precede mesh compression and cannot replace the initial decoded input without
+changing geometry and LOD results. This scratch stays within the existing doubled
+asset allowance; cancellation drops it before sealing the full template lease.
 Each shared tile decodes and uploads with mipmaps in separate steps. Environment
 observers return no context until preparation completes and cannot drain that queue.
 Partial preparation keeps its full lease until the decoded image/resources retire.
@@ -95,7 +101,9 @@ failed replacement, worker cancellation and delayed retirement.
 occluder faces, open doorways, excluded transparent/vegetation faces, transformed
 instances, shared preparation, partial cancellation and final shape borrowers.
 `mesh_preparation_validator` checks exact surface/LOD output, interleaved claims,
-per-surface admission, immutable inputs, cancellation/shutdown and final borrowers.
+per-surface admission, immutable inputs, retained CPU face release,
+cancellation/shutdown and final borrowers. Occlusion checks compare retained
+positions against actual compressed-GLB output as well as doorway fixtures.
 
 ## Unshareable presentation resources
 

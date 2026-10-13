@@ -114,12 +114,13 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 				node.set_meta("mapkit_decoration",not bool(sources[id].get("solid",true)) and node.mesh.get_aabb().size.length() <= 6.0)
 				node.set_meta("mapkit_occluder",node.mesh.get_aabb().size.length() > 6.0)
 				item.styling = node
-				item.lod_job = QUALITY.begin_lods(node.mesh)
+				item.lod_job = QUALITY.begin_lods(node.mesh,true)
 				item.stage = "lod_prepare"
 	elif stage == "lod_prepare":
 		if QUALITY.advance_lods(item.lod_job,mesh_observer):
 			item.styling.mesh = item.lod_job.result
 			item.owned_mesh = item.lod_job.owned
+			item.occluder_arrays = item.lod_job.get("occluder_arrays",[])
 			item.erase("lod_job")
 			_track_node(item.lease,item.styling)
 			item.stage = "materials"
@@ -146,24 +147,32 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		var node: MeshInstance3D = item.styling
 		var index: int = item.material_surface
 		if index < node.mesh.get_surface_count():
+			var style_started := Time.get_ticks_usec()
 			_environment.style_surface(node.mesh,item.material_binding,index,false,mesh_observer)
+			# Include callee-local retirement after its inner binding timer returns.
+			QUALITY.observe_mesh(mesh_observer,"material_style",style_started,index)
+			var track_started := Time.get_ticks_usec()
 			var material: Material = node.mesh.surface_get_material(index)
 			_track_material(item.lease,material)
+			QUALITY.observe_mesh(mesh_observer,"material_track",track_started,index)
 			item.water = item.water and material != null and material.get_meta("mapkit_water",false)
 			item.material_surface += 1
 		if item.material_surface == node.mesh.get_surface_count():
+			var finalize_started := Time.get_ticks_usec()
 			node.extra_cull_margin = .08
 			if item.water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			if node.material_override != null:
 				node.material_override = _environment.surface_material(node.material_override,0)
 				_track_material(item.lease,node.material_override)
 			item.erase("material_binding");item.erase("material_surface");item.erase("water")
+			QUALITY.observe_mesh(mesh_observer,"material_finalize",finalize_started)
 			item.stage = "occluder"
 	elif stage == "occluder":
 		# Derive once after LOD/material replacement, as its own admitted step.
 		# Root/placement scaling can make even a small mesh an occluder candidate.
 		var node: MeshInstance3D = item.styling
-		preload("./display_quality.gd").prepare_occluder(node.mesh,item.lease)
+		QUALITY.prepare_occluder(node.mesh,item.lease,item.occluder_arrays,mesh_observer)
+		item.erase("occluder_arrays")
 		item.erase("styling")
 		item.stage = "lod"
 	var elapsed := Time.get_ticks_usec() - started
@@ -218,6 +227,7 @@ func _evict(key: String) -> void:
 	item.pending.clear()
 	item.erase("styling")
 	item.erase("lod_job")
+	item.erase("occluder_arrays")
 	item.erase("material_binding")
 	if item.lease != null:
 		item.lease.seal()
