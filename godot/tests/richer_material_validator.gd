@@ -32,6 +32,7 @@ func run() -> void:
 	var context: RefCounted=cache.environment_context()
 	check(context!=null and cache.bytes()==MATERIALS.MEMORY_BYTES,"shared texture charge before materialization")
 	check(context.tiles.size()==10,"ten common 256px packed tiles")
+	surface_factory_quality(context)
 	var source:=StandardMaterial3D.new()
 	var picture:=Image.create(128,128,false,Image.FORMAT_RGBA8);picture.fill(Color(.5,.5,1,1))
 	var bitmap:=ImageTexture.create_from_image(picture)
@@ -121,18 +122,69 @@ func run() -> void:
 	for i in 4: await process_frame
 	mesh.free();road.free();camera.free();road_material=null
 	var held_tile: Texture2D=tile_material.get_shader_parameter("detail_tile")
+	var held_source:=StandardMaterial3D.new();held_source.resource_name="mk_leaf"
+	var held_pending: ShaderMaterial=context.import_surface(held_source,0,{})
+	held_source=null
 	cache.release(key);cache.release(key);cache.shutdown()
 	context=null;styled=null;tile_material=null;tile_other=null;template=null;source=null;plain=null;other=null;bitmap=null;picture=null
 	for i in 6: await process_frame
 	check(cache.bytes()==MATERIALS.MEMORY_BYTES+template_bytes,"borrowed tile and occluder retain their independent shared leases")
 	held_tile=null
 	for i in 6: await process_frame
-	check(cache.bytes()==template_bytes,"standalone occluder borrower retains the template charge after mesh retirement")
+	check(cache.bytes()==MATERIALS.MEMORY_BYTES+template_bytes,"pending surface and standalone occluder retain independent leases")
 	held_shape=null
+	for i in 3: await process_frame
+	check(cache.bytes()==MATERIALS.MEMORY_BYTES and held_pending.shader==null,"last unpublished surface borrower retains the context without shader activation")
+	held_pending=null
 	for i in 3: await process_frame
 	check(cache.bytes()==0,"last shared borrower releases the complete charge")
 	print("richer_material_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+
+func surface_factory_quality(context: RefCounted) -> void:
+	var saved := QUALITY.current
+	for level in 3:
+		QUALITY.current = QUALITY.profile(level)
+		for kind: String in ["brick","grass","leaf","unclassified"]:
+			var source := StandardMaterial3D.new();source.resource_name = "mk_"+kind
+			var direct: ShaderMaterial = context.generated_material(source.albedo_color,kind)
+			var wrapped: ShaderMaterial = context.surface_material(source,0)
+			var pending: ShaderMaterial = context.import_surface(source,0,{"window_materials":[0]})
+			var label := "%s/%d"%[kind,level]
+			check(pending.shader == null and pending.get_meta("mapkit_pending_surface",false),label+" GLB binding stays unpublished")
+			for material: ShaderMaterial in [direct,wrapped,pending]:
+				check_surface_quality(material,level,label+" initial factory")
+				check(material.get_meta("mapkit_surface",false) and material.get_meta("mapkit_opaque",false),label+" finished opaque surface")
+				check(material.get_meta("mapkit_vegetation",false) == (kind == "leaf") and material.get_shader_parameter("vegetation") == (kind == "leaf"),label+" leaf role")
+				check(material.get_shader_parameter("terrain_surface") == (kind == "grass"),label+" terrain role")
+				check(material.get_meta("mapkit_detail",false) == context.tiles.has(kind),label+" detail metadata")
+				if context.tiles.has(kind):
+					check(material.get_shader_parameter("detail_enabled") == true and material.get_shader_parameter("detail_tile") == context.tiles[kind],label+" detail texture identity")
+					check(material.get_shader_parameter("detail_scale") == (1.0 if kind == "brick" else 2.0),label+" detail scale")
+			check(context.surface_material(source,0) == wrapped,label+" ordinary identity cache")
+			check(context.surface_material(source,1) == pending and pending.shader == direct.shader and not pending.has_meta("mapkit_pending_surface"),label+" activates cached GLB binding")
+			check_surface_quality(pending,level,label+" activated GLB")
+			check(pending.get_shader_parameter("lighting_role") == 1,label+" GLB window role")
+			for material: ShaderMaterial in [direct,wrapped,pending]:
+				material.set_shader_parameter("detail_quality",-7)
+				material.set_shader_parameter("wind_strength",-7.0)
+				material.set_shader_parameter("base_color",Color.RED)
+				QUALITY.apply_material(material,QUALITY.active())
+				check_surface_quality(material,level,label+" same-preset repair")
+				QUALITY.apply_material(material,QUALITY.profile((level+1)%3))
+				check_surface_quality(material,(level+1)%3,label+" live quality")
+				check(material.get_shader_parameter("base_color") == Color.RED,label+" quality preserves appearance edits")
+		var detail_only := ShaderMaterial.new()
+		context.bind_detail(detail_only,"brick")
+		check(detail_only.get_shader_parameter("detail_quality") == level,"standalone bind_detail applies active quality")
+	var transparent := StandardMaterial3D.new();transparent.resource_name = "mk_leaf"
+	transparent.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	check(context.surface_material(transparent,0) == transparent and context.import_surface(transparent,0,{}) == transparent,"transparent factory passthrough")
+	QUALITY.current = saved
+
+func check_surface_quality(material: ShaderMaterial, level: int, label: String) -> void:
+	check(material.get_shader_parameter("detail_quality") == level,label+" detail quality")
+	check(material.get_shader_parameter("wind_strength") == float(QUALITY.profile(level).vegetation_motion),label+" wind quality")
 
 func partial_occluder_cancel(assets: Dictionary) -> void:
 	for finish_shape in [false,true]:

@@ -109,7 +109,8 @@ func generated_material(color: Color, kind: String, metallic := 0.0, roughness :
 	return result
 
 func _finish_surface(result: ShaderMaterial, kind: String, defer_quality := false) -> void:
-	bind_detail(result,kind,not defer_quality)
+	# Apply detail quality with wind below, or once the attaching node is tracked.
+	bind_detail(result,kind,false)
 	result.set_meta("mapkit_surface",true)
 	result.set_meta("mapkit_vegetation",kind == "leaf")
 	result.set_shader_parameter("vegetation",kind == "leaf")

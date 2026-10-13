@@ -29,26 +29,24 @@ consumer limits still govern admission; borrowers retain charges after shutdown.
 
 Generated opaque terrain, building and built-in faces use
 `chunk_renderer._generated_material` and `environment_materials.generated_material`
-to create their final shader binding directly. They retain cell ownership and share
-the context's shader/textures; absent bitmap, UV and lighting overrides use identical
-shader defaults. Climate tint, safety-metal metallicity and live quality survive.
+to create cell-owned bindings sharing context shaders/textures. Absent bitmap, UV
+and lighting overrides use shader defaults. Climate tint and safety-metal metallicity survive.
 Prepared and unbatched meshes use the same factory. Shader includes are expanded
 before assigning the complete source once, with identical final shader code.
-Built-in canopy leaves also create final bindings directly, with their own colour,
-source roughness of 1.0, leaf detail and wind role. The shared shader retains the
-wrapper's double-sided rendering. Every canopy owns an independent mutable binding;
-its shader/textures keep the shared context charged through the last borrower.
+Canopy leaves create independent bindings with leaf colour, roughness 1.0, detail
+and wind. The shared shader retains double-sided rendering; borrowed shaders/textures
+keep the context charged.
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC
 bindings likewise defer detail quality at `_environment_surface`. This applies the
-active preset once; LOD and decoration distance still update with it. Direct
-material factory calls remain ready for use. Reused cell bindings and live updates
-always reapply quality, including after external uniform edits; no remembered
-preset substitutes for the material's current state.
+active preset once with LOD and decoration distance. Direct generated bindings,
+opaque source wrappers and shaderless GLB snapshots bind detail textures and roles,
+then apply detail/wind quality once before returning. Standalone `bind_detail`
+applies quality itself. Reused cell bindings and live updates always reapply
+quality after external edits; no remembered preset replaces current material state.
 
-Urban/RC surfaces keep their dedicated factory and `_environment_surface` binding;
-standalone previews can use source materials. Record material key, actual class and
-branch with cell/frame/generation; GLB import timing does not describe this factory.
+Urban/RC surfaces use dedicated factories and `_environment_surface`;
+standalone previews can use source materials. Distinguish these from GLB import timing.
 
 | Branch | Operations to isolate |
 | --- | --- |
@@ -108,8 +106,10 @@ after partial cancellation or completed attachment. Initial-pixel comparisons ru
 before any corrective quality update; admission-step preset changes and same-preset
 repair of externally edited uniforms are also covered.
 `richer_material_validator` covers actual GLB import, retained channels, denied
-admission, shared identity and last-borrower retirement. `display_quality_validator`
-covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
+admission, shared identity and last-borrower retirement. It checks initial surface
+quality at each preset for direct/wrapped/pending bindings, GLB activation,
+same-preset repair, live updates and the final unpublished material borrower.
+`display_quality_validator` covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
 batches, tight MultiMesh bounds, solid-versus-decoration classification, live material/wind
 levels and actual-face occluders. Template preparation tests include shared phased
 LOD/material setup and final-borrower retirement. Weather appearance and
