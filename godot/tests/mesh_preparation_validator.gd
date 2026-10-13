@@ -132,6 +132,8 @@ func run() -> void:
 	await import_tracking_revisit()
 	for complete in [false,true]:
 		await pending_surface_tracking(complete)
+		for mode in ["transparent","opaque","pending"]:
+			await override_binding_tracking(mode,complete)
 	for extension in ["png","webp"]:
 		await cached_asset_material(extension)
 	for valid in [false,true]:
@@ -321,6 +323,53 @@ func pending_surface_tracking(complete: bool) -> void:
 	bitmaps.clear()
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"last source bitmap returns the pending binding reservation")
+
+func override_binding_tracking(mode: String, complete: bool) -> void:
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,BoxMesh.new().get_mesh_arrays())
+	var cache := seeded_cache(mesh)
+	var key: String=cache.entries.keys()[0]
+	var shared: String=cache.claim("fixture",ASSETS)
+	var item: Dictionary=cache.entries[key]
+	var source := StandardMaterial3D.new();source.normal_enabled=true;source.ao_enabled=true
+	if mode=="transparent": source.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+	var bitmaps: Array[Texture2D] = []
+	for slot in [BaseMaterial3D.TEXTURE_ALBEDO,BaseMaterial3D.TEXTURE_NORMAL,BaseMaterial3D.TEXTURE_AMBIENT_OCCLUSION,BaseMaterial3D.TEXTURE_ROUGHNESS,BaseMaterial3D.TEXTURE_METALLIC]:
+		var bitmap := ImageTexture.create_from_image(Image.create(2,2,false,Image.FORMAT_RGBA8))
+		source.set_texture(slot,bitmap);bitmaps.append(bitmap)
+	var original: Material=cache.environment_context().import_surface(source,0,{}) if mode=="pending" else source
+	item.template.material_override=original
+	var child := MeshInstance3D.new();child.mesh=mesh;child.material_override=original
+	item.template.add_child(child)
+	CACHE._track_node(item.lease,item.template)
+	var held: Material
+	var finalized := 0
+	var steps := 0
+	while item.stage!="done" and steps<50:
+		var finalizing: bool=item.stage=="material_surface"
+		var tracked: int=item.lease.refs.size()
+		cache.prepare_template(shared if steps%2 else key,"fixture",ASSETS);steps+=1
+		if finalizing:
+			finalized+=1
+			held=item.styling.material_override
+			check(item.lease.refs.size()==tracked+(6 if mode=="opaque" else 0),"override finalization tracks only replacement bindings and their five bitmaps: "+mode)
+			check((held!=original)==(mode=="opaque"),"override identity follows opaque replacement or passthrough: "+mode)
+			if mode!="transparent":
+				check(held.shader==cache.environment_context().shader and not held.has_meta("mapkit_pending_surface"),"opaque/pending override has an active shared shader")
+			if not complete: break
+	check(finalized==(2 if complete else 1),"shared override reaches the requested cancellation/completion boundary")
+	if complete: check(child.material_override==held,"multiple nodes share the final override identity")
+	var amount: int=item.bytes
+	cache.release(key);cache.release(shared);cache.shutdown()
+	mesh=null;source=null;original=null;item={}
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount+(0 if mode=="transparent" else cache._context_bytes()),"independent override retains its asset and shader context after cancel/completion: "+mode)
+	held=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"override bitmaps independently retain the asset charge: "+mode)
+	bitmaps.clear()
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"last override bitmap returns the complete reservation: "+mode)
 
 func image_assets(extension: String) -> Dictionary:
 	var picture := Image.create(2,2,false,Image.FORMAT_RGBA8)

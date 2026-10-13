@@ -234,8 +234,12 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			node.extra_cull_margin = .08
 			if item.water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			if node.material_override != null:
-				node.material_override = _environment.surface_material(node.material_override,0)
-				_track_material(item.lease,node.material_override)
+				var material: Material = _environment.surface_material(node.material_override,0)
+				# Unchanged overrides retain import tracking, including in-place
+				# pending activation. New wrappers still own their source bitmaps.
+				if material != node.material_override:
+					node.material_override = material
+					_track_material(item.lease,material)
 			item.erase("material_surface");item.erase("material_count");item.erase("water")
 			QUALITY.observe_mesh(mesh_observer,"material_finalize",finalize_started)
 			item.stage = "occluder"
