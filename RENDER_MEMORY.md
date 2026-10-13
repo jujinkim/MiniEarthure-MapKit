@@ -26,7 +26,7 @@ Cache keys include content, declarative materials and referenced image content.
 Claims precede import; the default cap is 256 entries/128 MiB including shaders.
 Concurrent claims share one import/preparation per entry. Texture context, import,
 each LOD input surface, LOD generation/upload, each material binding, occluder
-preparation and MultiMesh setup/placement are separate admitted steps.
+preparation, instance-part extraction and MultiMesh setup/placement are separate admitted steps.
 Synchronous engine calls cannot be preempted; [diagnostics](docs/RENDER_DIAGNOSTICS.md)
 report phase total/peak and attachment/release costs.
 With a ready context, GLB import captures opaque parameters into shaderless
@@ -51,7 +51,12 @@ same call; live updates remain unconditional. Bindings use the cell allowance;
 their last borrower retains shared shader/textures. Previews prepare locally.
 
 Opaque static models use cell-local MultiMesh instances, preserving hierarchy,
-surfaces, overrides, colours and shadows. Each setup shares one quality snapshot; each
+surfaces, overrides, colours and shadows. Immutable templates extract a read-only
+part list after all LOD/material/occluder work, including empty fallback results.
+Spatial groups borrow that list without traversing the hierarchy again. Records
+borrow tracked meshes/materials within the doubled native node allowance and are
+cleared on eviction; partial or closed caches expose no parts. Mutable standalone
+templates are inspected on every setup. Each setup shares one quality snapshot; each
 placement computes its object seed once and reads occluder quality once if needed.
 The next call reads current quality again. Transparent models, overlays and
 per-surface overrides use ordinary instances. LOD indices are generated once per
@@ -103,6 +108,8 @@ anchor margin, including transformed GLB bounds independently of collision proxi
 --probe binding` checks relocation, hashes, assets and batching. The rendered
 [material validators](docs/RICHER_MATERIALS.md#display-quality) cover node quality,
 geometry/LOD/material output, phased preparation and shared borrowers. Caller checks
+also cover part order, nested transforms, multi-surface/override fallback, empty
+result reuse, mutable previews and final mesh/material retirement. Consumer checks
 cover admission, cancellation, failed replacement, pressure, shutdown and final
 mesh/context/shape retirement.
 

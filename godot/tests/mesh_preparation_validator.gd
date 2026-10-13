@@ -3,6 +3,7 @@ const QUALITY := preload("../display_quality.gd")
 const CACHE := preload("../render_resource_cache.gd")
 const MATERIALS := preload("../environment_materials.gd")
 const ASSET_LIBRARY := preload("../asset_library.gd")
+const INSTANCES := preload("../render_instances.gd")
 const BINDING := {"asset_id":"fixture","window_materials":[2],"bulb_materials":[3]}
 const ASSETS := {"fixture":{"content_hash":"synthetic-mesh","memory_bytes":4194304,"material_json":"null","solid":true}}
 var failed := false
@@ -122,10 +123,12 @@ func run() -> void:
 	check(cache.bytes()==0,"completed staged resources retire")
 	# Test cancellation at each persistent scratch boundary, including a styled
 	# partial mesh held independently of the template and cache.
-	for boundary in ["surface","generate","get_mesh","materials","material_surface","occluder"]:
+	for boundary in ["surface","generate","get_mesh","materials","material_surface","occluder","instance_parts"]:
 		await cancel_at(boundary)
 	await borrowed_prepared_mesh()
 	await imported_materials()
+	for mode in ["opaque","transparent","overlay","surface_override"]:
+		await instance_parts(mode)
 	print("mesh_preparation_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
 
@@ -144,7 +147,10 @@ func cancel_at(boundary: String) -> void:
 	check(steps<100,"reached cancellation boundary "+boundary)
 	var held: Mesh=cache.entries[key].styling.mesh if boundary=="material_surface" else null
 	var partial: Dictionary=cache.entries[key]
-	check(partial.lod_job.has("occluder_arrays") if partial.has("lod_job") else partial.has("occluder_arrays"),"CPU faces stay with the admitted partial template "+boundary)
+	if boundary=="instance_parts":
+		check(not partial.has("occluder_arrays") and cache.instance_parts(key).is_empty(),"part preparation exposes no partial template or retained CPU faces")
+	else:
+		check(partial.lod_job.has("occluder_arrays") if partial.has("lod_job") else partial.has("occluder_arrays"),"CPU faces stay with the admitted partial template "+boundary)
 	var amount: int=cache.entries[key].bytes
 	if held!=null: amount+=cache._context_bytes() # Its styled surface also borrows context resources.
 	cache.release(key);cache.trim()
@@ -170,6 +176,84 @@ func borrowed_prepared_mesh() -> void:
 	cache.release(key);cache.shutdown();mesh=null
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"borrowed preparation path retires")
+
+func instance_parts(mode: String) -> void:
+	var mesh := ArrayMesh.new()
+	var box := BoxMesh.new()
+	for index in 2:
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,box.get_mesh_arrays())
+		mesh.surface_set_material(index,StandardMaterial3D.new())
+	if mode=="transparent": mesh.surface_get_material(1).transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+	var cache := seeded_cache(mesh)
+	var key: String=cache.entries.keys()[0]
+	var shared: String=cache.claim("fixture",ASSETS)
+	var item: Dictionary=cache.entries[key]
+	var template: MeshInstance3D=item.template
+	template.transform=Transform3D(Basis(Vector3.UP,.3),Vector3(1,2,3))
+	var branch := Node3D.new();branch.scale=Vector3(-1,2,1);template.add_child(branch)
+	var child := MeshInstance3D.new();child.mesh=BoxMesh.new();child.position=Vector3(3,1,2)
+	child.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	child.material_override=StandardMaterial3D.new();branch.add_child(child)
+	if mode=="overlay": template.material_overlay=StandardMaterial3D.new()
+	if mode=="surface_override": template.set_surface_override_material(0,StandardMaterial3D.new())
+	CACHE._track_node(item.lease,template)
+	var steps := 0
+	while item.stage!="instance_parts" and steps<100:
+		check(cache.instance_parts(key).is_empty(),"partial template has no published parts: "+mode)
+		check(not cache.prepare_template(key,"fixture",ASSETS),"LOD/material/occluder work yields before part preparation")
+		steps+=1
+	check(steps<100 and not item.has("instance_parts"),"part extraction has its own admitted boundary")
+	check(cache.prepare_template(shared,"fixture",ASSETS),"final part preparation publishes the template")
+	var pieces: Array=cache.instance_parts(key)
+	check(pieces.is_read_only() and pieces==INSTANCES.parts(template),"cached parts preserve final meshes, materials, transforms, shadows and order: "+mode)
+	check(is_same(pieces,cache.instance_parts(shared)),"concurrent claims share the same part list, including empty fallback")
+	var before: Dictionary=cache.preparation_usec.duplicate()
+	check(cache.prepare_template(key,"fixture",ASSETS) and before==cache.preparation_usec,"ready part reuse performs no preparation")
+	var scene := Node3D.new();root.add_child(scene)
+	check(INSTANCES.begin_parts(pieces,0,scene,null).is_empty(),"zero placements allocate no group")
+	var groups := []
+	for index in 3:
+		QUALITY.current=QUALITY.profile(index)
+		var group := INSTANCES.begin_parts(pieces,1,scene,null,false)
+		if mode=="opaque":
+			check(pieces.size()==2 and pieces.all(func(piece): return piece.is_read_only()),"one immutable part per mesh, not per surface")
+			check(pieces[0].transform.is_equal_approx(template.transform) and pieces[1].transform.is_equal_approx(template.transform*branch.transform*child.transform),"root and reflected nested transforms keep traversal order")
+			check(pieces[1].shadow==GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and pieces[1].material==child.material_override,"child override and shadow survive preparation")
+			INSTANCES.append(group,Transform3D(Basis.IDENTITY,Vector3(index*32,0,0)),str(index),"map")
+			check(group.groups[0].multi.mesh==pieces[0].mesh and group.groups[1].node.material_override==pieces[1].material,"spatial groups borrow final template resources")
+			check(is_equal_approx(group.groups[0].node.lod_bias,QUALITY.current.lod_bias),"reused parts still read current node quality")
+		else: check(group.is_empty(),"unsupported template retains ordinary-instance fallback: "+mode)
+		groups.append(group)
+	var held_mesh: Mesh=pieces[0].mesh if mode=="opaque" else null
+	var held_material: Material=pieces[1].material if mode=="opaque" else null
+	var amount: int=item.bytes+cache._context_bytes() if mode=="opaque" else 0
+	cache.release(key);cache.trim()
+	check(cache.entries.has(shared),"pressure cannot evict another claimant's prepared parts")
+	cache.release(shared);cache.trim()
+	check(not item.has("instance_parts") and cache.instance_parts(key).is_empty(),"eviction clears cached references even when entry diagnostics survive")
+	cache.shutdown()
+	check(cache.instance_parts(shared).is_empty() and cache.template(shared,"fixture",ASSETS)==null,"late access cannot restore evicted parts")
+	for group: Dictionary in groups: group.clear()
+	scene.free();groups.clear();pieces=[];mesh=null;box=null;item={}
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"last mesh/material borrowers keep template and context charged: "+mode)
+	held_mesh=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"independent material borrower keeps full template lease: "+mode)
+	held_material=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"last part borrower returns all reservations: "+mode)
+	QUALITY.current={}
+	# Ordinary preview calls must re-evaluate mutable material eligibility and pose.
+	var preview := MeshInstance3D.new();preview.mesh=BoxMesh.new()
+	var parent := Node3D.new()
+	var first := INSTANCES.begin(preview,1,parent,null)
+	preview.position=Vector3(7,1,4)
+	var second := INSTANCES.begin(preview,1,parent,null)
+	check(first.groups[0].transform!=second.groups[0].transform and second.groups[0].transform==preview.transform,"preview edits are extracted on every setup")
+	preview.material_overlay=StandardMaterial3D.new()
+	check(INSTANCES.begin(preview,1,parent,null).is_empty(),"preview eligibility is not cached")
+	parent.free();preview.free();first.clear();second.clear()
 
 func meshes(node: Node) -> Array[MeshInstance3D]:
 	var result: Array[MeshInstance3D] = []

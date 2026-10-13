@@ -209,7 +209,7 @@ static func _advance(job: Dictionary) -> bool:
 				if job.get("resources") != null:
 					if not job.instances.has(group):
 						job.last_phase = "multimesh_setup"
-						job.instances[group] = INSTANCES.begin(job.templates[id], int(job.counts.get(group, 0)), job.root, job.lease, bool(sources[id].get("solid",true)))
+						job.instances[group] = INSTANCES.begin_parts(job.resources.instance_parts(job.claims[id]), int(job.counts.get(group, 0)), job.root, job.lease, bool(sources[id].get("solid",true)))
 						job.object -= 1
 						return false
 					if not job.instances[group].is_empty():

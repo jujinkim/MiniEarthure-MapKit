@@ -4,6 +4,7 @@ const ASSETS := preload("./asset_library.gd")
 const URBAN := preload("./urban_surface.gdshader")
 const ENVIRONMENT := preload("./environment_materials.gd")
 const QUALITY := preload("./display_quality.gd")
+const INSTANCES := preload("./render_instances.gd")
 const CONTEXT_BYTES := ENVIRONMENT.MEMORY_BYTES
 # Fixed 16-segment/8-ring canopy: source, importer scratch, CPU/GPU output and
 # LOD indices overlap. Independent of asset content and material bindings.
@@ -75,6 +76,8 @@ func claim(id: String, sources: Dictionary) -> String:
 	# The native import profile already includes CPU/GPU overlap (256 bytes per
 	# vertex, 32 per index, 24 per image pixel). Replacing template meshes shares
 	# textures and releases the old mesh; add a material/clock binding allowance.
+	# The doubled native 8 KiB/node allowance also covers one four-field part
+	# record per mesh node, borrowing the already tracked mesh/material.
 	var amount := int(sources[id].memory_bytes) * 2 + 131072 # LOD generation, retained indices and occluders, including import overlap.
 	return _claim(key,amount,"context")
 
@@ -155,7 +158,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		if not prepare_environment(): return false
 		item.stage = "import"
 	elif stage == "lod":
-		if item.pending.is_empty(): item.stage = "done"
+		if item.pending.is_empty(): item.stage = "instance_parts"
 		else:
 			var node: Node3D = item.pending.pop_back()
 			item.pending.append_array(node.get_children())
@@ -224,6 +227,14 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		item.erase("occluder_arrays")
 		item.erase("styling")
 		item.stage = "lod"
+	elif stage == "instance_parts":
+		# Publish only after all LODs, bindings and occluders are final. Empty
+		# results are reusable too (transparent/override fallback).
+		var pieces := INSTANCES.parts(item.template)
+		for piece: Dictionary in pieces: piece.make_read_only()
+		pieces.make_read_only()
+		item.instance_parts = pieces
+		item.stage = "done"
 	var elapsed := Time.get_ticks_usec() - started
 	if stage != "context":
 		preparation_usec[diagnostic_stage] = int(preparation_usec.get(diagnostic_stage,0)) + elapsed
@@ -239,6 +250,11 @@ func template(key: String, id: String, sources: Dictionary) -> Node3D:
 	if closed or not entries.has(key): return null
 	while not prepare_template(key,id,sources): pass
 	return entries[key].template
+
+func instance_parts(key: String) -> Array:
+	# Never advance or expose a partially prepared template through this accessor.
+	if closed or not entries.has(key) or entries[key].stage != "done": return []
+	return entries[key].get("instance_parts",[])
 
 func material(key: String, id: String, sources: Dictionary) -> Material:
 	if not entries.has(key): return null
@@ -279,6 +295,7 @@ func _evict(key: String) -> void:
 	item.erase("mesh")
 	item.erase("occluder_arrays")
 	item.erase("material_binding")
+	item.erase("instance_parts")
 	if item.lease != null:
 		item.lease.seal()
 		retiring.append(item.lease)

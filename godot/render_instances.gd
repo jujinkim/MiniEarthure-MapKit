@@ -23,7 +23,10 @@ static func parts(template: Node3D) -> Array:
 	return result
 
 static func begin(template: Node3D, count: int, parent: Node3D, lease: RefCounted, solid := true) -> Dictionary:
-	var pieces := parts(template)
+	# Mutable standalone templates are always inspected at the time of use.
+	return begin_parts(parts(template),count,parent,lease,solid)
+
+static func begin_parts(pieces: Array, count: int, parent: Node3D, lease: RefCounted, solid := true) -> Dictionary:
 	# A single opaque object still uses INSTANCE_CUSTOM for its seed. Falling
 	# back to an instance uniform exhausts the hardware's shared shader buffer
 	# in dense cells; this path keeps the same meshes, materials and transform.
