@@ -319,9 +319,14 @@ static func track_instance_nodes(lease: RefCounted, node: Node) -> void:
 	for child: Node in node.get_children(): track_instance_nodes(lease, child)
 
 static func track_resources(job: Dictionary, node: Node, shared_mesh := false) -> void:
-	QUALITY.apply_node(node, QUALITY.active())
+	# One synchronous traversal uses one snapshot; the next admitted call reads
+	# current quality again. Lease tracking must not change display policy.
+	_track_resources(job, node, shared_mesh, QUALITY.active())
+
+static func _track_resources(job: Dictionary, node: Node, shared_mesh: bool, quality: Dictionary) -> void:
+	QUALITY.apply_node(node, quality)
 	if node is MeshInstance3D and node.get_meta("mapkit_occluder", false) and node.get_child_count() == 0:
-		var occluder := QUALITY.occluder(node.mesh, job.get("lease"))
+		var occluder := QUALITY.occluder(node.mesh, job.get("lease"), quality)
 		if occluder != null: node.add_child(occluder)
 	if job.get("lease") == null: return
 	if node is MeshInstance3D:
@@ -332,7 +337,7 @@ static func track_resources(job: Dictionary, node: Node, shared_mesh := false) -
 		for i in node.mesh.get_surface_count():
 			track_material(job, node.mesh.surface_get_material(i))
 			track_material(job, node.get_surface_override_material(i))
-	for child: Node in node.get_children(): track_resources(job, child)
+	for child: Node in node.get_children(): _track_resources(job, child, false, quality)
 
 static func track_material(job: Dictionary, material: Material) -> void:
 	if material == null: return

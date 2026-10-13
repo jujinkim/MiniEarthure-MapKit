@@ -81,6 +81,10 @@ independent. The cache retains the import peak until actual resource retirement.
 Fresh generated opaque and urban/RC bindings receive quality when their node is
 tracked, in the same admitted call before attachment. Reused cell bindings still
 receive live quality on every attachment; direct material factory results are ready for use.
+Resource tracking takes one quality snapshot for its synchronous node traversal,
+including newly created occluders, and reads it again on the next call. Lease
+callbacks only record ownership; they must not change display policy. Nodes and
+materials are still updated before tracking, with occluders created before child traversal.
 Canopy claims supplement the per-object allowance. Shared meshes do not hold cell
 leases: other trees and the warm cache cannot prevent a dead cell's retirement.
 Evicted copies stay charged through the last mesh/importer borrower.

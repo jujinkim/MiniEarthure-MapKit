@@ -103,13 +103,13 @@ static func advance_lods(job: Dictionary, observer := Callable()) -> bool:
 static func observe_mesh(observer: Callable, phase: String, started: int, surface := -1) -> void:
 	if observer.is_valid(): observer.call(phase,Time.get_ticks_usec()-started,surface)
 
-static func occluder(mesh: Mesh, lease: RefCounted) -> OccluderInstance3D:
+static func occluder(mesh: Mesh, lease: RefCounted, quality: Dictionary = {}) -> OccluderInstance3D:
 	var prepared: Dictionary = mesh.get_meta("mapkit_occluder_preparation", {})
 	var shape: ArrayOccluder3D = prepared.shape if prepared.has("shape") else _occluder_shape(mesh)
 	if shape == null: return null
 	var result := OccluderInstance3D.new()
 	result.occluder = shape
-	result.visible = bool(active().occlusion)
+	result.visible = bool((active() if quality.is_empty() else quality).occlusion)
 	if lease != null: lease.track(shape); lease.track(result)
 	return result
 

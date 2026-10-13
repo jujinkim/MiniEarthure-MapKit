@@ -4,7 +4,16 @@ const CACHE := preload("../render_resource_cache.gd")
 const MATERIALS := preload("../environment_materials.gd")
 const WATER := preload("../water_renderer.gd")
 const INSTANCES := preload("../render_instances.gd")
+const RENDER := preload("../chunk_renderer.gd")
 var failed := false
+
+class Lease extends RefCounted:
+	var refs: Array[WeakRef] = []
+	var sealed := false
+	func track(value: Object) -> void: refs.append(weakref(value))
+	func seal() -> void: sealed = true
+	func retired() -> bool: return sealed and refs.all(func(value): return value.get_ref() == null)
+
 func check(ok: bool, label: String) -> void:
 	if not ok: failed=true; push_error(label)
 func _initialize() -> void: run.call_deferred()
@@ -28,6 +37,7 @@ func run() -> void:
 	chunk.render_batches=batches
 	check(planner.upper_bound({"triangles":2,"objects":0})>=planner.estimate(chunk,0),"pre-generation allowance covers spatial batches and occluders")
 	var scene := Node3D.new();root.add_child(scene)
+	await tracked_quality()
 	occluder_reuse(scene)
 	var mesh := SphereMesh.new();mesh.radial_segments=48;mesh.rings=24
 	var lod := QUALITY.prepare_lods(mesh)
@@ -103,6 +113,61 @@ func run() -> void:
 	QUALITY.current={}
 	print("display_quality_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+
+func tracked_quality() -> void:
+	var lease := Lease.new()
+	var job := {"lease":lease}
+	var parent := MeshInstance3D.new();parent.mesh=BoxMesh.new()
+	parent.set_meta("mapkit_decoration",true)
+	var child := MeshInstance3D.new();child.mesh=BoxMesh.new();child.mesh.size=Vector3(8,4,.5)
+	child.set_meta("mapkit_occluder",true)
+	parent.add_child(child)
+	for node: MeshInstance3D in [parent,child]:
+		var material := ShaderMaterial.new();material.shader=Shader.new()
+		material.shader.code="shader_type spatial; uniform int detail_quality = 1; uniform float wind_strength = 0.5;"
+		material.set_meta("mapkit_surface",true)
+		node.material_override=material
+	for level in 3:
+		QUALITY.current=QUALITY.profile(level)
+		var snapshot := QUALITY.active()
+		snapshot.lod_bias=-1.0
+		check(QUALITY.active().lod_bias==QUALITY.profile(level).lod_bias,"active profile is an independent copy")
+		RENDER.track_resources(job,parent,true)
+		check(child.get_child_count()==1,"tracking creates one occluder before child traversal")
+		var occluder: OccluderInstance3D=child.get_child(0)
+		var expected := QUALITY.profile(level)
+		for repeat in 2:
+			if repeat==1: RENDER.track_resources(job,parent,true)
+			for node: MeshInstance3D in [parent,child]:
+				check(is_equal_approx(node.lod_bias,expected.lod_bias),"recursive node LOD follows each call's quality")
+				check(node.material_override.get_shader_parameter("detail_quality")==level and node.material_override.get_shader_parameter("wind_strength")==expected.vegetation_motion,"recursive material quality applies before tracking and repairs external edits")
+			check(parent.visibility_range_end==expected.decoration_distance and parent.visibility_range_end_margin==8.0 and child.visibility_range_end==0.0,"recursive quality preserves decoration versus solid distance")
+			check(occluder.visible==expected.occlusion,"new and existing occluder visibility follows each call's quality")
+			if repeat==0:
+				for node: MeshInstance3D in [parent,child]:
+					node.lod_bias=9.0
+					node.material_override.set_shader_parameter("detail_quality",-1)
+					node.material_override.set_shader_parameter("wind_strength",-1.0)
+				parent.visibility_range_end=1.0
+				occluder.visible=not expected.occlusion
+	var held: ArrayOccluder3D=child.get_child(0).occluder
+	var tracked := lease.refs.map(func(value): return value.get_ref())
+	check(tracked.slice(0,8)==[parent,parent.material_override,parent.material_override.shader,held,child.get_child(0),child.mesh,child.material_override,child.material_override.shader],"lease callback order and root-only shared mesh ownership survive")
+	check(not parent.mesh in tracked,"shared root mesh does not hold the cell lease")
+	tracked.clear()
+	parent.free();job.clear();lease.seal()
+	for _frame in 4: await process_frame
+	check(not lease.retired(),"retained occluder shape keeps tracked lease alive")
+	held=null
+	for _frame in 4: await process_frame
+	check(lease.retired(),"last tracked borrower releases lease")
+	# Standalone callers still get immediate root quality and occluder visibility.
+	var preview := MeshInstance3D.new();preview.mesh=BoxMesh.new();preview.mesh.size=Vector3(8,4,.5)
+	preview.set_meta("mapkit_occluder",true)
+	QUALITY.current=QUALITY.profile(0)
+	RENDER.track_resources({},preview)
+	check(is_equal_approx(preview.lod_bias,QUALITY.active().lod_bias) and not preview.get_child(0).visible,"lease-free preview applies quality before returning")
+	preview.free()
 
 func occluder_reuse(scene: Node3D) -> void:
 	# Two walls and a lintel leave a central doorway, with indexed opaque faces.

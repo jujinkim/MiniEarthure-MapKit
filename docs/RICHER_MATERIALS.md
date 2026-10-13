@@ -112,5 +112,7 @@ same-preset repair, live updates and the final unpublished material borrower.
 `display_quality_validator` covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
 batches, tight MultiMesh bounds, solid-versus-decoration classification, live material/wind
 levels and actual-face occluders. Template preparation tests include shared phased
-LOD/material setup and final-borrower retirement. Weather appearance and
+LOD/material setup and final-borrower retirement. Recursive resource tracking
+checks per-call quality refresh, same-preset repair, node/occluder state, lease
+callback order and final shape retirement. Weather appearance and
 target-device acceptance are user checks.
