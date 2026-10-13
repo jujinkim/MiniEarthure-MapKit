@@ -8,6 +8,7 @@ func check(value: bool, message: String) -> void:
 	if not value: failed=true;push_error(message)
 
 func run() -> void:
+	check_preparation_costs()
 	var zeros := METRICS.summary([0.0,0.0],true)
 	check(zeros.status=="unavailable" and zeros.p95_ms==null,"zero GPU readings must be unavailable")
 	check(METRICS.summary([0.0,2.0],true).status=="unavailable","partially missing GPU samples must not claim headroom")
@@ -51,3 +52,27 @@ func run() -> void:
 		check(scene.live_resources()==0 and cache.bytes()==0,"partial scene resources returned after failure/timeout")
 	print("render_measurement_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+
+func check_preparation_costs() -> void:
+	var first := SCENE.new()
+	var cache := SCENE.CACHE.new()
+	first.cache=cache
+	var context := {"cell":[2,3],"asset_id":"facade"}
+	first.record_cost("near/mesh_upload",9000,context)
+	context.cell[0]=99
+	first.record_cost("near/mesh_upload",1000,context)
+	var cost: Dictionary=first.preparation_stages["near/mesh_upload"]
+	check(cost.samples==2 and cost.total_usec==10000 and cost.peak_usec==9000 and cost.peak_context.cell==[2,3],"phase aggregate preserves the slowest call and detached context")
+	cache.preparation_usec={"lod":100000}
+	cache.preparation_peak_usec={"lod":100000}
+	first.record_cache({},context)
+	var revisit := SCENE.new();revisit.cache=cache
+	var before: Dictionary=cache.preparation_usec.duplicate()
+	revisit.record_cache(before,context)
+	check(revisit.preparation_stages.is_empty(),"reused templates cannot inherit lifetime LOD costs or peaks")
+	cache.preparation_usec.lod+=2000
+	revisit.record_cache(before,context)
+	cost=revisit.preparation_stages["cache/lod"]
+	check(cost.total_usec==2000 and cost.peak_usec==2000 and cost.samples==1,"new revisit work measures only its own operation")
+	check(cache.preparation_peak_usec.lod==100000 and cache.preparation_usec.lod==102000,"observation preserves shared lifetime diagnostics")
+	first.cache=null;revisit.cache=null;cache.shutdown()

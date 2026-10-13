@@ -37,6 +37,38 @@ var references: Array[WeakRef] = []
 var clock: Callable = Time.get_ticks_msec
 var deadline: int
 var report: Dictionary = {}
+var preparation_stages: Dictionary = {}
+
+func record_cost(stage: String, elapsed_usec: int, context: Dictionary) -> void:
+	if not preparation_stages.has(stage):
+		preparation_stages[stage]={"samples":0,"total_usec":0,"peak_usec":0,"peak_context":{}}
+	var value: Dictionary=preparation_stages[stage]
+	value.samples+=1;value.total_usec+=elapsed_usec
+	if value.samples==1 or elapsed_usec>int(value.peak_usec):
+		value.peak_usec=elapsed_usec;value.peak_context=context.duplicate(true)
+
+func record_cache(before: Dictionary, context: Dictionary) -> void:
+	# Every advance admits at most one shared preparation operation. Read its
+	# existing inner timer; lifetime peaks cannot be subtracted across revisits.
+	for phase: String in cache.preparation_usec:
+		var elapsed := int(cache.preparation_usec[phase])-int(before.get(phase,0))
+		if elapsed>0: record_cost("cache/"+phase,elapsed,context)
+
+static func template_context(job: Dictionary, cell: Dictionary) -> Dictionary:
+	var context := cell.duplicate(true)
+	var objects: Array=job.get("chunk",{}).get("objects",[])
+	var index := int(job.get("object",0))
+	if index>=objects.size(): return context
+	var id := str(objects[index].asset_id)
+	context.asset_id=id
+	var resources: RefCounted=job.get("resources")
+	if resources==null: return context
+	var item: Dictionary=resources.entries.get(job.get("claims",{}).get(id,""),{})
+	var node: Node=item.get("styling")
+	if node==null and not item.get("pending",[]).is_empty(): node=item.pending.back()
+	if node is MeshInstance3D:
+		context.mesh=node.name;context.surfaces=node.mesh.get_surface_count()
+	return context
 
 static func scene_point(point: Array) -> Vector3: return Vector3(point[0],point[1],-point[2])
 
@@ -64,6 +96,8 @@ func prepare(tree: SceneTree, bridge: RefCounted, meta: Dictionary, doc: Diction
 		resources: RefCounted, lighting: Callable, timeout_ms: int, detail_radius := 128.0, prefetch := 16.0) -> Dictionary:
 	var started: int = clock.call();deadline=started+timeout_ms
 	cache=resources
+	preparation_stages={}
+	var cache_before := {"imports":cache.imports,"hits":cache.hits}
 	scene=Node3D.new();tree.root.add_child(scene);references.append(weakref(scene))
 	environment=lighting.call(scene)
 	if environment == null: return {"ok":false,"error":"lighting admission failed"}
@@ -96,39 +130,64 @@ func prepare(tree: SceneTree, bridge: RefCounted, meta: Dictionary, doc: Diction
 			if jobs.size()%40==0: await tree.process_frame
 	if expired(): return {"ok":false,"error":"preparation timeout"}
 	if jobs.is_empty(): return {"ok":false,"error":"no visible cells"}
+	var environment_started := Time.get_ticks_usec()
 	environment.update_environment(state,camera.position,[],cache,true)
 	environment.update_dynamic_lights(camera.position,[])
+	record_cost("environment_update",Time.get_ticks_usec()-environment_started,{})
 	cell_times.sort()
 	report.merge({"preparation_ms":int(clock.call())-started,"cell_prepare_p95_ms":METRICS.percentile(cell_times,.95),
 		"cell_prepare_p99_ms":METRICS.percentile(cell_times,.99),"shared_cache_bytes":cache.bytes(),
-		"cache":cache.diagnostics(),"cache_limit_bytes":cache.limit_bytes,"attachment":RENDER.diagnostics()})
+		"cache":cache.diagnostics(),"cache_limit_bytes":cache.limit_bytes,"attachment":RENDER.diagnostics(),
+		"preparation_stages":preparation_stages,"cache_activity":{"imports":cache.imports-cache_before.imports,"hits":cache.hits-cache_before.hits},
+		"timing_scopes":{"preparation_stages":"this_view","cache":"cache_lifetime","attachment":"process_lifetime"}})
 	return {"ok":true}
 
 func _cell(bridge: RefCounted, x: int, y: int, near: bool) -> Dictionary:
 	var job: Dictionary
 	var lease := Lease.new();leases.append(lease)
+	var context := {"cell":[x,y],"representation":"near" if near else "far"}
+	var before := Time.get_ticks_usec()
 	if near:
 		var generated: Dictionary=bridge.generate_chunk_packed(x,y)
+		record_cost("near/generation",Time.get_ticks_usec()-before,context)
 		if not generated.get("ok",false): return generated
+		before=Time.get_ticks_usec()
 		var decorated: Dictionary=bridge.with_presentation(generated.data)
+		record_cost("near/presentation",Time.get_ticks_usec()-before,context)
 		if not decorated.get("ok",false): return decorated
 		var data: Dictionary=decorated.data.chunk
 		var render_view := RENDER.DATA.view(data)
 		report.near_collision_triangles+=RENDER.DATA.count(render_view)
+		before=Time.get_ticks_usec()
 		data.render_batches=RENDER.PLAN.prepare_batches(render_view)
+		record_cost("near/batch_preparation",Time.get_ticks_usec()-before,context)
 		# The observer lease detects resource release without imposing a second
 		# consumer budget. Shared cache admission remains consumer-owned.
+		before=Time.get_ticks_usec()
 		job=RENDER.begin(data,scene,func(_bytes): return lease,1+RENDER.PLAN.shared_bytes(render_view),cache)
+		record_cost("near/begin",Time.get_ticks_usec()-before,context)
 		report.near_cells+=1
 	else:
 		var generated: Dictionary=bridge.generate_far_chunk(x,y)
+		record_cost("far/generation",Time.get_ticks_usec()-before,context)
 		if not generated.get("ok",false): return generated
+		before=Time.get_ticks_usec()
 		job=FAR.begin(generated.data,scene,lease,cache);job["distant"]=true
+		record_cost("far/begin",Time.get_ticks_usec()-before,context)
 		report.far_cells+=1;report.far_display_triangles+=int(generated.data.triangles)
 		report.largest_far_cell_bytes=maxi(report.largest_far_cell_bytes,int(generated.data.retained_bytes)+int(generated.data.display_bytes))
 	jobs.append(job)
 	var renderer: GDScript=RENDER if near else FAR
-	while not renderer.advance(job):
+	while true:
+		var cache_before: Dictionary=cache.preparation_usec.duplicate()
+		var detail := template_context(job,context) if near else context
+		before=Time.get_ticks_usec()
+		var done: bool=renderer.advance(job)
+		var elapsed := Time.get_ticks_usec()-before
+		var phase := "near/"+str(job.last_phase) if near else "far/advance"
+		record_cost(phase,elapsed,detail if phase=="near/template_preparation" else context)
+		record_cache(cache_before,detail)
+		if done: break
 		if expired(): return {"ok":false,"error":"preparation timeout"}
 	if job.get("cancelled",false) or not job.get("error",{}).is_empty(): return {"ok":false,"error":job.get("error","render cancelled")}
 	job.root.visible=true
@@ -136,11 +195,15 @@ func _cell(bridge: RefCounted, x: int, y: int, near: bool) -> Dictionary:
 
 func release(keep_cache := false) -> void:
 	for job: Dictionary in jobs:
+		var before := Time.get_ticks_usec()
 		if job.get("distant",false): FAR.cancel(job)
 		else: RENDER.cancel(job)
+		record_cost("release/far" if job.get("distant",false) else "release/near",Time.get_ticks_usec()-before,{})
 	jobs.clear()
+	var shutdown_started := Time.get_ticks_usec()
 	if is_instance_valid(scene): scene.queue_free()
 	if cache!=null and not keep_cache: cache.shutdown()
+	record_cost("release/scene_cache",Time.get_ticks_usec()-shutdown_started,{"keep_cache":keep_cache})
 	scene=null;camera=null;environment=null;cache=null
 
 func live_resources() -> int:

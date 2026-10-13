@@ -141,11 +141,13 @@ func run() -> void:
 			print("REVIEW_CAPTURE ",JSON.stringify(report))
 			if not failure.is_empty(): break
 		if shared_cache!=null:
+			var shutdown_started := Time.get_ticks_usec()
 			shared_cache.shutdown()
+			var shutdown_usec := Time.get_ticks_usec()-shutdown_started
 			for frame in 8:
 				await process_frame
 				shared_cache.bytes();consumer_memory()
-			results.back()["revisit_release"]={"cache_bytes":shared_cache.bytes(),"consumer_memory":consumer_memory()}
+			results.back()["revisit_release"]={"cache_bytes":shared_cache.bytes(),"consumer_memory":consumer_memory(),"shutdown_usec":shutdown_usec}
 			if shared_cache.bytes()!=0: failure="revisit cache retained after shutdown"
 			for scene: RefCounted in retired_scenes:
 				if scene.live_resources()!=0: failure="scene resources retained after revisit shutdown"

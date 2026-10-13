@@ -35,6 +35,22 @@ nearest rank. Each run reports independent p95/p99 criteria and a `fixed_scene`
 verdict; `driving` remains `not_measured`. Completion PASS means the tool completed,
 not that the frame target passed.
 
+`preparation_stages` records this view's sample counts, totals and largest single
+call in microseconds, with the peak cell and, for template work, asset/mesh/surface
+context. Near generation, presentation extraction, batch preparation, begin and
+each attachment phase are separate from far generation/begin/advance. `cache/*`
+uses positive deltas of the existing shared preparation timers after each advance;
+zero-duration operations are not counted there. Cache subphases overlap their
+enclosing attachment phase and must not be added to it. These observer snapshots
+are outside individual stage timers but included in preparation wall time.
+
+`cache_activity` counts imports/hits for this view. The `cache` and `attachment`
+diagnostics retain cache-lifetime and process-lifetime counters/peaks, identified
+by `timing_scopes`; use `preparation_stages` for first-visit/revisit comparisons.
+Reused templates produce no new `cache/*` samples. Repeats recreate scene resources
+but keep the process and driver warm. This tool runs generation synchronously;
+its generation costs do not measure Runtime's worker scheduling or driving frames.
+
 ## Ownership and failure
 
 Preparation has a bounded deadline checked between native generation and render
@@ -52,7 +68,13 @@ survive scene teardown; logical cache/lease bytes, engine memory and process RSS
 are distinct. Shader/preload and driver caches are not required to return to a
 cold process baseline.
 
+`release/*` times cancellation/queueing calls only; deferred engine destruction is
+covered by the later resource checks, not by those durations. Revisit shutdown is
+timed separately in `revisit_release.shutdown_usec`. Instrumentation retains only
+bounded phase aggregates and primitive peak context, never scene/resource owners.
+
 `godot/tests/render_measurement_validator.gd` covers missing GPU timing, frame
 thresholds, malformed options, missing views, preparation failure/timeout and
-partial-scene teardown. Consumer graphical checks cover renderer metadata, frame
+partial-scene teardown, phase peak context and revisit isolation without resetting
+shared lifetime counters. Consumer graphical checks cover renderer metadata, frame
 sampling, cache retirement and isolated startup.
