@@ -48,6 +48,11 @@ reports binding replacement: new bindings are tracked; shader activation and
 transparent passthrough retain import tracking. The context tracks the shared
 shader. Mutable preview tracking remains unconditional.
 
+Image/declarative material lookups reuse the entry's initial material/texture
+tracking. GLB import tracks cached overrides, including those created before a
+hierarchy is rejected. Missing/failed material creation remains retryable; each
+entry owns its binding and the last independent bitmap retains its full charge.
+
 LOD jobs retain decoded positions/indices through occluder preparation, avoiding
 another GPU readback. Raw GLTF arrays precede compression and cannot substitute
 without changing geometry/LOD. Scratch uses the doubled asset allowance; eviction

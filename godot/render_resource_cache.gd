@@ -160,7 +160,11 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		item.template = ASSETS.template(id, sources, item.materials, prepare_material)
 		imports += 1
 		item.failed = item.template == null
-		if item.failed: item.stage = "done"
+		if item.failed:
+			# A rejected hierarchy can still have created its declarative override.
+			# Keep that cached binding tracked before material() can return it.
+			_track_material(item.lease,item.materials.get(id))
+			item.stage = "done"
 		else:
 			_track_node(item.lease, item.template)
 			item.pending = [item.template]
@@ -280,6 +284,9 @@ func instance_parts(key: String) -> Array:
 func material(key: String, id: String, sources: Dictionary) -> Material:
 	if not entries.has(key): return null
 	var item: Dictionary = entries[key]
+	# Successful creation tracks once; GLB import tracks cached overrides too.
+	# Failed material creation adds no cache entry, so a later call can retry.
+	if item.materials.has(id): return item.materials[id]
 	var value := ASSETS.material(id, sources, item.materials)
 	_track_material(item.lease, value)
 	return value

@@ -131,6 +131,10 @@ func run() -> void:
 		await replacement_tracking(prepared)
 	for complete in [false,true]:
 		await pending_surface_tracking(complete)
+	for extension in ["png","webp"]:
+		await cached_asset_material(extension)
+	for valid in [false,true]:
+		await imported_override_tracking(valid)
 	light_role_lookup()
 	await light_binding_snapshot()
 	await failed_light_import()
@@ -293,6 +297,86 @@ func pending_surface_tracking(complete: bool) -> void:
 	bitmaps.clear()
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"last source bitmap returns the pending binding reservation")
+
+func image_assets(extension: String) -> Dictionary:
+	var picture := Image.create(2,2,false,Image.FORMAT_RGBA8)
+	picture.fill(Color(.2,.4,.6,.5))
+	var data := picture.save_png_to_buffer() if extension=="png" else picture.save_webp_to_buffer()
+	return {"image":{"path":"image."+extension,"bytes":data,"material_json":"null","content_hash":"synthetic-"+extension,"memory_bytes":4096}}
+
+func cached_asset_material(extension: String) -> void:
+	var assets := image_assets(extension)
+	var descriptor := {"albedo_rgba":[150,200,250,255],"metallic_per_mille":200,"roughness_per_mille":700,"double_sided":true,"albedo_texture":"image"}
+	assets.declared={"path":"declared.glb","bytes":PackedByteArray(),"material_json":JSON.stringify(descriptor),"content_hash":"synthetic-declared","memory_bytes":4096}
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	var key: String=cache.claim("image",assets)
+	var shared: String=cache.claim("image",assets)
+	var declared: String=cache.claim("declared",assets)
+	var source: Dictionary=assets.image
+	assets.erase("image")
+	check(cache.material(key,"image",assets)==null and cache.material(declared,"declared",assets)==null,"missing source/bitmap does not cache a failed binding")
+	check(cache.entries[key].materials.is_empty() and cache.entries[declared].materials.is_empty(),"failed lookups leave both entries retryable")
+	assets.image=source
+	var material: StandardMaterial3D=cache.material(key,"image",assets)
+	var override: StandardMaterial3D=cache.material(declared,"declared",assets)
+	check(material!=null and override!=null and material!=override,"image/declarative entries recover independently")
+	check(material.transparency==BaseMaterial3D.TRANSPARENCY_ALPHA and override.transparency==material.transparency,"source alpha survives both material paths")
+	check(override.albedo_color==Color8(150,200,250,255) and is_equal_approx(override.metallic,.2) and is_equal_approx(override.roughness,.7) and override.cull_mode==BaseMaterial3D.CULL_DISABLED,"declarative parameters survive reuse")
+	var tracked: int=cache.entries[key].lease.refs.size()
+	var override_tracked: int=cache.entries[declared].lease.refs.size()
+	for index in 3:
+		check(cache.material(shared,"image",assets)==material and cache.material(declared,"declared",assets)==override,"other cells reuse the same cached bindings")
+	check(tracked==2 and override_tracked==2 and cache.entries[key].lease.refs.size()==tracked and cache.entries[declared].lease.refs.size()==override_tracked,"cache hits do not revisit material texture slots")
+	var held: Texture2D=material.albedo_texture
+	var held_override: Texture2D=override.albedo_texture
+	var amount: int=cache.entries[key].bytes
+	var override_amount: int=cache.entries[declared].bytes
+	cache.release(key);cache.trim()
+	check(cache.entries.has(shared),"another cell's claim protects the cached binding")
+	cache.release(shared);cache.release(declared);cache.shutdown()
+	material=null;override=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount+override_amount,"independent image/declarative bitmaps retain both reservations")
+	held=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==override_amount,"unrelated entry retires independently")
+	held_override=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==0 and cache.material(key,"image",assets)==null,"last bitmap retires and evicted entries cannot be read")
+
+func imported_override_tracking(valid: bool) -> void:
+	var source := Node3D.new()
+	var node := MeshInstance3D.new();node.mesh=BoxMesh.new();source.add_child(node)
+	# Camera nodes are rejected by the display adapter after override creation.
+	if not valid: source.add_child(Camera3D.new())
+	var document := GLTFDocument.new();var state := GLTFState.new()
+	check(document.append_from_scene(source,state)==OK,"synthetic override GLB export")
+	var data := document.generate_buffer(state)
+	source.free();source=null;document=null;state=null
+	var assets := image_assets("png")
+	var descriptor := {"albedo_rgba":[255,255,255,255],"metallic_per_mille":0,"roughness_per_mille":900,"double_sided":false,"albedo_texture":"image"}
+	assets.model={"path":"model.glb","bytes":data,"material_json":JSON.stringify(descriptor),"content_hash":"synthetic-override","memory_bytes":1048576}
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	var key: String=cache.claim("model",assets)
+	var item: Dictionary=cache.entries[key]
+	while item.stage not in ["lod","done"]: cache.prepare_template(key,"model",assets)
+	check(item.failed==not valid and item.materials.has("model"),"GLB import caches the override before hierarchy acceptance/rejection")
+	var tracked: int=item.lease.refs.size()
+	var material: StandardMaterial3D=cache.material(key,"model",assets)
+	var held: Texture2D=material.albedo_texture
+	check(item.lease.refs.size()==tracked and tracks(item.lease,material) and tracks(item.lease,held),"GLB-populated cache hits retain existing material and bitmap tracking")
+	var amount: int=item.bytes
+	cache.release(key);cache.shutdown();material=null;item={}
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"bitmap retained after failed import or partial cancellation keeps the reservation")
+	held=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"last imported override bitmap retires")
+
+func tracks(lease: Lease, resource: Resource) -> bool:
+	for ref: WeakRef in lease.refs:
+		if ref.get_ref()==resource: return true
+	return false
 
 func instance_parts(mode: String) -> void:
 	var mesh := ArrayMesh.new()
