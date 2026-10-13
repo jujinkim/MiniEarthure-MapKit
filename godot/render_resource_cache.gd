@@ -116,7 +116,6 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 				item.stage = "materials"
 	elif stage == "materials":
 		var node: MeshInstance3D = item.styling
-		item.erase("styling")
 		if _environment != null:
 			var binding := {}
 			for light: Dictionary in environment_profile.get("lights",[]):
@@ -130,6 +129,13 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			if water: node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			if node.material_override != null: node.material_override = _environment.surface_material(node.material_override,0)
 		_track_node(item.lease,node)
+		item.stage = "occluder"
+	elif stage == "occluder":
+		# Derive once after LOD/material replacement, as its own admitted step.
+		# Root/placement scaling can make even a small mesh an occluder candidate.
+		var node: MeshInstance3D = item.styling
+		preload("./display_quality.gd").prepare_occluder(node.mesh,item.lease)
+		item.erase("styling")
 		item.stage = "lod"
 	var elapsed := Time.get_ticks_usec() - started
 	if stage != "context":

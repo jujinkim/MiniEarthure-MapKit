@@ -1,6 +1,7 @@
 extends SceneTree
 const MATERIALS := preload("../environment_materials.gd")
 const CACHE := preload("../render_resource_cache.gd")
+const QUALITY := preload("../display_quality.gd")
 var failed := false
 class Lease extends RefCounted:
 	var bytes: int
@@ -61,6 +62,10 @@ func run() -> void:
 	var path: String=get_script().resource_path.get_base_dir().path_join("../../assets/richer-library/assets/shop-0.glb")
 	var bytes:=FileAccess.get_file_as_bytes(path)
 	var assets={"shop":{"path":"shop.glb","bytes":bytes,"material_json":"null","content_hash":bytes.hex_encode().sha256_text(),"memory_bytes":4194304}}
+	var asset_denied := CACHE.new(func(_amount): return null)
+	check(asset_denied.claim("shop",assets).is_empty() and asset_denied.entries.is_empty(),"admission denial creates no template or occluder")
+	asset_denied.shutdown()
+	await partial_occluder_cancel(assets)
 	cache.environment_profile={"lights":[{"asset_id":"shop","window_materials":[4],"bulb_materials":[]}]}
 	var key: String=cache.claim("shop",assets)
 	var shared_key: String=cache.claim("shop",assets)
@@ -71,20 +76,30 @@ func run() -> void:
 		stages.append(cache.entries[key].stage)
 		cache.prepare_template(key,"shop",assets)
 	var template: Node3D=cache.template(key,"shop",assets)
-	check(stages.has("lod") and stages.has("materials") and cache.imports==1,"phased preparation imports shared GLB exactly once")
+	check(stages.has("lod") and stages.has("materials") and stages.has("occluder") and cache.imports==1,"LOD, styling and occluder preparation use separate admitted steps")
+	var preparation: Dictionary=cache.diagnostics().preparation_usec
 	cache.release(shared_key)
 	check(cache.template(key,"shop",assets)==template and cache.imports==1,"second consumer reuses prepared resources")
+	check(cache.diagnostics().preparation_usec==preparation,"second consumer does not repeat derived preparation")
 	check(template!=null,"actual GLB imports with shared textured materials")
+	var held_shape: ArrayOccluder3D
+	var template_bytes: int=cache.entries[key].bytes
 	if template!=null:
 		var pending: Array[Node]=[template];var details:=0
 		while not pending.is_empty():
 			var node: Node=pending.pop_back()
 			if node is MeshInstance3D:
+				check(node.mesh.has_meta("mapkit_occluder_preparation"),"every styled template mesh has a prepared result")
+				var occluder := QUALITY.occluder(node.mesh,null)
+				if occluder!=null:
+					held_shape=occluder.occluder
+					occluder.free()
 				for i in node.mesh.get_surface_count():
 					var mat: Material=node.mesh.surface_get_material(i)
 					if mat is ShaderMaterial and mat.get_shader_parameter("detail_enabled"): details+=1
 			pending.append_array(node.get_children())
 		check(details>=3,"GLB material roles select brick/wood/stone shared tiles")
+	check(held_shape!=null,"fixture lends a standalone occluder resource")
 	# Compile both textured wrapper and urban shader on the real renderer.
 	var mesh:=MeshInstance3D.new();mesh.mesh=BoxMesh.new();mesh.material_override=styled;root.add_child(mesh)
 	var camera:=Camera3D.new();camera.position=Vector3(0,1,3);root.add_child(camera);camera.look_at(Vector3.ZERO)
@@ -96,9 +111,27 @@ func run() -> void:
 	cache.release(key);cache.release(key);cache.shutdown()
 	context=null;styled=null;tile_material=null;tile_other=null;template=null;source=null;plain=null;other=null;bitmap=null;picture=null
 	for i in 6: await process_frame
-	check(cache.bytes()==MATERIALS.MEMORY_BYTES,"borrowed tile retains context lease after cancellation/shutdown")
+	check(cache.bytes()==MATERIALS.MEMORY_BYTES+template_bytes,"borrowed tile and occluder retain their independent shared leases")
 	held_tile=null
 	for i in 6: await process_frame
-	check(cache.bytes()==0,"final tile borrower releases complete shared charge")
+	check(cache.bytes()==template_bytes,"standalone occluder borrower retains the template charge after mesh retirement")
+	held_shape=null
+	for i in 3: await process_frame
+	check(cache.bytes()==0,"last shared borrower releases the complete charge")
 	print("richer_material_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+
+func partial_occluder_cancel(assets: Dictionary) -> void:
+	for finish_shape in [false,true]:
+		var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+		var key: String=cache.claim("shop",assets)
+		var shared: String=cache.claim("shop",assets)
+		while cache.entries[key].stage not in ["occluder","done"]:
+			cache.prepare_template(key,"shop",assets)
+		check(cache.entries[key].stage=="occluder","fixture reaches staged occluder preparation")
+		if finish_shape: cache.prepare_template(key,"shop",assets)
+		cache.shutdown();cache.release(key)
+		check(cache.entries.has(shared),"one cancelled claim cannot evict another consumer's partial template")
+		cache.release(shared)
+		for i in 3: await process_frame
+		check(cache.entries.is_empty() and cache.bytes()==0,"cancel before/after occluder preparation drops pending nodes and resources")

@@ -28,6 +28,7 @@ func run() -> void:
 	chunk.render_batches=batches
 	check(planner.upper_bound({"triangles":2,"objects":0})>=planner.estimate(chunk,0),"pre-generation allowance covers spatial batches and occluders")
 	var scene := Node3D.new();root.add_child(scene)
+	occluder_reuse(scene)
 	var mesh := SphereMesh.new();mesh.radial_segments=48;mesh.rings=24
 	var lod := QUALITY.prepare_lods(mesh)
 	var importer := ImporterMesh.from_mesh(lod)
@@ -102,3 +103,64 @@ func run() -> void:
 	QUALITY.current={}
 	print("display_quality_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+
+func occluder_reuse(scene: Node3D) -> void:
+	# Two walls and a lintel leave a central doorway, with indexed opaque faces.
+	var points := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for rect: Rect2 in [Rect2(-4,0,3,4),Rect2(1,0,3,4),Rect2(-1,2,2,2)]:
+		var offset := points.size()
+		points.append_array(PackedVector3Array([Vector3(rect.position.x,rect.position.y,0),Vector3(rect.end.x,rect.position.y,0),Vector3(rect.end.x,rect.end.y,0),Vector3(rect.position.x,rect.end.y,0)]))
+		indices.append_array(PackedInt32Array([offset,offset+1,offset+2,offset,offset+2,offset+3]))
+	var arrays := [];arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX]=points;arrays[Mesh.ARRAY_INDEX]=indices
+	var facade := ArrayMesh.new();facade.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	# Large transparent/vegetation faces across the opening must remain excluded.
+	var pane := BoxMesh.new();pane.size=Vector3(8,4,.1)
+	for vegetation in [false,true]:
+		var material := StandardMaterial3D.new()
+		if vegetation: material.set_meta("mapkit_vegetation",true)
+		else: material.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+		facade.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,pane.get_mesh_arrays())
+		facade.surface_set_material(facade.get_surface_count()-1,material)
+	var original := QUALITY.occluder(facade,null)
+	var expected_vertices: PackedVector3Array=original.occluder.vertices
+	var expected_indices: PackedInt32Array=original.occluder.indices
+	check(expected_vertices.size()==18,"only opaque doorway walls contribute occlusion")
+	QUALITY.prepare_occluder(facade,null)
+	var first := QUALITY.occluder(facade,null)
+	QUALITY.prepare_occluder(facade,null)
+	var second := QUALITY.occluder(facade,null)
+	check(first!=second and first.occluder==second.occluder,"independent placements reuse one immutable shape")
+	check(first.occluder.vertices==expected_vertices and first.occluder.indices==expected_indices,"prepared occluder preserves every ordered face and inset")
+	for i in range(0,expected_vertices.size(),3):
+		var a: Vector3=expected_vertices[i];var b: Vector3=expected_vertices[i+1];var c: Vector3=expected_vertices[i+2]
+		check(maxf(a.x,maxf(b.x,c.x))<=-1 or minf(a.x,minf(b.x,c.x))>=1 or minf(a.y,minf(b.y,c.y))>=2,"no occluder triangle bridges the doorway")
+	for level in 3:
+		QUALITY.apply_node(first,QUALITY.profile(level))
+		check(first.visible==bool(QUALITY.profile(level).occlusion),"shared shape preserves per-instance quality visibility")
+	original.free();first.free();second.free()
+	# Opaque instancing path retains nested scale, reflection and placement yaw.
+	var opaque := ArrayMesh.new();opaque.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	QUALITY.prepare_occluder(opaque,null)
+	var template := MeshInstance3D.new();template.mesh=opaque
+	template.scale=Vector3(-1.5,2,1);template.position=Vector3(1,0,2)
+	var group := INSTANCES.begin(template,2,scene,null)
+	var pose := Transform3D(Basis(Vector3.UP,.43),Vector3(5,0,7))
+	INSTANCES.append(group,pose,"first")
+	INSTANCES.append(group,Transform3D.IDENTITY,"second")
+	var children: Array[Node]=group.groups[0].node.get_children()
+	check(children.size()==2 and children[0].occluder==children[1].occluder,"MultiMesh placements borrow the prepared shape")
+	check(children[0].transform.is_equal_approx(pose*template.transform),"occlusion follows reflected nested mesh and placement transform")
+	check(opaque.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]==points and opaque.surface_get_arrays(0)[Mesh.ARRAY_INDEX]==indices,"preparation does not alter display geometry")
+	template.free();group.clear();children.clear()
+	var ground := PlaneMesh.new();ground.size=Vector2(8,8)
+	QUALITY.prepare_occluder(ground,null)
+	check(ground.has_meta("mapkit_occluder_preparation") and QUALITY.occluder(ground,null)==null,"empty occluder result is prepared and reused")
+	# Unprepared mutable previews must keep observing their latest geometry.
+	var mutable := BoxMesh.new();mutable.size=Vector3(8,4,.1)
+	var before := QUALITY.occluder(mutable,null)
+	mutable.size=Vector3(10,6,.1)
+	var after := QUALITY.occluder(mutable,null)
+	check(before.occluder.vertices!=after.occluder.vertices and not mutable.has_meta("mapkit_occluder_preparation"),"uncached preview reflects mesh edits")
+	before.free();after.free()

@@ -28,9 +28,10 @@ The cache key includes content, declarative material settings and referenced ima
 content. Views without shareable records retain independent per-job ownership.
 The cache claims resources before import and holds at most 256 entries/128 MiB by
 default, including its urban shader. The caller supplies independent admission.
-Each model imports once while cached; materials, mesh surfaces and decoded images
-are shared. GLB import, shared texture context, per-mesh LOD generation, material binding,
-MultiMesh setup, placement and mesh upload are separate admitted steps. Concurrent
+Each model imports once while cached; materials, mesh surfaces, decoded images and
+derived occluder shapes are shared. GLB import, shared texture context, per-mesh LOD
+generation, material binding, occluder preparation, MultiMesh setup, placement and
+mesh upload are separate admitted steps. Concurrent
 claims advance one shared template and reuse its completed phases. Diagnostics
 include each phase total/peak and attachment/release costs; individual synchronous
 engine operations cannot be preempted and their peaks remain visible.
@@ -49,6 +50,12 @@ remain visible until normal cell/frustum retirement. MultiMesh bounds include on
 populated transformed instances, not unused capacity, with an 8 cm margin for leaf
 motion. Leaf faces never act as static occluders. Actual upright opaque
 triangles (at most 64, inset 1 cm) form occluders; an AABB never fills an opening.
+After LOD and material preparation, each immutable template mesh prepares this
+shape once in a separate admitted step, including an empty result when no face
+qualifies. Placements create independent occluder nodes with their original
+transforms and quality visibility. Mutable standalone meshes derive current faces
+on demand. Preparation uses the existing template allowance and reports its own
+phase total/peak in cache diagnostics.
 
 Opaque shared rendering emits each multi-material mesh once. Single-object groups
 also use MultiMesh custom data; exceptional material overrides get an owned seed
@@ -66,7 +73,9 @@ retirement; it does not claim allocator savings by reducing a multiplier.
 Claims pin templates during attachment. Completion/cancel releases pins exactly
 once and clears source records. Unpinned templates may be evicted; their meshes,
 materials/textures remain charged while scene instances or external consumers
-borrow them. Cache shutdown seals these leases, including the shared shader.
+borrow them. An independently retained occluder shape also keeps the shared
+template lease charged after its mesh and instances retire. Cache shutdown seals
+these leases, including the shared shader.
 The lease provider must retain charges through its last-borrower/retirement rules.
 Completed/failed jobs may retain an invalid root handle for diagnostics.
 
@@ -80,6 +89,9 @@ hashes, GLB/images, opaque grouping, cancellation and transforms. Actual GPU
 MultiMesh transform queries require a rendered engine; the dummy headless server
 cannot supply them. Caller integration tests cover admission, shared last borrowers,
 failed replacement, worker cancellation and delayed retirement.
+`display_quality_validator` and `richer_material_validator` cover identical ordered
+occluder faces, open doorways, excluded transparent/vegetation faces, transformed
+instances, shared preparation, partial cancellation and final shape borrowers.
 
 ## Unshareable presentation resources
 

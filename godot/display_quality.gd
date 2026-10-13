@@ -64,6 +64,24 @@ static func prepare_lods(mesh: Mesh) -> Mesh:
 	return result
 
 static func occluder(mesh: Mesh, lease: RefCounted) -> OccluderInstance3D:
+	var prepared: Dictionary = mesh.get_meta("mapkit_occluder_preparation", {})
+	var shape: ArrayOccluder3D = prepared.shape if prepared.has("shape") else _occluder_shape(mesh)
+	if shape == null: return null
+	var result := OccluderInstance3D.new()
+	result.occluder = shape
+	result.visible = bool(active().occlusion)
+	if lease != null: lease.track(shape); lease.track(result)
+	return result
+
+## Only immutable, fully styled shared-template meshes opt in. Mutable preview
+## meshes keep deriving their current faces on demand. Cache empty results too.
+static func prepare_occluder(mesh: Mesh, lease: RefCounted) -> void:
+	if mesh.has_meta("mapkit_occluder_preparation"): return
+	var shape := _occluder_shape(mesh)
+	mesh.set_meta("mapkit_occluder_preparation", {"shape":shape})
+	if shape != null and lease != null: lease.track(shape)
+
+static func _occluder_shape(mesh: Mesh) -> ArrayOccluder3D:
 	# A conservative subset of actual opaque upright faces. Never fill a model
 	# AABB: doors, junction cuts, branches and windows must stay open.
 	var vertices := PackedVector3Array()
@@ -91,8 +109,4 @@ static func occluder(mesh: Mesh, lease: RefCounted) -> OccluderInstance3D:
 	for i in vertices.size(): indices.append(i)
 	var shape := ArrayOccluder3D.new()
 	shape.set_arrays(vertices,indices)
-	var result := OccluderInstance3D.new()
-	result.occluder = shape
-	result.visible = bool(active().occlusion)
-	if lease != null: lease.track(shape); lease.track(result)
-	return result
+	return shape
