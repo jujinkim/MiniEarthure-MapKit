@@ -126,7 +126,9 @@ func run() -> void:
 	for boundary in ["surface","generate","get_mesh","materials","material_surface","occluder","instance_parts"]:
 		await cancel_at(boundary)
 	await borrowed_prepared_mesh()
+	light_role_lookup()
 	await light_binding_snapshot()
+	await failed_light_import()
 	await imported_materials()
 	for mode in ["opaque","transparent","overlay","surface_override"]:
 		await instance_parts(mode)
@@ -159,7 +161,7 @@ func cancel_at(boundary: String) -> void:
 	cache.shutdown()
 	check(cache.prepare_template(shared,"fixture",ASSETS) and cache.template(shared,"fixture",ASSETS)==null,"late advance after shutdown cannot publish partial materials")
 	cache.release(shared)
-	check(not partial.has("occluder_arrays") and not partial.has("lod_job") and not partial.has("light_binding"),"eviction drops preparation scratch even if diagnostics retain the entry "+boundary)
+	check(not partial.has("occluder_arrays") and not partial.has("lod_job") and not partial.has("light_binding") and not partial.has("light_roles"),"eviction drops preparation scratch even if diagnostics retain the entry "+boundary)
 	for frame in 3: await process_frame
 	check(cache.entries.is_empty(),"shutdown removes partial template "+boundary)
 	check(cache.bytes()==(amount if held!=null else 0),"scratch retires while a partial mesh borrower stays charged "+boundary)
@@ -286,6 +288,32 @@ func meshes(node: Node) -> Array[MeshInstance3D]:
 	for child: Node in node.get_children(): result.append_array(meshes(child))
 	return result
 
+func light_role_lookup() -> void:
+	# Direct callers accept numeric conversion and overlapping lists too.
+	var binding := {"window_materials":[2.0,"4",4],"bulb_materials":[2,3]}
+	var roles := MATERIALS.prepare_light_roles(binding)
+	check(roles.is_read_only(),"prepared light roles are immutable")
+	var source := StandardMaterial3D.new()
+	for index in 6:
+		var expected: int=[0,0,1,2,1,0][index]
+		check(MATERIALS.surface_role(source,binding,index)==expected and MATERIALS.surface_role(source,binding,index,roles)==expected,"prepared/direct surface-index role "+str(index))
+		check(MATERIALS.surface_role(null,binding,index,roles)==expected,"missing material uses surface-index role "+str(index))
+	source.set_meta("mapkit_material_index",3)
+	check(MATERIALS.surface_role(source,binding,2,roles)==2 and MATERIALS.surface_role(source,binding,2)==2,"material index overrides surface index")
+	var context := MATERIALS.new(128,true)
+	var pending: Material=context.import_surface(source,2,binding,roles)
+	check(pending.get_shader_parameter("lighting_role")==2 and pending.shader==null,"prepared import keeps the metadata role without activating a shader")
+	binding.window_materials.clear();binding.bulb_materials.clear();binding.window_materials.append(3)
+	check(MATERIALS.surface_role(source,binding,2)==1 and MATERIALS.surface_role(source,binding,2,roles)==2,"direct edits stay live while prepared roles remain fixed")
+	check(MATERIALS.surface_role(source,binding,2,MATERIALS.prepare_light_roles({}))==0,"empty prepared roles never fall back to a later binding")
+	check(context.import_surface(source,2,binding).get_shader_parameter("lighting_role")==1,"direct import reads the current binding")
+	var mesh := BoxMesh.new();mesh.material=source
+	var preview: Mesh=context.style_mesh(mesh,binding)
+	check(preview.surface_get_material(0).get_shader_parameter("lighting_role")==1,"preview uses the current role")
+	binding.window_materials.clear();binding.bulb_materials.append(3)
+	preview=context.style_mesh(mesh,binding)
+	check(preview.surface_get_material(0).get_shader_parameter("lighting_role")==2 and mesh.material==source,"next preview refreshes authored roles without mutating the source")
+
 func light_binding_snapshot() -> void:
 	var cache := seeded_cache(fixture())
 	var key: String=cache.entries.keys()[0]
@@ -298,18 +326,20 @@ func light_binding_snapshot() -> void:
 	var other_key: String=cache.claim("other",assets)
 	check(shared==key and other_key!=key,"unrelated cell lights preserve sharing; different asset bindings stay separate")
 	check(cache.entries[other_key].light_binding==other,"each claim captures its own asset binding")
+	check(item.light_roles=={2:1,3:2} and cache.entries[other_key].light_roles=={0:1,1:2},"asset role lookups remain independent")
 	binding.window_materials[0]=7;binding.bulb_materials[0]=8
 	var changed: String=cache.claim("fixture",assets)
 	check(changed!=key and changed==cache.environment_key_for("fixture",assets),"edited authored binding gets its own matching key")
-	check(item.light_binding==BINDING,"claim snapshot isolates nested list edits")
+	check(item.light_binding==BINDING and item.light_roles=={2:1,3:2},"claim snapshot and lookup isolate nested list edits")
 	cache.environment_profile={"lights":[other]}
 	var unbound: String=cache.claim("fixture",assets)
 	check(unbound!=key and cache.entries[unbound].light_binding.is_empty(),"missing binding is captured independently of other assets")
+	check(cache.entries[unbound].light_roles.is_empty() and cache.entries[unbound].light_roles.is_read_only(),"absent bindings have a prepared empty lookup")
 	cache.environment_profile={"lights":[{"asset_id":"fixture","window_materials":[],"bulb_materials":[]}]}
 	var empty: String=cache.claim("fixture",assets)
 	check(empty!=unbound and empty!=key,"explicit empty lists retain their original cache identity")
 	while not cache.prepare_template(shared,"fixture",assets): pass
-	check(not item.has("light_binding"),"completed template releases its claim snapshot")
+	check(not item.has("light_binding") and not item.has("light_roles"),"completed template releases its claim snapshot and lookup")
 	for index in item.template.mesh.get_surface_count():
 		var material: Material=item.template.mesh.surface_get_material(index)
 		if material is ShaderMaterial:
@@ -320,12 +350,25 @@ func light_binding_snapshot() -> void:
 	check(cache.entries.has(shared),"another claimant protects prepared binding during pressure")
 	for claim_key: String in [shared,other_key,changed,unbound,empty]: cache.release(claim_key)
 	cache.trim();cache.shutdown()
-	check(cache.entries.is_empty() and not item.has("light_binding"),"eviction removes every completed and partial binding snapshot")
+	check(cache.entries.is_empty() and not item.has("light_binding") and not item.has("light_roles"),"eviction removes every completed and partial binding snapshot and lookup")
 	for frame in 3: await process_frame
 	check(cache.bytes()==amount,"last light material borrower retains template and context allowances")
 	held=null
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"last light material release retires all allowances")
+
+func failed_light_import() -> void:
+	var assets := ASSETS.duplicate(true)
+	assets.fixture.path="fixture.glb";assets.fixture.bytes=PackedByteArray()
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	cache.quality_profile=QUALITY.profile(0);cache.environment_profile={"lights":[BINDING]}
+	var key: String=cache.claim("fixture",assets)
+	var item: Dictionary=cache.entries[key]
+	while not cache.prepare_template(key,"fixture",assets): pass
+	check(item.failed and not item.has("light_binding") and not item.has("light_roles"),"failed import drops snapshot and lookup")
+	cache.release(key);cache.shutdown()
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"failed light import retires its reservations")
 
 func imported_materials() -> void:
 	# Export a synthetic hierarchy once, then compare the ordinary GLB path with
@@ -410,7 +453,7 @@ func cancel_imported(assets: Dictionary, boundary: String) -> void:
 	cache.shutdown()
 	check(cache.template(shared,"fixture",assets)==null,"shutdown cannot publish a shaderless template "+boundary)
 	cache.release(shared)
-	check(not partial.has("light_binding"),"cancelled import releases the claimed light snapshot "+boundary)
+	check(not partial.has("light_binding") and not partial.has("light_roles"),"cancelled import releases the claimed light snapshot and lookup "+boundary)
 	for frame in 3: await process_frame
 	check(cache.bytes()==amount,"partial imported mesh and context keep their full leases "+boundary)
 	held=null

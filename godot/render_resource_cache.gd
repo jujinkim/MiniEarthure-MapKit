@@ -89,7 +89,11 @@ func claim(id: String, sources: Dictionary) -> String:
 	# record per mesh node, borrowing the already tracked mesh/material.
 	var amount := int(sources[id].memory_bytes) * 2 + 131072 # LOD generation, retained indices and occluders, including import overlap.
 	var claimed := _claim(key,amount,"context")
-	if fresh and not claimed.is_empty(): entries[claimed].light_binding = binding
+	if fresh and not claimed.is_empty():
+		entries[claimed].light_binding = binding
+		# Validated lights have at most 64 window + 16 bulb indices. The small
+		# integer lookup fits the existing 128 KiB material/clock allowance.
+		entries[claimed].light_roles = ENVIRONMENT.prepare_light_roles(binding)
 	return claimed
 
 func claim_tree_canopy() -> String:
@@ -152,7 +156,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 	var diagnostic_stage := "lod_"+str(item.lod_job.stage) if stage == "lod_prepare" else stage
 	var started := Time.get_ticks_usec()
 	if stage == "import":
-		var prepare_material: Callable = _environment.import_surface.bind(item.light_binding) if _environment != null else Callable()
+		var prepare_material: Callable = _environment.import_surface.bind(item.light_binding,item.light_roles) if _environment != null else Callable()
 		item.template = ASSETS.template(id, sources, item.materials, prepare_material)
 		imports += 1
 		item.failed = item.template == null
@@ -204,7 +208,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		var index: int = item.material_surface
 		if index < node.mesh.get_surface_count():
 			var style_started := Time.get_ticks_usec()
-			_environment.style_surface(node.mesh,item.light_binding,index,false,mesh_observer)
+			_environment.style_surface(node.mesh,item.light_binding,index,false,mesh_observer,item.light_roles)
 			# Include callee-local retirement after its inner binding timer returns.
 			QUALITY.observe_mesh(mesh_observer,"material_style",style_started,index)
 			var track_started := Time.get_ticks_usec()
@@ -241,7 +245,9 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		pieces.make_read_only()
 		item.instance_parts = pieces
 		item.stage = "done"
-	if item.stage == "done": item.erase("light_binding")
+	if item.stage == "done":
+		item.erase("light_binding")
+		item.erase("light_roles")
 	var elapsed := Time.get_ticks_usec() - started
 	if stage != "context":
 		preparation_usec[diagnostic_stage] = int(preparation_usec.get(diagnostic_stage,0)) + elapsed
@@ -302,6 +308,7 @@ func _evict(key: String) -> void:
 	item.erase("mesh")
 	item.erase("occluder_arrays")
 	item.erase("light_binding")
+	item.erase("light_roles")
 	item.erase("instance_parts")
 	if item.lease != null:
 		item.lease.seal()

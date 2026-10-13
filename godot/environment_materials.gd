@@ -145,18 +145,29 @@ func style_mesh(mesh: Mesh, binding: Dictionary, instances := false, observer :=
 
 ## Snapshot imported parameters before the engine uploads an unused source shader.
 ## The unpublished template binds the shared shader in its admitted surface step.
-func import_surface(source: Material, index: int, binding: Dictionary) -> Material:
-	return surface_material(source,surface_role(source,binding,index),false,true)
+func import_surface(source: Material, index: int, binding: Dictionary, roles: Variant = null) -> Material:
+	return surface_material(source,surface_role(source,binding,index,roles),false,true)
 
-static func surface_role(source: Material, binding: Dictionary, index: int) -> int:
+## Immutable, preparation-only lookup for a claimed asset's light binding.
+## Fill windows last to preserve their precedence for direct callers too.
+static func prepare_light_roles(binding: Dictionary) -> Dictionary:
+	var roles := {}
+	for value in binding.get("bulb_materials",[]): roles[int(value)] = 2
+	for value in binding.get("window_materials",[]): roles[int(value)] = 1
+	roles.make_read_only()
+	return roles
+
+static func surface_role(source: Material, binding: Dictionary, index: int, roles: Variant = null) -> int:
 	var material_index := int(source.get_meta("mapkit_material_index",index)) if source != null else index
+	# Null means a mutable direct caller; an empty prepared lookup is authoritative.
+	if roles != null: return int(roles.get(material_index,0))
 	return 1 if binding.get("window_materials",[]).any(func(value): return int(value)==material_index) else (2 if binding.get("bulb_materials",[]).any(func(value): return int(value)==material_index) else 0)
 
 ## Mutates only a caller-owned unpublished mesh; previews still use style_mesh.
-func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := false, observer := Callable()) -> void:
+func style_surface(mesh: Mesh, binding: Dictionary, index: int, instances := false, observer := Callable(), roles: Variant = null) -> void:
 	var started := Time.get_ticks_usec()
 	var source := mesh.surface_get_material(index)
-	mesh.surface_set_material(index, surface_material(source,surface_role(source,binding,index),instances))
+	mesh.surface_set_material(index, surface_material(source,surface_role(source,binding,index,roles),instances))
 	preload("./display_quality.gd").observe_mesh(observer,"material_bind",started,index)
 	started = Time.get_ticks_usec()
 	source = null

@@ -23,11 +23,14 @@ worker completion and before rendering. Compressed length is not a RAM estimate.
 Current v1 native presentation records add `content_hash` and `memory_bytes` from the
 validated package. They are excluded from package serialization/generated hashes.
 Cache keys include content, declarative materials and referenced image content.
-Each new asset claim snapshots the light binding used by its key. Import and all
-mesh material steps reuse that snapshot even when another cell replaces the current
-profile or authored lists change. Unrelated assets and absent bindings remain
-independent. Completion, failed import and eviction discard this preparation-only
-metadata within the existing asset allowance.
+Each new asset claim snapshots the light binding used by its key and builds a
+read-only material-role lookup. Import and all mesh material steps reuse it even
+when another cell replaces the current profile or authored lists change. Window
+roles take precedence; material metadata takes precedence over surface indices.
+Unrelated assets and absent bindings remain independent. Direct preview calls
+read their current binding. Completion, failed import and eviction discard this
+preparation-only metadata. At most 64 window and 16 bulb indices fit within the
+existing material/clock allowance.
 Claims precede import; the default cap is 256 entries/128 MiB including shaders.
 Concurrent claims share one import/preparation per entry. Texture context, import,
 each LOD input surface, LOD generation/upload, each material binding, occluder
