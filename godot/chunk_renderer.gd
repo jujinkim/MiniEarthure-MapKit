@@ -222,12 +222,13 @@ static func _advance(job: Dictionary) -> bool:
 						_environment_lamp(job,id,object)
 						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
+				var seed_value := float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0
 				var pending: Array = [instance]
 				while not pending.is_empty():
 					var piece: Node3D = pending.pop_back()
 					if piece is MeshInstance3D:
 						if bool(sources[id].get("solid",true)): piece.set_meta("mapkit_decoration",false)
-						_seed_fallback_materials(piece,float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0,job.lease)
+						_seed_fallback_materials(piece,seed_value,job.lease)
 						if piece.get_meta("mapkit_occluder",false):
 							var occluder := QUALITY.occluder(piece.mesh,job.lease)
 							if occluder != null: piece.add_child(occluder)

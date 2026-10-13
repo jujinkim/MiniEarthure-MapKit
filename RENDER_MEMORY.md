@@ -67,7 +67,9 @@ instances enter the merged bounds. Mutable preview meshes refresh bounds at plac
 Each setup shares one quality snapshot; each
 placement computes its object seed once and reads occluder quality once if needed.
 The next call reads current quality again. Transparent models, overlays and
-per-surface overrides use ordinary instances. LOD indices are generated once per
+per-surface overrides use ordinary instances. Their hierarchy shares one object
+seed calculation while each mesh keeps its independent material bindings.
+LOD indices are generated once per
 template. The validated `solid` flag/cache key preserves collidable fences, walls
 and props at every preset. Only assets without collision at/above their origin
 may use decoration distance (buried root beds qualify), with 8 m hysteresis.
