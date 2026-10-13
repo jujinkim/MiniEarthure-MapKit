@@ -27,7 +27,7 @@ func run() -> void:
 	root.add_child(world)
 	var cell := Node3D.new()
 	world.add_child(cell)
-	CHUNKS._environment_lamp({"root":cell,"lamp_bindings":CHUNKS._lamp_bindings({"lights":[LAMP]},{"fixture:lamp":true})}, "fixture:lamp", {"quarter_turns":0,"position":[0,0,0]})
+	CHUNKS._environment_lamp({"root":cell,"lamp_bindings":CHUNKS._lamp_bindings({"lights":[LAMP]},{"fixture:lamp":true})}, "fixture:lamp", Transform3D.IDENTITY)
 	var street: Dictionary = cell.get_meta("environment_lamps")[0]
 	check(is_equal_approx(tan(deg_to_rad(street.angle))/tan(deg_to_rad(48.0)), 3.0), "streetlight ground footprint is three times as wide")
 	check(is_equal_approx(street.range, 36.0) and street.energy == 2.0 and is_equal_approx(street.position.y, 3.12), "wider streetlight reaches the road with unchanged mounting and energy")

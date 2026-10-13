@@ -74,6 +74,8 @@ per-surface overrides use ordinary instances. Their hierarchy shares one object
 seed calculation while each mesh keeps its independent material bindings.
 Each ordinary placement shares one current quality snapshot between occluder
 creation and final tree application, refreshing it on the next admitted call.
+Mounted lamps reuse the visual placement transform in both paths; authored
+centimetre offsets are still rotated before metre conversion and translation.
 LOD indices are generated once per
 template. The validated `solid` flag/cache key preserves collidable fences, walls
 and props at every preset. Only assets without collision at/above their origin

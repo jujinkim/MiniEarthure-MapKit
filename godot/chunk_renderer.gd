@@ -220,7 +220,7 @@ static func _advance(job: Dictionary) -> bool:
 					if not job.instances[group].is_empty():
 						var transform := Transform3D(Basis(Vector3.UP, (float(object.quarter_turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0))), scene_position(object.position))
 						INSTANCES.append(job.instances[group], transform, str(object.id), str(presentation.get("map_id","")))
-						_environment_lamp(job,id,object)
+						_environment_lamp(job,id,transform)
 						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
 				var seed_value := float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0
@@ -236,7 +236,6 @@ static func _advance(job: Dictionary) -> bool:
 							var occluder := QUALITY.occluder(piece.mesh,job.lease,quality)
 							if occluder != null: piece.add_child(occluder)
 					pending.append_array(piece.get_children())
-				_environment_lamp(job,id,object)
 				var anchor := Node3D.new()
 				anchor.set_meta("mapkit_asset_id", id)
 				anchor.set_meta("mapkit_object_id", str(object.id))
@@ -244,6 +243,7 @@ static func _advance(job: Dictionary) -> bool:
 				# glTF metres: x-right, y-up, z-back; local map y points forward.
 				anchor.rotation.y = (float(object.quarter_turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0))
 				anchor.scale = Vector3.ONE
+				_environment_lamp(job,id,anchor.transform)
 				QUALITY.apply_tree(instance, quality)
 				anchor.add_child(instance)
 				job.root.add_child(anchor)
@@ -489,13 +489,12 @@ static func _lamp_bindings(profile: Dictionary, assets: Dictionary) -> Dictionar
 		result[str(binding.asset_id)] = lamp
 	return result
 
-static func _environment_lamp(job: Dictionary, id: String, object: Dictionary) -> void:
+static func _environment_lamp(job: Dictionary, id: String, placement: Transform3D) -> void:
 	var bindings: Dictionary = job.get("lamp_bindings",{})
 	if not bindings.has(id): return
 	var lamp: Dictionary = bindings[id].duplicate()
-	var rotation := Basis(Vector3.UP,(float(object.quarter_turns)*PI/2.0+deg_to_rad(float(object.get("yaw_offset_mdeg",0))/1000.0)))
-	# Preserve rotation-before-centimetre conversion for authored mount positions.
-	lamp.position = scene_position(object.position)+rotation*lamp.offset_cm*0.01
+	# Reuse the visual placement without changing rotation-before-cm conversion.
+	lamp.position = placement.origin+placement.basis*lamp.offset_cm*0.01
 	lamp.erase("offset_cm")
 	var lamps: Array = job.root.get_meta("environment_lamps",[])
 	lamps.append(lamp)
