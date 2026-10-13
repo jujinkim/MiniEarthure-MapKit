@@ -46,8 +46,9 @@ or read a partial context. Partial resources retain the full lease until retirem
 Built-in trees share one immutable material-free canopy mesh per session cache.
 A 128 KiB claim covers the sphere, importer scratch, CPU/GPU output and LOD indices.
 Source creation, readback, LOD generation and upload are separate admitted steps.
-Trees keep independent nodes, transforms, visibility and leaf bindings. Standalone
-previews without a session cache retain job-local preparation.
+Trees keep independent nodes, transforms, visibility and direct final leaf bindings.
+Leaf bindings use the cell allowance; their last borrower retains the shared
+shader/textures. Standalone previews retain local preparation and source materials.
 
 Repeated opaque static models use cell-local MultiMesh instances. Hierarchical
 transforms, mesh surfaces, material overrides, original colours and shadow mode
@@ -98,8 +99,8 @@ Run `display_quality_validator` and `richer_material_validator` with a rendered
 engine for MultiMesh transforms, compressed-GLB occlusion, openings and excluded
 faces. `mesh_preparation_validator` compares full geometry/LOD/material output,
 early source retirement, surface admission, interleaved claims and immutable inputs.
-`tree_canopy_validator` covers exact canopy geometry/LOD buffers, same-frame pixels
-at each preset, independent placements/materials, staged cancellation and pressure.
+`tree_canopy_validator` covers geometry/LOD, leaf uniforms and same-frame pixels at
+each preset, independent placements/bindings, cancellation, pressure and borrowers.
 These and caller checks cover admission, cancellation, failed replacement,
 shutdown, scratch release and final mesh/context/shape borrowers.
 

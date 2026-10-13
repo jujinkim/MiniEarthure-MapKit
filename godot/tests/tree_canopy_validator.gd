@@ -35,16 +35,61 @@ func geometry(mesh: Mesh) -> Array:
 	return result
 
 func run() -> void:
+	await leaf_bindings()
 	await preparation()
 	for boundary in ["canopy_source","surface","generate","get_mesh","done"]:
 		await cancel_at(boundary)
 	await cancel_attachment()
 	await attachment()
 	await detached_node()
+	for complete in [false,true]: await last_leaf_borrower(complete)
 	await rejected()
 	QUALITY.current = {}
 	print("tree_canopy_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+
+func reference_leaf(cache: RefCounted) -> Material:
+	var source := StandardMaterial3D.new()
+	source.albedo_color = Color("486447"); source.resource_name = "mk_leaf"
+	return RENDER._environment_surface({"resources":cache},source)
+
+func compare_material(actual: ShaderMaterial, expected: ShaderMaterial, label: String) -> void:
+	check(actual.shader == expected.shader,label+" shared shader")
+	for uniform: Dictionary in actual.shader.get_shader_uniform_list():
+		var name: String = uniform.name
+		var a: Variant = actual.get_shader_parameter(name)
+		var b: Variant = expected.get_shader_parameter(name)
+		var fallback: Variant = RenderingServer.shader_get_parameter_default(actual.shader.get_rid(),name)
+		if a == null: a = fallback
+		if b == null: b = fallback
+		if a is float and b is float:
+			a = PackedFloat32Array([a])[0]; b = PackedFloat32Array([b])[0]
+		check(a == b,label+" effective uniform "+name+": "+str(a)+" != "+str(b))
+	for key in ["mapkit_surface","mapkit_vegetation","mapkit_detail","mapkit_opaque","mapkit_water"]:
+		check(actual.get_meta(key,false) == expected.get_meta(key,false),label+" metadata "+key)
+
+func leaf_bindings() -> void:
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	cache.environment_profile = {"lights":[]}
+	cache.quality_profile = QUALITY.profile(0)
+	var context: RefCounted = cache.environment_context()
+	for level in 3:
+		QUALITY.current = QUALITY.profile(level)
+		var identities: int = context.materials.size()
+		var actual: ShaderMaterial = RENDER._leaf_material({"resources":cache})
+		check(context.materials.size() == identities,"direct leaf binding adds no imported identity-cache entry")
+		var expected: ShaderMaterial = reference_leaf(cache)
+		compare_material(actual,expected,"leaf preset %d"%level)
+		check(actual.get_shader_parameter("roughness") == 1.0,"leaf preserves source roughness")
+		for live in 3:
+			QUALITY.apply_material(actual,QUALITY.profile(live))
+			QUALITY.apply_material(expected,QUALITY.profile(live))
+			compare_material(actual,expected,"leaf live %d -> %d"%[level,live])
+	var preview: StandardMaterial3D = RENDER._leaf_material({})
+	check(preview.albedo_color == Color("486447") and preview.resource_name == "mk_leaf" and preview.roughness == 1.0 and preview.cull_mode == BaseMaterial3D.CULL_BACK,"standalone leaf source values preserved")
+	context = null; cache.shutdown()
+	for _frame in 4: await process_frame
+	check(cache.bytes() == 0,"comparison bindings release the context")
 
 func preparation() -> void:
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
@@ -178,8 +223,7 @@ func pixels(canopy: MeshInstance3D, cache: RefCounted) -> void:
 		root.add_child(viewport); viewports.append(viewport)
 		var node := MeshInstance3D.new(); nodes.append(node)
 		if original:
-			var leaf := StandardMaterial3D.new(); leaf.albedo_color = Color("486447"); leaf.resource_name = "mk_leaf"
-			node.mesh = reference(); node.material_override = RENDER._environment_surface({"resources":cache},leaf)
+			node.mesh = reference(); node.material_override = reference_leaf(cache)
 		else:
 			node.mesh = canopy.mesh; node.material_override = canopy.material_override
 		viewport.add_child(node)
@@ -233,6 +277,24 @@ func detached_node() -> void:
 	held.free()
 	for _frame in 4: await process_frame
 	check(lease.retired(),"detached canopy node returns cell reservation after release")
+
+func last_leaf_borrower(complete: bool) -> void:
+	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
+	cache.quality_profile = QUALITY.profile(0)
+	var parent := Node3D.new(); root.add_child(parent)
+	var chunk := fixture(complete)
+	var lease := Lease.new(RENDER.PLAN.estimate(chunk,0))
+	var job := RENDER.begin(chunk,parent,func(_bytes): return lease,lease.bytes,cache)
+	while not RENDER.advance(job):
+		if not complete and job.root.get_child_count() == 2: break
+	check(job.done == complete,"last leaf borrower completion boundary %s"%complete)
+	var held: Material = job.root.get_child(1).material_override
+	RENDER.cancel(job); job.clear(); parent.queue_free(); cache.shutdown()
+	for _frame in 4: await process_frame
+	check(not lease.retired() and cache.bytes() == cache._context_bytes(),"leaf alone retains cell/context, not shared geometry, after completion/cancel %s"%complete)
+	held = null
+	for _frame in 4: await process_frame
+	check(lease.retired() and cache.bytes() == 0,"last leaf borrower retires cell/context %s"%complete)
 
 func rejected() -> void:
 	var denied := CACHE.new(func(_bytes): return null)

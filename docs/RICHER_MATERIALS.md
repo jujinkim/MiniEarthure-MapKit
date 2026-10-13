@@ -34,6 +34,10 @@ the context's shader/textures; absent bitmap, UV and lighting overrides use iden
 shader defaults. Climate tint, safety-metal metallicity and live quality survive.
 Prepared and unbatched meshes use the same factory. Shader includes are expanded
 before assigning the complete source once, with identical final shader code.
+Built-in canopy leaves also create final bindings directly, with their own colour,
+source roughness of 1.0, leaf detail and wind role. The shared shader retains the
+wrapper's double-sided rendering. Every canopy owns an independent mutable binding;
+its shader/textures keep the shared context charged through the last borrower.
 
 Urban/RC surfaces keep their dedicated factory and `_environment_surface` binding;
 standalone previews can use source materials. Record material key, actual class and
@@ -42,6 +46,7 @@ branch with cell/frame/generation; GLB import timing does not describe this fact
 | Branch | Operations to isolate |
 | --- | --- |
 | Generated opaque face | Direct final binding, colour/detail and quality; no source-material conversion or imported identity-cache entry |
+| Built-in canopy leaf | Independent direct binding with leaf appearance and quality; the standalone preview retains its source material |
 | Urban `ShaderMaterial` | Creation, first shader assignment, source parameters, environment texture and `bind_detail`; the same material is returned |
 | RC `ShaderMaterial` | Existing shader and wall parameter, then `bind_detail` |
 | Imported opaque `StandardMaterial3D` | Shared-wrapper creation, shader/bitmap/parameter binding, quality application and caller's last source-reference release |
@@ -85,6 +90,9 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `generated_material_validator` compares effective GPU uniforms, live quality,
 rendered pixels, prepared/unbatched geometry and cell/context borrower retirement
 against the source-material path, including climate, urban, RC and preview cases.
+`tree_canopy_validator` also compares leaf GPU uniforms and same-frame pixels at
+each preset, live quality, independent bindings and final leaf/context retirement
+after partial cancellation or completed attachment.
 `richer_material_validator` covers actual GLB import, retained channels, denied
 admission, shared identity and last-borrower retirement. `display_quality_validator`
 covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial

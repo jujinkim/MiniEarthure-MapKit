@@ -96,12 +96,12 @@ func surface_material(source: Material, role: int, use_instances := false, defer
 
 ## Generated opaque faces already know their appearance. No temporary imported
 ## material, texture scan or identity-cache entry is needed; the cell owns this binding.
-func generated_material(color: Color, kind: String, metallic := 0.0) -> ShaderMaterial:
+func generated_material(color: Color, kind: String, metallic := 0.0, roughness := 0.9) -> ShaderMaterial:
 	var result := ShaderMaterial.new()
 	result.shader = shader
 	result.set_shader_parameter("environment_data",texture)
 	result.set_shader_parameter("base_color",color)
-	result.set_shader_parameter("roughness",0.9)
+	result.set_shader_parameter("roughness",roughness)
 	result.set_shader_parameter("metallic",metallic)
 	_finish_surface(result,kind)
 	return result
