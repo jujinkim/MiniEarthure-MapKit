@@ -23,6 +23,11 @@ worker completion and before rendering. Compressed length is not a RAM estimate.
 Current v1 native presentation records add `content_hash` and `memory_bytes` from the
 validated package. They are excluded from package serialization/generated hashes.
 Cache keys include content, declarative materials and referenced image content.
+Each new asset claim snapshots the light binding used by its key. Import and all
+mesh material steps reuse that snapshot even when another cell replaces the current
+profile or authored lists change. Unrelated assets and absent bindings remain
+independent. Completion, failed import and eviction discard this preparation-only
+metadata within the existing asset allowance.
 Claims precede import; the default cap is 256 entries/128 MiB including shaders.
 Concurrent claims share one import/preparation per entry. Texture context, import,
 each LOD input surface, LOD generation/upload, each material binding, occluder
@@ -112,7 +117,8 @@ anchor margin, including transformed GLB bounds independently of collision proxi
 [material validators](docs/RICHER_MATERIALS.md#display-quality) cover node quality,
 geometry/LOD/material output, phased preparation and shared borrowers. Caller checks
 also cover part order, nested transforms, multi-surface/override fallback, empty
-result reuse, composed/merged bounds, mutable previews and final mesh/material retirement. Consumer checks
+result reuse, composed/merged bounds, mutable previews, claimed light roles across
+profile changes and final mesh/material retirement. Consumer checks
 cover admission, cancellation, failed replacement, pressure, shutdown and final
 mesh/context/shape retirement.
 

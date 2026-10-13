@@ -54,7 +54,7 @@ func geometry(mesh: Mesh) -> Array:
 
 func seeded_cache(mesh: Mesh) -> RefCounted:
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
-	cache.environment_profile={"lights":[BINDING]}
+	cache.environment_profile={"lights":[BINDING.duplicate(true)]}
 	cache.quality_profile=QUALITY.profile(0)
 	cache.environment_context()
 	var key: String=cache.claim("fixture",ASSETS)
@@ -126,6 +126,7 @@ func run() -> void:
 	for boundary in ["surface","generate","get_mesh","materials","material_surface","occluder","instance_parts"]:
 		await cancel_at(boundary)
 	await borrowed_prepared_mesh()
+	await light_binding_snapshot()
 	await imported_materials()
 	for mode in ["opaque","transparent","overlay","surface_override"]:
 		await instance_parts(mode)
@@ -158,7 +159,7 @@ func cancel_at(boundary: String) -> void:
 	cache.shutdown()
 	check(cache.prepare_template(shared,"fixture",ASSETS) and cache.template(shared,"fixture",ASSETS)==null,"late advance after shutdown cannot publish partial materials")
 	cache.release(shared)
-	check(not partial.has("occluder_arrays") and not partial.has("lod_job"),"eviction drops CPU faces even if diagnostics retain the entry "+boundary)
+	check(not partial.has("occluder_arrays") and not partial.has("lod_job") and not partial.has("light_binding"),"eviction drops preparation scratch even if diagnostics retain the entry "+boundary)
 	for frame in 3: await process_frame
 	check(cache.entries.is_empty(),"shutdown removes partial template "+boundary)
 	check(cache.bytes()==(amount if held!=null else 0),"scratch retires while a partial mesh borrower stays charged "+boundary)
@@ -285,6 +286,47 @@ func meshes(node: Node) -> Array[MeshInstance3D]:
 	for child: Node in node.get_children(): result.append_array(meshes(child))
 	return result
 
+func light_binding_snapshot() -> void:
+	var cache := seeded_cache(fixture())
+	var key: String=cache.entries.keys()[0]
+	var item: Dictionary=cache.entries[key]
+	var binding: Dictionary=cache.environment_profile.lights[0]
+	var other := {"asset_id":"other","window_materials":[0],"bulb_materials":[1]}
+	cache.environment_profile.lights.append(other)
+	var assets := ASSETS.duplicate(true);assets.other=assets.fixture.duplicate(true)
+	var shared: String=cache.claim("fixture",assets)
+	var other_key: String=cache.claim("other",assets)
+	check(shared==key and other_key!=key,"unrelated cell lights preserve sharing; different asset bindings stay separate")
+	check(cache.entries[other_key].light_binding==other,"each claim captures its own asset binding")
+	binding.window_materials[0]=7;binding.bulb_materials[0]=8
+	var changed: String=cache.claim("fixture",assets)
+	check(changed!=key and changed==cache.environment_key_for("fixture",assets),"edited authored binding gets its own matching key")
+	check(item.light_binding==BINDING,"claim snapshot isolates nested list edits")
+	cache.environment_profile={"lights":[other]}
+	var unbound: String=cache.claim("fixture",assets)
+	check(unbound!=key and cache.entries[unbound].light_binding.is_empty(),"missing binding is captured independently of other assets")
+	cache.environment_profile={"lights":[{"asset_id":"fixture","window_materials":[],"bulb_materials":[]}]}
+	var empty: String=cache.claim("fixture",assets)
+	check(empty!=unbound and empty!=key,"explicit empty lists retain their original cache identity")
+	while not cache.prepare_template(shared,"fixture",assets): pass
+	check(not item.has("light_binding"),"completed template releases its claim snapshot")
+	for index in item.template.mesh.get_surface_count():
+		var material: Material=item.template.mesh.surface_get_material(index)
+		if material is ShaderMaterial:
+			check(material.get_shader_parameter("lighting_role")==(1 if index==2 else 2 if index==3 else 0),"all surfaces keep claimed roles across profile replacement")
+	var held: Material=item.template.mesh.surface_get_material(2)
+	var amount: int=item.bytes+cache._context_bytes()
+	cache.release(key);cache.trim()
+	check(cache.entries.has(shared),"another claimant protects prepared binding during pressure")
+	for claim_key: String in [shared,other_key,changed,unbound,empty]: cache.release(claim_key)
+	cache.trim();cache.shutdown()
+	check(cache.entries.is_empty() and not item.has("light_binding"),"eviction removes every completed and partial binding snapshot")
+	for frame in 3: await process_frame
+	check(cache.bytes()==amount,"last light material borrower retains template and context allowances")
+	held=null
+	for frame in 3: await process_frame
+	check(cache.bytes()==0,"last light material release retires all allowances")
+
 func imported_materials() -> void:
 	# Export a synthetic hierarchy once, then compare the ordinary GLB path with
 	# early parameter capture. Both still use Godot's compressed uploaded arrays.
@@ -304,6 +346,7 @@ func imported_materials() -> void:
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
 	cache.environment_profile={"lights":[BINDING]};cache.quality_profile=QUALITY.profile(0)
 	var key: String=cache.claim("fixture",assets)
+	cache.environment_profile={"lights":[{"asset_id":"fixture","window_materials":[7],"bulb_materials":[8]}]}
 	while cache.entries[key].stage!="lod": cache.prepare_template(key,"fixture",assets)
 	var context: RefCounted=cache.environment_context()
 	var original_refs := []
@@ -357,6 +400,7 @@ func cancel_imported(assets: Dictionary, boundary: String) -> void:
 	cache.environment_profile={"lights":[BINDING]};cache.quality_profile=QUALITY.profile(0)
 	var key: String=cache.claim("fixture",assets)
 	var shared: String=cache.claim("fixture",assets)
+	var partial: Dictionary=cache.entries[key]
 	while cache.entries[key].stage!=boundary: cache.prepare_template(key,"fixture",assets)
 	var held: Mesh
 	if boundary in ["lod","material_surface"]: held=meshes(cache.entries[key].template)[0].mesh
@@ -366,6 +410,7 @@ func cancel_imported(assets: Dictionary, boundary: String) -> void:
 	cache.shutdown()
 	check(cache.template(shared,"fixture",assets)==null,"shutdown cannot publish a shaderless template "+boundary)
 	cache.release(shared)
+	check(not partial.has("light_binding"),"cancelled import releases the claimed light snapshot "+boundary)
 	for frame in 3: await process_frame
 	check(cache.bytes()==amount,"partial imported mesh and context keep their full leases "+boundary)
 	held=null

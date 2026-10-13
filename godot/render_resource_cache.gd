@@ -59,27 +59,38 @@ static func key_for(id: String, sources: Dictionary) -> String:
 	return str(asset.content_hash) + ":" + str(asset.material_json) + ":" + texture_hash + ":" + str(asset.get("solid",true))
 
 func environment_key_for(id: String, sources: Dictionary) -> String:
-	var key := key_for(id, sources)
-	if key.is_empty(): return ""
+	return _key_with_binding(key_for(id,sources),_light_binding_for(id))
+
+func _light_binding_for(id: String) -> Dictionary:
 	# Cell sources carry only their relevant light bindings. Key this asset by
 	# its own binding so adjacent cells still share the same imported template.
 	var binding := {}
 	for light: Dictionary in environment_profile.get("lights",[]):
 		if light.asset_id == id: binding = light
-	key += ":" + JSON.stringify(binding, "", true).sha256_text()
-	return key
+	return binding
+
+static func _key_with_binding(key: String, binding: Dictionary) -> String:
+	return "" if key.is_empty() else key + ":" + JSON.stringify(binding, "", true).sha256_text()
 
 func claim(id: String, sources: Dictionary) -> String:
 	if closed: return ""
-	var key := environment_key_for(id,sources)
-	if key.is_empty(): return ""
+	var source_key := key_for(id,sources)
+	if source_key.is_empty(): return ""
+	var binding := _light_binding_for(id)
+	var key := _key_with_binding(source_key,binding)
+	var fresh := not entries.has(key)
+	# Snapshot exactly the binding used by the key. Another cell can replace the
+	# current profile between admitted steps; nested authored lists may change too.
+	if fresh: binding = binding.duplicate(true)
 	# The native import profile already includes CPU/GPU overlap (256 bytes per
 	# vertex, 32 per index, 24 per image pixel). Replacing template meshes shares
 	# textures and releases the old mesh; add a material/clock binding allowance.
 	# The doubled native 8 KiB/node allowance also covers one small part/bounds
 	# record per mesh node, borrowing the already tracked mesh/material.
 	var amount := int(sources[id].memory_bytes) * 2 + 131072 # LOD generation, retained indices and occluders, including import overlap.
-	return _claim(key,amount,"context")
+	var claimed := _claim(key,amount,"context")
+	if fresh and not claimed.is_empty(): entries[claimed].light_binding = binding
+	return claimed
 
 func claim_tree_canopy() -> String:
 	return _claim(TREE_CANOPY_KEY,TREE_CANOPY_BYTES,"canopy_source")
@@ -141,10 +152,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 	var diagnostic_stage := "lod_"+str(item.lod_job.stage) if stage == "lod_prepare" else stage
 	var started := Time.get_ticks_usec()
 	if stage == "import":
-		var binding := {}
-		for light: Dictionary in environment_profile.get("lights",[]):
-			if light.asset_id == id: binding = light
-		var prepare_material: Callable = _environment.import_surface.bind(binding) if _environment != null else Callable()
+		var prepare_material: Callable = _environment.import_surface.bind(item.light_binding) if _environment != null else Callable()
 		item.template = ASSETS.template(id, sources, item.materials, prepare_material)
 		imports += 1
 		item.failed = item.template == null
@@ -179,9 +187,6 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 	elif stage == "materials":
 		var node: MeshInstance3D = item.styling
 		if _environment != null:
-			var binding := {}
-			for light: Dictionary in environment_profile.get("lights",[]):
-				if light.asset_id == id: binding = light
 			# New LOD output belongs solely to this unpublished template. Rebinding
 			# its surfaces avoids a second whole-mesh GPU readback/copy.
 			if not item.owned_mesh:
@@ -189,7 +194,6 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 				node.mesh = node.mesh.duplicate()
 				QUALITY.observe_mesh(mesh_observer,"material_duplicate",copy_started)
 				_track_node(item.lease,node)
-			item.material_binding = binding
 			item.material_surface = 0
 			item.water = node.mesh.get_surface_count() > 0
 			item.stage = "material_surface"
@@ -200,7 +204,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		var index: int = item.material_surface
 		if index < node.mesh.get_surface_count():
 			var style_started := Time.get_ticks_usec()
-			_environment.style_surface(node.mesh,item.material_binding,index,false,mesh_observer)
+			_environment.style_surface(node.mesh,item.light_binding,index,false,mesh_observer)
 			# Include callee-local retirement after its inner binding timer returns.
 			QUALITY.observe_mesh(mesh_observer,"material_style",style_started,index)
 			var track_started := Time.get_ticks_usec()
@@ -216,7 +220,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 			if node.material_override != null:
 				node.material_override = _environment.surface_material(node.material_override,0)
 				_track_material(item.lease,node.material_override)
-			item.erase("material_binding");item.erase("material_surface");item.erase("water")
+			item.erase("material_surface");item.erase("water")
 			QUALITY.observe_mesh(mesh_observer,"material_finalize",finalize_started)
 			item.stage = "occluder"
 	elif stage == "occluder":
@@ -237,6 +241,7 @@ func prepare_template(key: String, id: String, sources: Dictionary) -> bool:
 		pieces.make_read_only()
 		item.instance_parts = pieces
 		item.stage = "done"
+	if item.stage == "done": item.erase("light_binding")
 	var elapsed := Time.get_ticks_usec() - started
 	if stage != "context":
 		preparation_usec[diagnostic_stage] = int(preparation_usec.get(diagnostic_stage,0)) + elapsed
@@ -296,7 +301,7 @@ func _evict(key: String) -> void:
 	item.erase("lod_job")
 	item.erase("mesh")
 	item.erase("occluder_arrays")
-	item.erase("material_binding")
+	item.erase("light_binding")
 	item.erase("instance_parts")
 	if item.lease != null:
 		item.lease.seal()
