@@ -347,14 +347,30 @@ func shutdown() -> void:
 
 static func _track_node(lease: RefCounted, node: Node) -> void:
 	if lease == null: return
+	# Import may reuse a mesh/material across many nodes and surfaces. Keep the
+	# visited set local: later calls must observe edits to standalone resources.
+	_track_import_node(lease,node,{})
+
+static func _track_import_node(lease: RefCounted, node: Node, tracked: Dictionary) -> void:
 	if node is MeshInstance3D:
-		lease.track(node.mesh)
-		_track_material(lease, node.material_override)
-		_track_material(lease, node.material_overlay)
+		var mesh_id: int = node.mesh.get_instance_id()
+		var fresh := not tracked.has(mesh_id)
+		if fresh:
+			tracked[mesh_id] = true
+			lease.track(node.mesh)
+		_track_import_material(lease,node.material_override,tracked)
+		_track_import_material(lease,node.material_overlay,tracked)
 		for i in node.mesh.get_surface_count():
-			_track_material(lease, node.mesh.surface_get_material(i))
-			_track_material(lease, node.get_surface_override_material(i))
-	for child: Node in node.get_children(): _track_node(lease, child)
+			if fresh: _track_import_material(lease,node.mesh.surface_get_material(i),tracked)
+			_track_import_material(lease,node.get_surface_override_material(i),tracked)
+	for child: Node in node.get_children(): _track_import_node(lease,child,tracked)
+
+static func _track_import_material(lease: RefCounted, material: Material, tracked: Dictionary) -> void:
+	if material == null: return
+	var id := material.get_instance_id()
+	if tracked.has(id): return
+	tracked[id] = true
+	_track_material(lease,material)
 
 static func _track_material(lease: RefCounted, material: Material) -> void:
 	if lease == null or material == null: return

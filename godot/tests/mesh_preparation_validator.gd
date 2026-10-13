@@ -129,6 +129,7 @@ func run() -> void:
 	await empty_prepared_mesh()
 	for prepared in [false,true]:
 		await replacement_tracking(prepared)
+	await import_tracking_revisit()
 	for complete in [false,true]:
 		await pending_surface_tracking(complete)
 	for extension in ["png","webp"]:
@@ -226,10 +227,13 @@ func replacement_tracking(prepared: bool) -> void:
 	var override := StandardMaterial3D.new();child.material_override=override
 	var overlay := StandardMaterial3D.new();child.material_overlay=overlay
 	var surface_override := StandardMaterial3D.new();child.set_surface_override_material(0,surface_override)
-	CACHE._track_node(item.lease,template)
 	var lease: Lease=item.lease
+	var tracked_before := lease.refs.size()
+	CACHE._track_node(lease,template)
+	for resource: Resource in [mesh,source,override,overlay,surface_override]:
+		check(track_count(lease,resource,tracked_before)==1,"each shared mesh/binding is tracked once per hierarchy traversal")
 	for bitmap: Texture2D in bitmaps:
-		check(lease.refs.any(func(ref): return ref.get_ref()==bitmap),"import tracks each of the five independent source bitmap slots")
+		check(track_count(lease,bitmap,tracked_before)==1,"reused material scans each source bitmap slot once across nested mesh nodes")
 	check(lease.refs.any(func(ref): return ref.get_ref()==surface_override),"initial hierarchy tracks nested surface overrides")
 	var steps := 0
 	while item.stage!="done" and steps<100:
@@ -261,6 +265,26 @@ func replacement_tracking(prepared: bool) -> void:
 	overlay=null
 	for frame in 3: await process_frame
 	check(cache.bytes()==0,"final overlay release retires the replacement lease")
+
+func import_tracking_revisit() -> void:
+	var lease := Lease.new(4096)
+	var node := MeshInstance3D.new();node.mesh=BoxMesh.new()
+	var source := StandardMaterial3D.new()
+	node.mesh.material=source;node.material_override=source;node.material_overlay=source
+	node.set_surface_override_material(0,source)
+	CACHE._track_node(lease,node)
+	check(track_count(lease,source)==1,"one binding shared by surface, override and overlay is visited once")
+	var bitmap := ImageTexture.create_from_image(Image.create(2,2,false,Image.FORMAT_RGBA8))
+	source.albedo_texture=bitmap
+	var before := lease.refs.size()
+	CACHE._track_node(lease,node)
+	check(track_count(lease,source,before)==1 and track_count(lease,bitmap,before)==1,"a later traversal sees edited bitmap slots on the same binding")
+	node.free();source=null;lease.seal()
+	for frame in 3: await process_frame
+	check(not lease.retired(),"new standalone bitmap keeps its lease after the edited hierarchy is freed")
+	bitmap=null
+	for frame in 3: await process_frame
+	check(lease.retired(),"per-traversal visited set retains no final resources")
 
 func pending_surface_tracking(complete: bool) -> void:
 	var mesh := ArrayMesh.new()
@@ -374,9 +398,13 @@ func imported_override_tracking(valid: bool) -> void:
 	check(cache.bytes()==0,"last imported override bitmap retires")
 
 func tracks(lease: Lease, resource: Resource) -> bool:
-	for ref: WeakRef in lease.refs:
-		if ref.get_ref()==resource: return true
-	return false
+	return track_count(lease,resource)>0
+
+func track_count(lease: Lease, resource: Resource, start := 0) -> int:
+	var count := 0
+	for index in range(start,lease.refs.size()):
+		if lease.refs[index].get_ref()==resource: count+=1
+	return count
 
 func instance_parts(mode: String) -> void:
 	var mesh := ArrayMesh.new()
