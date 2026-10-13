@@ -39,7 +39,8 @@ source roughness of 1.0, leaf detail and wind role. The shared shader retains th
 wrapper's double-sided rendering. Every canopy owns an independent mutable binding;
 its shader/textures keep the shared context charged through the last borrower.
 Fresh generated-face and canopy attachments defer detail/wind quality until their
-node is tracked in the same admitted call, before publication. This applies the
+node is tracked in the same admitted call, before publication. Fresh urban/RC
+bindings likewise defer detail quality at `_environment_surface`. This applies the
 active preset once; LOD and decoration distance still update with it. Direct
 material factory calls remain ready for use. Reused cell bindings and live updates
 always reapply quality, including after external uniform edits; no remembered
@@ -96,8 +97,9 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `generated_material_validator` compares effective GPU uniforms, live quality,
 rendered pixels, prepared/unbatched geometry and cell/context borrower retirement
 against the source-material path, including climate, urban, RC and preview cases.
-It checks fresh attachments before corrective updates, preset changes between
-admitted batches, reused cell bindings and same-preset repair of external edits.
+It checks generated opaque and urban/RC attachments before corrective updates,
+preset changes between admitted batches, reused cell bindings and same-preset
+repair of external edits, including partial cancellation and last detail borrowers.
 Set `MAPKIT_SKIP_PIXEL_COMPARISON=1` for focused material/attachment regressions;
 the validator reports the skipped visual comparison explicitly.
 `tree_canopy_validator` also compares leaf GPU uniforms and same-frame pixels at

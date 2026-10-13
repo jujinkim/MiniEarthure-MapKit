@@ -434,7 +434,7 @@ static func _generated_material(job: Dictionary, key: String, presentation: Dict
 		material.roughness = 0.9
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		material.resource_name = "mk_"+detail_kind(key)
-	return _environment_surface(job,material)
+	return _environment_surface(job,material,defer_quality)
 
 static func _urban_surface(key: String, presentation: Dictionary) -> bool:
 	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete"])
@@ -476,17 +476,19 @@ static func _environment_lamp(job: Dictionary, id: String, object: Dictionary, p
 		job.root.set_meta("environment_lamps",lamps)
 		job.root.add_to_group("mapkit_environment_cells")
 
-static func _environment_surface(job: Dictionary, material: Material) -> Material:
+## Only newly generated urban/RC bindings may defer detail quality. Borrowed
+## assets and imported wrappers keep their normal preparation and live updates.
+static func _environment_surface(job: Dictionary, material: Material, defer_quality := false) -> Material:
 	if job.get("resources") == null: return material
 	var context: RefCounted = job.resources.environment_context()
 	if context == null: return material
 	if material is ShaderMaterial and material.shader == preload("./rc_surface.gdshader"):
-		context.bind_detail(material,"concrete" if material.get_shader_parameter("wall") else "asphalt")
+		context.bind_detail(material,"concrete" if material.get_shader_parameter("wall") else "asphalt",not defer_quality)
 		return material
 	if material is ShaderMaterial and material.shader == job.get("urban_shader"):
 		material.set_shader_parameter("environment_enabled",true)
 		material.set_shader_parameter("environment_data",context.texture)
-		context.bind_detail(material,"concrete" if material.get_shader_parameter("paving") else "asphalt")
+		context.bind_detail(material,"concrete" if material.get_shader_parameter("paving") else "asphalt",not defer_quality)
 		return material
 	return context.surface_material(material,0)
 

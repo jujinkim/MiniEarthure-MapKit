@@ -78,9 +78,9 @@ The cell lease subtracts only the separately admitted shared asset allowance.
 Shared resources have their own lease. Instance nodes/MultiMeshes and private
 surface meshes/materials belong to the cell. Worker/native source owners remain
 independent. The cache retains the import peak until actual resource retirement.
-Fresh generated opaque bindings receive quality when their node is tracked, in
-the same admitted call before attachment. Reused cell bindings still receive live
-quality on every attachment; direct material factory results are ready for use.
+Fresh generated opaque and urban/RC bindings receive quality when their node is
+tracked, in the same admitted call before attachment. Reused cell bindings still
+receive live quality on every attachment; direct material factory results are ready for use.
 Canopy claims supplement the per-object allowance. Shared meshes do not hold cell
 leases: other trees and the warm cache cannot prevent a dead cell's retirement.
 Evicted copies stay charged through the last mesh/importer borrower.

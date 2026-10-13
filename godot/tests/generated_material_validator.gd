@@ -51,6 +51,8 @@ func run() -> void:
 	var context: RefCounted = cache.environment_context()
 	var job := {"resources":cache,"urban_shader":cache.urban_shader()}
 	var keys := ["grass","dirt","gravel","asphalt","concrete","brick:home","wood:home","builtin:tree","builtin:fence","builtin:streetlight","safety:metal"]
+	var urban := {"urban_surfaces":true,"road_styles":{"road:test":{"surface":1,"marked":true,"path_count":1,"road_paths":PackedVector4Array([Vector4(0,0,4,0)])}}}
+	var rc := {"track_seed":42}
 	for level in 3:
 		QUALITY.current = QUALITY.profile(level)
 		for climate in ["default","polar","arid","tropical","tinted"]:
@@ -64,11 +66,16 @@ func run() -> void:
 				QUALITY.apply_material(actual,QUALITY.profile(2-level))
 				QUALITY.apply_material(expected,QUALITY.profile(2-level))
 				compare(actual,expected,"live quality "+key)
-	var urban := {"urban_surfaces":true,"road_styles":{"road:test":{"surface":1,"marked":true,"path_count":1,"road_paths":PackedVector4Array([Vector4(0,0,4,0)])}}}
-	for key: String in ["road:test","asphalt","concrete"]:
-		compare(RENDER._generated_material(job,key,urban),reference(job,key,urban),"urban "+key)
-	for key: String in ["rc:floor","rc:wall","rc:road:0"]:
-		compare(RENDER._generated_material(job,key,{"track_seed":42}),reference(job,key,{"track_seed":42}),key)
+		for key: String in ["road:test","asphalt","concrete","rc:floor","rc:wall","rc:road:0"]:
+			var presentation: Dictionary = rc if key.begins_with("rc:") else urban
+			var actual: ShaderMaterial = RENDER._generated_material(job,key,presentation)
+			var expected: ShaderMaterial = reference(job,key,presentation)
+			compare(actual,expected,"direct %s/%d"%[key,level])
+			check(actual.get_shader_parameter("detail_quality") == level,"direct factory applies active detail "+key)
+			actual.set_shader_parameter("base_color",Color.RED)
+			check(expected.get_shader_parameter("base_color") != Color.RED,"independent dedicated bindings "+key)
+			var preview_job := {"urban_shader":job.urban_shader}
+			compare(RENDER._generated_material(preview_job,key,presentation,true),reference(preview_job,key,presentation),"standalone "+key)
 	var preview: Material = RENDER._generated_material({},"safety:metal",{})
 	check(preview is StandardMaterial3D and is_equal_approx(preview.metallic,0.8) and is_equal_approx(preview.roughness,0.9),"standalone preview keeps source material")
 	preview = null
@@ -76,18 +83,28 @@ func run() -> void:
 		print("generated_material_validator: pixel comparison skipped")
 	else:
 		await compare_pixels(job)
-	await attachment_paths(cache)
+	await attachment_paths(cache,["grass","brick:home","builtin:fence","safety:metal","grass","dirt"],{})
+	await attachment_paths(cache,["road:test","asphalt","concrete","road:test","asphalt","concrete"],urban)
+	await attachment_paths(cache,["rc:floor","rc:wall","rc:road:0","rc:floor","rc:wall","rc:road:0"],rc)
 	var first: ShaderMaterial = RENDER._generated_material(job,"grass",{})
 	var second: ShaderMaterial = RENDER._generated_material(job,"grass",{})
 	check(first != second,"cells own independent mutable bindings")
 	first.set_shader_parameter("base_color",Color.RED)
 	check(second.get_shader_parameter("base_color") != Color.RED,"one cell cannot mutate another")
 	var held := second
+	var held_urban: Material = RENDER._generated_material(job,"road:test",urban)
+	var held_rc: Material = RENDER._generated_material(job,"rc:wall",rc)
 	job.clear();context = null;first = null;second = null
 	cache.shutdown()
 	for _frame in 4: await process_frame
 	check(cache.bytes() > 0,"last material borrower keeps the context charged")
 	held = null
+	for _frame in 4: await process_frame
+	check(cache.bytes() > 0,"urban/RC borrowers keep the shared context charged")
+	held_urban = null
+	for _frame in 4: await process_frame
+	check(cache.bytes() > 0,"RC detail borrower keeps the shared context charged")
+	held_rc = null
 	for _frame in 4: await process_frame
 	check(cache.bytes() == 0,"last borrower returns all shared reservations")
 	QUALITY.current = {}
@@ -115,10 +132,10 @@ func compare_pixels(job: Dictionary) -> void:
 	viewport.queue_free()
 	await process_frame
 
-func attachment_paths(cache: RefCounted) -> void:
+func attachment_paths(cache: RefCounted, keys: Array, presentation: Dictionary) -> void:
 	# Spatially distinct repeats exercise job.materials reuse in both paths.
-	var keys := ["grass","brick:home","builtin:fence","safety:metal","grass","dirt"]
-	var chunk := {"cell":Vector2i.ZERO,"triangles":[],"objects":[],"scene_vertices":PackedVector3Array(),"scene_normals":PackedVector3Array(),"wall_uv":PackedVector2Array(),"presentation":{"proxy_materials":{}}}
+	var chunk := {"cell":Vector2i.ZERO,"triangles":[],"objects":[],"scene_vertices":PackedVector3Array(),"scene_normals":PackedVector3Array(),"wall_uv":PackedVector2Array(),"presentation":presentation.duplicate(true)}
+	chunk.presentation.proxy_materials = {}
 	for index in keys.size():
 		var id := "face-%d"%index
 		chunk.triangles.append({"surface":"grass","object_id":id})
@@ -158,7 +175,7 @@ func attachment_paths(cache: RefCounted) -> void:
 						var arrays := mesh.mesh.surface_get_arrays(0)
 						check(arrays[Mesh.ARRAY_VERTEX] == chunk.scene_vertices.slice(count*3,(count+1)*3),label+" geometry unchanged")
 						material.set_shader_parameter("detail_quality",-7)
-						material.set_shader_parameter("wind_strength",-7.0)
+						if material.get_meta("mapkit_surface",false): material.set_shader_parameter("wind_strength",-7.0)
 						material.set_shader_parameter("base_color",Color.RED)
 						QUALITY.apply_node(mesh,QUALITY.active())
 						expected.set_shader_parameter("base_color",Color.RED)
@@ -166,12 +183,12 @@ func attachment_paths(cache: RefCounted) -> void:
 						# Leave edited quality on the first binding for its later reuse.
 						if count == 0:
 							material.set_shader_parameter("detail_quality",-7)
-							material.set_shader_parameter("wind_strength",-7.0)
+							if material.get_meta("mapkit_surface",false): material.set_shader_parameter("wind_strength",-7.0)
 						count += 1
 						QUALITY.current = QUALITY.profile((level+count)%3)
 					if job.done or (partial and count == 1): break
 				check(job.error.is_empty() and count == (1 if partial else keys.size()) and job.done != partial,"attachment completion %s/%d/%s: count=%d error=%s"%[prepared,level,partial,count,job.error])
-				var held: Material = bindings.get("grass")
+				var held: Material = bindings.get(keys[0])
 				bindings.clear()
 				RENDER.cancel(job);parent.queue_free();job.clear()
 				for _frame in 4: await process_frame
