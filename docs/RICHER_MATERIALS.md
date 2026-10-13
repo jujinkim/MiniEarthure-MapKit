@@ -38,11 +38,12 @@ Built-in canopy leaves also create final bindings directly, with their own colou
 source roughness of 1.0, leaf detail and wind role. The shared shader retains the
 wrapper's double-sided rendering. Every canopy owns an independent mutable binding;
 its shader/textures keep the shared context charged through the last borrower.
-Fresh canopy attachments defer detail/wind quality until their node is tracked in
-the same admitted call, before publication. This applies the active preset once;
-LOD and decoration distance still update with it. Direct material factory calls
-remain ready for use. Live updates always reapply quality, including after external
-uniform edits; no remembered preset substitutes for the material's current state.
+Fresh generated-face and canopy attachments defer detail/wind quality until their
+node is tracked in the same admitted call, before publication. This applies the
+active preset once; LOD and decoration distance still update with it. Direct
+material factory calls remain ready for use. Reused cell bindings and live updates
+always reapply quality, including after external uniform edits; no remembered
+preset substitutes for the material's current state.
 
 Urban/RC surfaces keep their dedicated factory and `_environment_surface` binding;
 standalone previews can use source materials. Record material key, actual class and
@@ -95,6 +96,10 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `generated_material_validator` compares effective GPU uniforms, live quality,
 rendered pixels, prepared/unbatched geometry and cell/context borrower retirement
 against the source-material path, including climate, urban, RC and preview cases.
+It checks fresh attachments before corrective updates, preset changes between
+admitted batches, reused cell bindings and same-preset repair of external edits.
+Set `MAPKIT_SKIP_PIXEL_COMPARISON=1` for focused material/attachment regressions;
+the validator reports the skipped visual comparison explicitly.
 `tree_canopy_validator` also compares leaf GPU uniforms and same-frame pixels at
 each preset, live quality, independent bindings and final leaf/context retirement
 after partial cancellation or completed attachment. Initial-pixel comparisons run

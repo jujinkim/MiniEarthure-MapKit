@@ -72,7 +72,10 @@ func run() -> void:
 	var preview: Material = RENDER._generated_material({},"safety:metal",{})
 	check(preview is StandardMaterial3D and is_equal_approx(preview.metallic,0.8) and is_equal_approx(preview.roughness,0.9),"standalone preview keeps source material")
 	preview = null
-	await compare_pixels(job)
+	if OS.get_environment("MAPKIT_SKIP_PIXEL_COMPARISON") == "1":
+		print("generated_material_validator: pixel comparison skipped")
+	else:
+		await compare_pixels(job)
 	await attachment_paths(cache)
 	var first: ShaderMaterial = RENDER._generated_material(job,"grass",{})
 	var second: ShaderMaterial = RENDER._generated_material(job,"grass",{})
@@ -113,23 +116,66 @@ func compare_pixels(job: Dictionary) -> void:
 	await process_frame
 
 func attachment_paths(cache: RefCounted) -> void:
-	var vertices := PackedVector3Array([Vector3.ZERO,Vector3.RIGHT,Vector3.FORWARD])
-	var chunk := {"cell":Vector2i.ZERO,"triangles":[{"surface":"grass","object_id":"ground"}],"objects":[],"scene_vertices":vertices,"scene_normals":PackedVector3Array([Vector3.UP,Vector3.UP,Vector3.UP]),"wall_uv":PackedVector2Array([Vector2.ZERO,Vector2.RIGHT,Vector2.UP])}
+	# Spatially distinct repeats exercise job.materials reuse in both paths.
+	var keys := ["grass","brick:home","builtin:fence","safety:metal","grass","dirt"]
+	var chunk := {"cell":Vector2i.ZERO,"triangles":[],"objects":[],"scene_vertices":PackedVector3Array(),"scene_normals":PackedVector3Array(),"wall_uv":PackedVector2Array(),"presentation":{"proxy_materials":{}}}
+	for index in keys.size():
+		var id := "face-%d"%index
+		chunk.triangles.append({"surface":"grass","object_id":id})
+		chunk.presentation.proxy_materials[id] = keys[index]
+		var origin := Vector3(index*64,0,0)
+		chunk.scene_vertices.append_array(PackedVector3Array([origin,origin+Vector3.RIGHT,origin+Vector3.FORWARD]))
+		chunk.scene_normals.append_array(PackedVector3Array([Vector3.UP,Vector3.UP,Vector3.UP]))
+		chunk.wall_uv.append_array(PackedVector2Array([Vector2.ZERO,Vector2.RIGHT,Vector2.UP]))
 	for prepared in [false,true]:
 		var input := chunk.duplicate(true)
 		if prepared: input.render_batches = RENDER.PLAN.prepare_batches(input)
-		var parent := Node3D.new();root.add_child(parent)
-		var lease := Lease.new(RENDER.PLAN.estimate(input,0))
-		var job := RENDER.begin(input,parent,func(_bytes): return lease,lease.bytes,cache)
-		while not RENDER.advance(job): pass
-		check(job.error.is_empty(),"generated surface attachment")
-		var mesh: MeshInstance3D = job.root.get_child(0)
-		check(mesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] == vertices,"prepared/raw geometry unchanged")
-		check(mesh.material_override is ShaderMaterial,"both attachment paths bind final material")
-		mesh = null
-		RENDER.cancel(job);parent.queue_free();job.clear()
-		for _frame in 4: await process_frame
-		var alive := []
-		for ref: WeakRef in lease.refs:
-			if ref.get_ref() != null: alive.append(ref.get_ref().get_class())
-		check(lease.retired(),"cancelled cell releases its private material and mesh; sealed=%s alive=%s" % [lease.sealed,alive])
+		for level in 3:
+			for partial in [false,true]:
+				QUALITY.current = QUALITY.profile((level+2)%3)
+				var parent := Node3D.new();root.add_child(parent)
+				var lease := Lease.new(RENDER.PLAN.estimate(input,0))
+				var job := RENDER.begin(input,parent,func(_bytes): return lease,lease.bytes,cache)
+				QUALITY.current = QUALITY.profile(level)
+				var bindings := {}
+				var count := 0
+				for _step in 100:
+					RENDER.advance(job)
+					if job.root.get_child_count() > count:
+						var key: String = keys[count]
+						var mesh: MeshInstance3D = job.root.get_child(count)
+						var material: ShaderMaterial = mesh.material_override
+						var expected: ShaderMaterial = reference(job,key,input.presentation)
+						var label := "%s/%d/%s/%d/%s"%[prepared,level,partial,count,key]
+						if bindings.has(key):
+							check(material == bindings[key],label+" reuses cell binding")
+							expected.set_shader_parameter("base_color",Color.RED)
+						else:
+							bindings[key] = material
+						# Inspect immediately, before any corrective quality application.
+						compare(material,expected,label+" initial attachment")
+						check(is_equal_approx(mesh.lod_bias,float(QUALITY.active().lod_bias)) and mesh.visibility_range_end == 0.0,label+" solid node quality")
+						var arrays := mesh.mesh.surface_get_arrays(0)
+						check(arrays[Mesh.ARRAY_VERTEX] == chunk.scene_vertices.slice(count*3,(count+1)*3),label+" geometry unchanged")
+						material.set_shader_parameter("detail_quality",-7)
+						material.set_shader_parameter("wind_strength",-7.0)
+						material.set_shader_parameter("base_color",Color.RED)
+						QUALITY.apply_node(mesh,QUALITY.active())
+						expected.set_shader_parameter("base_color",Color.RED)
+						compare(material,expected,label+" same-preset repair preserves appearance")
+						# Leave edited quality on the first binding for its later reuse.
+						if count == 0:
+							material.set_shader_parameter("detail_quality",-7)
+							material.set_shader_parameter("wind_strength",-7.0)
+						count += 1
+						QUALITY.current = QUALITY.profile((level+count)%3)
+					if job.done or (partial and count == 1): break
+				check(job.error.is_empty() and count == (1 if partial else keys.size()) and job.done != partial,"attachment completion %s/%d/%s: count=%d error=%s"%[prepared,level,partial,count,job.error])
+				var held: Material = bindings.get("grass")
+				bindings.clear()
+				RENDER.cancel(job);parent.queue_free();job.clear()
+				for _frame in 4: await process_frame
+				check(not lease.retired(),"material borrower retains cancelled/completed cell lease")
+				held = null
+				for _frame in 4: await process_frame
+				check(lease.retired(),"last borrower releases cancelled/completed cell material and mesh")

@@ -163,7 +163,7 @@ static func _advance(job: Dictionary) -> bool:
 				material = job.resources.material(job.claims[id], id, sources) if job.get("resources") != null else ASSETS.material(id, sources, job.asset_materials)
 				if material != null and job.get("resources") != null: job.borrowed_materials[material.get_instance_id()] = true
 				if material != null: material = _environment_surface(job, material)
-			else: material = _generated_material(job, key, presentation)
+			else: material = _generated_material(job, key, presentation, true)
 			if material == null:
 				mesh.free()
 				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
@@ -295,7 +295,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 			if material != null and job.get("resources") != null: job.borrowed_materials[material.get_instance_id()] = true
 			if material != null: material = _environment_surface(job, material)
 		else:
-			material = _generated_material(job, key, presentation)
+			material = _generated_material(job, key, presentation, true)
 		if material == null:
 			mesh.free()
 			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
@@ -421,10 +421,13 @@ static func _leaf_material(job: Dictionary, defer_quality := false) -> Material:
 	leaf.resource_name = "mk_leaf"
 	return leaf
 
-static func _generated_material(job: Dictionary, key: String, presentation: Dictionary) -> Material:
+## Only fresh attachment bindings defer quality to track_resources in the same
+## admitted call. Direct callers receive a complete material; reused bindings
+## still receive unconditional node quality updates.
+static func _generated_material(job: Dictionary, key: String, presentation: Dictionary, defer_quality := false) -> Material:
 	var context: RefCounted = job.resources.environment_context() if job.get("resources") != null else null
 	if context != null and not key.begins_with("rc:") and not _urban_surface(key,presentation):
-		return context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0)
+		return context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0,0.9,defer_quality)
 	var material := surface_material(key,presentation,job.get("urban_shader"))
 	if material is StandardMaterial3D:
 		material.albedo_color = ground_color(key,presentation)
