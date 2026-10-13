@@ -224,6 +224,8 @@ static func _advance(job: Dictionary) -> bool:
 						continue
 				var instance: Node3D = job.templates[id].duplicate(0)
 				var seed_value := float((str(presentation.get("map_id",""))+"/"+str(object.id)).sha256_text().substr(0,6).hex_to_int())/16777215.0
+				# One synchronous placement shares quality; refresh on the next call.
+				var quality := QUALITY.active()
 				var pending: Array = [instance]
 				while not pending.is_empty():
 					var piece: Node3D = pending.pop_back()
@@ -231,7 +233,7 @@ static func _advance(job: Dictionary) -> bool:
 						if bool(sources[id].get("solid",true)): piece.set_meta("mapkit_decoration",false)
 						_seed_fallback_materials(piece,seed_value,job.lease)
 						if piece.get_meta("mapkit_occluder",false):
-							var occluder := QUALITY.occluder(piece.mesh,job.lease)
+							var occluder := QUALITY.occluder(piece.mesh,job.lease,quality)
 							if occluder != null: piece.add_child(occluder)
 					pending.append_array(piece.get_children())
 				_environment_lamp(job,id,object)
@@ -242,7 +244,7 @@ static func _advance(job: Dictionary) -> bool:
 				# glTF metres: x-right, y-up, z-back; local map y points forward.
 				anchor.rotation.y = (float(object.quarter_turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0))
 				anchor.scale = Vector3.ONE
-				QUALITY.apply_tree(instance, QUALITY.active())
+				QUALITY.apply_tree(instance, quality)
 				anchor.add_child(instance)
 				job.root.add_child(anchor)
 				track_instance_nodes(job.lease, anchor)

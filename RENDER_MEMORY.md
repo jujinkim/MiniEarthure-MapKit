@@ -72,6 +72,8 @@ placement computes its object seed once and reads occluder quality once if neede
 The next call reads current quality again. Transparent models, overlays and
 per-surface overrides use ordinary instances. Their hierarchy shares one object
 seed calculation while each mesh keeps its independent material bindings.
+Each ordinary placement shares one current quality snapshot between occluder
+creation and final tree application, refreshing it on the next admitted call.
 LOD indices are generated once per
 template. The validated `solid` flag/cache key preserves collidable fences, walls
 and props at every preset. Only assets without collision at/above their origin
