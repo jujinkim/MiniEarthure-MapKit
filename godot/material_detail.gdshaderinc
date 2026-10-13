@@ -3,6 +3,10 @@ uniform sampler2D detail_tile : filter_linear_mipmap, repeat_enable;
 uniform bool detail_enabled = false;
 uniform int detail_quality = 1;
 uniform float detail_scale = 1.0;
+uniform float surface_effect_distance = 96.0;
+float surface_effect_weight(float distance_to_camera) {
+    return 1.0-smoothstep(surface_effect_distance*0.8,surface_effect_distance,distance_to_camera);
+}
 vec2 detail_uv(vec3 p, vec3 n) {
     vec3 a=abs(n);
     return (a.y>max(a.x,a.z) ? p.xz : (a.x>a.z ? p.zy : p.xy))*detail_scale;

@@ -61,20 +61,26 @@ void fragment() {
     }
     if(vertex_tinted && !distant) color *= COLOR.rgb;
     if(textured) color *= texture(albedo_texture,UV).rgb;
+    float view_distance=length(VERTEX);
+    float effect_weight=surface_effect_weight(view_distance);
     float surface_roughness=roughness;
-    if(roughness_enabled) surface_roughness*=dot(texture(roughness_texture,UV),roughness_channel);
-    if(normal_enabled) { NORMAL_MAP=texture(normal_texture,UV).rgb; NORMAL_MAP_DEPTH=normal_strength; }
-    if(ao_enabled) { AO=dot(texture(ao_texture,ao_uv2 ? UV2 : UV),ao_channel); AO_LIGHT_AFFECT=ao_light_affect; }
-    if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
+    if(effect_weight>0.0) {
+        if(roughness_enabled) surface_roughness*=mix(1.0,dot(texture(roughness_texture,UV),roughness_channel),effect_weight);
+        if(normal_enabled) { NORMAL_MAP=texture(normal_texture,UV).rgb; NORMAL_MAP_DEPTH=normal_strength*effect_weight; }
+        if(ao_enabled) { AO=mix(1.0,dot(texture(ao_texture,ao_uv2 ? UV2 : UV),ao_channel),effect_weight); AO_LIGHT_AFFECT=ao_light_affect; }
+    }
+    if(detail_enabled && detail_quality>0 && view_distance<48.0 && effect_weight>0.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
-        color*=detail.r;
-        surface_roughness*=detail.g;
-        AO=mix(1.0,detail.r,0.5);
-        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
+        color*=mix(1.0,detail.r,effect_weight);
+        surface_roughness*=mix(1.0,detail.g,effect_weight);
+        AO=mix(1.0,detail.r,0.5*effect_weight);
+        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*effect_weight,0.0)).xyz);
     }
     // Large, restrained variation remains stable when the camera moves.
-    float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
-    color *= 0.985 + 0.03*grain;
+    if(effect_weight>0.0) {
+        float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
+        color *= 1.0 + (0.03*grain-0.015)*effect_weight;
+    }
     if(terrain_surface || (distant && UV.y < -0.5)) {
         float broad=sin(world_position.x*0.055+sin(world_position.z*0.037))*cos(world_position.z*0.063);
         color*=0.96+0.06*broad;
@@ -91,12 +97,14 @@ void fragment() {
     ALBEDO = color * vec3(1.015,1.002,.975);
     ROUGHNESS = mix(surface_roughness,0.28,weather.x*facing_up);
     ROUGHNESS = mix(ROUGHNESS,0.92,snow_cover);
-    float puddle = distant ? 0.0 : puddle_mask(world_position,world_normal.y,weather.x,weather.y);
+    float puddle = 0.0;
+    if(!distant && effect_weight>0.0 && weather.x>0.2) puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y)*effect_weight;
     ALBEDO *= 1.0-puddle*0.10;
     ROUGHNESS = mix(ROUGHNESS,0.18,puddle);
     SPECULAR = mix(0.35,0.55,puddle);
-    NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
-    METALLIC = metallic*(dot(texture(metallic_texture,UV),metallic_channel)*float(metallic_enabled)+float(!metallic_enabled));
+    if(puddle>0.0) NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
+    METALLIC = metallic;
+    if(metallic_enabled && effect_weight>0.0) METALLIC*=mix(1.0,dot(texture(metallic_texture,UV),metallic_channel),effect_weight);
     if(water_kind>0) {
         float speed=water_kind==1 ? 0.7 : 0.12;
         vec2 p=world_position.xz;
@@ -109,14 +117,15 @@ void fragment() {
     }
     bool enabled = clock.z < 0.0;
     int role = distant ? int(round(UV.y)) : lighting_role;
-    if(role == 1) {
+    if(role == 1 && enabled) {
         uint identity = uint(round(seed*16777215.0));
         uint night = uint(max(0.0,clock.y+100000.0));
         float cutoff = float((identity ^ (night*31337u)) % 241u)*60.0;
         enabled = enabled && (clock.x < cutoff || clock.x >= clock.w);
-        float windows = step(0.2,fract(floor(world_position.x*0.7)+floor(world_position.y*0.6)*0.618+seed));
+        float windows = 0.8;
+        if(effect_weight>0.0) windows=mix(0.8,step(0.2,fract(floor(world_position.x*0.7)+floor(world_position.y*0.6)*0.618+seed)),effect_weight);
         EMISSION = enabled ? vec3(1.0,0.63,0.28)*windows*1.2 : vec3(0.0);
-    } else if(role == 2) {
+    } else if(role == 2 && enabled) {
         // Authored bulbs/signs retain their material colour in both LODs.
         EMISSION = enabled ? color*0.9 : vec3(0.0);
     }

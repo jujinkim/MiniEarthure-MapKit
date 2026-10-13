@@ -184,6 +184,7 @@ func surface_factory_quality(context: RefCounted) -> void:
 
 func check_surface_quality(material: ShaderMaterial, level: int, label: String) -> void:
 	check(material.get_shader_parameter("detail_quality") == level,label+" detail quality")
+	check(material.get_shader_parameter("surface_effect_distance") == QUALITY.profile(level).surface_effect_distance,label+" imported/generated effects distance")
 	check(material.get_shader_parameter("wind_strength") == float(QUALITY.profile(level).vegetation_motion),label+" wind quality")
 
 func partial_occluder_cancel(assets: Dictionary) -> void:

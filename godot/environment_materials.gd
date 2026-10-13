@@ -129,7 +129,9 @@ func bind_detail(material: ShaderMaterial, kind: String, apply_quality := true) 
 	if not tiles.has(kind): return
 	material.set_meta("mapkit_detail",true)
 	if apply_quality:
-		material.set_shader_parameter("detail_quality",int(preload("./display_quality.gd").active().material_detail))
+		var quality := preload("./display_quality.gd").active()
+		material.set_shader_parameter("detail_quality",int(quality.material_detail))
+		material.set_shader_parameter("surface_effect_distance",float(quality.surface_effect_distance))
 	material.set_shader_parameter("detail_enabled",true)
 	material.set_shader_parameter("detail_tile",tiles[kind])
 	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass","metal","leaf"] else 1.0)

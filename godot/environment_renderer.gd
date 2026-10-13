@@ -27,6 +27,7 @@ var _light_candidates: Array = []
 var _scan_at := 0
 var low := false
 var quality := preload("./display_quality.gd").active()
+var _precipitation_strength := 0.0
 var _night_lights := false
 var display_distance := 0.0 # Opt-in scene metres; zero preserves Editor/default weather fog.
 var _weather_fog_density := 0.0008
@@ -190,13 +191,14 @@ func _update_precipitation(state: RefCounted, camera_position: Vector3) -> void:
 	var wet_weather: bool = state.weather in ["rain","snow"]
 	var previous_wet: bool = state.previous_weather in ["rain","snow"]
 	var strength := lerpf(1.0 if previous_wet else 0.0,1.0 if wet_weather else 0.0,state.blend())*float(state.config.intensity)
+	_precipitation_strength = strength
 	var query := PhysicsRayQueryParameters3D.create(camera_position,camera_position+Vector3.UP*1000.0)
 	query.hit_back_faces = true
 	var sheltered := not get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 	_sheltered = sheltered
 	precipitation.emitting = strength > 0.01 and not sheltered
 	precipitation.visible = not sheltered and strength > 0.01
-	precipitation.amount_ratio = maxf(0.01,strength) * (.4 if low else 1.0)
+	precipitation.amount_ratio = maxf(0.01,strength) * float(quality.weather_amount)
 	var snowing: bool = (state.previous_weather if state.blend()<0.5 else state.weather) == "snow"
 	particle_material.initial_velocity_min = 1.0 if snowing else 10.0
 	particle_material.initial_velocity_max = 2.5 if snowing else 14.0
@@ -292,4 +294,4 @@ func apply_display_quality(value: Dictionary) -> void:
 	low = int(value.level) == 0
 	if sun != null: sun.directional_shadow_max_distance = float(value.shadow_distance)
 	if moon != null: moon.directional_shadow_max_distance = float(value.shadow_distance)
-	if precipitation != null: precipitation.amount_ratio = minf(precipitation.amount_ratio,.4 if low else 1.0)
+	if precipitation != null: precipitation.amount_ratio = maxf(.01,_precipitation_strength)*float(value.weather_amount)

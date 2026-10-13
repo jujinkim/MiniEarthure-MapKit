@@ -29,19 +29,23 @@ float band(float distance,float width) {
 }
 void fragment() {
     vec2 p=world_position.xz;
-    float noise=fract(sin(dot(floor(p*150.0),vec2(12.9898,78.233)))*43758.5453);
-    vec3 color=base_color.rgb*(0.96+0.08*noise);
-    float tile_roughness=0.9;
-    if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
-        vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
-        color*=detail.r;tile_roughness=detail.g;
-        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal),0.0)).xyz);
-        AO=mix(1.0,detail.r,0.5);
+    float effect_weight=surface_effect_weight(length(VERTEX));
+    vec3 color=base_color.rgb;
+    if(effect_weight>0.0) {
+        float noise=fract(sin(dot(floor(p*150.0),vec2(12.9898,78.233)))*43758.5453);
+        color*=1.0+(0.08*noise-0.04)*effect_weight;
     }
-    if (paving) {
+    float tile_roughness=0.9;
+    if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0 && effect_weight>0.0) {
+        vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
+        color*=mix(1.0,detail.r,effect_weight);tile_roughness=mix(0.9,detail.g,effect_weight);
+        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*effect_weight,0.0)).xyz);
+        AO=mix(1.0,detail.r,0.5*effect_weight);
+    }
+    if (paving && effect_weight>0.0) {
         vec2 q=abs(fract(p/0.7)-0.5);
         float seams=max(smoothstep(0.475,0.5,q.x),smoothstep(0.475,0.5,q.y));
-        color*=1.0-0.13*seams;
+        color*=1.0-0.13*seams*effect_weight;
     }
     if (marked) {
         float nearest=1e20;
@@ -109,9 +113,10 @@ void fragment() {
     color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
     ALBEDO=color;
     ROUGHNESS=mix(mix(tile_roughness,0.27,weather.x),0.95,weather.y);
-    float puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y);
+    float puddle=0.0;
+    if(effect_weight>0.0 && weather.x>0.2) puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y)*effect_weight;
     ALBEDO*=1.0-puddle*0.10;
     ROUGHNESS=mix(ROUGHNESS,0.18,puddle);
     SPECULAR=mix(0.35,0.55,puddle);
-    NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
+    if(puddle>0.0) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
 }

@@ -8,6 +8,7 @@ static func profile(level: int) -> Dictionary:
 		"particles":[256,512,768][level], "shadow_distance":[48.0,96.0,160.0][level],
 		"water":level, "sky":level, "material_detail":level, "vegetation_motion":[0.0,.5,1.0][level], "lod_bias":[.55,.8,1.0][level], "decoration_distance":[64.0,112.0,192.0][level],
 		"detail_distance":[96.0,128.0,160.0][level],
+		"surface_effect_distance":[48.0,96.0,160.0][level], "weather_amount":[.4,.7,1.0][level],
 		"occlusion":level > 0, "light_count":[4,6,8][level]}
 
 static func active() -> Dictionary:
@@ -48,6 +49,8 @@ static func apply_material(material: Material, value: Dictionary) -> void:
 		material.set_shader_parameter("detail_quality",int(value.material_detail))
 		material.set_shader_parameter("wind_strength",float(value.vegetation_motion))
 	elif material.get_meta("mapkit_detail",false): material.set_shader_parameter("detail_quality",int(value.material_detail))
+	if material.get_meta("mapkit_surface",false) or material.get_meta("mapkit_detail",false):
+		material.set_shader_parameter("surface_effect_distance",float(value.surface_effect_distance))
 	if material.get_meta("mapkit_water", false):
 		material.shader = preload("./water_surface_high.gdshader") if int(value.water) == 2 else preload("./water_surface.gdshader")
 		material.set_shader_parameter("quality_level",int(value.water))

@@ -9,7 +9,11 @@ LOD mesh with a leaf material. Existing user assets and generated packages survi
 `scripts/richer_assets.py` generates ten shared tiles (brick, plaster, wood, stone,
 asphalt, concrete, earth, grass, metal, leaf) at 128/256/512px. Channels contain
 shaded luminance/AO, roughness, and baked normal XY; a normal costs one texture
-sample instead of neighboring height fetches. Near detail stops at 48m. Low omits material relief, medium uses packed colour/AO
+sample instead of neighboring height fetches. Detail tiles stop at 48m. Imported normal/AO/roughness/metallic maps, grain,
+puddle ripples and procedural window masks fade out over the last fifth of the
+quality effect distance (48/96/160m). Far windows retain average emission and the
+authoritative lighting schedule; albedo/sign colours remain sampled. Dry surfaces
+and disabled metallic maps skip their texture/noise work. Road markings remain intact. Low omits material relief, medium uses packed colour/AO
 and roughness, and high also samples the normal detail. Muted
 material colours and subtle warm grading preserve vehicle colours, hazards and
 weather/night distinctions; Control/HUD rendering is unaffected.
