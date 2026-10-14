@@ -11,7 +11,7 @@ var _progress_revision := -1
 
 func begin(settings: Dictionary, destination: String, with_preview := false) -> int:
 	cancel()
-	_pending = {"settings": settings.duplicate(true), "destination": destination, "request": generation, "preview":with_preview}
+	_pending = {"settings": settings.duplicate(true), "destination": destination, "request": generation, "preview":with_preview, "seed_defaults":JSON.parse_string(ClassDB.instantiate("MapKitBridge").track_seed_defaults(int(settings.get("seed",-1))))}
 	return generation
 
 func cancel() -> void:
@@ -51,6 +51,7 @@ func _poll_progress() -> void:
 	progressed.emit(_running, value)
 
 static func _generate(request: Dictionary, token: RefCounted) -> Dictionary:
+	if not request.seed_defaults.get("ok",false): return request.seed_defaults
 	token.enter()
 	var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
 	var result: Dictionary = JSON.parse_string(bridge.generate_track(JSON.stringify(request.settings), request.destination))
@@ -58,6 +59,7 @@ static func _generate(request: Dictionary, token: RefCounted) -> Dictionary:
 		var prepared:Dictionary=preload("./track_authoring_preview.gd").prepare(result.data.document,bridge,{},token)
 		if prepared.has("error"): result={"ok":false,"error":{"code":"E_PREVIEW","message":prepared.error}}
 		else: result.data.preview=prepared
+	if result.get("ok",false): result.data.seed_defaults=request.seed_defaults.data.duplicate(true)
 	token.leave()
 	return result
 

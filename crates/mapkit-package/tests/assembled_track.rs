@@ -4,6 +4,20 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn composed_seed_templates_roundtrip_as_editable_v1_sources() {
+    for id in ["double_jump", "air_ring_chain", "grind_shortcut"] {
+        let source = templates::source(id).unwrap();
+        let document = package::compile_source(&source).unwrap();
+        let reopened = read_bytes(&pack_bytes(document.clone(), BTreeMap::new()).unwrap()).unwrap();
+        assert_eq!(reopened.document.assembled_track, document.assembled_track);
+        assert_eq!(reopened.document.gimmicks, document.gimmicks);
+        assert_eq!(reopened.document.grind_lines, document.grind_lines);
+        assert_eq!(reopened.document.courses, document.courses);
+        assert_eq!(reopened.document.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap(), &source);
+    }
+}
+
+#[test]
 fn manual_acceleration_and_jump_remain_independent_on_reload() {
     let mut source=authoring::shortcut_source();
     let mut boost=source.actions[0].clone();

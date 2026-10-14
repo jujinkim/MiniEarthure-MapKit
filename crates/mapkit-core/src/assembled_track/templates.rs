@@ -1,0 +1,362 @@
+//! Editable v1 graphs. Templates expand into ordinary roads/actions/branches;
+//! no runtime template interpretation or second set of physics is required.
+use super::*;
+use authoring::{Action, Checkpoint, Connection, PanelAlignment, Path, Source};
+
+pub fn catalogue() -> serde_json::Value {
+    serde_json::json!([
+        {"id":"double_jump","category":"action"},
+        {"id":"air_ring_chain","category":"action"},
+        {"id":"grind_shortcut","category":"gimmick"}
+    ])
+}
+fn linear(ids: &[&str]) -> Result<Source> {
+    let mut s = Source::empty();
+    s.settings.circuit = false;
+    let mut i = 0;
+    while i < ids.len() {
+        let id = ids[i];
+        let mut count = 1;
+        if id == "straight" {
+            while i + count < ids.len() && ids[i + count] == "straight" {
+                count += 1;
+            }
+        }
+        let mut item = authoring::instance(
+            &format!("t{i}"),
+            if id == "straight" { "free_curve" } else { id },
+            800,
+        );
+        if id == "straight" {
+            let length = count as i64 * 800;
+            item.control_points = vec![
+                [0, 0, 0],
+                [0, 0, length / 3],
+                [0, 0, length * 2 / 3],
+                [0, 0, length],
+            ];
+        }
+        if let Some(previous) = s.instances.last() {
+            item = authoring::snap(&item, previous)?;
+        }
+        s.instances.push(item);
+        i += count;
+    }
+    s.paths.push(Path {
+        id: "base".into(),
+        pieces: s.instances.iter().map(|i| i.id.clone()).collect(),
+    });
+    s.connections = s.paths[0]
+        .pieces
+        .windows(2)
+        .map(|w| Connection {
+            from: w[0].clone(),
+            to: w[1].clone(),
+        })
+        .collect();
+    s.checkpoints = vec![
+        Checkpoint {
+            piece: s.instances[0].id.clone(),
+            sample: 0,
+        },
+        Checkpoint {
+            piece: s.instances.last().unwrap().id.clone(),
+            sample: authoring::piece(s.instances.last().unwrap())?.path.len() - 1,
+        },
+    ];
+    Ok(s)
+}
+pub fn source(id: &str) -> Result<Source> {
+    match id {
+        "double_jump" => linear(&[
+            "straight", "straight", "jump", "straight", "straight", "straight", "straight",
+            "straight", "jump", "straight", "straight", "straight", "straight", "straight",
+        ]),
+        "air_ring_chain" => {
+            let mut s = linear(&[
+                "straight", "straight", "jump", "straight", "straight", "straight", "straight",
+                "straight", "straight", "straight", "straight",
+            ])?;
+            let p = authoring::piece(s.instances.iter().find(|i| i.id == "t2").unwrap())?;
+            for (i, station) in [1600, 2500, 2900].iter().enumerate() {
+                let (sample, point) = p
+                    .path
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, v)| v.position_cm[2].abs_diff(p.origin_cm[2] + station))
+                    .unwrap();
+                s.actions.push(Action {
+                    id: format!("ring{i}"),
+                    kind: "air_ring".into(),
+                    piece: "t2".into(),
+                    sample,
+                    height_cm: ((if i == 0 { 300 } else { 360 }) - point.position_cm[1]) as u32,
+                    panel_width_percent: 50,
+                    panel_alignment: PanelAlignment::Center,
+                    landing: None,
+                });
+            }
+            Ok(s)
+        }
+        "grind_shortcut" => {
+            let mut s = authoring::shortcut_source();
+            s.instances.retain(|i| i.id != "finish");
+            s.connections.retain(|c| c.to != "finish");
+            for p in &mut s.paths {
+                p.pieces.retain(|id| id != "finish");
+            }
+            s.checkpoints.retain(|cp| cp.piece != "finish");
+            let position = [800, 500, 6600];
+            s.structures.push(Gimmick {
+                id: "authored-rail".into(),
+                position,
+                rotation_mdeg: [0; 3],
+                scale_per_mille: [1000; 3],
+                parts: vec![box_part([0, 20, 0], [40, 40, 1200])],
+                track: None,
+                curved_faces: vec![],
+                effect: None,
+                surface: Surface::Concrete,
+                color: [255, 200, 40, 255],
+                motion: Motion {
+                    kind: MotionKind::Static,
+                    delta_cm: [0; 3],
+                    axis: 1,
+                    period_ms: 4000,
+                    phase_ms: 0,
+                    impulse_cmps: [0; 3],
+                    cooldown_ms: 1500,
+                },
+                safety_min_cm: position.map(|v| v - 2000),
+                safety_max_cm: position.map(|v| v + 2000),
+            });
+            s.grind_lines.push(crate::grind::GrindLine {
+                id: "rail".into(),
+                control_points: vec![[800, 540, 6000], [800, 540, 7200]],
+                up: [0, 1_000_000, 0],
+                capture_width_cm: 40,
+                start_connections: vec![],
+                end_connections: vec![],
+            });
+            Ok(s)
+        }
+        _ => Err(error("E_TRACK_SOURCE", "unknown track template")),
+    }
+}
+
+/// Rigidly place a template at a supported port. References stay local until
+/// merge; roads, solid rail and interaction line all receive the same transform.
+pub(super) fn placed(id: &str, port: &Sample) -> Result<Source> {
+    let mut s = source(id)?;
+    let first = authoring::snap_surface(&s.instances[0], port)?;
+    let rotation = first.rotation_mdeg;
+    let origin = first.position_cm;
+    let point = |v| add(origin, geometry::rotate3(v, rotation));
+    let rotate = |old| {
+        let axes = [[1_000_000, 0, 0], [0, 1_000_000, 0], [0, 0, 1_000_000]]
+            .map(|v| geometry::rotate3(geometry::rotate3(v, old), rotation));
+        geometry::euler(std::array::from_fn(|i| {
+            std::array::from_fn(|j| axes[j][i] as f64 / 1e6)
+        }))
+    };
+    for i in &mut s.instances {
+        i.position_cm = point(i.position_cm);
+        i.rotation_mdeg = rotate(i.rotation_mdeg);
+    }
+    s.instances[0].entry_width_cm = first.entry_width_cm;
+    for g in &mut s.structures {
+        g.position = point(g.position);
+        g.rotation_mdeg = rotate(g.rotation_mdeg);
+        g.safety_min_cm = g.position.map(|v| v - 5000);
+        g.safety_max_cm = g.position.map(|v| v + 5000);
+    }
+    for l in &mut s.grind_lines {
+        for p in &mut l.control_points {
+            *p = point(*p);
+        }
+        l.up = geometry::rotate3(l.up, rotation);
+    }
+    Ok(s)
+}
+
+/// Reserve the entire ring aperture/rim, including clearance above the road's
+/// ordinary vehicle envelope. Module roads already passed their own geometry check.
+pub(super) fn clear_of_roads(fragment: &Source, others: &[Piece]) -> Result<bool> {
+    for action in fragment.actions.iter().filter(|a| a.kind == "air_ring") {
+        let piece = authoring::piece(
+            fragment
+                .instances
+                .iter()
+                .find(|i| i.id == action.piece)
+                .unwrap(),
+        )?;
+        let mut center = piece.path[action.sample].position_cm;
+        center[1] += i64::from(action.height_cm);
+        if others
+            .iter()
+            .flat_map(|p| p.path.iter().chain(&p.alternate_path))
+            .any(|sample| {
+                let (point, radius, low, high) = geometry::volume(sample);
+                low < center[1] + 300
+                    && center[1] - 300 < high
+                    && (center[0] - point[0]).pow(2) + (center[2] - point[2]).pow(2)
+                        < (radius + 300).pow(2)
+            })
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Merge a placed graph, mapping its base instances onto an existing sequence.
+/// This also creates whole-course alternatives with shared branch checkpoints.
+pub(super) fn merge(s: &mut Source, fragment: &Source, base_ids: &[String], prefix: &str) {
+    let base = &fragment.paths[0].pieces;
+    let map: std::collections::BTreeMap<_, _> = fragment
+        .instances
+        .iter()
+        .map(|i| {
+            let name = base
+                .iter()
+                .position(|id| id == &i.id)
+                .map_or_else(|| format!("{prefix}-{}", i.id), |at| base_ids[at].clone());
+            (i.id.clone(), name)
+        })
+        .collect();
+    for item in &fragment.instances {
+        if !base.contains(&item.id) {
+            let mut item = item.clone();
+            item.id = map[&item.id].clone();
+            s.instances.push(item);
+        }
+    }
+    for c in &fragment.connections {
+        let edge = Connection {
+            from: map[&c.from].clone(),
+            to: map[&c.to].clone(),
+        };
+        if !s.connections.contains(&edge) {
+            s.connections.push(edge);
+        }
+    }
+    for path in fragment.paths.iter().skip(1) {
+        let mut route = s.paths[0].clone();
+        route.id = format!("{prefix}-{}", path.id);
+        let first = route
+            .pieces
+            .iter()
+            .position(|id| id == &base_ids[0])
+            .unwrap();
+        route.pieces.splice(
+            first..first + base_ids.len(),
+            path.pieces.iter().map(|id| map[id].clone()),
+        );
+        s.paths.push(route);
+    }
+    for a in &fragment.actions {
+        let mut a = a.clone();
+        a.id = format!("{prefix}-{}", a.id);
+        a.piece = map[&a.piece].clone();
+        if let Some(cp) = &mut a.landing {
+            cp.piece = map[&cp.piece].clone();
+        }
+        s.actions.push(a);
+    }
+    for g in &fragment.structures {
+        let mut g = g.clone();
+        g.id = format!("authored-{prefix}-{}", g.id.trim_start_matches("authored-"));
+        s.structures.push(g);
+    }
+    for l in &fragment.grind_lines {
+        let mut l = l.clone();
+        l.id = format!("{prefix}-{}", l.id);
+        for link in l.start_connections.iter_mut().chain(&mut l.end_connections) {
+            link.line = format!("{prefix}-{}", link.line);
+        }
+        s.grind_lines.push(l);
+    }
+}
+
+pub fn append(source: &Source, id: &str, anchor: &str, prefix: &str) -> Result<Source> {
+    if prefix.is_empty()
+        || prefix.len() > 12
+        || !prefix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err(error(
+            "E_TRACK_SOURCE",
+            "template prefix must be 1..12 ASCII letters/digits/hyphens",
+        ));
+    }
+    let port = if source.instances.is_empty() {
+        authoring::piece(&authoring::instance("origin", "straight", 800))?.path[0].clone()
+    } else {
+        authoring::piece(
+            source
+                .instances
+                .iter()
+                .find(|i| i.id == anchor)
+                .ok_or_else(|| error("E_TRACK_SOURCE", "select a route endpoint"))?,
+        )?
+        .path
+        .last()
+        .unwrap()
+        .clone()
+    };
+    let fragment = placed(id, &port)?;
+    let existing = source
+        .instances
+        .iter()
+        .map(authoring::piece)
+        .collect::<Result<Vec<_>>>()?;
+    if !clear_of_roads(&fragment, &existing)? {
+        return Err(error(
+            "E_TRACK_CLEARANCE",
+            "template ring aperture needs clear flight space",
+        ));
+    }
+    let mut out = source.clone();
+    out.original_seed = None;
+    if out.paths.is_empty() {
+        out.paths.push(Path {
+            id: "base".into(),
+            pieces: vec![],
+        });
+    }
+    if !out.paths[0].pieces.is_empty() && out.paths[0].pieces.last().unwrap() != anchor {
+        return Err(error(
+            "E_TRACK_SOURCE",
+            "select the end of the base route to append a template",
+        ));
+    }
+    let ids: Vec<_> = fragment.paths[0]
+        .pieces
+        .iter()
+        .map(|id| format!("{prefix}-{id}"))
+        .collect();
+    for (old, new) in fragment.paths[0].pieces.iter().zip(&ids) {
+        let mut item = fragment
+            .instances
+            .iter()
+            .find(|i| &i.id == old)
+            .unwrap()
+            .clone();
+        item.id = new.clone();
+        out.instances.push(item);
+    }
+    if !anchor.is_empty() {
+        out.connections.push(Connection {
+            from: anchor.into(),
+            to: ids[0].clone(),
+        });
+    }
+    for route in &mut out.paths {
+        if route.pieces.is_empty() || route.pieces.last().is_some_and(|last| last == anchor) {
+            route.pieces.extend(ids.iter().cloned());
+        }
+    }
+    merge(&mut out, &fragment, &ids, prefix);
+    Ok(out)
+}

@@ -344,7 +344,7 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
             }
             // Count usable road distance, not the number of candidate centres.
             // Approach/footprint margins constrain placement without silently
-            // halving difficulty density on short, joined road pieces.
+            // halving planned density on short, joined road pieces.
             eligible += path
                 .windows(2)
                 .filter(|w| {
@@ -368,11 +368,7 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
             }
         }
     }
-    let spacing = match a.settings.difficulty.as_str() {
-        "easy" => 6400,
-        "hard" => 1600,
-        _ => 3200,
-    };
+    let spacing = plan::Plan::new(a.settings.seed).obstacle_spacing;
     let target = ((eligible + spacing / 2) / spacing).max(1) as u32;
     let road_objects = road_gimmicks(a)?;
     let available = crate::gimmick::MAX_GIMMICKS.saturating_sub(road_objects.len());
@@ -643,7 +639,7 @@ mod tests {
         assert!(place(&a).unwrap().0.is_empty());
     }
     #[test]
-    fn difficulty_density_budget_and_seed_repeatability() {
+    fn seed_density_budget_and_inert_difficulty() {
         let mut a = fixture("sprint_lane", 400);
         let mut origin = a.pieces.last().unwrap().path.last().unwrap().position_cm;
         for _ in 0..20 {
@@ -658,7 +654,8 @@ mod tests {
             );
         }
         let mut counts = vec![];
-        for (difficulty, spacing) in [("easy", 6400), ("normal", 3200), ("hard", 1600)] {
+        let spacing=plan::Plan::new(a.settings.seed).obstacle_spacing;
+        for difficulty in ["easy", "normal", "hard"] {
             a.settings.difficulty = difficulty.into();
             let result = place(&a).unwrap();
             assert_eq!(result, place(&a).unwrap());
@@ -666,10 +663,10 @@ mod tests {
             assert_eq!(result.0.len(), result.2 as usize);
             counts.push(result.0.len());
         }
-        assert!(counts[0] < counts[1] && counts[1] < counts[2]);
+        assert_eq!(counts[0],counts[1]);assert_eq!(counts[1],counts[2]);
         // Existing object cap reduces attachments instead of adding roads.
         let mut budget = a.clone();
-        for _ in 0..40 {
+        for _ in 0..(crate::gimmick::MAX_GIMMICKS / 3) {
             push_piece(
                 &mut budget.pieces,
                 &mut origin,

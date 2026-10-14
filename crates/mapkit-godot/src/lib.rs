@@ -86,6 +86,23 @@ impl MapKitBridge {
         response(Ok(mapkit_core::assembled_track::catalogue()))
     }
     #[func]
+    fn track_seed_defaults(&self, seed: i64) -> GString {
+        response(u64::try_from(seed).map_err(|_|mapkit_core::error("E_TRACK_SETTINGS","negative seed"))
+            .and_then(mapkit_core::assembled_track::track_seed_defaults))
+    }
+    #[func]
+    fn track_template_source(&self, id: GString) -> GString {
+        response(mapkit_core::assembled_track::templates::source(&id.to_string())
+            .map(|s|serde_json::to_value(s).unwrap()))
+    }
+    #[func]
+    fn append_track_template(&self, source: GString, id: GString, anchor: GString, prefix: GString) -> GString {
+        response((|| {
+            let source=serde_json::from_value(engine_value(&source.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::templates::append(&source,&id.to_string(),&anchor.to_string(),&prefix.to_string())?).unwrap())
+        })())
+    }
+    #[func]
     fn track_preview(&self, document:GString)->GString {
         response((|| {
             let d=engine_document(&document.to_string())?;

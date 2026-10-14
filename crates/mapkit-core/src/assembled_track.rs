@@ -32,6 +32,9 @@ mod panels;
 mod junction;
 mod walls;
 mod layout;
+mod plan;
+pub mod templates;
+pub use plan::track_seed_defaults;
 pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
 const ROAD_WIDTHS: &[u32] = &[400, 600, 800, 1200];
 pub const MAX_PORT_WIDTH_CM: u32 = 1800;
@@ -47,6 +50,7 @@ pub struct Settings {
     pub seed: u64,
     pub circuit: bool,
     pub duration_seconds: u16,
+    /// Inert v1 preservation field. New generation always writes "normal".
     pub difficulty: String,
     pub categories: Vec<String>,
     pub time_minutes: u16,
@@ -315,6 +319,14 @@ pub fn catalogue_ids() -> &'static [&'static str] {
         "gentle90_ultra_wide_left",
         "right90_ultra_wide",
         "right90_ultra_wide_left",
+        "banked_hairpin",
+        "banked_hairpin_left",
+        "cylinder_spiral_right_up",
+        "cylinder_spiral_right_down",
+        "cylinder_spiral_left_up",
+        "cylinder_spiral_left_down",
+        "spatial_s",
+        "spatial_s_left",
         "gentle45",
         "gentle45_left",
         "gentle90",
@@ -439,6 +451,8 @@ pub fn fingerprint() -> String {
             include_bytes!("special_track.rs").as_slice(),
             include_bytes!("curve_sampling.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
+            include_bytes!("assembled_track/plan.rs").as_slice(),
+            include_bytes!("assembled_track/templates.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/panels.rs").as_slice(),
             include_bytes!("assembled_track/junction.rs").as_slice(),
@@ -462,7 +476,7 @@ pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,"wall_thickness_cm":WALL_THICKNESS_CM,
         "min_width_cm":MIN_WIDTH_CM,"loop_min_width_cm":MIN_WIDTH_CM,"pipe_default_radius_cm":SpecialTrack::DEFAULT_PIPE_RADIUS_CM,"pipe_radii_cm":SpecialTrack::PIPE_RADII_CM,"loop_default_width_cm":MIN_WIDTH_CM,"pipe_min_radius_cm":crate::special_track::SpecialTrack::MIN_PIPE_RADIUS_CM,"tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
-        "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
+        "selection_ids":selection_ids(),"templates":templates::catalogue(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
         "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"max_port_width_cm":maximum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),

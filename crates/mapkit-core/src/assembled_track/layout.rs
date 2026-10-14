@@ -234,33 +234,22 @@ pub(super) fn finish(pieces: Vec<Piece>, s: &Settings) -> Assembly {
         floor: stats.4,
     }
 }
-// Category tickets retain the original 26:9:5 ratio. Within driving, select a
-// family before its uniformly distributed handedness/elevation variants.
-const DRIVING_FAMILIES: [&[&str]; 10] = [
-    &["straight"],
-    &["slope_up", "slope_down"],
+// The immutable section plan supplies independent family/category/width weights.
+const DRIVING_FAMILIES: [&[&str]; 13] = [
+    &["straight", "sprint_lane"],
+    &["slope_up", "slope_down", "slope", "roller_waves", "curve_up", "curve_down", "curve_left_up", "curve_left_down"],
     &["gentle45", "gentle45_left", "gentle90", "gentle90_left"],
     &["right90", "right90_left"],
-    &["zigzag"],
+    &["zigzag", "chicane", "chicane_narrow", "zigzag_narrow", "straight_narrow"],
     &["sharp135", "sharp135_left"],
     &["hairpin", "hairpin_left"],
     &["spiral90_right_down", "spiral90_left_up", "spiral90_right_up", "spiral90_left_down"],
     &["spiral180_right_up", "spiral180_left_down", "spiral180_right_down", "spiral180_left_up"],
     &["spiral360_right_down", "spiral360_left_up", "spiral360_right_up", "spiral360_left_down"],
+    &["banked_hairpin", "banked_hairpin_left"],
+    &["spatial_s", "spatial_s_left"],
+    &["curve", "curve_left", "sharp_curve", "sharp_curve_left"],
 ];
-const FAMILY_WEIGHTS: [[u32; 10]; 3] = [
-    [34, 12, 34, 16, 4, 0, 0, 0, 0, 0],
-    [16, 10, 24, 18, 8, 8, 6, 6, 3, 1],
-    [8, 6, 14, 18, 12, 12, 12, 8, 6, 4],
-];
-const WIDTH_WEIGHTS: [[u32; 5]; 3] = [
-    [0, 2, 33, 45, 20],
-    [0, 5, 35, 45, 15],
-    [0, 8, 42, 40, 10],
-];
-fn difficulty_index(difficulty: &str) -> usize {
-    match difficulty { "easy" => 0, "hard" => 2, _ => 1 }
-}
 fn weighted_index(rng: &mut u64, weights: &[u32]) -> usize {
     let mut ticket = (next(rng) % u64::from(weights.iter().sum::<u32>())) as u32;
     for (index, weight) in weights.iter().enumerate() {
@@ -269,18 +258,22 @@ fn weighted_index(rng: &mut u64, weights: &[u32]) -> usize {
     }
     unreachable!("nonempty positive weight distribution")
 }
-fn driving_choice(rng: &mut u64, difficulty: usize) -> &'static str {
-    let family = DRIVING_FAMILIES[weighted_index(rng, &FAMILY_WEIGHTS[difficulty])];
-    family[next(rng) as usize % family.len()]
+fn driving_choice(rng: &mut u64, section: &plan::Section) -> &'static str {
+    let family = DRIVING_FAMILIES[weighted_index(rng, &section.families)];
+    let variants:Vec<_>=family.iter().copied().filter(|id| {
+        (!family.iter().any(|v|v.contains("left")) || id.contains("left")==section.left)
+            && (!id.ends_with("up") && !id.ends_with("down") || id.ends_with("up")==section.up)
+    }).collect();
+    variants[next(rng) as usize % variants.len()]
 }
-fn road_width(rng: &mut u64, id: &str, difficulty: usize) -> u32 {
+fn road_width(rng: &mut u64, id: &str, section: &plan::Section) -> u32 {
     let widths = if ULTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id) { WIDTHS } else { supported_widths(id) };
-    let weights: Vec<_> = widths.iter().map(|w| WIDTH_WEIGHTS[difficulty][WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
+    let weights: Vec<_> = widths.iter().map(|w| section.widths[WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
     widths[weighted_index(rng, &weights)]
 }
-fn driving_piece(rng: &mut u64, difficulty: usize) -> (&'static str, u32) {
-    let id = driving_choice(rng, difficulty);
-    let width = road_width(rng, id, difficulty);
+fn driving_piece(rng: &mut u64, section: &plan::Section) -> (&'static str, u32) {
+    let id = driving_choice(rng, section);
+    let width = road_width(rng, id, section);
     let preset = if width == 1800 {
         ULTRA_WIDE_PRESETS.iter().find(|(_, base)| *base == id).map_or(id, |(wide, _)| *wide)
     } else if width == 1200 {
@@ -289,13 +282,13 @@ fn driving_piece(rng: &mut u64, difficulty: usize) -> (&'static str, u32) {
     (preset, width)
 }
 fn special_width(rng: &mut u64, id: &str) -> u32 {
-    // One uniform draw at every difficulty, with the same manual bore choices.
+    // Same bore choices as manual authoring.
     let widths = supported_widths(id);
     widths[next(rng) as usize % widths.len()]
 }
-fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
+fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<Assembly>> {
     let mut rng = s.seed ^ attempt.wrapping_mul(0xa0761d6478bd642f);
-    let difficulty = difficulty_index(&s.difficulty);
+
     let gimmicks = [
         "cylinder",
         "cylinder_curve",
@@ -303,6 +296,10 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         "cylinder_uturn",
         "cylinder_uturn_left",
         "cylinder_s_rise",
+        "cylinder_spiral_right_up",
+        "cylinder_spiral_right_down",
+        "cylinder_spiral_left_up",
+        "cylinder_spiral_left_down",
         "overpass",
         "banked_chicane",
         "loop",
@@ -313,31 +310,27 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         "acceleration_panel",
         "boost_chain",
         "air_ring",
+        "offset_jump",
+        "double_jump",
+        "air_ring_chain",
     ];
-    let mut choices = vec![];
-    for (category, ids) in [
-        ("driving", ["driving"; 26].as_slice()),
-        ("gimmick", gimmicks.as_slice()),
-        ("action", actions.as_slice()),
-    ] {
-        if s.categories.iter().any(|id| id == category) {
-            choices.extend_from_slice(ids);
-        }
-    }
     let mut pieces = vec![];
     let mut origin = [0; 3];
     for _ in 0..START_PIECES {
         push_piece(&mut pieces, &mut origin, 0, "straight", 800, false, [0; 3]);
     }
-    let shortcut = s.categories.len() == 3 && attempt % 3 == 0;
-    if shortcut {
-        let example = authoring::shortcut_source();
-        for i in &example.instances[3..5] {
-            pieces.push(authoring::piece(i)?);
+    let mut fragments:Vec<(usize,authoring::Source)>=vec![];
+    let mut blocks=vec![];
+    if plan.shortcut && s.categories.len()==3 {
+        let fragment=templates::placed("grind_shortcut",&end(&pieces))?;
+        let start=pieces.len();
+        for id in &fragment.paths[0].pieces {
+            pieces.push(authoring::piece(fragment.instances.iter().find(|i|&i.id==id).unwrap())?);
         }
+        blocks.push(start);fragments.push((start,fragment));
     }
     let target = u32::from(s.duration_seconds) * 1000;
-    let mut best: Option<Assembly> = None;
+    let mut best: Option<(Assembly,Vec<(usize,authoring::Source)>)> = None;
     let mut backtracks = 0;
     let mut closure_after=target/3;
     for _ in 0..MAX_PIECES {
@@ -352,16 +345,15 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
             let mut connected = pieces.clone();
             if closure(&mut connected, s)? {
                 let a = finish(connected, s);
-                // Prefer the closest executable duration, retaining an earlier
-                // valid candidate when extra action gates exhaust the budget.
+                // Keep duration feasibility and the section-plan residual together.
                 if authoring::checkpoint_budget(&a).is_ok() && best.as_ref().is_none_or(|b| {
-                    a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
+                    plan.rank(&a) < plan.rank(&b.0)
                 }) {
-                    best = Some(a);
+                    best = Some((a,fragments.clone()));
                 }
                 if best
                     .as_ref()
-                    .is_some_and(|a| a.estimated_msec.abs_diff(target) < 300)
+                    .is_some_and(|(a,_)| a.estimated_msec.abs_diff(target) < 300 && plan.fit(a)<65)
                 {
                     break;
                 }
@@ -369,64 +361,107 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         }
         let mut added = false;
         for _ in 0..12 {
-            let choice = choices[next(&mut rng) as usize % choices.len()];
-            let (id, w) = if choice == "driving" { driving_piece(&mut rng, difficulty) }
-                else if category(choice) == "action" { (choice, road_width(&mut rng, choice, difficulty)) }
+            let section=plan.section(elapsed,target);
+            let mut category_weights=section.categories;
+            for (index,id) in selection_ids().iter().enumerate() {
+                if !s.categories.iter().any(|v|v==id) {category_weights[index]=0;}
+            }
+            // A category-only request remains usable even when its seed weight is zero.
+            if category_weights.iter().sum::<u32>()==0 {
+                for (i,id) in selection_ids().iter().enumerate() {category_weights[i]=u32::from(s.categories.iter().any(|v|v==id));}
+            }
+            let choice=match weighted_index(&mut rng,&category_weights) {
+                0=>"driving",1=>gimmicks[next(&mut rng) as usize%gimmicks.len()],
+                _=>actions[next(&mut rng) as usize%actions.len()],
+            };
+            let start=pieces.len();
+            if ["double_jump","air_ring_chain"].contains(&choice) {
+                let fragment=templates::placed(choice,&end(&pieces))?;
+                let mut valid=true;
+                for id in &fragment.paths[0].pieces {
+                    let p=authoring::piece(fragment.instances.iter().find(|i|&i.id==id).unwrap())?;
+                    if pieces.iter().any(|other|authoring::conflict(&p,other)) {valid=false;break;}
+                    pieces.push(p);
+                }
+                if valid && pieces.len()<=MAX_PIECES && pieces.iter().map(|p|p.path.len()).sum::<usize>()<=MAX_SAMPLES && valid_runs(&pieces,false) {
+                    blocks.push(start);fragments.push((start,fragment));added=true;break;
+                }
+                pieces.truncate(start);continue;
+            }
+            let (id, w) = if choice == "driving" { driving_piece(&mut rng, section) }
+                else if category(choice) == "action" { (choice, road_width(&mut rng, choice, section)) }
                 else { (choice, special_width(&mut rng, choice)) };
             if add_block(&mut pieces, id, w) {
-                added = true;
-                break;
+                blocks.push(start);added = true;break;
             }
         }
         if !added {
             if pieces.len() <= START_PIECES || backtracks >= 32 {
                 break;
             }
-            pieces.pop();
+            let start=blocks.pop().unwrap_or(START_PIECES);
+            pieces.truncate(start);fragments.retain(|(at,_)|*at<start);
             backtracks += 1;
         }
     }
-    if let Some(mut a) = best {
+    if let Some((mut a,fragments)) = best {
+        if !valid_runs(&a.pieces,s.circuit) || a.pieces.iter().any(|p|geometry::self_intersects(p) || !geometry::ordinary_grade_valid(p)) {return Ok(None);}
         let (obstacles, eligible, target) = obstacles::place(&a)?;
-        a.obstacles = obstacles;
-        a.obstacle_eligible_length_cm = eligible;
-        a.obstacle_target_count = target;
-        grounding::apply(&mut a)?;
-        authoring::checkpoint_budget(&a)?;
-        if a.validate().is_ok() {
-            if shortcut {
-                return match authoring::seed_shortcut(&a) {
-                    Ok(graph) => Ok(Some(graph)),
-                    Err(e) if e.code == "E_CANCELLED" || e.code == "E_TRACK_SUPPORT" || e.code == "E_TRACK_CHECKPOINT_LIMIT" => Err(e),
-                    Err(_) => Ok(None),
-                };
-            }
-            return Ok(Some(authoring::seed_runway(&a)?));
+        a.obstacles=obstacles;a.obstacle_eligible_length_cm=eligible;a.obstacle_target_count=target;
+        // A composed module reserves its full approach, recovery and merge.
+        a.obstacles.retain(|obstacle| !fragments.iter().any(|(start, fragment)|
+            (*start..*start + fragment.paths[0].pieces.len()).contains(&obstacle.piece_index)));
+        for (start,fragment) in &fragments {
+            let outside:Vec<_>=a.pieces.iter().enumerate().filter(|(index,_)|
+                !(*start..*start+fragment.paths[0].pieces.len()).contains(index)).map(|(_,p)|p.clone()).collect();
+            if !templates::clear_of_roads(fragment,&outside)? {return Ok(None);}
         }
+        let mut source=authoring::from_assembly(&a);
+        for (start,fragment) in fragments {
+            let ids:Vec<_>=(start..start+fragment.paths[0].pieces.len()).map(|i|source.instances[i].id.clone()).collect();
+            templates::merge(&mut source,&fragment,&ids,&format!("t{start}"));
+        }
+        source.checkpoints.clear();
+        let compiled=authoring::compile(&source)?;
+        if !compiled.geometry_issues.is_empty() {return Ok(None);}
+        source.checkpoints=authoring::automatic_checkpoints(&compiled).into_iter().map(|(i,sample)|authoring::Checkpoint{piece:source.instances[i].id.clone(),sample}).collect();
+        if source.checkpoints.is_empty() {return Ok(None);}
+        source.checkpoints[0]=authoring::Checkpoint{piece:source.instances[2].id.clone(),sample:compiled.pieces[2].path.len()-1};
+        source.checkpoints.dedup();
+        let mut out=authoring::compile(&source)?;
+        if authoring::executable(&out).is_err() {return Ok(None);}
+        authoring::checkpoint_budget(&out)?;
+        out.authoring=None;out.seed_source=Some(source);
+        out.validate()?;
+        return Ok(Some(out));
     }
     Ok(None)
 }
 pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
-    let s = settings.normalized()?;
+    let mut s = settings.normalized()?;
+    s.difficulty="normal".into();
+    s.time_minutes=track_seed_defaults(s.seed)?["time_minutes"].as_u64().unwrap() as u16;
+    let plan=plan::Plan::new(s.seed);
     let target = u32::from(s.duration_seconds) * 1000;
     let mut best: Option<Assembly> = None;
     let mut support_failure = None;
     let mut checkpoint_failure = None;
     for attempt in 0..24 {
         cancellation::checkpoint()?;
-        let candidate = match candidate(&s, attempt) {
+        let candidate = match candidate(&s, &plan, attempt) {
+            Err(e) if e.code == "E_TRACK_CLEARANCE" || e.code == "E_TRACK_GEOMETRY" || e.code == "E_TRACK_DRAFT" => continue,
             Err(e) if e.code == "E_TRACK_CHECKPOINT_LIMIT" => { checkpoint_failure=Some(e); continue; }
             Err(e) if e.code == "E_TRACK_SUPPORT" => { support_failure = Some(e); continue; }
             other => other?,
         };
         if let Some(a) = candidate {
             if best.as_ref().is_none_or(|b| {
-                a.estimated_msec.abs_diff(target) < b.estimated_msec.abs_diff(target)
+                plan.rank(&a) < plan.rank(b)
             }) {
                 best = Some(a);
             }
-            // A deterministic one-percent result needs no more candidate search.
-            if best.as_ref().is_some_and(|a|a.estimated_msec.abs_diff(target)<=target/100) {break;}
+            // Stop only when duration and the intended section flow both fit.
+            if best.as_ref().is_some_and(|a|a.estimated_msec.abs_diff(target)<=target/100 && plan.fit(a)<65) {break;}
         }
     }
     if best.is_none() { if let Some(e)=checkpoint_failure {return Err(e);} }
@@ -470,156 +505,20 @@ mod tests {
         }
     }
     #[test]
-    fn pipe_draws_uniform_bores_and_preserve_road_ports_and_budgets() {
-        for difficulty in 0..3 {
-            let mut old_rng=42+difficulty;
-            let mut new_rng=old_rng;
-            for _ in 0..300 {
-                let old=[400,600][next(&mut old_rng) as usize%2];
-                assert_eq!(special_width(&mut new_rng,"cylinder_curve"),old);
+    fn seed_plans_preserve_geometry_axes_across_attempts() {
+        let plans:Vec<_>=(0..64).map(plan::Plan::new).collect();
+        assert!(plans.iter().any(|p|p.sections[0].families[0]>200));
+        assert!(plans.iter().any(|p|p.sections[0].families[0]<25));
+        assert!(plans.iter().any(|p|p.sections[0].categories[2]>30));
+        assert!(plans.iter().any(|p|p.sections[0].categories[2]<3));
+        for plan in plans {for section in plan.sections {
+            let mut rng=42;
+            for _ in 0..100 {
+                let (id,width)=driving_piece(&mut rng,&section);
+                assert!(supported_widths(id).contains(&width));
+                let p=materialize(&variant(id,width,width,width));
+                assert!(!geometry::self_intersects(&p),"{id}/{width}");
             }
-        }
-        for width in [400,600] {
-            let mut pieces=vec![];let mut origin=[0;3];
-            for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
-            assert!(add_block(&mut pieces,"cylinder_curve",width));
-            assert_eq!(pieces.last().unwrap().path.last().unwrap().lateral_cm,width);
-            assert!(append(&mut pieces,"straight",400));
-            assert!(pieces.last().unwrap().entry_width_cm>=400);
-            let snapshot=pieces.clone();
-            pieces.resize(MAX_PIECES,pieces[0].clone());
-            assert!(!add_block(&mut pieces,"cylinder_curve",width));
-            assert_eq!(&pieces[..snapshot.len()],&snapshot);
-            assert_eq!(pieces.len(),MAX_PIECES);
-        }
-    }
-    #[test]
-    fn difficulty_distribution_preserves_variants_and_increases_complexity() {
-        let mut scores = vec![];
-        let mut widths = vec![];
-        for difficulty in 0..3 {
-            let mut rng = 42;
-            let mut previous_rng = rng;
-            let mut wide_seen = std::collections::BTreeSet::new();
-            let mut family_counts = [0u32; 10];
-            let mut variant_counts = std::collections::BTreeMap::new();
-            let mut width_counts = [0u32; 5];
-            let mut expected_width_counts = [0.0f64; 5];
-            let mut score = 0u64;
-            let mut width_sum = 0u64;
-            for _ in 0..100_000 {
-                let previous_id = driving_choice(&mut previous_rng, difficulty);
-                let previous_width = road_width(&mut previous_rng, previous_id, difficulty);
-                let (preset, width) = driving_piece(&mut rng, difficulty);
-                let id = base_preset(preset);
-                assert_eq!((id, width, rng), (previous_id, previous_width, previous_rng), "same geometry/width draws and RNG consumption");
-                if preset != id { wide_seen.insert(preset); assert!(width == 1200 || width == 1800); }
-                else { assert!(width != 1200 || !EXTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id)); }
-                let family = DRIVING_FAMILIES.iter().position(|v| v.contains(&id)).unwrap();
-                family_counts[family] += 1;
-                *variant_counts.entry(id).or_insert(0u32) += 1;
-                score += family as u64;
-                assert!(supported_widths(preset).contains(&width));
-                let available = if ULTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id) { WIDTHS } else { supported_widths(id) };
-                let total: u32 = WIDTHS.iter().enumerate().filter(|(_, w)| available.contains(w)).map(|(i, _)| WIDTH_WEIGHTS[difficulty][i]).sum();
-                for (i, w) in WIDTHS.iter().enumerate() {
-                    if available.contains(w) { expected_width_counts[i] += f64::from(WIDTH_WEIGHTS[difficulty][i]) / f64::from(total); }
-                }
-                width_counts[WIDTHS.iter().position(|w| *w == width).unwrap()] += 1;
-                width_sum += u64::from(width);
-            }
-            assert_eq!(wide_seen, EXTRA_WIDE_PRESETS.iter().chain(ULTRA_WIDE_PRESETS.iter()).map(|(wide, _)| *wide).collect());
-            for (i, count) in family_counts.iter().enumerate() {
-                assert!(count.abs_diff(FAMILY_WEIGHTS[difficulty][i]*1000) < 700, "family {difficulty}/{i}: {count}");
-                if FAMILY_WEIGHTS[difficulty][i] == 0 { assert_eq!(*count, 0); }
-                for id in DRIVING_FAMILIES[i] {
-                    assert!(variant_counts.get(id).copied().unwrap_or(0).abs_diff(count / DRIVING_FAMILIES[i].len() as u32) < 400);
-                }
-            }
-            for (i, count) in width_counts.iter().enumerate() {
-                assert!((f64::from(*count)-expected_width_counts[i]).abs() < 700.0);
-                if i == 0 { assert_eq!(*count, 0); }
-            }
-            scores.push(score);
-            widths.push(width_sum);
-        }
-        assert!(scores.windows(2).all(|s| s[0] < s[1]));
-        assert!(widths.windows(2).all(|s| s[0] > s[1]));
-    }
-    #[test]
-    fn difficulty_seed_routes_reproduce_with_bounded_geometry() {
-        let mut complexity = [0usize; 3];
-        for (index, difficulty) in ["easy", "normal", "hard"].iter().enumerate() {
-            for circuit in [false, true] {
-                let s = Settings { seed: 17, circuit, difficulty: (*difficulty).into(), categories: vec!["driving".into()], ..Default::default() };
-                let a = assemble(&s).unwrap();
-                assert_eq!(a, assemble(&s).unwrap());
-                a.validate().unwrap();
-                assert!(a.pieces.iter().all(|p| category(&p.id)=="driving"));
-                assert!(a.pieces.iter().take(START_PIECES).all(|p|p.id=="straight" && p.width_cm==800 && p.path.iter().all(|s|s.lateral_cm==400)));
-                assert!(a.estimated_msec.abs_diff(u32::from(s.duration_seconds)*1000)<=u32::from(s.duration_seconds)*100);
-                assert!(a.pieces.iter().filter(|p| p.id != "finish_plaza").all(|p| p.width_cm >= 600));
-                assert!(a.pieces.len() <= MAX_PIECES);
-                assert!(a.pieces.iter().map(|p|p.path.len()).sum::<usize>() <= MAX_SAMPLES);
-                complexity[index] += a.pieces.iter().filter_map(|p|DRIVING_FAMILIES.iter().position(|v|v.contains(&base_preset(&p.id)))).sum::<usize>();
-            }
-        }
-        eprintln!("difficulty route complexity: {complexity:?}");
-        assert!(complexity[0] < complexity[1] && complexity[1] < complexity[2]);
-    }
-    #[test]
-    fn return_route_uses_modules_and_only_short_seams() {
-        let mut pieces=vec![];
-        let mut origin=[0;3];
-        for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
-        let start=pieces.len();
-        assert!(closure(&mut pieces,&Settings::default()).unwrap());
-        assert!(pieces[start..].iter().filter(|p|p.id!="free_curve").count()>=3);
-        for p in &pieces[start..] {
-            assert_eq!(*p,materialize(p));
-            assert_eq!(p.width_cm,800);
-            if p.id=="free_curve" {assert!(p.control_points.windows(2).map(|w|distance(w[0],w[1])).sum::<u64>()<=MAX_SEAM_CONTROLS_CM);}
-        }
-        assert!(authoring::joined(pieces.last().unwrap().path.last().unwrap(),&pieces[0].path[0]));
-        assert!(short_seam(&pieces[START_PIECES-1].path[0],&pieces[0].path[0]).is_none());
-    }
-    #[test]
-    fn return_search_failure_and_cancellation_preserve_input() {
-        let mut pieces=vec![];
-        let mut origin=[0;3];
-        for _ in 0..START_PIECES {push_piece(&mut pieces,&mut origin,0,"straight",400,false,[0;3]);}
-        let before=pieces.clone();
-        let mut settings=Settings::default();
-        settings.duration_seconds=0;
-        assert!(!closure(&mut pieces,&settings).unwrap());
-        assert_eq!(pieces,before);
-        let token=cancellation::CancellationToken::default();
-        token.cancel();
-        assert_eq!(token.run(||closure(&mut pieces,&Settings::default())).unwrap_err().code,"E_CANCELLED");
-        assert_eq!(pieces,before);
-    }
-    #[test]
-    fn automatic_composition_is_a_graph_candidate() {
-        let mut found = false;
-        for seed in 1..=8 {
-            let settings = Settings {
-                seed,
-                circuit: false,
-                duration_seconds: 90,
-                ..Default::default()
-            }
-            .normalized()
-            .unwrap();
-            if let Some(a) = candidate(&settings, 0).unwrap() {
-                assert!(a.seed_source.is_some());
-                assert_eq!(a.routes.len(), 2);
-                assert_eq!(a.pieces[3].exit_width_cm, 800);
-                assert_eq!(a.pieces[4].width_cm, 800);
-                assert!(a.pieces.iter().any(|p| p.id == "flight_curve" && p.width_cm == 400));
-                found = true;
-                break;
-            }
-        }
-        assert!(found, "bounded seed search includes the composed shortcut");
+        }}
     }
 }

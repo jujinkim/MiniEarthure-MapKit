@@ -20,7 +20,8 @@ essential validation; edit existing sections instead of appending dated logs.
 | Topic | Document |
 | --- | --- |
 | Track source, compiler and manual authoring | [TRACK_AUTHORING](TRACK_AUTHORING.md) |
-| Seeded track generation and geometry | [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md) |
+| Seeded track generation | [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md) |
+| Catalogue and surface geometry | [TRACK_GEOMETRY](TRACK_GEOMETRY.md) |
 | Special structures, air rings, pipes | [SPECIAL_DRIVING](SPECIAL_DRIVING.md) |
 | Designed roads and composite worlds | [ROAD_DESIGN](ROAD_DESIGN.md) |
 | Rounded streets and deck safety | [ROAD_SAFETY](ROAD_SAFETY.md) |

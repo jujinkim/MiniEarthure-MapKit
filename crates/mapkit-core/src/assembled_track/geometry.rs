@@ -11,6 +11,9 @@ fn analytical_raw(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: 
     analytical_placed(eval,breaks,width,entry,exit,mode,[0;3],[0;3])
 }
 fn analytical_placed(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32, entry: u32, exit: u32, mode: &str, rotation: [i32;3], origin: Vertex) -> Vec<(Sample,[f64;3],f64)> {
+    analytical_banked(eval, breaks, width, entry, exit, mode, rotation, origin, |_| 0.0)
+}
+fn analytical_banked(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], width: u32, entry: u32, exit: u32, mode: &str, rotation: [i32;3], origin: Vertex, bank: impl Fn(f64)->f64) -> Vec<(Sample,[f64;3],f64)> {
     let length: f64 = (0..64).map(|i| {
         let a=eval(i as f64/64.0).0; let b=eval((i+1) as f64/64.0).0;
         sampling::length(std::array::from_fn(|j|b[j]-a[j]))
@@ -26,7 +29,10 @@ fn analytical_placed(eval: impl Fn(f64)->([f64;3],[f64;3]), breaks: &[f64], widt
         let mut side=norm([f[2],0.0,-f[0]]);
         if sampling::length(side)<0.5 {side=[1.0,0.0,0.0];}
         let n=norm(cross(f,side));
-        (p,f,n,side)
+        let angle=bank(t);
+        let tilted_n=std::array::from_fn(|j|n[j]*libm::cos(angle)+side[j]*libm::sin(angle));
+        let tilted_side=std::array::from_fn(|j|side[j]*libm::cos(angle)-n[j]*libm::sin(angle));
+        (p,f,tilted_n,tilted_side)
     };
     let probe=|t| {
         let (p,f,n,side)=frame(t); let w=half_width(t);
@@ -345,7 +351,46 @@ pub(super) fn shape(p: &mut Piece, width: u32) -> bool {
     } else {
         0.0
     };
-    if id.starts_with("spiral") {
+    if id.starts_with("banked_hairpin") {
+        let radius=1200.max(width) as f64;
+        let arc=std::f64::consts::PI*radius;
+        let length=1600.0+arc;
+        let begin=800.0/length; let end=(800.0+arc)/length;
+        p.path=analytical_banked(|t| {
+            let station=t*length;
+            if station<=800.0 {([0.0,0.0,station],[0.0,0.0,1.0])}
+            else if station>=800.0+arc {([sign*2.0*radius,0.0,800.0-(station-800.0-arc)],[0.0,0.0,-1.0])}
+            else {let angle=(station-800.0)/radius;
+                ([sign*radius*(1.0-libm::cos(angle)),0.0,800.0+radius*libm::sin(angle)], [sign*libm::sin(angle),0.0,libm::cos(angle)])}
+        }, &[0.0,begin,end,1.0],p.width_cm,p.entry_width_cm,p.exit_width_cm,"drift",[0;3],[0;3],|t| {
+            let u=((t-begin)/(end-begin)).clamp(0.0,1.0);
+            sign*20.0f64.to_radians()*libm::sin(std::f64::consts::PI*u).powi(2)
+        }).into_iter().map(|(s,_,_)|s).collect();
+    } else if id.starts_with("cylinder_spiral") {
+        let radius=(p.width_cm/2+900) as f64;
+        let circumference=std::f64::consts::TAU*radius;
+        let length=1600.0+circumference;
+        let rise=1000.0*if id.ends_with("down") {-1.0} else {1.0};
+        let begin=800.0/length;let end=(800.0+circumference)/length;
+        p.path=analytical(|t| {
+            let station=t*length;
+            if station<=800.0 {([0.0,0.0,station],[0.0,0.0,1.0])}
+            else if station>=800.0+circumference {([0.0,rise,800.0+station-800.0-circumference],[0.0,0.0,1.0])}
+            else {let u=(station-800.0)/circumference;let angle=u*std::f64::consts::TAU;
+                ([sign*radius*(1.0-libm::cos(angle)),rise*spiral_rise(u),800.0+radius*libm::sin(angle)],
+                    [sign*libm::sin(angle),rise*spiral_pitch(u)/circumference,libm::cos(angle)])}
+        }, &[0.0,begin,begin+(end-begin)*0.125,begin+(end-begin)*0.875,end,1.0],p.width_cm,p.width_cm,p.width_cm,"cylinder");
+        for s in &mut p.path {s.tube_radius_cm=p.width_cm/2;s.safe=false;s.above_cm=250;s.below_cm=50;}
+    } else if id.starts_with("spatial_s") {
+        let length=8000.0;
+        let amplitude=(width as f64*1.5).min(length*length/(300.0*(width as f64/2.0+100.0)));
+        p.path=analytical(|t| {
+            let pi=std::f64::consts::PI;let a=t*pi*2.0;let sn=libm::sin(pi*t);
+            let x=sign*amplitude*libm::sin(a)*sn*sn;
+            let dx=sign*amplitude*(2.0*pi*libm::cos(a)*sn*sn+pi*libm::sin(a)*libm::sin(2.0*pi*t));
+            ([x,300.0*sn*sn,length*t],[dx,300.0*pi*libm::sin(2.0*pi*t),length])
+        }, &[0.0,0.25,0.5,0.75,1.0],p.width_cm,p.entry_width_cm,p.exit_width_cm,"drift");
+    } else if id.starts_with("spiral") {
         p.path=spiral_path(p,[0;3],[0;3]);
     } else if angle > 0.0 {
         let radius = if id.starts_with("gentle") || id == "curve" || id == "curve_left" || grade_curve {

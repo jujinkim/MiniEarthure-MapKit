@@ -155,9 +155,9 @@ This page lists the domain invariants and links each feature's owner.
 - Seeded settings, categories, 60/90/120 s targets, catalogue and saved-package
   verification: [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md).
 - `Assembly.supports` and `Source.grounded_supports` are required:
-  [grounded supports](../docs/ASSEMBLED_TRACKS.md#grounded-supports).
+  [grounded supports](../docs/TRACK_GEOMETRY.md#grounded-supports).
 - Sprint finish plaza (`Assembly.finish_plaza`):
-  [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md#sprint-finish-plaza).
+  [TRACK_GEOMETRY](../docs/TRACK_GEOMETRY.md#sprint-finish-plaza).
 - Source/compiler API, drafts and checkpoints: [TRACK_AUTHORING](../docs/TRACK_AUTHORING.md).
 - `grind_lines` and RC attachments:
   [line contract](../docs/TRACK_AUTHORING.md#independent-grind-lines-and-rc-attachments)
