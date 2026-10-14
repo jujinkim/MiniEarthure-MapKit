@@ -5,6 +5,8 @@ uniform vec4 accent : source_color = vec4(1.0,0.7,0.1,1.0);
 uniform int theme = 0;
 uniform bool wall = false;
 uniform bool floor_surface = false;
+uniform bool environment_enabled = false;
+uniform sampler2D environment_data : filter_nearest, repeat_disable;
 #include "material_detail.gdshaderinc"
 varying vec3 position_world;
 varying vec3 normal_world;
@@ -14,7 +16,9 @@ void vertex() { position_world = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; normal_w
 void fragment() {
 	vec3 color = base_color.rgb;
 	vec3 p = position_world;
-	float grain = fract(sin(dot(floor(p.xz*180.0),vec2(12.9898,78.233)))*43758.5453);
+	float grain = 0.5;
+	float effect_weight=surface_effect_weight(length(VERTEX));
+	if(effect_weight>0.0) grain=mix(0.5,fract(sin(dot(floor(p.xz*180.0),vec2(12.9898,78.233)))*43758.5453),effect_weight*0.4);
 	if(wall) {
 		float stripe = step(0.5,fract((p.x+p.z)*0.35));
 		color = mix(color,(theme==2 ? vec3(0.05,0.13,0.22) : vec3(0.94,0.96,0.92)),stripe);
@@ -35,12 +39,14 @@ void fragment() {
 	}
 	float worn = .5+.5*sin(p.x*.81+sin(p.z*.43)+p.y*.7);
 	if(wall) color *= .91+.09*worn;
-	if(detail_enabled && length(VERTEX)<48.0) {
+	if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
 		vec4 detail=texture(detail_tile,detail_uv(p,normal_world));
-		color*=detail.r;
-		NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(p,normal_world),0.0)).xyz);
+		float relief=material_detail_weight(length(VERTEX))*0.65;
+		color*=mix(1.0,detail_luminance(detail.r),relief);
+		if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(p,normal_world)*relief,0.0)).xyz);
 	}
-	color = mix(vec3(dot(color,vec3(.2126,.7152,.0722))),color,.72);
-	ALBEDO = color*vec3(1.015,1.0,.97);
+	float snow=environment_enabled ? texelFetch(environment_data,ivec2(0,0),0).y : 0.0;
+	float altitude=environment_enabled ? texelFetch(environment_data,ivec2(1,0),0).z : 1.0;
+	ALBEDO = world_surface_color(color,snow,altitude);
 	ROUGHNESS = (theme==2 && !wall && !floor_surface) ? 0.48 : 0.92;
 }

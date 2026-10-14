@@ -22,11 +22,11 @@ float dome_noise(vec3 p) {
 }
 void sky() {
     float horizon=pow(1.0-max(0.0,EYEDIR.y),4.0);
-    vec3 day=mix(vec3(0.17,0.29,0.40),vec3(0.50,0.53,0.53),horizon);
+    vec3 day=mix(vec3(0.16,0.28,0.40),vec3(0.58,0.57,0.51),horizon);
     vec3 night=mix(vec3(0.001,0.003,0.008),vec3(0.007,0.012,0.025),horizon);
     float dusk=(1.0-smoothstep(0.0,0.28,abs(sun_direction.y)))*horizon;
     vec3 color=mix(night,day,daylight);
-    color+=vec3(0.36,0.11,0.035)*dusk*max(0.0,dot(normalize(vec3(EYEDIR.x,0.0,EYEDIR.z)),normalize(vec3(sun_direction.x,0.001,sun_direction.z))));
+    color+=vec3(0.48,0.21,0.055)*dusk*(1.0-cloud_cover*0.7)*max(0.0,dot(normalize(vec3(EYEDIR.x,0.0,EYEDIR.z)),normalize(vec3(sun_direction.x,0.001,sun_direction.z))));
     float sun=smoothstep(0.9997,0.99985,dot(EYEDIR,sun_direction));
     float moon=smoothstep(0.9995,0.9997,dot(EYEDIR,moon_direction));
     vec3 moon_right=normalize(cross(moon_direction,abs(moon_direction.y)>0.99?vec3(0.0,0.0,1.0):vec3(0.0,1.0,0.0)));

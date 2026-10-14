@@ -20,14 +20,14 @@ float scene_depth(vec2 uv, mat4 inverse_projection) {
 void fragment() {
     float thickness = max(0.0, scene_depth(SCREEN_UV, INV_PROJECTION_MATRIX) + VERTEX.z);
     vec2 p = world_position.xz - (flow_from_uv ? UV : flow) * TIME * .3;
-    vec2 wave = vec2(cos(p.x*3.8+TIME*.7), sin(p.y*4.1-TIME*.6))*.035;
-    if(quality_level>0) wave += vec2(sin(p.y*7.1+p.x*1.7-TIME),cos(p.x*6.7-p.y*2.1+TIME*.9))*.018;
+    vec2 wave = vec2(cos(p.x*2.4+TIME*.7), sin(p.y*2.8-TIME*.6))*.028;
+    if(quality_level>0) wave += vec2(sin(p.y*5.1+p.x*1.3-TIME),cos(p.x*4.7-p.y*1.8+TIME*.9))*.010;
     NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(wave.x,0.0,wave.y,0.0)).xyz);
     float deep = 1.0-exp(-thickness*.6);
-    vec3 color = mix(vec3(.17,.39,.37),vec3(.035,.15,.20),deep);
+    vec3 color = mix(vec3(.18,.36,.34),vec3(.045,.16,.20),deep);
     float fresnel = pow(1.0-clamp(dot(NORMAL,VIEW),0.0,1.0),5.0);
-    SPECULAR = .65;
-    ROUGHNESS = .20;
+    SPECULAR = .55;
+    ROUGHNESS = .24;
     METALLIC = .12;
     color = mix(color,vec3(.39,.48,.54),fresnel*.4);
 #ifdef WATER_REFRACTION

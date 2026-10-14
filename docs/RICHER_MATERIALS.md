@@ -15,8 +15,13 @@ quality effect distance (48/96/160m). Far windows retain average emission and th
 authoritative lighting schedule; albedo/sign colours remain sampled. Dry surfaces
 and disabled metallic maps skip their texture/noise work. Road markings remain intact. Low omits material relief, medium uses packed colour/AO
 and roughness, and high also samples the normal detail. Muted
-material colours and subtle warm grading preserve vehicle colours, hazards and
-weather/night distinctions; Control/HUD rendering is unaffected.
+material colours use one shared golden-daylight grade for generated, imported,
+urban/RC and distant bindings. Authored hues and bitmap channels remain intact;
+warmth fades out at night and under snow. Cream, brick and olive backgrounds frame
+dark asphalt and distinct lane/hazard colours. Packed luminance is centred to
+avoid a dark ring at detail/quality transitions and fades continuously at 32–48m.
+Leaf relief favours broad canopy colour over fine noise. Control/HUD rendering is
+unaffected.
 
 The weather wrapper retains imported albedo, normal/scale, AO/channel/UV2,
 roughness/channel, metallic/channel and UV1 transforms. Night-window/light roles
@@ -89,6 +94,8 @@ high adds a guarded screen refraction. Shore foam softens shallow boundaries.
 Depth reconstruction supports Mobile and Compatibility NDC conventions. No
 cosmetic ripple alters buoyancy, water entry or surface height.
 
+`surface_style_validator` compares rendered generated/imported/distant swatches at
+every quality tier, including warm daylight, neutral night and cool snow.
 `test_richer_assets.py` reproduces all library bytes and three texture tiers.
 `generated_material_validator` compares effective GPU uniforms, live quality,
 rendered pixels, prepared/unbatched geometry and cell/context borrower retirement

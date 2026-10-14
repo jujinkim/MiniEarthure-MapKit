@@ -69,7 +69,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	settings.fog_density = 0.0008
 	settings.glow_enabled = false
 	settings.adjustment_enabled = true
-	settings.adjustment_saturation = .92
+	settings.adjustment_saturation = .98
 	settings.adjustment_contrast = 1.02
 	add_to_group("mapkit_quality_targets")
 	sun.directional_shadow_max_distance = 96.0 if low else 160.0
@@ -149,17 +149,21 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	_clouds = lerpf(float(cover.get(state.previous_weather,0.18)),float(cover.get(state.weather,0.18)),state.blend())
 	_orient(sun,celestial.sun_direction)
 	_orient(moon,celestial.moon_direction)
-	sun.light_color = Color(1.0,0.68,0.43).lerp(Color(1.0,0.94,0.84),day)
-	sun.light_energy = maxf(0.0,sin(float(celestial.altitude)))*1.05*(1.0-_clouds*0.82)
+	# Low sun keeps a broad golden key; snow softens the warmth without changing
+	# authority-owned time/weather or introducing a post-process pass.
+	var elevation := maxf(0.0,sin(float(celestial.altitude)))
+	var high_sun := smoothstep(0.0,0.65,elevation)
+	sun.light_color = Color(1.0,0.73,0.46).lerp(Color(1.0,0.93,0.80),high_sun).lerp(Color(0.92,0.96,1.0),_snow*0.65)
+	sun.light_energy = pow(elevation,0.65)*1.45*(1.0-_clouds*0.82)
 	moon.light_energy = maxf(0.0,sin(float(celestial.moon_altitude)))*float(celestial.moon_phase)*0.12*(1.0-_clouds*0.85)
 	sun.shadow_enabled = float(celestial.altitude) > 0.0
 	moon.shadow_enabled = not sun.shadow_enabled and moon.light_energy > 0.01
-	settings.ambient_light_color = night_color.lerp(Color(0.62,0.69,0.72),day)
-	settings.ambient_light_energy = lerpf(night_ambient,0.24,day)*(1.0-_clouds*0.58)
+	settings.ambient_light_color = night_color.lerp(Color(0.55,0.66,0.79),day)
+	settings.ambient_light_energy = lerpf(night_ambient,0.38,day)*(1.0-_clouds*0.50)
 	# Preserve low night tones; extra contrast otherwise clips the indirect
 	# illumination of urban road/building materials down to black.
 	settings.adjustment_contrast = lerpf(1.0,1.02,day) if settlement == "urban" else 1.02
-	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.36,0.42,0.46),day)
+	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.48,0.49,0.46),day)
 	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
 	_weather_fog_energy = lerpf(0.04,0.6,day)
 	_apply_distance_fog()

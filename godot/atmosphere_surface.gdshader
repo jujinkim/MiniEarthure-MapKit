@@ -71,15 +71,16 @@ void fragment() {
     }
     if(detail_enabled && detail_quality>0 && view_distance<48.0 && effect_weight>0.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
-        color*=mix(1.0,detail.r,effect_weight);
-        surface_roughness*=mix(1.0,detail.g,effect_weight);
-        AO=mix(1.0,detail.r,0.5*effect_weight);
-        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*effect_weight,0.0)).xyz);
+        float relief=material_detail_weight(view_distance)*(vegetation ? 0.28 : 0.65);
+        color*=mix(1.0,detail_luminance(detail.r),relief);
+        surface_roughness*=mix(1.0,detail.g,relief);
+        AO=mix(1.0,detail.r,0.35*relief);
+        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*relief,0.0)).xyz);
     }
     // Large, restrained variation remains stable when the camera moves.
-    if(effect_weight>0.0) {
+    if(effect_weight>0.0 && !vegetation) {
         float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
-        color *= 1.0 + (0.03*grain-0.015)*effect_weight;
+        color *= 1.0 + (0.016*grain-0.008)*effect_weight;
     }
     if(terrain_surface || (distant && UV.y < -0.5)) {
         float broad=sin(world_position.x*0.055+sin(world_position.z*0.037))*cos(world_position.z*0.063);
@@ -93,15 +94,15 @@ void fragment() {
     float snow_cover = weather.y * facing_up;
     color *= 1.0 - weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),snow_cover*0.92);
-    color = mix(vec3(dot(color,vec3(.2126,.7152,.0722))),color,.88);
-    ALBEDO = color * vec3(1.015,1.002,.975);
+    color = world_surface_color(color,snow_cover,clock.z);
+    ALBEDO = color;
     ROUGHNESS = mix(surface_roughness,0.28,weather.x*facing_up);
     ROUGHNESS = mix(ROUGHNESS,0.92,snow_cover);
     float puddle = 0.0;
     if(!distant && effect_weight>0.0 && weather.x>0.2) puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y)*effect_weight;
     ALBEDO *= 1.0-puddle*0.10;
-    ROUGHNESS = mix(ROUGHNESS,0.18,puddle);
-    SPECULAR = mix(0.35,0.55,puddle);
+    ROUGHNESS = mix(ROUGHNESS,0.22,puddle);
+    SPECULAR = mix(0.35,0.50,puddle);
     if(puddle>0.0) NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
     METALLIC = metallic;
     if(metallic_enabled && effect_weight>0.0) METALLIC*=mix(1.0,dot(texture(metallic_texture,UV),metallic_channel),effect_weight);

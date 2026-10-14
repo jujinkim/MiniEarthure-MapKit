@@ -27,8 +27,8 @@ has a required length-prefixed water section following gimmicks. Conservative
 `water_bytes` charges 32 KiB + 16 KiB per ring vertex per intersecting cell for
 geometry, JSON/Variant copies, query records and renderer resources. Existing
 consumer caps are unchanged. `water_renderer.gd` uses the existing bounded renderer
-steps and compatibility shader: animated ripples, depth tint, weak reflection and
-shoreline foam. Physics and simulation clocks remain the consumer's responsibility.
+steps and compatibility shader: broad, restrained ripples, muted teal depth tint,
+soft specular reflection and shoreline foam. Physics and simulation clocks remain the consumer's responsibility.
 
 Two optional environment fields support authored scenery: `start_minutes` (0–1439)
 is an initial-time suggestion for the authority, and `ground_color: [r,g,b]` tints

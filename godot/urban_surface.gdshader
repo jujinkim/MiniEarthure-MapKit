@@ -33,14 +33,15 @@ void fragment() {
     vec3 color=base_color.rgb;
     if(effect_weight>0.0) {
         float noise=fract(sin(dot(floor(p*150.0),vec2(12.9898,78.233)))*43758.5453);
-        color*=1.0+(0.08*noise-0.04)*effect_weight;
+        color*=1.0+(0.035*noise-0.0175)*effect_weight;
     }
     float tile_roughness=0.9;
     if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0 && effect_weight>0.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
-        color*=mix(1.0,detail.r,effect_weight);tile_roughness=mix(0.9,detail.g,effect_weight);
-        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*effect_weight,0.0)).xyz);
-        AO=mix(1.0,detail.r,0.5*effect_weight);
+        float relief=material_detail_weight(length(VERTEX))*0.65;
+        color*=mix(1.0,detail_luminance(detail.r),relief);tile_roughness=mix(0.9,detail.g,relief);
+        if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*relief,0.0)).xyz);
+        AO=mix(1.0,detail.r,0.35*relief);
     }
     if (paving && effect_weight>0.0) {
         vec2 q=abs(fract(p/0.7)-0.5);
@@ -111,12 +112,13 @@ void fragment() {
     weather.y *= snow_retention_percent * 0.01;
     color *= 1.0-weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
-    ALBEDO=color;
+    float sun_altitude=environment_enabled ? texelFetch(environment_data,ivec2(1,0),0).z : 1.0;
+    ALBEDO=world_surface_color(color,weather.y,sun_altitude);
     ROUGHNESS=mix(mix(tile_roughness,0.27,weather.x),0.95,weather.y);
     float puddle=0.0;
     if(effect_weight>0.0 && weather.x>0.2) puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y)*effect_weight;
     ALBEDO*=1.0-puddle*0.10;
-    ROUGHNESS=mix(ROUGHNESS,0.18,puddle);
-    SPECULAR=mix(0.35,0.55,puddle);
+    ROUGHNESS=mix(ROUGHNESS,0.22,puddle);
+    SPECULAR=mix(0.35,0.50,puddle);
     if(puddle>0.0) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
 }

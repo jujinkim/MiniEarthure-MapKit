@@ -64,13 +64,18 @@ cell estimates, not measured work time or RSS.
 
 ## Weather and distance fog
 
+Golden direct light and blue-grey ambient shadows retain detail at low sun angles.
+The sky blends a restrained amber horizon into blue daylight; snow reduces the
+warm key and night retains its own cool ambient values. Existing light/shadow
+pools, authority and display-distance limits are unchanged.
+
 Precipitation uses a bounded camera-centred GPU volume and an overhead shelter ray.
 Splashes use one shared quad/material and a fixed 64-slot MultiMesh (24 on low),
 with at most two extra surface rays per 10Hz update. Covered/steep surfaces suppress
 splashes. Clear weather and snow retire pool contents without reallocating.
 
 Wet upward surfaces share world-space puddle masks, small ripple normals,
-roughness 0.18 and modest specular response. There is no planar reflection pass
+roughness 0.22 and modest specular response. There is no planar reflection pass
 or fluid simulation. Shader includes expand before context-owned duplication for
 compatibility rendering. Rain contrasts with cloud/direct/ambient lighting;
 a curved noise dome handles clouds. The sky shader owns horizon haze and cloud
