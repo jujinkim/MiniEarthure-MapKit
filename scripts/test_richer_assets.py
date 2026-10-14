@@ -31,6 +31,10 @@ class RicherAssets(unittest.TestCase):
             for tile in tiles.rglob('*.png'):
                 self.assertEqual(tile.read_bytes(),(ROOT/'godot/textures'/tile.relative_to(tiles)).read_bytes())
                 size=256 if tile.parent==tiles else int(tile.parent.name)
-                with Image.open(tile) as image:self.assertEqual(image.size,(size,size))
+                with Image.open(tile) as image:
+                    self.assertEqual(image.size,(size,size))
+                    luminance=list(image.getchannel('R').getdata())
+                    self.assertAlmostEqual(sum(luminance)/len(luminance)/255,.65,delta=.003)
+                    self.assertGreater(max(luminance)-min(luminance),25)
 
 if __name__=='__main__':unittest.main()

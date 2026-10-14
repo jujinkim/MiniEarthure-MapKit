@@ -8,20 +8,20 @@ LOD mesh with a leaf material. Existing user assets and generated packages survi
 
 `scripts/richer_assets.py` generates ten shared tiles (brick, plaster, wood, stone,
 asphalt, concrete, earth, grass, metal, leaf) at 128/256/512px. Channels contain
-shaded luminance/AO, roughness, and baked normal XY; a normal costs one texture
-sample instead of neighboring height fetches. Detail tiles stop at 48m. Imported normal/AO/roughness/metallic maps, grain,
-puddle ripples and procedural window masks fade out over the last fifth of the
-quality effect distance (48/96/160m). Far windows retain average emission and the
-authoritative lighting schedule; albedo/sign colours remain sampled. Dry surfaces
-and disabled metallic maps skip their texture/noise work. Road markings remain intact. Low omits material relief, medium uses packed colour/AO
-and roughness, and high also samples the normal detail. Muted
-material colours use one shared golden-daylight grade for generated, imported,
-urban/RC and distant bindings. Authored hues and bitmap channels remain intact;
-warmth fades out at night and under snow. Cream, brick and olive backgrounds frame
-dark asphalt and distinct lane/hazard colours. Packed luminance is centred to
-avoid a dark ring at detail/quality transitions and fades continuously at 32–48m.
-Leaf relief favours broad canopy colour over fine noise. Control/HUD rendering is
-unaffected.
+mean-normalized albedo variation, roughness and baked normal XY. Asphalt has
+aggregate, repair patches and sealed cracks; brick/plaster have joints and stains;
+concrete has panel joints and discolouration, and metal has seams and wear.
+The shared master supplies 128/256/512px tiers. Low keeps base colour patterns,
+medium adds roughness/AO, and high uses the normal from the same tile. All tiers
+fade detail continuously at 32–48m to the authored mean colour. Tile luminance is
+centred at 0.65; leaf variation stays broad and quiet. Road markings are applied
+after base detail, preserving lane/hazard colours.
+Imported normal/AO/roughness/metallic maps, puddle ripples and window masks fade
+through the last fifth of the existing quality effect distance (48/96/160m).
+Far windows retain average emission and the authority-owned lighting schedule.
+The shared [Environment LUT](ENVIRONMENT.md) owns daylight sepia, cool nights and
+neutral snow across vehicles, sky and near/far scenery. Canvas HUD colours retain
+their palette.
 
 The weather wrapper retains imported albedo, normal/scale, AO/channel/UV2,
 roughness/channel, metallic/channel and UV1 transforms. Night-window/light roles
@@ -45,8 +45,11 @@ and matte-metal properties remain authoritative. Small seam detail fades with
 distance. Speed panels retain orange chevrons, jump panels cyan arrows, and grind
 caps cyan/cream bands. No fullscreen pass or texture tier is added.
 
-Paired cottage models keep dormers, porches and flower boxes; crown forms distinguish
-columnar, spreading and young trees. Market stalls, open sandstone arches and park
+Paired architectural models retain deep window reveals, lintels, roof fascia and
+ridge thickness. Urban cornices/corner piers and factory columns break up flat
+walls. Cottages keep dormers, porches and flower boxes; asymmetric crown peaks and
+irregular radial facets distinguish columnar, spreading and young trees and rocks.
+Canyon strata use irregular edges in both models. Market stalls, open sandstone arches and park
 pergolas fill the middle scale between scenery and major landmarks. Far meshes
 retain their silhouettes/openings while dropping fine geometry.
 
@@ -103,7 +106,8 @@ Depth reconstruction supports Mobile and Compatibility NDC conventions. No
 cosmetic ripple alters buoyancy, water entry or surface height.
 
 `surface_style_validator` compares generated/imported/distant swatches at every
-quality tier, including daylight, night and snow. `test_richer_assets.py` reproduces
+quality tier, including daylight, night and snow, Low tile visibility and mean
+luminance at detail/distance transitions. `test_richer_assets.py` reproduces
 library bytes and texture tiers. Render `generated_material_validator` to compare
 GPU uniforms and pixels before corrective quality updates, with prepared/unbatched
 geometry, cancellation and last-borrower retirement. Its optional

@@ -69,11 +69,11 @@ def crown(m,center,size,seed,color):
     for row in range(1,rings):
         angle=-math.pi/2+math.pi*row/rings
         for col in range(sides):
-            a=math.tau*col/sides;rad=1+r.uniform(-.16,.13)
+            a=math.tau*col/sides;rad=1+r.uniform(-.16,.13)+.06*math.sin(a*3+seed)
             points.append((center[0]+size[0]/2*math.cos(angle)*math.cos(a)*rad,
                 center[1]+size[1]/2*math.sin(angle)+r.uniform(-.12,.12),
                 center[2]+size[2]/2*math.cos(angle)*math.sin(a)*rad))
-    points.append((center[0]+.13,center[1]+size[1]/2,center[2]-.10));faces=[]
+    points.append((center[0]+size[0]*.16*math.sin(seed+1),center[1]+size[1]/2,center[2]+size[2]*.15*math.cos(seed+2)));faces=[]
     for i in range(sides):
         faces.append((0,1+(i+1)%sides,1+i))
         for row in range(rings-2):
@@ -87,6 +87,10 @@ def gable(m,w,d,h,rise,color=ROOF,x=0,z=0):
         (x-w/2,h,z+d/2),(x+w/2,h,z+d/2),(x,h+rise,z+d/2)]
     fs=[(0,1,2),(3,5,4),(0,3,4),(0,4,1),(1,4,5),(1,5,2),(2,5,3),(2,3,0)]
     m.hull(vs,fs,color,True)
+    # Solid fascia and ridge thickness remain visible in both distance models.
+    for side in (-1,1):
+        m.solid((x+side*w/2,h-.08,z),(.16,.23,d+.10),TRIM)
+    beam(m,(x,h+rise+.03,z-d/2),(x,h+rise+.03,z+d/2),.09,color,6)
     if not m.distant:
         # Raised ridge, fascia, gutter and seams follow the pitched roof.
         beam(m,(x,h+rise+.04,z-d/2-.04),(x,h+rise+.04,z+d/2+.04),.075,color)
@@ -100,8 +104,12 @@ def gable(m,w,d,h,rise,color=ROOF,x=0,z=0):
                      (x+side*w/2*a,h+rise*(1-a)+.025,z+d/2),.018,color,4)
 
 def window(m,x,y,z,w=1.15,h=1.35,shutters=False):
-    m.solid((x,y,z),(w+.16,h+.16,.10),TRIM)
-    m.solid((x,y,z-.07),(w,h,.045),GLASS)
+    # Dark reveal behind the glass, with projecting frame and lintel shadows.
+    m.solid((x,y,z),(w+.20,h+.20,.10),DARK)
+    m.solid((x,y,z-.062),(w-.08,h-.08,.025),GLASS)
+    for dx in (-w/2,w/2):m.solid((x+dx,y,z-.14),(.10,h+.20,.22),TRIM)
+    for dy in (-h/2,h/2):m.solid((x,y+dy,z-.14),(w+.20,.10,.22),TRIM)
+    m.solid((x,y+h/2+.12,z-.12),(w+.36,.12,.30),STONE)
     if not m.distant:
         for dx in [-w/2,0,w/2]:m.solid((x+dx,y,z-.10),(.055,h,.055),TRIM)
         m.solid((x,y-.12,z-.10),(w,.055,.055),TRIM)

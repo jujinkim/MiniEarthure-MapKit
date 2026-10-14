@@ -46,7 +46,7 @@ func run() -> void:
 	verify_material(first.material_override, Color("596168"))
 	PREVIEW.apply(preview, prepared)
 	check(first.material_override.get_instance_id() == identity, "unchanged preview reuses material")
-	var templates: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://addons/mapkit/godot/driving_templates.json"))
+	var templates: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(get_script().resource_path.get_base_dir().path_join("../driving_templates.json")))
 	check(templates.cylinder.color.map(func(v): return int(v)) == [89,97,104,255], "standalone default colour")
 	var custom: Dictionary = templates.cylinder.duplicate(true)
 	custom.color = [23, 144, 71, 255]

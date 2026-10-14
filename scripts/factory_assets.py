@@ -17,6 +17,12 @@ def hall(variant=0,distant=False):
     for x in range(-int(w/2)+4,int(w/2)-2,6):
         m.solid((x,h-2.3,-d/2-.06),(4.4,1.8,.12),GLASS)
         m.solid((x,h-2.3,d/2+.06),(4.4,1.8,.12),GLASS)
+    # Structural columns, head rails and gussets remain legible in the far model.
+    for side in (-1,1):
+        for z in (-d*.4,0,d*.4):
+            m.solid((side*(w/2+.12),h/2,z),(.28,h,.24),STEEL)
+            m.solid((side*(w/2+.18),.35,z),(.42,.70,.48),DARK)
+        m.solid((side*(w/2+.14),h-.45,0),(.30,.32,d),STEEL)
     door(m,w*.41,d/2+.16)
     for x in (-w*.28,w*.28):m.solid((x,h+2.6,d*.24),(5,2.0,7),DARK,True)
     if not distant:

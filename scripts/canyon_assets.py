@@ -9,8 +9,8 @@ def strata(variant=0,distant=False):
     sides=8 if distant else 16;levels=[(-.7,1.04),(h*.18,1.0),(h*.24,1.08),(h*.45,.81),(h*.52,.94),(h*.76,.69),(h,.58)]
     rings=[]
     for row,(y,radius) in enumerate(levels):
-        rings.append([(math.cos(a)*w*.5*radius*(1+.07*math.sin(a*3+variant)),y+.35*math.sin(a*2+row),
-            math.sin(a)*d*.5*radius*(1+.09*math.cos(a*3+variant))) for a in [i*math.tau/sides for i in range(sides)]])
+        rings.append([(math.cos(a)*w*.5*radius*(1+.11*math.sin(a*3+variant)+.05*math.sin(a*5+row)),y+.65*math.sin(a*2+row),
+            math.sin(a)*d*.5*radius*(1+.13*math.cos(a*3+variant))) for a in [i*math.tau/sides for i in range(sides)]])
     for row in range(len(rings)-1):
         vertices=rings[row]+rings[row+1];faces=[]
         for i in range(sides):j=(i+1)%sides;faces.extend([(i,j,j+sides),(i,j+sides,i+sides)])

@@ -160,7 +160,7 @@ func surface_factory_quality(context: RefCounted) -> void:
 				check(material.get_meta("mapkit_detail",false) == context.tiles.has(kind),label+" detail metadata")
 				if context.tiles.has(kind):
 					check(material.get_shader_parameter("detail_enabled") == true and material.get_shader_parameter("detail_tile") == context.tiles[kind],label+" detail texture identity")
-					check(material.get_shader_parameter("detail_scale") == (1.0 if kind == "brick" else 2.0),label+" detail scale")
+					check(material.get_shader_parameter("detail_scale") == (.75 if kind == "brick" else 1.0),label+" detail scale")
 			check(context.surface_material(source,0) == wrapped,label+" ordinary identity cache")
 			check(context.surface_material(source,1) == pending and pending.shader == direct.shader and not pending.has_meta("mapkit_pending_surface"),label+" activates cached GLB binding")
 			check_surface_quality(pending,level,label+" activated GLB")

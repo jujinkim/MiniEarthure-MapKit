@@ -58,14 +58,12 @@ void fragment() {
 		float joint=step(.988,fract((p.x+p.z)/6.0));
 		color*=1.0-joint*.12;
 	}
-	if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
+	if(detail_enabled && length(VERTEX)<48.0) {
 		vec4 detail=texture(detail_tile,detail_uv(p,normal_world));
-		float relief=material_detail_weight(length(VERTEX))*0.65;
+		float relief=material_detail_weight(length(VERTEX))*0.9;
 		color*=mix(1.0,detail_luminance(detail.r),relief);
 		if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(p,normal_world)*relief,0.0)).xyz);
 	}
-	float snow=environment_enabled ? texelFetch(environment_data,ivec2(0,0),0).y : 0.0;
-	float altitude=environment_enabled ? texelFetch(environment_data,ivec2(1,0),0).z : 1.0;
-	ALBEDO = world_surface_color(color,snow,altitude);
+	ALBEDO = color;
 	ROUGHNESS = shell ? .65 : (theme==2 && !wall && !floor_surface && !support) ? 0.58 : 0.92;
 }

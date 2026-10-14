@@ -64,10 +64,15 @@ cell estimates, not measured work time or RSS.
 
 ## Weather and distance fog
 
-Golden direct light and blue-grey ambient shadows retain detail at low sun angles.
-The sky blends a restrained amber horizon into blue daylight; snow reduces the
-warm key and night retains its own cool ambient values. Existing light/shadow
-pools, authority and display-distance limits are unchanged.
+`color_grade.gd` supplies a scene-owned 256px HDR channel LUT to Godot's built-in
+`Environment.adjustment_color_correction`. Daylight uses amber highlights, olive
+midtones and deep shadows; night keeps cool shadows and true black. Accumulated
+snow blends the daylight curves towards neutral. Updates reuse one gradient and
+texture, within the existing atmosphere allowance; retained LUT resources keep
+that lease alive. The grade covers sky, vehicles and scenery after tonemapping,
+while Canvas HUD colours stay unchanged. Materials retain their authored colours.
+Direct light follows solar elevation, with cooler snow illumination. Existing
+light/shadow pools, authority and display-distance limits are unchanged.
 
 Precipitation uses a bounded camera-centred GPU volume and an overhead shelter ray.
 Splashes use one shared quad/material and a fixed 64-slot MultiMesh (24 on low),
@@ -94,5 +99,7 @@ grants no loading readiness. Standalone Editor defaults to weather fog.
 inputs. `light_group_validator` covers ordering, atomic groups, culling, reentry,
 static fallback, falloff reset and pool bounds. It also checks interleaved cell
 profiles, mounted offsets/yaw, opaque/transparent placements and cancellation/retirement.
-Weather, splash pool, celestial occlusion and depth-fog checks run in Godot 4.7.2. Aesthetics and device
+`color_grade_validator` checks actual Mobile framebuffer colours, night black, snow,
+HUD exclusion and bounded LUT reuse. Weather, splash pool, celestial occlusion and
+depth-fog checks run in Godot 4.7.2. Aesthetics and device
 performance are user checks.

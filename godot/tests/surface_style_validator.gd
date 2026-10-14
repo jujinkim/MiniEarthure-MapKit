@@ -13,6 +13,8 @@ func pixel() -> Color:
 	return picture.get_pixelv(picture.get_size()/2)
 func run() -> void:
 	root.size = Vector2i(128,128)
+	root.content_scale_size = root.size
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
 	var scene := Node3D.new(); root.add_child(scene)
 	var environment := WorldEnvironment.new(); environment.environment = Environment.new()
 	environment.environment.background_mode = Environment.BG_COLOR
@@ -51,9 +53,32 @@ func run() -> void:
 					check(Vector3(reference.r,reference.g,reference.b).distance_to(Vector3(actual.r,actual.g,actual.b))<.025,"same colour across near/far and quality: "+str([tint,weather,level]))
 			seasons.append(reference)
 		if tint == Color("898989"):
-			check(seasons[0].r>seasons[0].b,"daylight grade is warm")
+			check(absf(seasons[0].r-seasons[0].b)<.015,"materials do not duplicate the scene grade")
 			check(absf(seasons[1].r-seasons[1].b)<.015,"night removes warm grade")
 			check(seasons[2].b>seasons[2].r,"snow retains its cool colour")
+	# Low keeps the same base tile; fading it at distance keeps average colour.
+	context.update(43200,0,0,0.8,1080)
+	var quad := QuadMesh.new(); quad.size = Vector2(2,2); node.mesh = quad
+	var textured := context.generated_material(Color(.55,.55,.55),"asphalt")
+	node.material_override = textured
+	var means: Array[float] = []
+	for level in 3:
+		QUALITY.apply_material(textured,QUALITY.profile(level))
+		await pixel()
+		var photo := root.get_texture().get_image()
+		var sum := 0.0; var square := 0.0; var count := 0
+		for y in range(20,108):
+			for x in range(20,108):
+				var value := photo.get_pixel(x,y).r
+				sum += value; square += value*value; count += 1
+		means.append(sum/count)
+		print("TILE_PIXELS ",level," mean=",sum/count," variance=",square/count-pow(sum/count,2)," enabled=",textured.get_shader_parameter("detail_enabled"))
+		check(square/count-pow(sum/count,2)>.0001,"base texture remains visible at quality "+str(level))
+	textured.set_shader_parameter("detail_enabled",false)
+	var far_color := await pixel()
+	print("TILE_FAR ",far_color)
+	for mean in means: check(absf(mean-far_color.r)<.06,"detail fade preserves mean luminance")
+	check(absf(means[0]-means[2])<.025,"quality changes preserve base texture brightness")
 	node.material_override = null; node.mesh = null
 	scene.queue_free(); context = null
 	for frame in 4: await process_frame

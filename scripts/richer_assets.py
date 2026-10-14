@@ -189,11 +189,13 @@ def library():
     return result
 
 def textures(destination):
-    """Packed shaded luminance/AO, roughness and baked normal XY at three sizes."""
+    """Mean-normalized albedo variation, roughness and normal XY; all tiers share a master."""
     destination.mkdir(parents=True,exist_ok=True)
     kinds=['brick','plaster','wood','stone','asphalt','concrete','earth','grass','metal','leaf']
     for index,kind in enumerate(kinds):
         size=512;rng=random.Random(624+index);heights=[];base=[]
+        grains=[[rng.uniform(-1,1) for _ in range(64)] for _ in range(64)]
+        patches=[[rng.uniform(-1,1) for _ in range(8)] for _ in range(8)]
         for y in range(size):
             for x in range(size):
                 u=x*.5;v=y*.5;noise=rng.random()-.5
@@ -207,16 +209,30 @@ def textures(destination):
                 wear=max(0,broad*.7+streak*.3-.48)
                 if kind=='metal':grain=math.sin(v*.5)*.35
                 if kind=='leaf':grain=math.sin(u*.2+v*.3)*.45
-                heights.append(.5+noise*.12+broad*.06+grain*.075+strata*.04-seam*.24)
-                light=.88+noise*.07+broad*.055+grain*.035+strata*.025-seam*.15-wear*.13
-                rough=(.52 if kind=='metal' else .82)+noise*.09+seam*.08+wear*.15
+                gx,gy=x//8,y//8;tx=(x%8)/8;ty=(y%8)/8
+                tx=tx*tx*(3-2*tx);ty=ty*ty*(3-2*ty)
+                aggregate=((1-tx)*grains[gy][gx]+tx*grains[gy][(gx+1)%64])*(1-ty)+((1-tx)*grains[(gy+1)%64][gx]+tx*grains[(gy+1)%64][(gx+1)%64])*ty
+                patch=patches[y//64][x//64]
+                repair=0.0
+                if kind=='asphalt':
+                    repair=float((x+14*math.sin(y*.025))%512<96 and 70<y<350)
+                    seam=float(abs(math.sin(u*.026+math.sin(v*.04)*.5))<.024)
+                    grain=aggregate*.65
+                elif kind=='plaster':wear+=max(0,streak-.5)*.7
+                elif kind=='concrete':wear+=max(0,patch)*.25
+                elif kind=='metal':wear+=max(0,patch)*.5;seam=float(v%64<1.4)
+                heights.append(.5+noise*.12+broad*.08+grain*.12+strata*.06-seam*.28-repair*.06)
+                light=.65+noise*.10+broad*.09+grain*.10+strata*.06+aggregate*.025-seam*.25-wear*.25-repair*.15
+                rough=(.45 if kind=='metal' else .84)+noise*.08+seam*.09+wear*.25-repair*.18
+                if kind=='leaf':light=.65+noise*.035+broad*.06+grain*.04
                 base.append((light,rough))
+        mean=sum(value[0] for value in base)/len(base)
         pixels=[]
         for y in range(size):
             for x in range(size):
                 dx=(heights[y*size+(x+1)%size]-heights[y*size+(x-1)%size])*2.0
                 dy=(heights[((y+1)%size)*size+x]-heights[((y-1)%size)*size+x])*2.0
-                light,rough=base[y*size+x]
+                light,rough=base[y*size+x];light+=.65-mean
                 pixels.append(tuple(round(max(0,min(1,v))*255) for v in [light,rough,.5+dx*.5,.5+dy*.5]))
         image=Image.new('RGBA',(size,size));image.putdata(pixels)
         for resolution in [128,256,512]:

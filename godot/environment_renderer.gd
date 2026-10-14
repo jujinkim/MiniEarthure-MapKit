@@ -11,6 +11,7 @@ var _splash_cursor := 0
 var _surface_cursor := 0
 var surface_ray_count := 0
 var _sheltered := false
+var color_grade := preload("./color_grade.gd").new()
 var settings: Environment
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
@@ -69,8 +70,9 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	settings.fog_density = 0.0008
 	settings.glow_enabled = false
 	settings.adjustment_enabled = true
-	settings.adjustment_saturation = .98
-	settings.adjustment_contrast = 1.02
+	settings.adjustment_saturation = .92
+	settings.adjustment_contrast = 1.0
+	settings.adjustment_color_correction = color_grade.texture
 	add_to_group("mapkit_quality_targets")
 	sun.directional_shadow_max_distance = 96.0 if low else 160.0
 	moon = DirectionalLight3D.new()
@@ -149,20 +151,19 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	_clouds = lerpf(float(cover.get(state.previous_weather,0.18)),float(cover.get(state.weather,0.18)),state.blend())
 	_orient(sun,celestial.sun_direction)
 	_orient(moon,celestial.moon_direction)
-	# Low sun keeps a broad golden key; snow softens the warmth without changing
-	# authority-owned time/weather or introducing a post-process pass.
+	# Direct light retains time-of-day colour; the shared LUT owns the art grade.
 	var elevation := maxf(0.0,sin(float(celestial.altitude)))
 	var high_sun := smoothstep(0.0,0.65,elevation)
-	sun.light_color = Color(1.0,0.73,0.46).lerp(Color(1.0,0.93,0.80),high_sun).lerp(Color(0.92,0.96,1.0),_snow*0.65)
+	sun.light_color = Color(1.0,0.85,0.66).lerp(Color(1.0,0.98,0.93),high_sun).lerp(Color(0.92,0.96,1.0),_snow*0.65)
 	sun.light_energy = pow(elevation,0.65)*1.45*(1.0-_clouds*0.82)
 	moon.light_energy = maxf(0.0,sin(float(celestial.moon_altitude)))*float(celestial.moon_phase)*0.12*(1.0-_clouds*0.85)
 	sun.shadow_enabled = float(celestial.altitude) > 0.0
 	moon.shadow_enabled = not sun.shadow_enabled and moon.light_energy > 0.01
-	settings.ambient_light_color = night_color.lerp(Color(0.55,0.66,0.79),day)
+	settings.ambient_light_color = night_color.lerp(Color(0.61,0.65,0.70),day)
 	settings.ambient_light_energy = lerpf(night_ambient,0.38,day)*(1.0-_clouds*0.50)
-	# Preserve low night tones; extra contrast otherwise clips the indirect
-	# illumination of urban road/building materials down to black.
-	settings.adjustment_contrast = lerpf(1.0,1.02,day) if settlement == "urban" else 1.02
+	# Preserve night blacks and snow whites without a quality-dependent grade.
+	color_grade.update(day,clampf(_snow*2.0,0.0,1.0))
+	settings.adjustment_saturation = lerpf(1.0,.92,day*(1.0-_snow*2.0))
 	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.48,0.49,0.46),day)
 	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
 	_weather_fog_energy = lerpf(0.04,0.6,day)

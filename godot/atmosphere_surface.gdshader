@@ -69,12 +69,12 @@ void fragment() {
         if(normal_enabled) { NORMAL_MAP=texture(normal_texture,UV).rgb; NORMAL_MAP_DEPTH=normal_strength*effect_weight; }
         if(ao_enabled) { AO=mix(1.0,dot(texture(ao_texture,ao_uv2 ? UV2 : UV),ao_channel),effect_weight); AO_LIGHT_AFFECT=ao_light_affect; }
     }
-    if(detail_enabled && detail_quality>0 && view_distance<48.0 && effect_weight>0.0) {
+    if(detail_enabled && view_distance<48.0 && effect_weight>0.0) {
         vec4 detail=texture(detail_tile,detail_uv(world_position,world_normal));
-        float relief=material_detail_weight(view_distance)*(vegetation ? 0.28 : 0.65);
+        float relief=material_detail_weight(view_distance)*(vegetation ? 0.30 : 0.9);
         color*=mix(1.0,detail_luminance(detail.r),relief);
-        surface_roughness*=mix(1.0,detail.g,relief);
-        AO=mix(1.0,detail.r,0.35*relief);
+        if(detail_quality>0) surface_roughness*=mix(1.0,detail.g,relief);
+        if(detail_quality>0) AO=mix(1.0,detail.r/0.65,0.18*relief);
         if(detail_quality>1) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(detail_bump(world_position,world_normal)*relief,0.0)).xyz);
     }
     // Large, restrained variation remains stable when the camera moves.
@@ -94,7 +94,7 @@ void fragment() {
     float snow_cover = weather.y * facing_up;
     color *= 1.0 - weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),snow_cover*0.92);
-    color = world_surface_color(color,snow_cover,clock.z);
+
     ALBEDO = color;
     ROUGHNESS = mix(surface_roughness,0.28,weather.x*facing_up);
     ROUGHNESS = mix(ROUGHNESS,0.92,snow_cover);

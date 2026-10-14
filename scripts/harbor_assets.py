@@ -41,6 +41,9 @@ def block(variant=0,distant=False):
             for tz in (-d*.3,0,d*.3):
                 m.solid((side*(w/2+.035),y,tz),(.08,1.75,1.5),TRIM)
                 m.solid((side*(w/2+.09),y,tz),(.035,1.55,1.3),GLASS)
+                for edge in (-1,1):
+                    m.solid((side*(w/2+.17),y,tz+edge*.73),(.26,1.78,.10),STONE)
+                m.solid((side*(w/2+.17),y+.86,tz),(.26,.12,1.58),TRIM)
         for x in (-w*.30,0,w*.30):
             m.solid((x,y,d/2+.05),(1.55,1.65,.1),TRIM)
             m.solid((x,y,d/2+.11),(1.35,1.45,.035),GLASS)
@@ -51,6 +54,10 @@ def block(variant=0,distant=False):
         if not distant:
             m.solid((0,y-1.1,z),(w+.2,.12,.15),STONE)
             m.solid((w*.31,y-.9,z-.25),(1.1,.45,.55),CREAM)
+    # Cornice bands and deep corner piers break up the repeated flat facade.
+    for side in (-1,1):
+        for end in (-1,1):m.solid((side*(w/2-.08),h/2,end*(d/2+.08)),(.25,h,.22),STONE)
+        m.solid((0,h-.28,side*(d/2+.13)),(w+.36,.22,.30),TRIM)
     # Real parapets and a varied roof silhouette, visible from slopes and bridges.
     for side in (-1,1):
         m.solid((side*w/2,h+.58,0),(.2,.95,d),wall)

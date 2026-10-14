@@ -134,7 +134,7 @@ func bind_detail(material: ShaderMaterial, kind: String, apply_quality := true) 
 		material.set_shader_parameter("surface_effect_distance",float(quality.surface_effect_distance))
 	material.set_shader_parameter("detail_enabled",true)
 	material.set_shader_parameter("detail_tile",tiles[kind])
-	material.set_shader_parameter("detail_scale",2.0 if kind in ["asphalt","earth","grass","metal","leaf"] else 1.0)
+	material.set_shader_parameter("detail_scale",0.5 if kind in ["asphalt","concrete","plaster","metal"] else (1.0 if kind in ["leaf","earth","grass"] else 0.75))
 
 func style_mesh(mesh: Mesh, binding: Dictionary, instances := false, observer := Callable()) -> Mesh:
 	# Own surface bindings; vertex/index buffers and texture resources remain shared.
