@@ -26,6 +26,22 @@ def rubble(distant=False):
     m.collision=[dict(center=[0,35,0],size_cm=[430,70,390])]
     return m
 
+def natural_arch(distant=False):
+    m=Mesh(distant)
+    for side in (-1,1):
+        for layer in range(3):
+            m.solid((side*11.5,1.7+layer*3.3,0),(5.5-layer*.3,3.5,8),[SAND,BAND,OCHRE][layer],True)
+    # Individual convex wedges preserve the opening in both visual LODs and
+    # collision. No large rectangular proxy fills the arch's passage.
+    for i in range(12):
+        a=i*math.pi/12;b=(i+1)*math.pi/12
+        vs=[(r*math.cos(t),10+r*math.sin(t),z) for z in (-4,4) for r,t in [(9,a),(14,a),(14,b),(9,b)]]
+        m.hull(vs,[(0,2,1),(0,3,2),(4,5,6),(4,6,7),(0,1,5),(0,5,4),
+            (1,2,6),(1,6,5),(2,3,7),(2,7,6),(3,0,4),(3,4,7)],OCHRE if i%3 else BAND,True)
+        if not distant:
+            m.solid((12*math.cos((a+b)/2),10+12*math.sin((a+b)/2),-4.15),(1.6,.35,.5),PALE)
+    return m
+
 def stockpile(distant=False):
     m=Mesh(distant);crown(m,(0,1.8,0),(22,7,16),153,OCHRE)
     m.collision=[dict(center=[0,150,0],size_cm=[1700,300,1200])]
@@ -98,5 +114,5 @@ def pier(distant=False):
 
 def library():
     return assemble_library({**{'sandstone-'+str(i):lambda far,i=i:strata(i,far) for i in range(4)},
-        'canyon-rubble':rubble,'canyon-stockpile':stockpile,'cactus':cactus,'desert-scrub':scrub,'quarry-crusher':crusher,
+        'natural-arch':natural_arch,'canyon-rubble':rubble,'canyon-stockpile':stockpile,'cactus':cactus,'desert-scrub':scrub,'quarry-crusher':crusher,
         'quarry-conveyor':conveyor,'quarry-loader':loader,'quarry-office':office,'canyon-pier':pier},'canyon_assets.py')

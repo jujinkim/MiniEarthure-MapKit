@@ -59,13 +59,13 @@ the same frame, roof forms, crowns and real openings while dropping fine detail.
 
 | Script | Contents |
 | --- | --- |
-| `authored_assets.py` | Houses, shops, market hall, farm equipment, crops, tree growth stages, shrubs, rocks, bridge piers |
+| `authored_assets.py` | Dormer/porch houses, shops, market hall and stalls, farm equipment, crops, tree growth stages, shrubs, rocks, bridge piers |
 | `harbor_assets.py` | Shop/apartment silhouettes, loading warehouses, container stacks, open gantry cranes, trucks, quays, pipes, piers |
 | `forest_assets.py` | Cedar/broadleaf growth stages, saplings, ferns, fallen timber, lodges, tents, picnic shelters, piers |
-| `canyon_assets.py` | Eroded sandstone with strata, talus, cactus/scrub, quarry office, loader, crusher bay, conveyor, piers |
+| `canyon_assets.py` | Eroded sandstone with strata, open natural arch, talus, cactus/scrub, quarry office, loader, crusher bay, conveyor, piers |
 | `snow_assets.py` | Snow firs, granite crags, timber lodges, snowbanks, road rails, open shelter, solid frozen tarn |
 | `factory_assets.py` | Production halls, process tanks, boilers, stacks, pipe racks, transformers, compressors, offices |
-| `park_assets.py` | Open observation wheel, carousel, decorative coaster, kiosks, queue rails, flowerbeds, viaduct piers |
+| `park_assets.py` | Open observation wheel, carousel, decorative coaster, kiosks, queue rails, pergolas, flowerbeds, viaduct piers |
 
 Ground-cover patches follow the quality distance limits; trunks and structures
 keep primary collision. Physical hulls stay within the 32-vertex/60-face and

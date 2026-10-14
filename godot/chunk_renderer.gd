@@ -510,7 +510,7 @@ static func _environment_surface(job: Dictionary, material: Material, defer_qual
 	if material is ShaderMaterial and material.shader == preload("./rc_surface.gdshader"):
 		material.set_shader_parameter("environment_enabled",true)
 		material.set_shader_parameter("environment_data",context.texture)
-		context.bind_detail(material,"concrete" if material.get_shader_parameter("wall") else "asphalt",not defer_quality)
+		context.bind_detail(material,str(material.get_meta("rc_detail_kind")),not defer_quality)
 		return material
 	if material is ShaderMaterial and material.shader == job.get("urban_shader"):
 		material.set_shader_parameter("environment_enabled",true)

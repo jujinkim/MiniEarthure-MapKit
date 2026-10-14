@@ -34,6 +34,22 @@ never script preloads. Shared context reservations are 4.75/16/61MiB respectivel
 (`1MiB + 10 × size² × 24`), including CPU/GPU/mipmap/retirement overlap. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.
 
+## Track and authored scenery
+
+`rc_venue.surface_key` is the single Editor/runtime classifier for road, wall,
+outer shell and structural support materials. Panel seams, dark side faces,
+formwork bands and shell ribs use the existing meshes; catalogue IDs, ports,
+drive surfaces and collision dimensions are unchanged. Pipes, loops, halfpipes
+and static attachments share `gimmick_geometry.structure_material`; stored colour
+and matte-metal properties remain authoritative. Small seam detail fades with
+distance. Speed panels retain orange chevrons, jump panels cyan arrows, and grind
+caps cyan/cream bands. No fullscreen pass or texture tier is added.
+
+Paired cottage models keep dormers, porches and flower boxes; crown forms distinguish
+columnar, spreading and young trees. Market stalls, open sandstone arches and park
+pergolas fill the middle scale between scenery and major landmarks. Far meshes
+retain their silhouettes/openings while dropping fine geometry.
+
 ## First-use binding
 
 Generated opaque terrain, building and built-in faces use
@@ -56,14 +72,6 @@ quality after external edits; no remembered preset replaces current material sta
 
 Urban/RC surfaces use dedicated factories and `_environment_surface`;
 standalone previews can use source materials. Distinguish these from GLB import timing.
-
-| Branch | Operations to isolate |
-| --- | --- |
-| Generated opaque face | Direct final binding, colour/detail and quality; no source-material conversion or imported identity-cache entry |
-| Built-in canopy leaf | Independent direct binding with leaf appearance and quality; the standalone preview retains its source material |
-| Urban `ShaderMaterial` | Creation, first shader assignment, source parameters, environment texture and `bind_detail`; the same material is returned |
-| RC `ShaderMaterial` | Existing shader and wall parameter, then `bind_detail` |
-| Imported opaque `StandardMaterial3D` | Shared-wrapper creation, shader/bitmap/parameter binding, quality application and caller's last source-reference release |
 
 The first urban shader assignment can stall on Metal before `_environment_surface`.
 `ShaderMaterial.set_shader` lazily requests the shader RID; the internal cause needs
@@ -94,32 +102,17 @@ high adds a guarded screen refraction. Shore foam softens shallow boundaries.
 Depth reconstruction supports Mobile and Compatibility NDC conventions. No
 cosmetic ripple alters buoyancy, water entry or surface height.
 
-`surface_style_validator` compares rendered generated/imported/distant swatches at
-every quality tier, including warm daylight, neutral night and cool snow.
-`test_richer_assets.py` reproduces all library bytes and three texture tiers.
-`generated_material_validator` compares effective GPU uniforms, live quality,
-rendered pixels, prepared/unbatched geometry and cell/context borrower retirement
-against the source-material path, including climate, urban, RC and preview cases.
-It checks generated opaque and urban/RC attachments before corrective updates,
-preset changes between admitted batches, reused cell bindings and same-preset
-repair of external edits, including partial cancellation and last detail borrowers.
-Set `MAPKIT_SKIP_PIXEL_COMPARISON=1` for focused material/attachment regressions;
-the validator reports the skipped visual comparison explicitly.
-`tree_canopy_validator` also compares leaf GPU uniforms and same-frame pixels at
-each preset, live quality, independent bindings and final leaf/context retirement
-after partial cancellation or completed attachment. Initial-pixel comparisons run
-before any corrective quality update; admission-step preset changes and same-preset
-repair of externally edited uniforms are also covered.
-`richer_material_validator` covers actual GLB import, retained channels, denied
-admission, shared identity and last-borrower retirement. It checks initial surface
-quality at each preset for direct/wrapped/pending bindings, GLB activation,
-same-preset repair, live updates and the final unpublished material borrower.
-`display_quality_validator` covers texture leases, live water tiers, generated LOD indices/cache reuse, spatial
-batches, tight MultiMesh bounds, solid-versus-decoration classification, live material/wind
-levels and actual-face occluders. Template preparation tests include shared phased
-LOD/material setup and final-borrower retirement. Recursive resource tracking
-checks per-call quality refresh, same-preset repair, node/occluder state, lease
-callback order and final shape retirement. MultiMesh checks cover nested parts,
-setup/placement preset changes, per-object seeds, live repair and borrower retirement
-after empty, partial and completed placement. Weather appearance and
-target-device acceptance are user checks.
+`surface_style_validator` compares generated/imported/distant swatches at every
+quality tier, including daylight, night and snow. `test_richer_assets.py` reproduces
+library bytes and texture tiers. Render `generated_material_validator` to compare
+GPU uniforms and pixels before corrective quality updates, with prepared/unbatched
+geometry, cancellation and last-borrower retirement. Its optional
+`MAPKIT_SKIP_PIXEL_COMPARISON=1` explicitly skips only pixel comparison.
+`tree_canopy_validator`, `richer_material_validator` and
+`display_quality_validator` cover leaf/imported bindings, bitmap retention,
+independent materials, denied admission, quality changes during preparation,
+MultiMesh bounds, occluders and final resource retirement. Track checks pair
+`rc_venue_validator`, `pipe_material_validator` and `panel_geometry_validator`
+with the rendered `rc_piece_gallery`; `RC_PIECE_KINDS`, `RC_PIECE_WIDTH` and
+`RC_PIECE_CAPTURE` select supported catalogue variants and output images.
+Weather appearance and target-device acceptance are user checks.

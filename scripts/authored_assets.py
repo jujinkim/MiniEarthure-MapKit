@@ -151,6 +151,15 @@ def house(variant=0,distant=False):
     if variant in (0,4,5):
         m.solid((0,2.8,front-.9),(3.3,.16,2),SLATE,True)
         for x in (-1.45,1.45):m.solid((x,1.4,front-1.65),(.14,2.8,.14),WOOD,True)
+    if variant in (1,5):
+        # Broad dormer silhouette survives Low and the paired distance model.
+        m.solid((w*.17,h+.65,-d*.25),(2.1,1.3,2.4),wall)
+        gable(m,2.45,2.8,h+1.3,.75,SLATE,w*.17,-d*.25)
+        window(m,w*.17,h+.74,-d*.25-1.24,.95,.8)
+    if variant in (0,2,4):
+        for x in (-w*.29,w*.29):
+            m.solid((x,1.02,front-.25),(1.48,.24,.46),WOOD)
+            for dx in (-.45,0,.45):crown(m,(x+dx,1.24,front-.27),(.4,.35,.4),variant+round(dx*10),GREEN)
     return m
 
 LETTERS={'A':['01110','10001','10001','11111','10001','10001','10001'],
@@ -256,15 +265,29 @@ def tree(variant=0,distant=False):
     bark=(.48,.49,.41,1) if variant==1 else WOOD
     beam(m,(0,-.28,0),(.25,height*.72,.1),.26 if variant!=4 else .10,bark,5 if distant else 6,r2=.11)
     m.collision=[dict(center=cm((0,height*.26,0)),size_cm=cm((.55 if variant!=4 else .22,height*.57,.55 if variant!=4 else .22)))]
-    count=8
+    count=[7,5,8,6,4][variant]
     for i in range(count):
         angle=math.tau*i/count+r.uniform(-.23,.23)
         ring=radius*r.uniform(.28,.70)
         y=height*(.68+r.uniform(-.16,.15));x=math.cos(angle)*ring;z=math.sin(angle)*ring
+        if variant==1:y=height*(.47+.40*i/count);x*=.63;z*=.63
+        if variant==2:y=height*(.55+r.uniform(-.08,.08));x*=1.12;z*=1.12
         if not distant:beam(m,(.1,height*.36,0),(x,y,z),.10,bark,4,r2=.035)
         color=[(.23,.35,.15,1),(.30,.42,.19,1),(.19,.31,.17,1),(.35,.44,.22,1)][(i+variant)%4]
         crown(m,(x,y,z),(radius*.98,height*.38,radius*.98),i+variant*51,color)
     crown(m,(.3,height*.85,-.25),(radius*1.25,height*.31,radius*1.12),910+variant,(.29,.40,.17,1))
+    return m
+
+def market_stall(distant=False):
+    m=Mesh(distant)
+    for x in (-1.8,1.8):
+        for z in (-1.1,1.1):m.solid((x,1.35,z),(.12,2.7,.12),WOOD,True)
+    m.solid((0,.95,0),(3.8,.16,1.7),WOOD,True)
+    gable(m,4.4,3.0,2.65,.65,CREAM)
+    for x in (-1.4,-.7,0,.7,1.4):m.solid((x,2.57,-1.5),(.34,.32,.06),RUST)
+    for i,x in enumerate((-1.1,0,1.1)):
+        m.solid((x,1.12,0),(.88,.22,.75),WOOD)
+        for z in (-.2,.2):crown(m,(x,1.36,z),(.72,.34,.32),i,GREEN if i%2 else RUST)
     return m
 
 def shrub(distant=False,hedge=False):
@@ -426,7 +449,7 @@ def library():
         **{'shop-'+str(i):lambda far,i=i:shop(i,far) for i in range(4)},
         **{'tree-'+str(i):lambda far,i=i:tree(i,far) for i in range(5)},
         **{'rock-'+str(i):lambda far,i=i:rock(i,far) for i in range(3)},
-        'market-hall':market_hall,'barn':barn,'shed':shed,'shrub':shrub,'hedge':lambda far:shrub(far,True),
+        'market-hall':market_hall,'market-stall':market_stall,'barn':barn,'shed':shed,'shrub':shrub,'hedge':lambda far:shrub(far,True),
         'fence':fence,'trail-sign':trail_sign,'bridge-support':bridge_support,'bridge-support-high':lambda far:bridge_support(far,17.8),
         'tractor':lambda far:vehicle(True,far),'parked-car':lambda far:vehicle(False,far),
         'wheat':lambda far:crop(0,far),'cabbage':lambda far:crop(1,far)}

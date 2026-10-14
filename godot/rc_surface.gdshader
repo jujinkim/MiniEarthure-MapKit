@@ -4,6 +4,8 @@ uniform vec4 base_color : source_color = vec4(0.1,0.4,0.5,1.0);
 uniform vec4 accent : source_color = vec4(1.0,0.7,0.1,1.0);
 uniform int theme = 0;
 uniform bool wall = false;
+uniform bool support = false;
+uniform bool shell = false;
 uniform bool floor_surface = false;
 uniform bool environment_enabled = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
@@ -19,9 +21,18 @@ void fragment() {
 	float grain = 0.5;
 	float effect_weight=surface_effect_weight(length(VERTEX));
 	if(effect_weight>0.0) grain=mix(0.5,fract(sin(dot(floor(p.xz*180.0),vec2(12.9898,78.233)))*43758.5453),effect_weight*0.4);
-	if(wall) {
+	if(support) {
+		// Large formwork panels and dark footings read at distance, with fine
+		// joinery fading through the existing material-quality policy.
+		float seam=step(.975,fract(p.y/2.4));
+		color*=1.0-seam*.23;
+		color*=.94+.06*sin(p.x*1.1+p.z*.7);
+	} else if(shell) {
+		float rib=step(.91,fract((p.x+p.z+p.y)*.5));
+		color=mix(color,vec3(.66,.69,.65),rib*.55);
+	} else if(wall) {
 		float stripe = step(0.5,fract((p.x+p.z)*0.35));
-		color = mix(color,(theme==2 ? vec3(0.05,0.13,0.22) : vec3(0.94,0.96,0.92)),stripe);
+		color = mix(color,(theme==2 ? vec3(0.05,0.13,0.22) : vec3(0.94,0.96,0.92)),stripe*.72);
 		float seam = step(0.96,fract((p.x+p.z)*0.7));
 		color *= 1.0-seam*0.18;
 	} else if(floor_surface) {
@@ -39,6 +50,14 @@ void fragment() {
 	}
 	float worn = .5+.5*sin(p.x*.81+sin(p.z*.43)+p.y*.7);
 	if(wall) color *= .91+.09*worn;
+	if(!wall && !shell && !support && !floor_surface) {
+		// The authored road solid supplies its existing side/underside faces.
+		// Material relief adds depth without changing a port or collision size.
+		float side=1.0-smoothstep(.12,.72,abs(normal_world.y));
+		color=mix(color,vec3(.18,.23,.25),side*.42);
+		float joint=step(.988,fract((p.x+p.z)/6.0));
+		color*=1.0-joint*.12;
+	}
 	if(detail_enabled && detail_quality>0 && length(VERTEX)<48.0) {
 		vec4 detail=texture(detail_tile,detail_uv(p,normal_world));
 		float relief=material_detail_weight(length(VERTEX))*0.65;
@@ -48,5 +67,5 @@ void fragment() {
 	float snow=environment_enabled ? texelFetch(environment_data,ivec2(0,0),0).y : 0.0;
 	float altitude=environment_enabled ? texelFetch(environment_data,ivec2(1,0),0).z : 1.0;
 	ALBEDO = world_surface_color(color,snow,altitude);
-	ROUGHNESS = (theme==2 && !wall && !floor_surface) ? 0.48 : 0.92;
+	ROUGHNESS = shell ? .65 : (theme==2 && !wall && !floor_surface && !support) ? 0.58 : 0.92;
 }

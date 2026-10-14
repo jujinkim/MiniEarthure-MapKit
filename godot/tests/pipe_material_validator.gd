@@ -5,10 +5,10 @@ var failures: Array[String] = []
 func _initialize() -> void: run.call_deferred()
 func check(value: bool, label: String) -> void:
 	if not value: failures.append(label); push_error(label)
-func verify_material(material: StandardMaterial3D, color: Color) -> void:
-	check(material.albedo_color.is_equal_approx(color), "stored pipe colour")
-	check(is_equal_approx(material.roughness, 0.82) and is_equal_approx(material.metallic, 0.65), "matte metal properties")
-	check(not material.emission_enabled, "non-emissive pipe")
+func verify_material(material: ShaderMaterial, color: Color) -> void:
+	check(material.get_shader_parameter("base_color").is_equal_approx(color), "stored pipe colour")
+	check(is_equal_approx(material.get_shader_parameter("roughness"), 0.82) and is_equal_approx(material.get_shader_parameter("metallic"), 0.65), "matte metal properties")
+	check(not "EMISSION" in material.shader.code, "non-emissive pipe")
 func run() -> void:
 	var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
 	var source := {"original_seed":null,"grounded_supports":false,"settings":{"seed":101,"circuit":false,"duration_seconds":60,"difficulty":"easy","categories":["driving"],"time_minutes":720},"instances":[],"connections":[],"paths":[],"checkpoints":[],"actions":[],"attachments":[]}
@@ -33,15 +33,15 @@ func run() -> void:
 			if pipe:
 				verify_material(mesh.material_override, Color("596168"))
 				verify_material(view.material_override, Color("596168"))
-				check(mesh.material_override.cull_mode == view.material_override.cull_mode, "matching cull mode")
+				check(mesh.material_override.shader == view.material_override.shader, "matching cull mode")
 				refs.append(weakref(view.material_override)); refs.append(weakref(mesh.material_override))
 			elif g.has("track"):
-				check(is_equal_approx(mesh.material_override.roughness, 0.72) and mesh.material_override.metallic == 0.0, "loop/halfpipe material unchanged")
+				check(is_equal_approx(mesh.material_override.get_shader_parameter("roughness"), 0.72) and mesh.material_override.get_shader_parameter("metallic") == 0.0, "loop/halfpipe material unchanged")
 		visual.free()
 	var first: MeshInstance3D = preview.get_meta("objects")["track-0-0:0"]
 	var identity := first.material_override.get_instance_id()
 	PREVIEW.select(preview, 0)
-	check(first.material_override.albedo_color == Color("f5ce5f"), "pipe selection highlight")
+	check(first.material_override.get_shader_parameter("base_color") == Color("f5ce5f"), "pipe selection highlight")
 	PREVIEW.select(preview, -1)
 	verify_material(first.material_override, Color("596168"))
 	PREVIEW.apply(preview, prepared)
@@ -70,8 +70,8 @@ func run() -> void:
 				if not view.get_meta("pipe", false): continue
 				view.material_override = GEOMETRY.pipe_material(Color("596168"))
 				if mode == "before":
-					view.material_override.albedo_color = Color8(60,160,230)
-					view.material_override.roughness = 0.72; view.material_override.metallic = 0.0
+					view.material_override.set_shader_parameter("base_color", Color8(60,160,230))
+					view.material_override.set_shader_parameter("roughness", 0.72); view.material_override.set_shader_parameter("metallic",0.0)
 			for i in 4: await process_frame
 			await RenderingServer.frame_post_draw
 			check(root.get_texture().get_image().save_png(capture+"-"+mode+".png") == OK, "fixed camera/light comparison capture")

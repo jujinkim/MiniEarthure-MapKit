@@ -66,7 +66,7 @@ func run() -> void:
 				QUALITY.apply_material(actual,QUALITY.profile(2-level))
 				QUALITY.apply_material(expected,QUALITY.profile(2-level))
 				compare(actual,expected,"live quality "+key)
-		for key: String in ["road:test","asphalt","concrete","rc:floor","rc:wall","rc:road:0"]:
+		for key: String in ["road:test","asphalt","concrete","rc:floor","rc:wall","rc:road:0","rc:support","rc:shell"]:
 			var presentation: Dictionary = rc if key.begins_with("rc:") else urban
 			var actual: ShaderMaterial = RENDER._generated_material(job,key,presentation)
 			var expected: ShaderMaterial = reference(job,key,presentation)

@@ -3,13 +3,28 @@ use mapkit_package::*;
 use std::path::Path;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let help="usage: mapkit audit-roads PACKAGE | design-roads INPUT.json NEW.json | compile-track SOURCE.json NEW.memap | track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
+    let help="usage: mapkit compose-world DOCUMENT.json SOURCE.json ATTACHMENTS.json NEW.json | audit-roads PACKAGE | design-roads INPUT.json NEW.json | compile-track SOURCE.json NEW.memap | track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
     let arg = |i: usize| {
         args.get(i)
             .map(String::as_str)
             .ok_or_else(|| error("E_USAGE", help))
     };
     match arg(0)? {
+        "compose-world" if args.len()==5 => {
+            // The existing v1 sources are compiled transactionally; no geometry,
+            // route proofs or source surfaces are reconstructed by Python tools.
+            let read_json=|path:&str| -> Result<serde_json::Value> {
+                serde_json::from_slice(&std::fs::read(path).map_err(|e|error("E_IO",e.to_string()))?)
+                    .map_err(|e|error("E_JSON",e.to_string()))
+            };
+            let mut d:MapDocument=serde_json::from_value(read_json(arg(1)?)?).map_err(|e|error("E_JSON",e.to_string()))?;
+            let source:Option<mapkit_core::assembled_track::authoring::Source>=serde_json::from_value(read_json(arg(2)?)?).map_err(|e|error("E_TRACK_SOURCE",e.to_string()))?;
+            if let Some(source)=source {d=mapkit_core::assembled_track::composite::apply_source(&d,&source)?;}
+            let attachments=serde_json::from_value(read_json(arg(3)?)?).map_err(|e|error("E_SURFACE_ATTACHMENT",e.to_string()))?;
+            d=mapkit_core::assembled_track::surface::apply(&d,attachments)?;
+            mapkit_core::assembled_track::composite::executable(&d)?;
+            write_new(Path::new(arg(4)?),&canonical(&d)?)?;
+        }
         "design-roads" if args.len()==3 => {
             let mut d:MapDocument=serde_json::from_slice(&std::fs::read(arg(1)?).map_err(|e|error("E_IO",e.to_string()))?).map_err(|e|error("E_JSON",e.to_string()))?;
             for r in &mut d.roads {

@@ -10,6 +10,10 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
 	root.size=Vector2i(1440,900)
+	for object_id: String in ["assembled-road-0","assembled-wall-1","assembled-shell-2","assembled-support-3","assembled-terrain-support-0"]:
+		var key := VENUE.surface_key(object_id)
+		check(not key.is_empty(),"shared track material classification "+object_id)
+		check(VENUE.material(key,1).shader!=null,"shared structure material "+key)
 	for seed in 3:
 		var native: RefCounted = ClassDB.instantiate("MapKitBridge")
 		var settings: Dictionary = JSON.parse_string(native.track_catalogue()).data.defaults

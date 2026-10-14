@@ -118,6 +118,9 @@ func prepare(tree: SceneTree, bridge: RefCounted, meta: Dictionary, doc: Diction
 	var state := StillSky.new();state.profile=doc.environment;state.config=doc.environment.duplicate(true)
 	state.config.merge({"intensity":.3,"aurora_probability":0.0,"celestial_mode":"simple"})
 	state.seconds=float(view.get("time_minutes",doc.environment.start_minutes))*60
+	state.weather=str(view.get("weather","clear"));state.previous_weather=state.weather
+	state.snow=clampf(float(view.get("snow",0.0)),0.0,1.0)
+	state.wet=clampf(float(view.get("wet",0.0)),0.0,1.0)
 	cache.environment_profile=state.profile;cache.quality_profile=QUALITY.active()
 	var window: Dictionary=JSON.parse_string(bridge.cell_window(roundi(camera.position.x*100),roundi(-camera.position.z*100)))
 	if not window.get("ok",false): return window

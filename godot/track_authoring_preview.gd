@@ -26,7 +26,8 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		if vertices.is_empty(): continue
 		var owner := -1
 		if id.begins_with("assembled-road-") or id.begins_with("assembled-wall-"): owner = int(id.get_slice("-", 2))
-		var key := "rc:wall" if id.begins_with("assembled-wall") or id.begins_with("assembled-shell") or id.begins_with("assembled-support") else "rc:floor" if id == "assembled-venue-floor" else "rc:road:"+str(maxi(0,owner)%4)
+		var key := preload("./rc_venue.gd").surface_key(id)
+		if key.is_empty(): key="rc:road:"+str(maxi(0,owner)%4)
 		objects[id] = {"vertices":vertices, "owner":owner, "color":Color("b9c9d0") if key=="rc:wall" else Color("448fac"), "lit":true, "material_key":key, "seed":int(assembly.get("settings",{}).get("seed",0)), "pose":Transform3D.IDENTITY}
 	for raw: Dictionary in result.data.gimmicks:
 		if token != null and token.is_cancelled(): return {"error":"Track preview cancelled."}
@@ -51,6 +52,7 @@ static func prepare(document: Dictionary, bridge: RefCounted = null, previous: D
 		var panel := GIMMICK.panel_style(g)
 		for i in groups.size():
 			rows[g.id + ":%d" % i] = {"vertices":groups[i], "owner":owner, "color":color, "emission":emission, "pipe":GIMMICK.is_pipe(g), "lit":true, "pose":GIMMICK.pose(g, 0)}
+			rows[g.id + ":%d" % i]["structure"]=GIMMICK.is_structure(g)
 			if not panel.is_empty(): rows[g.id + ":%d" % i]["panel"] = panel
 		if g.motion.kind == "air_ring":
 			var top := 0.0
@@ -139,6 +141,7 @@ static func apply(root: Node3D, prepared: Dictionary, selected := -1) -> void:
 		view.set_meta("color", entry.color)
 		view.set_meta("road", id.begins_with("assembled-road-"))
 		view.set_meta("pipe", entry.get("pipe", false))
+		view.set_meta("structure", entry.get("structure", false))
 		var material := StandardMaterial3D.new()
 		material.albedo_color = entry.color
 		material.roughness = 0.72
@@ -147,10 +150,10 @@ static func apply(root: Node3D, prepared: Dictionary, selected := -1) -> void:
 			material.emission_enabled = true
 			material.emission = entry.color * 0.35
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
-		view.material_override = GIMMICK.pipe_material(entry.color) if entry.get("pipe", false) else GIMMICK.panel_material(entry.panel) if entry.has("panel") else material
+		view.material_override = GIMMICK.structure_material(entry.color,entry.get("pipe",false)) if entry.get("structure",false) else GIMMICK.panel_material(entry.panel) if entry.has("panel") else material
 		if entry.has("material_key"):
 			var rc := preload("./rc_venue.gd").material(entry.material_key,entry.seed)
-			root.get_meta("material_context").bind_detail(rc,"concrete" if entry.material_key=="rc:wall" else "asphalt")
+			root.get_meta("material_context").bind_detail(rc,str(rc.get_meta("rc_detail_kind")))
 			view.material_override = rc
 			view.set_meta("color",rc.get_shader_parameter("base_color"))
 		root.add_child(view)
@@ -163,7 +166,7 @@ static func select(root: Node3D, selected: int) -> void:
 	for view: MeshInstance3D in root.get_meta("objects", {}).values() + root.get_meta("draft_objects", {}).values():
 		var color: Color = Color("f5ce5f") if (view.get_meta("road") or view.get_meta("pipe", false)) and view.get_meta("owner") == selected else view.get_meta("color")
 		if view.material_override is ShaderMaterial:
-			if view.get_meta("road", false): view.material_override.set_shader_parameter("base_color",color)
+			if view.get_meta("road", false) or view.get_meta("structure", false): view.material_override.set_shader_parameter("base_color",color)
 		else: view.material_override.albedo_color = color
 
 static func create(document: Dictionary, selected := -1) -> Node3D:

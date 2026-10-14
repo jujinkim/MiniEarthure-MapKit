@@ -9,13 +9,14 @@ func check(ok: bool, message: String) -> void:
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
 	root.size=Vector2i(1200,900)
-	for kind in ["banked_chicane","overpass","roller_waves","offset_jump"]:
+	var width := int(OS.get_environment("RC_PIECE_WIDTH")) if OS.has_environment("RC_PIECE_WIDTH") else 400
+	for kind in ["straight","curve","curve_left","slope","slope_down","loop","cylinder","cylinder_curve","banked_chicane","overpass","roller_waves","offset_jump"]:
 		if OS.has_environment("RC_PIECE_KINDS") and kind not in OS.get_environment("RC_PIECE_KINDS").split(","): continue
 		var native: RefCounted = ClassDB.instantiate("MapKitBridge")
 		var source: Dictionary=JSON.parse_string(native.track_shortcut_source()).data
 		source.original_seed=null
 		for key in ["connections","paths","checkpoints","actions","attachments"]: source[key]=[]
-		source.instances=[{"id":"gallery","preset":kind,"position_cm":[0,0,0],"rotation_mdeg":[0,0,0],"width_cm":400,"entry_width_cm":400,"exit_width_cm":400,"control_points":[]}]
+		source.instances=[{"id":"gallery","preset":kind,"position_cm":[0,0,0],"rotation_mdeg":[0,0,0],"width_cm":width,"entry_width_cm":width,"exit_width_cm":width,"control_points":[]}]
 		var generated: Dictionary=JSON.parse_string(native.compile_track_source(JSON.stringify(source)))
 		check(generated.ok,"explicit gallery source "+kind)
 		if not generated.ok: continue

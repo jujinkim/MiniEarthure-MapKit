@@ -104,6 +104,16 @@ def flowerbed(distant=False):
         crown(m,(x,.73,0),(.65,.55,1.8),i+71,RED if i%2 else GOLD)
     return m
 
+def pergola(distant=False):
+    m=Mesh(distant)
+    for x in (-5.5,0,5.5):
+        for z in (-2.4,2.4):m.solid((x,1.9,z),(.23,3.8,.23),TRIM,True)
+    for z in (-2.4,2.4):m.solid((0,3.8,z),(12,.25,.25),TEAL,True)
+    for x in (-5.5,-3.7,-1.8,0,1.8,3.7,5.5):m.solid((x,4,0),(.25,.22,5.5),GOLD)
+    # Banded fabric keeps the arcade's volume readable even at distance.
+    for x in (-4.5,-1.5,1.5,4.5):m.solid((x,3.95,0),(2.5,.08,4.5),TRIM)
+    return m
+
 def pier(height,distant=False):
     m=Mesh(distant)
     for x in (-3.6,3.6):m.solid((x,(height-.7)/2,0),(1.8,height-.7,2.7),STONE,True)
@@ -113,5 +123,5 @@ def pier(height,distant=False):
 
 def library():
     return assemble_library({'observation-wheel':wheel,'carousel':carousel,'decorative-coaster':coaster,
-        **{'park-kiosk-'+str(i):lambda far,i=i:kiosk(i,far) for i in range(3)},'queue-rail':queue,'flowerbed':flowerbed,
+        **{'park-kiosk-'+str(i):lambda far,i=i:kiosk(i,far) for i in range(3)},'queue-rail':queue,'flowerbed':flowerbed,'park-pergola':pergola,
         'sky-pier-low':lambda far:pier(59.8,far),'sky-pier-high':lambda far:pier(77.8,far)},'park_assets.py')

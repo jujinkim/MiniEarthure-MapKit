@@ -83,13 +83,19 @@ static func is_pipe(g: Dictionary) -> bool:
 	return g.get("track", {}).get("kind", "") in ["cylinder", "swept_cylinder"]
 
 ## Shared display/authoring material. Stored colours remain authoritative.
-static func pipe_material(color: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.82
-	material.metallic = 0.65
-	material.emission_enabled = false
+static func structure_material(color: Color, pipe := false) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader=preload("./track_structure.gdshader")
+	material.set_shader_parameter("base_color",color)
+	material.set_shader_parameter("roughness",0.82 if pipe else 0.72)
+	material.set_shader_parameter("metallic",0.65 if pipe else 0.0)
 	return material
+
+static func pipe_material(color: Color) -> ShaderMaterial:
+	return structure_material(color,true)
+
+static func is_structure(g: Dictionary) -> bool:
+	return g.has("track") or g.motion.kind=="static"
 
 static func visual(g: Dictionary) -> Node3D:
 	g = resolved(g)
@@ -102,7 +108,7 @@ static func visual(g: Dictionary) -> Node3D:
 		material.emission_enabled = true
 		material.emission = material.albedo_color * 0.35
 	var panel := panel_style(g)
-	var display_material: Material = pipe_material(material.albedo_color) if is_pipe(g) else panel_material(panel) if not panel.is_empty() else material
+	var display_material: Material = structure_material(material.albedo_color,is_pipe(g)) if is_structure(g) else panel_material(panel) if not panel.is_empty() else material
 	if g.has("track_mesh"):
 		for role: String in ["inner","shell"]:
 			var tool := SurfaceTool.new()

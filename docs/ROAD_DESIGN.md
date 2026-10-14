@@ -78,6 +78,9 @@ Road rounding and safety furniture follow [ROAD_SAFETY](ROAD_SAFETY.md).
 ## CLI and audit
 
 - `mapkit design-roads INPUT.json NEW.json` authors a new document.
+- `mapkit compose-world DOCUMENT.json SOURCE.json ATTACHMENTS.json NEW.json` applies
+  a v1 authored overlay (or JSON `null`) and the shared surface attachments to a
+  fresh document. Validation failures and existing destinations preserve all inputs.
 - `mapkit audit-roads PACKAGE` samples generated collision every 0.5 m on five
   width lines against the designed surface (at most 1 cm deviation), checks
   junction fans/overlap, duplicate terrain contacts, per-cell road-paint budgets

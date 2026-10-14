@@ -92,8 +92,8 @@ static func material_key(chunk: Dictionary, triangle: int) -> String:
 	var presentation: Dictionary = chunk.get("presentation", {})
 	if presentation.has("track_seed"):
 		var object := DATA.object_id(chunk, triangle)
-		if object.begins_with("assembled-road-"): return "rc:road:" + str(int(object.trim_prefix("assembled-road-")) % 4)
-		if object.begins_with("assembled-wall-") or object.begins_with("assembled-support-") or object.begins_with("assembled-shell-"): return "rc:wall"
+		var track_key := preload("./rc_venue.gd").surface_key(object)
+		if not track_key.is_empty(): return track_key
 	var road_keys: PackedStringArray = presentation.get("road_materials", PackedStringArray())
 	if triangle < road_keys.size() and not road_keys[triangle].is_empty(): return road_keys[triangle]
 	var id := str(presentation.get("proxy_materials", {}).get(DATA.object_id(chunk, triangle), ""))
