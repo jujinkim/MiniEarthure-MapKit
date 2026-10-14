@@ -46,7 +46,7 @@ fn composed_shortcut_is_connected_with_shared_progress() {
 
 #[test]
 fn widths_curves_helices_and_continuous_jump() {
-    for &w in track::WIDTHS {
+    for &w in track::supported_widths("gentle90") {
         for preset in [
             "gentle45",
             "gentle90",

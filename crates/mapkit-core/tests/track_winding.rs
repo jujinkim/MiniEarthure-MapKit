@@ -138,7 +138,7 @@ fn all_catalogue_road_tops_face_the_authored_surface_at_supported_widths_and_pla
             }
         }
     }
-    assert_eq!(cases, 747, "every catalogue width and placement is audited");
+    assert_eq!(cases, track::catalogue_ids().iter().map(|id| track::supported_widths(id).len()*PLACEMENTS.len()).sum::<usize>(), "every catalogue width and placement is audited");
     println!("CATALOGUE_ROAD_WINDING cases={cases} faces={faces}");
 }
 
@@ -490,4 +490,24 @@ fn catalogue_geometry_audit_includes_tapers_editor_curves_and_special_surfaces()
         std::fs::write(path, serde_json::to_vec_pretty(&serde_json::json!({"cases":reports,"special_meshes":special_reports})).unwrap()).unwrap();
     }
     assert!(failed.is_empty(), "geometry failures (first eight): {:?}", &failed[..failed.len().min(8)]);
+}
+
+#[test]
+fn ultra_wide_tapers_keep_surface_winding_and_snapped_wall_seams() {
+    for preset in ["straight_ultra_wide","gentle90_ultra_wide","gentle90_ultra_wide_left","right90_ultra_wide","right90_ultra_wide_left"] {
+        for rotation in PLACEMENTS {
+            for [entry,exit] in [[1800,1800],[400,1800],[1800,400]] {
+                let mut road=instance("wide",preset,1800);
+                road.rotation_mdeg=rotation; road.position_cm=[137,211,389];
+                road.entry_width_cm=entry; road.exit_width_cm=exit;
+                let next=snap(&instance("next","straight",800),&road).unwrap();
+                assert_eq!(piece(&road).unwrap().path.last().unwrap().ribbon_cm,piece(&next).unwrap().path[0].ribbon_cm);
+                let mut source=Source::empty(); source.instances=vec![road,next];
+                source.connections.push(Connection{from:"wide".into(),to:"next".into()});
+                let document=track::document_from_assembly(compile(&source).unwrap()).unwrap();
+                let (faces,failures)=audit_road_geometry(&document);
+                assert!(faces>0 && failures.is_empty(),"{preset} {rotation:?} {entry}/{exit}: {failures:?}");
+            }
+        }
+    }
 }

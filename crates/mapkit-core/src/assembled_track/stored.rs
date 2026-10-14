@@ -27,8 +27,8 @@ impl Assembly {
         }
         for p in &self.pieces {
             cancellation::checkpoint()?;
-            if !catalogue_ids().contains(&p.id.as_str()) || !(1..=1200).contains(&p.width_cm)
-                || !(1..=1200).contains(&p.entry_width_cm) || !(1..=1200).contains(&p.exit_width_cm)
+            if !catalogue_ids().contains(&p.id.as_str()) || !(1..=supported_widths(&p.id).iter().copied().max().unwrap_or(1200).max(1200)).contains(&p.width_cm)
+                || !(1..=maximum_port_width(&p.id)).contains(&p.entry_width_cm) || !(1..=maximum_port_width(&p.id)).contains(&p.exit_width_cm)
                 || p.path.len()<2 || (!p.alternate_path.is_empty() && p.alternate_path.len()<2)
                 || !coordinate(p.origin_cm) || !coordinate(p.reserved_min_cm) || !coordinate(p.reserved_max_cm)
                 || (0..3).any(|i|p.reserved_min_cm[i]>p.reserved_max_cm[i])

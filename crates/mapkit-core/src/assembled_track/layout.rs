@@ -113,7 +113,7 @@ fn short_seam(last: &Sample, goal: &Sample) -> Option<Piece> {
     let dot=|a: Vertex,b: Vertex| (0..3).map(|j|a[j] as f64*b[j] as f64/1e12).sum::<f64>();
     if dot(direction,last.forward)<0.5 || dot(direction,goal.forward)<0.5 {return None;}
     let reach=(gap/3).max(50) as i64;
-    let mut p=variant("free_curve",400,last.lateral_cm*2,goal.lateral_cm*2);
+    let mut p=variant("free_curve",800,last.lateral_cm*2,goal.lateral_cm*2);
     p.control_points=vec![last.position_cm,
         add(last.position_cm,last.forward.map(|v|v*reach/1_000_000)),
         add(goal.position_cm,goal.forward.map(|v|-v*reach/1_000_000)),goal.position_cm];
@@ -126,7 +126,7 @@ fn short_seam(last: &Sample, goal: &Sample) -> Option<Piece> {
 fn return_piece(previous: &Piece, id: &str, templates: &mut std::collections::BTreeMap<(String,u32),Piece>) -> Piece {
     let last=previous.path.last().unwrap();
     let yaw=round(libm::atan2(last.forward[0] as f64,last.forward[2] as f64)*180000.0/std::f64::consts::PI) as i32;
-    let template=templates.entry((id.into(),last.lateral_cm*2)).or_insert_with(||materialize(&variant(id,400,last.lateral_cm*2,400)));
+    let template=templates.entry((id.into(),last.lateral_cm*2)).or_insert_with(||materialize(&variant(id,800,last.lateral_cm*2,800)));
     let mut p=template.clone();
     p.origin_cm=last.position_cm;
     p.rotation_mdeg=[0,yaw,0];
@@ -253,10 +253,10 @@ const FAMILY_WEIGHTS: [[u32; 10]; 3] = [
     [16, 10, 24, 18, 8, 8, 6, 6, 3, 1],
     [8, 6, 14, 18, 12, 12, 12, 8, 6, 4],
 ];
-const WIDTH_WEIGHTS: [[u32; 4]; 3] = [
-    [20, 40, 30, 10],
-    [40, 30, 20, 10],
-    [70, 20, 8, 2],
+const WIDTH_WEIGHTS: [[u32; 5]; 3] = [
+    [0, 2, 33, 45, 20],
+    [0, 5, 35, 45, 15],
+    [0, 8, 42, 40, 10],
 ];
 fn difficulty_index(difficulty: &str) -> usize {
     match difficulty { "easy" => 0, "hard" => 2, _ => 1 }
@@ -274,14 +274,16 @@ fn driving_choice(rng: &mut u64, difficulty: usize) -> &'static str {
     family[next(rng) as usize % family.len()]
 }
 fn road_width(rng: &mut u64, id: &str, difficulty: usize) -> u32 {
-    let widths = supported_widths(id);
+    let widths = if ULTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id) { WIDTHS } else { supported_widths(id) };
     let weights: Vec<_> = widths.iter().map(|w| WIDTH_WEIGHTS[difficulty][WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
     widths[weighted_index(rng, &weights)]
 }
 fn driving_piece(rng: &mut u64, difficulty: usize) -> (&'static str, u32) {
     let id = driving_choice(rng, difficulty);
     let width = road_width(rng, id, difficulty);
-    let preset = if width == 1200 {
+    let preset = if width == 1800 {
+        ULTRA_WIDE_PRESETS.iter().find(|(_, base)| *base == id).map_or(id, |(wide, _)| *wide)
+    } else if width == 1200 {
         EXTRA_WIDE_PRESETS.iter().find(|(_, base)| *base == id).map_or(id, |(wide, _)| *wide)
     } else { id };
     (preset, width)
@@ -369,6 +371,7 @@ fn candidate(s: &Settings, attempt: u64) -> Result<Option<Assembly>> {
         for _ in 0..12 {
             let choice = choices[next(&mut rng) as usize % choices.len()];
             let (id, w) = if choice == "driving" { driving_piece(&mut rng, difficulty) }
+                else if category(choice) == "action" { (choice, road_width(&mut rng, choice, difficulty)) }
                 else { (choice, special_width(&mut rng, choice)) };
             if add_block(&mut pieces, id, w) {
                 added = true;
@@ -500,7 +503,8 @@ mod tests {
             let mut wide_seen = std::collections::BTreeSet::new();
             let mut family_counts = [0u32; 10];
             let mut variant_counts = std::collections::BTreeMap::new();
-            let mut width_counts = [0u32; 4];
+            let mut width_counts = [0u32; 5];
+            let mut expected_width_counts = [0.0f64; 5];
             let mut score = 0u64;
             let mut width_sum = 0u64;
             for _ in 0..100_000 {
@@ -509,17 +513,22 @@ mod tests {
                 let (preset, width) = driving_piece(&mut rng, difficulty);
                 let id = base_preset(preset);
                 assert_eq!((id, width, rng), (previous_id, previous_width, previous_rng), "same geometry/width draws and RNG consumption");
-                if preset != id { wide_seen.insert(preset); assert_eq!(width, 1200); }
+                if preset != id { wide_seen.insert(preset); assert!(width == 1200 || width == 1800); }
                 else { assert!(width != 1200 || !EXTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id)); }
                 let family = DRIVING_FAMILIES.iter().position(|v| v.contains(&id)).unwrap();
                 family_counts[family] += 1;
                 *variant_counts.entry(id).or_insert(0u32) += 1;
                 score += family as u64;
                 assert!(supported_widths(preset).contains(&width));
+                let available = if ULTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id) { WIDTHS } else { supported_widths(id) };
+                let total: u32 = WIDTHS.iter().enumerate().filter(|(_, w)| available.contains(w)).map(|(i, _)| WIDTH_WEIGHTS[difficulty][i]).sum();
+                for (i, w) in WIDTHS.iter().enumerate() {
+                    if available.contains(w) { expected_width_counts[i] += f64::from(WIDTH_WEIGHTS[difficulty][i]) / f64::from(total); }
+                }
                 width_counts[WIDTHS.iter().position(|w| *w == width).unwrap()] += 1;
                 width_sum += u64::from(width);
             }
-            assert_eq!(wide_seen, EXTRA_WIDE_PRESETS.iter().map(|(wide, _)| *wide).collect());
+            assert_eq!(wide_seen, EXTRA_WIDE_PRESETS.iter().chain(ULTRA_WIDE_PRESETS.iter()).map(|(wide, _)| *wide).collect());
             for (i, count) in family_counts.iter().enumerate() {
                 assert!(count.abs_diff(FAMILY_WEIGHTS[difficulty][i]*1000) < 700, "family {difficulty}/{i}: {count}");
                 if FAMILY_WEIGHTS[difficulty][i] == 0 { assert_eq!(*count, 0); }
@@ -528,7 +537,8 @@ mod tests {
                 }
             }
             for (i, count) in width_counts.iter().enumerate() {
-                assert!(count.abs_diff(WIDTH_WEIGHTS[difficulty][i]*1000) < 700);
+                assert!((f64::from(*count)-expected_width_counts[i]).abs() < 700.0);
+                if i == 0 { assert_eq!(*count, 0); }
             }
             scores.push(score);
             widths.push(width_sum);
@@ -548,6 +558,7 @@ mod tests {
                 assert!(a.pieces.iter().all(|p| category(&p.id)=="driving"));
                 assert!(a.pieces.iter().take(START_PIECES).all(|p|p.id=="straight" && p.width_cm==800 && p.path.iter().all(|s|s.lateral_cm==400)));
                 assert!(a.estimated_msec.abs_diff(u32::from(s.duration_seconds)*1000)<=u32::from(s.duration_seconds)*100);
+                assert!(a.pieces.iter().filter(|p| p.id != "finish_plaza").all(|p| p.width_cm >= 600));
                 assert!(a.pieces.len() <= MAX_PIECES);
                 assert!(a.pieces.iter().map(|p|p.path.len()).sum::<usize>() <= MAX_SAMPLES);
                 complexity[index] += a.pieces.iter().filter_map(|p|DRIVING_FAMILIES.iter().position(|v|v.contains(&base_preset(&p.id)))).sum::<usize>();
@@ -566,6 +577,7 @@ mod tests {
         assert!(pieces[start..].iter().filter(|p|p.id!="free_curve").count()>=3);
         for p in &pieces[start..] {
             assert_eq!(*p,materialize(p));
+            assert_eq!(p.width_cm,800);
             if p.id=="free_curve" {assert!(p.control_points.windows(2).map(|w|distance(w[0],w[1])).sum::<u64>()<=MAX_SEAM_CONTROLS_CM);}
         }
         assert!(authoring::joined(pieces.last().unwrap().path.last().unwrap(),&pieces[0].path[0]));
@@ -601,6 +613,9 @@ mod tests {
             if let Some(a) = candidate(&settings, 0).unwrap() {
                 assert!(a.seed_source.is_some());
                 assert_eq!(a.routes.len(), 2);
+                assert_eq!(a.pieces[3].exit_width_cm, 800);
+                assert_eq!(a.pieces[4].width_cm, 800);
+                assert!(a.pieces.iter().any(|p| p.id == "flight_curve" && p.width_cm == 400));
                 found = true;
                 break;
             }

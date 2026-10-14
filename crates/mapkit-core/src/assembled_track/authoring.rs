@@ -230,8 +230,8 @@ pub fn piece(instance: &Instance) -> Result<Piece> {
     }
     if !catalogue_ids().contains(&instance.preset.as_str())
         || !supported_widths(&instance.preset).contains(&instance.width_cm)
-        || !(minimum_port_width(&instance.preset)..=1200).contains(&instance.entry_width_cm)
-        || !(minimum_port_width(&instance.preset)..=1200).contains(&instance.exit_width_cm)
+        || !(minimum_port_width(&instance.preset)..=maximum_port_width(&instance.preset)).contains(&instance.entry_width_cm)
+        || !(minimum_port_width(&instance.preset)..=maximum_port_width(&instance.preset)).contains(&instance.exit_width_cm)
         || instance
             .position_cm
             .iter()
@@ -960,7 +960,7 @@ pub fn shortcut_source() -> Source {
     }
     let mut lower = instance("lower-zigzag", "free_curve", 800);
     lower.entry_width_cm = 800;
-    lower.exit_width_cm = 400;
+    lower.exit_width_cm = 800;
     lower.control_points = vec![
         [0, 0, 2400],
         [0, 0, 3000],
@@ -974,10 +974,11 @@ pub fn shortcut_source() -> Source {
         [0, 0, 10400],
     ];
     s.instances.push(lower);
-    let mut join = instance("merge", "straight", 400);
+    let mut join = instance("merge", "straight", 800);
     join.position_cm = [0, 0, 10400];
     s.instances.push(join);
     let mut finish = instance("finish", "finish_plaza", 400);
+    finish.entry_width_cm = 800;
     finish.position_cm = [0, 0, 11200];
     s.instances.push(finish);
     let mut approach = instance("jump-approach", "free_curve", 400);
@@ -1001,7 +1002,7 @@ pub fn shortcut_source() -> Source {
     ];
     s.instances.push(upper);
     let mut exit = instance("landing-merge", "free_curve", 400);
-    exit.exit_width_cm = 400;
+    exit.exit_width_cm = 800;
     exit.control_points = vec![
         [800, 500, 7500],
         [800, 500, 7900],
@@ -1089,6 +1090,7 @@ pub fn shortcut_source() -> Source {
 pub(super) fn seed_runway(a: &Assembly) -> Result<Assembly> {
     let mut source = from_assembly(a);
     source.checkpoints[0].sample = a.pieces[2].path.len()-1;
+    source.checkpoints.dedup();
     let mut out = compile(&source)?;
     executable(&out)?;
     checkpoint_budget(&out)?;
@@ -1141,7 +1143,10 @@ pub(super) fn seed_shortcut(a: &Assembly) -> Result<Assembly> {
     source.actions.push(example.actions[0].clone());
     let compiled = compile(&source)?;
     source.checkpoints=automatic_checkpoints(&compiled).into_iter().map(|(piece,sample)|Checkpoint{piece:source.instances[piece].id.clone(),sample}).collect();
+    // The branch boundary can already select the runway endpoint. Moving gate
+    // zero there must not publish the same source checkpoint twice.
     source.checkpoints[0].sample = compiled.pieces[2].path.len()-1;
+    source.checkpoints.dedup();
     let mut out = compile(&source)?;
     executable(&out)?;
     checkpoint_budget(&out)?;

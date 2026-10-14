@@ -5,7 +5,7 @@ fn templates() -> BTreeMap<String, gimmick::Gimmick> {
 }
 #[test]
 fn loop_upper_arc_preserves_height_without_a_tight_crown() {
-    for radius in [150,250,350,600] {
+    for radius in [150,250,350,525,600] {
         let mut t=templates()["loop"].track.clone().unwrap();
         t.radius_cm=radius;
         let mesh=t.mesh();
@@ -27,7 +27,7 @@ fn loop_upper_arc_preserves_height_without_a_tight_crown() {
 }
 #[test]
 fn loop_mesh_ends_match_centimetre_road_ports_and_shell_is_closed() {
-    for radius in [150,250,350,600] { for width in [140,220,400,600] {
+    for radius in [150,250,350,525,600] { for width in [140,220,400,600] {
         let mut t=templates()["loop"].track.clone().unwrap();
         t.radius_cm=radius;t.width_cm=width;
         let mesh=t.mesh();

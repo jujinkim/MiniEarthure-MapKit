@@ -16,7 +16,7 @@ pub const FINISH_WALL_CM: i64 = 120;
 /// Outward only: authored lane width and barrier height do not change.
 pub const WALL_THICKNESS_CM: i64 = 50;
 const SLOT: i64 = TILE_CM * 4;
-const LOOP_RADIUS: u32 = 350;
+const LOOP_RADIUS: u32 = 525;
 const LOOP_WIDTH: u32 = MIN_WIDTH_CM;
 const LOOP_OFFSET: i64 = crate::special_track::loop_offset_cm(LOOP_WIDTH);
 const SPEED: i64 = 900;
@@ -32,7 +32,9 @@ mod panels;
 mod junction;
 mod walls;
 mod layout;
-pub const WIDTHS: &[u32] = &[400, 600, 800, 1200];
+pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
+const ROAD_WIDTHS: &[u32] = &[400, 600, 800, 1200];
+pub const MAX_PORT_WIDTH_CM: u32 = 1800;
 mod grounding;
 pub use grounding::Support;
 pub(crate) use grounding::terrain_supports;
@@ -108,6 +110,7 @@ fn basic_ids() -> &'static [&'static str] {
         "approach",
         "straight",
         "straight_extra_wide",
+        "straight_ultra_wide",
         "curve",
         "curve_left",
         "sharp_curve",
@@ -303,10 +306,15 @@ pub struct VenueFloor {
 pub fn catalogue_ids() -> &'static [&'static str] {
     &[
         "straight_extra_wide",
+        "straight_ultra_wide",
         "gentle90_extra_wide",
         "gentle90_extra_wide_left",
         "right90_extra_wide",
         "right90_extra_wide_left",
+        "gentle90_ultra_wide",
+        "gentle90_ultra_wide_left",
+        "right90_ultra_wide",
+        "right90_ultra_wide_left",
         "gentle45",
         "gentle45_left",
         "gentle90",
@@ -387,8 +395,15 @@ const EXTRA_WIDE_PRESETS: [(&str, &str); 5] = [
     ("right90_extra_wide", "right90"),
     ("right90_extra_wide_left", "right90_left"),
 ];
+const ULTRA_WIDE_PRESETS: [(&str, &str); 5] = [
+    ("straight_ultra_wide", "straight"),
+    ("gentle90_ultra_wide", "gentle90"),
+    ("gentle90_ultra_wide_left", "gentle90_left"),
+    ("right90_ultra_wide", "right90"),
+    ("right90_ultra_wide_left", "right90_left"),
+];
 fn base_preset(id: &str) -> &str {
-    EXTRA_WIDE_PRESETS.iter().find(|(wide, _)| *wide == id).map_or(id, |(_, base)| *base)
+    EXTRA_WIDE_PRESETS.iter().chain(ULTRA_WIDE_PRESETS.iter()).find(|(wide, _)| *wide == id).map_or(id, |(_, base)| *base)
 }
 fn catalogue_piece(id: &str) -> Piece {
     let width = catalogue_width(id);
@@ -448,7 +463,7 @@ pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,"wall_thickness_cm":WALL_THICKNESS_CM,
         "min_width_cm":MIN_WIDTH_CM,"loop_min_width_cm":MIN_WIDTH_CM,"pipe_default_radius_cm":SpecialTrack::DEFAULT_PIPE_RADIUS_CM,"pipe_radii_cm":SpecialTrack::PIPE_RADII_CM,"loop_default_width_cm":MIN_WIDTH_CM,"pipe_min_radius_cm":crate::special_track::SpecialTrack::MIN_PIPE_RADIUS_CM,"tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
         "selection_ids":selection_ids(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
-        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
+        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"max_port_width_cm":maximum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
@@ -471,21 +486,26 @@ pub fn catalogue_fingerprint() -> String {
     .clone()
 }
 pub fn supported_widths(id: &str) -> &'static [u32] {
-    if base_preset(id) != id {
+    if ULTRA_WIDE_PRESETS.iter().any(|(wide, _)| *wide == id) {
+        &[1800]
+    } else if base_preset(id) != id {
         &[1200]
     } else if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
         &[400]
     } else if id.starts_with("cylinder") {
         &[400, 600]
-    } else if ["tube_entry", "tube_exit"].contains(&id) {
-        WIDTHS
     } else {
-        WIDTHS
+        ROAD_WIDTHS
     }
 }
 pub fn minimum_port_width(_id: &str) -> u32 { MIN_WIDTH_CM }
+pub fn maximum_port_width(id: &str) -> u32 {
+    if pipe_piece(id) || ["loop", "overpass"].contains(&id) { 1200 } else { MAX_PORT_WIDTH_CM }
+}
 fn catalogue_width(id: &str) -> u32 {
-    if base_preset(id) != id {
+    if ULTRA_WIDE_PRESETS.iter().any(|(wide, _)| *wide == id) {
+        1800
+    } else if base_preset(id) != id {
         1200
     } else {
         400

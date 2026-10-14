@@ -14,7 +14,9 @@ Seeded generation settings, categories, catalogue and geometry are owned by
   roll; degenerate tangents are rejected.
 - New roads, loop ribbons and ports require at least 400 cm. Pipe bores use
   400/600 cm with a 400 cm default; the catalogue publishes every minimum, size
-  and default for consumers. Stored v1 validation is separate from compilation.
+  and default for consumers, including `max_port_width_cm` per entry (1800 cm
+  for ordinary roads/transitions). Fixed 18 m bodies use the ultra-wide presets.
+  Stored v1 validation is separate from compilation.
   Project opening materializes a preview from validated saved geometry; it does not
   recompile or resize old sources. Explicit execution export uses current authoring
   verification and reports narrow instances and fields.

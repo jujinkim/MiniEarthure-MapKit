@@ -36,25 +36,36 @@ and package checkpoints retain their explicit positions.
   variant. Family weights (easy/normal/hard): straight 34/16/8, grade 12/10/6,
   gentle corner 34/24/14, right angle 16/18/18, zigzag 4/8/12, sharp135 0/8/12,
   hairpin 0/6/12, spiral90 0/6/8, spiral180 0/3/6, spiral360 0/1/4.
-- Width weights for 4/6/8/12 m: easy 20/40/30/10, normal 40/30/20/10, hard
-  70/20/8/2. The first three straight grid pieces are 8 m wide. Obstacle spacing is 64/32/16 m. API default seed is 1; settings
-  have no weather field.
+- Main-road and action width weights for 4/6/8/12/18 m: easy 0/2/33/45/20,
+  normal 0/5/35/45/15, hard 0/8/42/40/10. Unsupported widths are excluded before
+  normalizing the draw. Only the five ultra-wide shapes support an 18 m body.
+  Runways, main-route merges and circuit returns use 8 m; 4 m ordinary lanes
+  serve shortcuts and required special-structure transitions. Pipe/loop sizes
+  remain their catalogue dimensions. Obstacle spacing is 64/32/16 m. API default
+  seed is 1; settings have no weather field.
 
 ## Catalogue and dimensions
 
-- New ordinary widths: 400/600/800/1200 cm (manual default 400 cm) with eased entry/exit widths. Loops,
+- New ordinary widths: 400/600/800/1200 cm, plus five 1800 cm presets (manual default 400 cm) with eased entry/exit widths. Loops,
   halfpipes and the compact overpass use 400 cm. The public catalogue reports
-  category, supported dimensions and ports.
+  category, supported dimensions and minimum/maximum port widths. Ordinary roads
+  and transitions accept 400–1800 cm ports; dedicated loop/pipe/overpass ports
+  retain their existing limits.
 - Extra-wide presets (fixed 1200 cm body, default 1200 cm ports, ports editable
-  400–1200 cm): `straight_extra_wide` (8 m), `gentle90_extra_wide`/`_left` (90°,
+  400–1800 cm): `straight_extra_wide` (8 m), `gentle90_extra_wide`/`_left` (90°,
   radius 48 m), `right90_extra_wide`/`_left` (90°, radius 8 m). A generated 12 m
   draw of one of those five shapes publishes the extra-wide ID with no extra RNG
   draw. Saved IDs are not rewritten.
+- Ultra-wide presets (fixed 1800 cm body and default ports, editable 400–1800 cm
+  ports): `straight_ultra_wide` (8 m), `gentle90_ultra_wide`/`_left` (radius 72 m),
+  `right90_ultra_wide`/`_left` (radius 11 m). An 18 m draw publishes these IDs
+  without another RNG draw; manual and generated geometry share the same rules.
 - Bend radius for width w (m): gentle 45°/90° max(16, 4w); right-angle 90°
   max(4, w/2+2); sharp 135°/180° max(3, w/2+1). Transitions use the widest section.
 - Helices: 90°/180°/360°, either direction, up/down, radius max(8, w/2+7) m, rises
   2/4/8 m, eased grades.
-- Loop upper arc advance follows radius `r*(1.1 + 0.6*cos(t) + 0.3*cos(2*t))`
+- Newly compiled vertical loops have radius 5.25 m and height 10.5 m, with a
+  4 m ribbon. Helices retain their dimensions. Loop upper arc advance follows radius `r*(1.1 + 0.6*cos(t) + 0.3*cos(2*t))`
   (minimum 0.65r, crown 0.8r); height is 2r. Quintic feet match position, slope and
   curvature to flat road. The acceleration panel sits on the final straight.
 - The overpass lower road uses analytic quarter-circle tangents; empty-control

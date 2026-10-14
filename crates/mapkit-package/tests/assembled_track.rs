@@ -20,14 +20,16 @@ fn manual_acceleration_and_jump_remain_independent_on_reload() {
 
 #[test]
 fn extra_wide_tracks_export_reload_with_routes_and_collision() {
+    for suffix in ["extra_wide", "ultra_wide"] {
     let mut source = authoring::Source::empty();
     source.settings.circuit = false;
-    let presets = ["straight", "straight", "straight", "straight_extra_wide", "sprint_lane", "gentle90_extra_wide",
-        "sprint_lane", "gentle90_extra_wide_left", "sprint_lane", "right90_extra_wide", "sprint_lane", "right90_extra_wide_left", "sprint_lane", "finish_plaza"];
+    let presets = ["straight", "straight", "straight", "straight_extra_wide", "sprint_lane", "sprint_lane", "gentle90_extra_wide",
+        "sprint_lane", "sprint_lane", "gentle90_extra_wide_left", "sprint_lane", "sprint_lane", "right90_extra_wide", "sprint_lane", "sprint_lane", "right90_extra_wide_left", "sprint_lane", "finish_plaza"];
     for (i, preset) in presets.iter().enumerate() {
+        let preset = preset.replace("extra_wide", suffix);
         let id = format!("piece-{i}");
-        let width = if preset.contains("extra_wide") || *preset == "sprint_lane" { 1200 } else { 400 };
-        let mut road = authoring::instance(&id, preset, width);
+        let width = if preset.contains("ultra_wide") { 1800 } else if preset.contains("extra_wide") || preset == "sprint_lane" { 1200 } else { 400 };
+        let mut road = authoring::instance(&id, &preset, width);
         if let Some(previous) = source.instances.last() {
             road = authoring::snap(&road, previous).unwrap();
             source.connections.push(authoring::Connection { from: previous.id.clone(), to: id });
@@ -37,7 +39,7 @@ fn extra_wide_tracks_export_reload_with_routes_and_collision() {
     source.paths.push(authoring::Path { id: "base".into(), pieces: source.instances.iter().map(|i|i.id.clone()).collect() });
     source.checkpoints = vec![authoring::Checkpoint { piece: "piece-2".into(), sample: 0 }, authoring::Checkpoint { piece: format!("piece-{}", presets.len()-1), sample: 2 }];
     let document = package::compile_source(&source).unwrap();
-    assert!(document.assembled_track.as_ref().unwrap().issues.is_empty(), "{:?}", document.assembled_track.as_ref().unwrap().issues);
+    assert!(document.assembled_track.as_ref().unwrap().issues.is_empty(), "{suffix}: {:?}", document.assembled_track.as_ref().unwrap().issues);
     let bytes = pack_bytes(document.clone(), BTreeMap::new()).unwrap();
     let reopened = read_bytes(&bytes).unwrap();
     assert_eq!(reopened.document.assembled_track, document.assembled_track);
@@ -48,6 +50,7 @@ fn extra_wide_tracks_export_reload_with_routes_and_collision() {
     assert_eq!(after, before);
     assert!(after.triangles.iter().any(|t| t.object_id.starts_with("assembled-wall-")));
     package::verify(&reopened.document, &reopened.inspection.world_content_hash, &reopened.document.courses[0]).unwrap();
+    }
 }
 
 #[test]

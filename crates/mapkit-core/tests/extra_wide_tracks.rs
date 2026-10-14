@@ -24,7 +24,7 @@ fn extra_wide_catalogue_dimensions_and_fixed_body_contract() {
         for width in [200, 400, 600, 800, 1199, 1201] {
             assert_eq!(piece(&instance("a", preset, width)).unwrap_err().code, "E_TRACK_SOURCE");
         }
-        for port in [199, 1201] {
+        for port in [199, 1801] {
             for entry in [false, true] {
                 let mut road = instance("a", preset, 1200);
                 if entry { road.entry_width_cm = port; } else { road.exit_width_cm = port; }
