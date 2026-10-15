@@ -4,6 +4,38 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn stored_quarterpipe_placement_is_not_recomputed_on_open() {
+    let mut source=authoring::Source::empty();
+    source.settings.circuit=false;
+    for (i,id) in ["straight","straight","straight","sprint_lane","finish_plaza"].iter().enumerate() {
+        let mut p=authoring::instance(&format!("p{i}"),id,if *id=="finish_plaza" {400} else {800});
+        if let Some(last)=source.instances.last() {
+            p=authoring::snap(&p,last).unwrap();
+            source.connections.push(authoring::Connection{from:last.id.clone(),to:p.id.clone()});
+        }
+        source.instances.push(p);
+    }
+    source.paths.push(authoring::Path{id:"base".into(),pieces:source.instances.iter().map(|p|p.id.clone()).collect()});
+    source.attachments.push(authoring::Attachment{kind:"quarterpipe_left".into(),piece:"p3".into(),path:"main".into(),station_cm:800,side:1});
+    let mut d=package::compile_source(&source).unwrap();
+    // Synthetic saved-v1 placement from the former symmetric-width calculation:
+    // explicit left-rising geometry on the right side, floating away from its wall.
+    let a=d.assembled_track.as_mut().unwrap();
+    let o=&mut a.obstacles[0];
+    let delta=190-o.lateral_cm;
+    o.lateral_cm=190;o.half_width_cm=200;
+    a.generator_fingerprint="0".repeat(64);
+    let g=d.gimmicks.iter_mut().find(|g|g.id=="track-obstacle-0").unwrap();
+    g.position[0]+=delta;g.safety_min_cm[0]+=delta;g.safety_max_cm[0]+=delta;
+    d.validate().unwrap();
+    assert!(verify_document(&d).is_err(),"export/recompile uses current placement");
+    let bytes=pack_stored_preview(d.clone(),BTreeMap::new()).unwrap();
+    let read=read_bytes(&bytes).unwrap();
+    assert_eq!(read.document.assembled_track,d.assembled_track);
+    assert_eq!(read.document.gimmicks,d.gimmicks);
+}
+
+#[test]
 fn composed_seed_templates_roundtrip_as_editable_v1_sources() {
     for id in ["double_jump", "air_ring_chain", "grind_shortcut"] {
         let source = templates::source(id).unwrap();

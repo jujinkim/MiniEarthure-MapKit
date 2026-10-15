@@ -311,10 +311,8 @@ fn safe_without(a: &Assembly, candidate: &Support, placed: &[Support], objects: 
                         if o.jump_station_cm.is_some() {
                             return false;
                         }
-                        intervals.push((
-                            (o.lateral_cm - o.half_width_cm as i64) as f64,
-                            (o.lateral_cm + o.half_width_cm as i64) as f64,
-                        ));
+                        let (lo, hi) = obstacles::lateral_bounds(o);
+                        intervals.push((lo as f64, hi as f64));
                         if o.kind == "slalom_gates" {
                             intervals.push((
                                 (-o.lateral_cm - o.half_width_cm as i64) as f64,

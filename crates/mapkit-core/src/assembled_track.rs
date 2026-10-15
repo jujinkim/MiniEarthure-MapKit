@@ -33,6 +33,7 @@ mod junction;
 mod walls;
 mod layout;
 mod plan;
+mod composition;
 pub mod templates;
 pub use plan::track_seed_defaults;
 pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
@@ -452,6 +453,7 @@ pub fn fingerprint() -> String {
             include_bytes!("curve_sampling.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/plan.rs").as_slice(),
+            include_bytes!("assembled_track/composition.rs").as_slice(),
             include_bytes!("assembled_track/templates.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/panels.rs").as_slice(),
@@ -1141,10 +1143,16 @@ fn next(rng: &mut u64) -> u64 {
     z ^ (z >> 31)
 }
 fn family(id: &str) -> &str {
-    if id.starts_with("cylinder") {
+    if pipe_piece(id) {
         "cylinder"
+    } else if ["jump", "offset_jump", "jump_panel", "double_jump"].contains(&id) {
+        "jump"
+    } else if ["air_ring", "air_ring_chain"].contains(&id) {
+        "air_ring"
+    } else if ["acceleration_panel", "boost_chain"].contains(&id) {
+        "acceleration"
     } else {
-        id
+        base_preset(id).trim_end_matches("_left")
     }
 }
 fn ramp_tiles(width: u32) -> usize {

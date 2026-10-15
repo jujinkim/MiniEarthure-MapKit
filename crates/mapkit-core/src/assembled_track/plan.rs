@@ -43,17 +43,17 @@ pub(super) struct Plan {
 impl Plan {
     pub fn new(seed: u64) -> Self {
         let mut rng = seed ^ 0x636f_7572_7365_3031;
-        // Independent axes permit long/flat action courses, narrow quiet roads,
-        // broad elevated bends, and everything between, without a combined grade.
-        let straight = 8 + draw(&mut rng, 85) as u32;
+        // The seed varies shape and order within the shared density contract,
+        // without a combined difficulty grade or a disabled special category.
+        let straight = 8 + draw(&mut rng, 21) as u32;
         let turn_draw = draw(&mut rng, 35) as u32;
         let turn = turn_draw * turn_draw / 35;
         let elevation = (draw(&mut rng, 32) as u32).saturating_sub(16);
-        let gimmick = (draw(&mut rng, 32) as u32).saturating_sub(16);
-        let action = (draw(&mut rng, 28) as u32).saturating_sub(14);
+        let gimmick = 20 + draw(&mut rng, 21) as u32;
+        let action = 20 + draw(&mut rng, 21) as u32;
         let width = draw(&mut rng, 4) as usize + 1;
         let obstacle_spacing = 1600 + draw(&mut rng, 113) * 100;
-        let shortcut = draw(&mut rng, 4) == 0 && gimmick > 0 && action > 0;
+        let shortcut = draw(&mut rng, 4) == 0;
         let count = 4 + draw(&mut rng, 3) as usize;
         let mut sections = Vec::new();
         for _ in 0..count {
@@ -65,7 +65,7 @@ impl Plan {
             widths[width] += 50;
             sections.push(Section {
                 families: [
-                    straight * if flow == 0 { 4 } else { 1 },
+                    straight,
                     elevation,
                     turn,
                     turn / 2,
@@ -80,7 +80,7 @@ impl Plan {
                     3 + turn / 3,
                 ],
                 categories: [
-                    60 + straight,
+                    30,
                     gimmick * if flow == 2 { 3 } else { 1 },
                     action * if flow == 2 { 3 } else { 1 },
                 ],
@@ -107,23 +107,21 @@ impl Plan {
         let mut actual = vec![[0u64; 3]; self.sections.len()];
         let mut straight = vec![0u64; self.sections.len()];
         let mut driving = vec![0u64; self.sections.len()];
-        for p in &a.pieces {
+        for &index in &a.routes[0].pieces {
+            let p = &a.pieces[index];
             let i = (elapsed as usize * self.sections.len() / target as usize)
                 .min(self.sections.len() - 1);
             elapsed += p.reference_msec;
-            if ["tube_entry", "tube_exit", "finish_plaza"].contains(&p.id.as_str()) {
-                continue;
-            }
             let c = match category(&p.id) {
                 "gimmick" => 1,
                 "action" => 2,
                 _ => 0,
             };
-            actual[i][c] += 1;
+            actual[i][c] += race_length(p);
             if c == 0 {
-                driving[i] += 1;
+                driving[i] += race_length(p);
                 if base_preset(&p.id) == "straight" || p.id == "sprint_lane" {
-                    straight[i] += 1;
+                    straight[i] += race_length(p);
                 }
             }
         }
@@ -159,12 +157,14 @@ impl Plan {
         }
         residual / self.sections.len() as u64
     }
-    pub fn rank(&self, a: &Assembly) -> (bool, u64) {
+    pub fn rank(&self, a: &Assembly, required: &composition::Required) -> (bool, u64) {
         let target = u32::from(a.settings.duration_seconds) * 1000;
         let delta = a.estimated_msec.abs_diff(target);
+        let quality = composition::Composition::assembly(a, required);
         (
-            delta > target / 10,
-            u64::from(delta) * 1000 / u64::from(target) + self.fit(a),
+            delta > target / 10 || !quality.valid(&a.settings),
+            quality.penalty(&a.settings) * 1000 / quality.total()
+                + u64::from(delta) * 1000 / u64::from(target) + self.fit(a),
         )
     }
 }

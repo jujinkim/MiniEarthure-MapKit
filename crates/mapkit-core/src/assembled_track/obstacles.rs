@@ -71,6 +71,100 @@ fn offset(s: &Sample, lateral: i64) -> Vertex {
         right(s).map(|v| round(v as f64 * lateral as f64 / 1e6)),
     )
 }
+fn automatic_kind(kind: &str, side: i64) -> &str {
+    if kind.starts_with("quarterpipe") {
+        if side < 0 { "quarterpipe_left" } else { "quarterpipe_right" }
+    } else { kind }
+}
+fn obstacle_rotation(s: &Sample) -> [i32; 3] {
+    [round(-libm::asin(s.forward[1] as f64 / 1e6) * 180000.0 / std::f64::consts::PI) as i32,
+     round(libm::atan2(s.forward[0] as f64, s.forward[2] as f64) * 180000.0 / std::f64::consts::PI) as i32, 0]
+}
+/// Actual asymmetric local collision bounds; metadata remains a conservative
+/// radius for stored v1 readers. Generation and support clearance share this.
+pub(super) fn lateral_bounds(o: &Obstacle) -> (i64, i64) {
+    if o.kind.starts_with("quarterpipe") {
+        let parts = rc_parts(&o.kind).unwrap();
+        let lo = parts.iter().flat_map(|p| &p.vertices).map(|v| v[0]).min().unwrap();
+        let hi = parts.iter().flat_map(|p| &p.vertices).map(|v| v[0]).max().unwrap();
+        (o.lateral_cm + lo, o.lateral_cm + hi)
+    } else { (o.lateral_cm - i64::from(o.half_width_cm), o.lateral_cm + i64::from(o.half_width_cm)) }
+}
+fn cross2(a: Point, b: Point, c: Point) -> i128 {
+    (b[0]-a[0]) as i128*(c[1]-a[1]) as i128 - (b[1]-a[1]) as i128*(c[0]-a[0]) as i128
+}
+fn convex_footprint(mut points: Vec<Point>) -> Vec<Point> {
+    points.sort_unstable();points.dedup();
+    let mut hull=Vec::new();
+    for &p in &points {
+        while hull.len()>=2 && cross2(hull[hull.len()-2],hull[hull.len()-1],p)<=0 {hull.pop();}
+        hull.push(p);
+    }
+    let lower=hull.len();
+    for &p in points.iter().rev().skip(1) {
+        while hull.len()>lower && cross2(hull[hull.len()-2],hull[hull.len()-1],p)<=0 {hull.pop();}
+        hull.push(p);
+    }
+    hull.pop();hull
+}
+// A convex footprint must fit the entire (possibly concave) ribbon: checking
+// just its corners misses a curved wall or a narrowing between two corners.
+fn contains_footprint(boundary: &[Point], footprint: &[Point]) -> bool {
+    let n=footprint.len();
+    footprint.iter().all(|p| point_in_polygon(*p,boundary))
+        && !boundary.iter().any(|p| (0..n).all(|i| cross2(footprint[i],footprint[(i+1)%n],*p)>0))
+        && (0..n).all(|i| (0..boundary.len()).all(|j| {
+            let (a,b)=(footprint[i],footprint[(i+1)%n]);
+            let (c,d)=(boundary[j],boundary[(j+1)%boundary.len()]);
+            cross2(a,b,c).signum()*cross2(a,b,d).signum()>=0
+                || cross2(c,d,a).signum()*cross2(c,d,b).signum()>=0
+        }))
+}
+fn wall_distance(p: Point, wall: &[Point]) -> f64 {
+    wall.windows(2).map(|w| {
+        let d=[(w[1][0]-w[0][0]) as f64,(w[1][1]-w[0][1]) as f64];
+        let q=[(p[0]-w[0][0]) as f64,(p[1]-w[0][1]) as f64];
+        let t=((d[0]*q[0]+d[1]*q[1])/(d[0]*d[0]+d[1]*d[1]).max(1.0)).clamp(0.0,1.0);
+        libm::sqrt((q[0]-t*d[0]).powi(2)+(q[1]-t*d[1]).powi(2))
+    }).fold(f64::INFINITY,f64::min)
+}
+fn quarterpipe_lateral(path: &[Sample], s: &Sample, kind: &str, side: i64) -> Option<i64> {
+    let rotation=obstacle_rotation(s);
+    let edges:Vec<_>=path.iter().map(|s|geometry::ribbon_edges(s,0).map(|v|[v[0],v[2]])).collect();
+    let wall:Vec<_>=edges.iter().map(|e|e[usize::from(side>0)]).collect();
+    // Reserve a connected 220 cm strip along the opposite wall, following the
+    // true ribbon through bends/tapers instead of assuming a symmetric width.
+    let available:Vec<_>=edges.iter().map(|e| {
+        let mut e=*e;
+        let d=[e[1][0]-e[0][0],e[1][1]-e[0][1]];
+        let len=libm::sqrt((d[0]*d[0]+d[1]*d[1]) as f64).max(1.0);
+        let i=usize::from(side<0);
+        for j in 0..2 {e[i][j]+=round(side as f64*d[j] as f64*(PASSAGE_CM+1) as f64/len);}
+        e
+    }).collect();
+    let boundary:Vec<_>=available.iter().map(|e|e[0]).chain(available.iter().rev().map(|e|e[1])).collect();
+    let parts=rc_parts(kind)?;
+    let points:Vec<_>=parts.iter().flat_map(|p|&p.vertices).map(|&v| {
+        let v=geometry::rotate3(v,rotation);[v[0],v[2]]
+    }).collect();
+    let hull=convex_footprint(points);
+    let outside=parts.iter().flat_map(|p|&p.vertices).map(|v|side*v[0]).max().unwrap()*side;
+    let nominal=side*(i64::from(s.lateral_cm)-1)-outside;
+    for delta in 0..=20 {
+        for direction in [-1,1] {
+            let lateral=nominal+direction*delta;
+            let position=offset(s,lateral);
+            let footprint:Vec<_>=hull.iter().map(|p|[p[0]+position[0],p[1]+position[2]]).collect();
+            if !contains_footprint(&boundary,&footprint) {continue;}
+            if automatic_kind(kind,side)==kind && !(-150..=150).step_by(10).all(|z| {
+                let high=add(offset(s,lateral),geometry::rotate3([side*200,200,z],rotation));
+                wall_distance([high[0],high[2]],&wall)<=10.0
+            }) {continue;}
+            return Some(lateral);
+        }
+    }
+    None
+}
 pub(super) fn sample(path: &[Sample], station: u64) -> Sample {
     let mut at = 0;
     for w in path.windows(2) {
@@ -222,9 +316,10 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
         }
         half = half.min(t.lateral_cm as i64);
     }
+    let quarter = kind.starts_with("quarterpipe");
     let sweep = match kind {
         "ramp_low" | "ramp_standard" | "ramp_triple" => 160,
-        "quarterpipe_left" | "quarterpipe_right" => 200,
+        "quarterpipe_left" | "quarterpipe_right" => 208,
         "grind_rail" => 20,
         "fixed_obstacle" => 20,
         "moving_obstacle" => 40, // 40cm box plus 40cm translation, centred on sweep
@@ -233,10 +328,11 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
         "slalom_gates" => 70.min((half * 2 - PASSAGE_CM - 20) / 4),
         _ => 70.min((half * 2 - PASSAGE_CM - 10) / 2),
     };
-    if sweep < 20 || sweep * 2 + PASSAGE_CM + 10 > half * 2 {
+    if sweep < 20 || (!quarter && sweep * 2 + PASSAGE_CM + 10 > half * 2) {
         return None;
     }
-    let lateral = side * (half - sweep - 10);
+    let lateral = if quarter { quarterpipe_lateral(path, &s, kind, side)? }
+        else { side * (half - sweep - 10) };
     let avoid = if slalom { 0 } else { -side * (half - PASSAGE_CM / 2) };
     let o = Obstacle {
         kind: kind.into(),
@@ -261,6 +357,7 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
     } else {
         30
     };
+    if !quarter {
     for x in [
         lateral - sweep,
         lateral + sweep,
@@ -286,6 +383,7 @@ fn safe_site(a: &Assembly, site: &Site, kind: &str, side: i64) -> Option<Obstacl
                 return None;
             }
         }
+    }
     }
     let g = gimmick(a, &o, 0);
     let occupied = g.occupancy_bounds();
@@ -385,7 +483,7 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
         'search: for offset in 0..end - begin {
             let site = &sites[begin + (start + offset) % (end - begin)];
             for n in 0..KINDS.len() {
-                let Some(o) = safe_site(a, site, KINDS[(kind_start + n) % KINDS.len()], side)
+                let Some(o) = safe_site(a, site, automatic_kind(KINDS[(kind_start + n) % KINDS.len()], side), side)
                 else {
                     continue;
                 };
@@ -422,14 +520,7 @@ pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
     let mut g = Gimmick {
         id: format!("track-obstacle-{index}"),
         position: offset(&s, o.lateral_cm),
-        rotation_mdeg: [
-            round(-libm::asin(s.forward[1] as f64 / 1e6) * 180000.0 / std::f64::consts::PI) as i32,
-            round(
-                libm::atan2(s.forward[0] as f64, s.forward[2] as f64) * 180000.0
-                    / std::f64::consts::PI,
-            ) as i32,
-            0,
-        ],
+        rotation_mdeg: obstacle_rotation(&s),
         scale_per_mille: [1000; 3],
         parts: vec![],
         curved_faces: vec![],
@@ -528,6 +619,116 @@ mod tests {
         assert_eq!(seed_fence_lines(&a),original);
     }
     #[test]
+    fn quarterpipes_face_outward_touch_the_wall_and_roundtrip_source() {
+        for width in [800,1200] {
+            for side in [-1,1] {
+                let mut a=fixture("sprint_lane",width);
+                let kind=automatic_kind("quarterpipe_left",side);
+                assert_eq!(kind,if side<0 {"quarterpipe_left"} else {"quarterpipe_right"});
+                assert_eq!(automatic_kind("quarterpipe_right",side),kind);
+                let o=safe_site(&a,&Site{piece:3,branch:false,station:800},kind,side).unwrap_or_else(||panic!("quarterpipe {width}/{side}"));
+                let g=gimmick(&a,&o,0);
+                for part in &g.parts {
+                    for v in &part.vertices {
+                        let x=o.lateral_cm+v[0];
+                        assert!(x.abs()<=i64::from(width/2));
+                        assert!(i64::from(width/2)+side*x>=PASSAGE_CM);
+                        if v[1]==200 {
+                            let gap=i64::from(width/2)-side*x;
+                            assert!((0..=10).contains(&gap),"{width}/{side}: {gap}");
+                        }
+                    }
+                }
+                a.obstacles=vec![o.clone()];
+                let mut source=authoring::from_assembly(&a);
+                source.grounded_supports=false;
+                let compiled=authoring::compile(&source).unwrap();
+                assert_eq!(compiled.obstacles,vec![o]);
+                assert_eq!(gimmick(&compiled,&compiled.obstacles[0],0),g);
+                // Explicit manual handedness is independent of the selected side.
+                source.attachments[0].kind=automatic_kind(kind,-side).into();
+                let manual=authoring::compile(&source).unwrap();
+                assert_eq!(manual.obstacles[0].kind,source.attachments[0].kind);
+            }
+        }
+    }
+    #[test]
+    fn quarterpipes_reject_curved_walls_tapers_and_pinched_bypass() {
+        let site=Site{piece:3,branch:false,station:800};
+        assert!(safe_site(&fixture("sprint_lane",600),&site,"quarterpipe_right",1).is_none());
+        let mut accepted=0;
+        let mut rejected=0;
+        for preset in ["gentle90","gentle90_left","right90","right90_left"] {
+            let a=fixture(preset,800);
+            let site=Site{station:length(&a.pieces[3].path)/2,..site.clone()};
+            for side in [-1,1] {
+                if let Some(o)=safe_site(&a,&site,automatic_kind("quarterpipe_left",side),side) {
+                    accepted+=1;
+                    let g=gimmick(&a,&o,0);
+                    let wall:Vec<_>=a.pieces[3].path.iter().map(|s|geometry::ribbon_edges(s,0)[usize::from(side>0)])
+                        .map(|v|[v[0],v[2]]).collect();
+                    for v in g.parts.iter().flat_map(|p|&p.vertices).filter(|v|v[1]==200) {
+                        let world=add(g.position,geometry::rotate3(*v,g.rotation_mdeg));
+                        assert!(wall_distance([world[0],world[2]],&wall)<=10.0);
+                    }
+                } else {rejected+=1;}
+            }
+        }
+        assert!(accepted>0 && rejected>0,"{accepted}/{rejected}");
+        let mut a=fixture("sprint_lane",800);
+        // An abrupt narrowing inside the footprint must be caught even when
+        // the station and both end corners are wide enough.
+        let origin=a.pieces[3].origin_cm;
+        let mut narrow=sample(&a.pieces[3].path,850);
+        narrow.position_cm=add(origin,[0,0,850]);narrow.lateral_cm=250;narrow.ribbon_cm=None;
+        a.pieces[3].path.push(narrow);
+        a.pieces[3].path.sort_by_key(|s|s.position_cm[2]);
+        assert!(safe_site(&a,&site,"quarterpipe_right",1).is_none());
+        let mut tapered=fixture("sprint_lane",800);
+        let mut p=variant("sprint_lane",800,800,1200);
+        p.origin_cm=tapered.pieces[3].origin_cm;
+        tapered.pieces[3]=materialize(&p);
+        assert!(safe_site(&tapered,&site,"quarterpipe_right",1).is_none());
+    }
+    #[test]
+    fn automatic_quarterpipes_keep_handedness_after_yaw_and_source_conversion() {
+        let mut found=std::collections::BTreeSet::new();
+        for seed in 0..64 {
+            let mut a=fixture("sprint_lane",800);
+            a.settings.seed=seed;
+            a.obstacles=place(&a).unwrap().0;
+            for o in &a.obstacles {
+                if !o.kind.starts_with("quarterpipe") {continue;}
+                let side=if o.lateral_cm<0 {-1} else {1};
+                assert_eq!(o.kind,automatic_kind(&o.kind,side));
+                found.insert(side);
+                let mut source=authoring::from_assembly(&a);
+                source.grounded_supports=false;
+                assert_eq!(authoring::compile(&source).unwrap().obstacles,a.obstacles);
+            }
+        }
+        assert_eq!(found,[-1,1].into());
+        for yaw in [17000,45000,90000,-123000] {
+            let mut a=fixture("sprint_lane",800);
+            for p in &mut a.pieces {
+                p.origin_cm=geometry::rotate3(p.origin_cm,[0,yaw,0]);
+                p.rotation_mdeg=[0,yaw,0];
+                *p=materialize(p);
+            }
+            for side in [-1,1] {
+                let kind=automatic_kind("quarterpipe_left",side);
+                let o=safe_site(&a,&Site{piece:3,branch:false,station:800},kind,side).unwrap_or_else(||panic!("yaw {yaw}/{side}: lateral {:?}",quarterpipe_lateral(&a.pieces[3].path,&sample(&a.pieces[3].path,800),kind,side)));
+                let g=gimmick(&a,&o,0);
+                let wall:Vec<_>=a.pieces[3].path.iter().map(|s|geometry::ribbon_edges(s,0)[usize::from(side>0)])
+                    .map(|v|[v[0],v[2]]).collect();
+                for v in g.parts.iter().flat_map(|p|&p.vertices).filter(|v|v[1]==200) {
+                    let w=add(g.position,geometry::rotate3(*v,g.rotation_mdeg));
+                    assert!(wall_distance([w[0],w[2]],&wall)<=10.0,"{yaw}/{side}");
+                }
+            }
+        }
+    }
+    #[test]
     fn resolved_attachments_fit_three_widths_and_use_real_motion_geometry() {
         for width in [400, 600, 800] {
             let a = fixture("sprint_lane", width);
@@ -555,7 +756,8 @@ mod tests {
                     assert_eq!(o.jump_station_cm, Some(550));
                 } else {
                     assert!(o.avoid_lateral_cm.abs() + 45 <= (width / 2) as i64);
-                    assert!(o.lateral_cm.abs() + o.half_width_cm as i64 <= (width / 2) as i64 - 10);
+                    let (lo,hi)=lateral_bounds(&o);
+                    assert!(lo>=-(width as i64/2) && hi<=width as i64/2);
                 }
                 let expected = match *kind {
                     "moving_obstacle" | "piston_gates" => MotionKind::Translate,

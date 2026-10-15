@@ -15,10 +15,14 @@ and package checkpoints retain their explicit positions.
 ## Generation settings
 
 - `categories: ["driving", "gimmick", "action"]`, all enabled by default; empty or
-  unknown selections are rejected. Categories supply candidates; no family has a
-  minimum occurrence (start, finish, width transitions, required approaches and
-  closure excepted). Identical gimmick families repeat at most twice in a row,
-  including across a circuit seam. Category weights and section order come from the seed plan.
+  unknown selections are rejected. With driving and any special category enabled,
+  gimmick/action pieces occupy 40–60% of the completed base-route distance. With
+  only special categories, the minimum is 40% without an upper cap; driving-only
+  courses contain no special pieces. All-category courses include both gimmicks
+  and actions and at least three families. Selection draws a family before its
+  variants, so additional pipe variants do not increase the pipe family's weight.
+  Mirrored/width variants share a family; identical special families repeat at most
+  twice in a row, including across a circuit seam.
 - Jump panels, gap/offset jumps and air-ring pieces contain a standalone jump
   panel. Generated acceleration-panel and boost-chain pieces cannot connect
   directly to any of these jump pieces, including across a circuit seam; an
@@ -35,11 +39,17 @@ and package checkpoints retain their explicit positions.
   requested/closest time and reason; callers keep their current map.
 - A seed first plans the whole course as four to six ordered sections. Independent
   draws choose corner families, elevation, road widths, obstacle spacing and
-  gimmick/action shares; sections arrange straights, bends and action sequences.
-  Flat ordinary courses and courses with substantial elevation/actions are valid.
+  positive gimmick/action weights; sections arrange bends and action sequences.
+  Section and whole-course distance deficits prioritize specials during growth.
   Retry randomness changes placement candidates, while the section plan stays fixed.
-  Candidate ranking first requires time feasibility, then compares duration error
-  and actual section composition with that seed's plan.
+  Candidate ranking and early exit require both time and composition feasibility,
+  then compare duration error and section distance composition with the seed plan.
+  Attachments, quarterpipes and optional shortcuts never contribute special distance;
+  tube transitions and composed-module preparation/recovery count as ordinary road.
+  Optional ordinary straights are limited to 32 m continuously across piece and
+  width boundaries, including return seams. The start runway and required
+  approach/recovery lengths remain intact. These are generation rules, not
+  restrictions on manual sources or stored-v1 package loading.
 - Width choices stay 4/6/8/12/18 m, restricted to each preset's supported dimensions.
   Runways, merges and returns use 8 m. Pipe bores use the catalogue's 4/6 m choices.
   Obstacles use independent seeded spacing and must retain the continuous bypass.
@@ -73,12 +83,15 @@ apertures reserve clearance above ordinary road envelopes.
 ## Circuit returns
 
 Closure runs a bounded best-first search over straight, right-angle, 45°, grade
-and height-return spiral modules, available regardless of category. A final cubic
+and height-return spiral modules, available regardless of category, plus action
+modules when selected. It tracks distance deficits and remaining straight length;
+completed returns must satisfy the same composition and sequence rules as growth. A final cubic
 seam is allowed only between endpoints ≤800 cm apart with control-polygon length
 ≤1600 cm, forward-facing tangents and ≤23% vertical tangent component. A closure
 stores at most 4096 nodes and 64 added modules, is attempted after four more
-reference seconds of growth, and stops early within 1% of the target. Equivalent
-50 cm pose bins keep the cheapest arrival. Hand-authored curves are not limited.
+reference seconds of growth, and stops once time (±10%) and composition are feasible. Equivalent
+50 cm pose bins distinguish straight allowance, special-distance share and the
+last family before keeping the cheapest arrival. Hand-authored curves are not limited.
 
 ## Saved-package verification
 
@@ -93,6 +106,8 @@ their stored dimensions. Recompilation applies the new catalogue minima and repo
 the instance ID and width fields; it never widens source data automatically.
 
 Validation: `seed_track_plan` covers deterministic environment, preserved fields,
-completed-course diversity, category/time bounds and template geometry; focused
+completed-course distance density/diversity, category/time/resource bounds,
+source recompilation and template geometry. Obstacle unit tests cover quarterpipe
+handedness, actual wall distance, curved/tapered rejection and the continuous bypass; focused
 `mapkit-core` assembled/track_winding/wall/special-track tests
 and `mapkit-package` assembled-track tests. Detailed driving is user verification.

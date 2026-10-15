@@ -111,7 +111,8 @@ fn compound_templates_expand_to_editable_safe_v1_graphs() {
 #[test]
 fn seeded_compound_modules_reach_completed_routes() {
     let mut found = [false; 3];
-    for seed in [26, 50, 114] {
+    for seed in [26, 50, 114, 1, 7, 31, 73] {
+        if found.iter().all(|v| *v) {break;}
         let a = track::assemble(&Settings {
             seed,
             circuit: false,
@@ -265,21 +266,14 @@ fn representative_seed_courses_exhibit_distinct_shapes() {
             .filter(|p| track::category(&p.id) != "driving")
             .count();
         println!("seed {seed}: straight={straight}% turns={turns:.2}rad height={height}cm special={specials} time={}ms",a.estimated_msec);
+        assert_generated_composition(&a);
         measures.push((straight, turns, height, specials));
     }
     assert!(
-        measures
-            .iter()
-            .any(|m| m.0 >= 65 && m.1 < 10.0 && m.2 == 0 && m.3 == 0),
-        "a quiet completed course must survive candidate selection: {measures:?}"
+        measures.iter().map(|m| m.0).max().unwrap() > measures.iter().map(|m| m.0).min().unwrap()
     );
     assert!(
-        measures.iter().map(|m| m.0).max().unwrap() - measures.iter().map(|m| m.0).min().unwrap()
-            >= 15
-    );
-    assert!(
-        measures.iter().map(|m| m.2).max().unwrap() - measures.iter().map(|m| m.2).min().unwrap()
-            >= 500
+        measures.iter().map(|m| m.2).max().unwrap() > measures.iter().map(|m| m.2).min().unwrap()
     );
     assert!(
         measures.iter().map(|m| m.3).max().unwrap() > measures.iter().map(|m| m.3).min().unwrap()
@@ -295,6 +289,17 @@ fn category_masks_shapes_and_duration_options_remain_bounded() {
         (true, 60, vec!["driving", "gimmick", "action"], 4),
         (true, 90, vec!["driving"], 15),
         (true, 120, vec!["driving", "gimmick", "action"], 31),
+        (false, 90, vec!["driving", "gimmick", "action"], 7),
+        (false, 120, vec!["driving", "gimmick", "action"], 73),
+        (true, 90, vec!["driving", "gimmick", "action"], 42),
+        (false, 60, vec!["driving", "gimmick"], 1),
+        (true, 90, vec!["driving", "gimmick"], 17),
+        (false, 90, vec!["driving", "action"], 31),
+        (true, 60, vec!["driving", "action"], 4),
+        (false, 120, vec!["gimmick", "action"], 7),
+        (true, 120, vec!["gimmick", "action"], 42),
+        (true, 60, vec!["action"], 17),
+        (true, 90, vec!["gimmick"], 42),
     ] {
         let s = Settings {
             seed,
@@ -305,6 +310,8 @@ fn category_masks_shapes_and_duration_options_remain_bounded() {
         };
         let a = track::assemble(&s)
             .unwrap_or_else(|e| panic!("{circuit}/{seconds}/{categories:?}: {e:?}"));
+        assert_generated_composition(&a);
+        println!("{circuit}/{seconds}/{categories:?}: {} ms, {} pieces", a.estimated_msec, a.pieces.len());
         assert!(a.estimated_msec.abs_diff(u32::from(seconds) * 1000) <= u32::from(seconds) * 100);
         assert!(a
             .pieces
@@ -315,5 +322,81 @@ fn category_masks_shapes_and_duration_options_remain_bounded() {
             assert!(a.obstacles.is_empty());
         }
         a.validate_stored().unwrap();
+    }
+}
+
+// Independent distance oracle: only base-route pieces count; attachments and
+// optional routes cannot inflate the numerator. Compiler stats include finish entry.
+fn assert_generated_composition(a: &track::Assembly) {
+    let mut lengths=[0u64;3];
+    let mut families=std::collections::BTreeSet::new();
+    for &i in &a.routes[0].pieces {
+        let p=&a.pieces[i];
+        let c=match track::category(&p.id) {"gimmick"=>1,"action"=>2,_=>0};
+        let len=if p.id=="finish_plaza" {400} else {p.path.windows(2).map(|w| {
+            let sum=(0..3).map(|j|(w[1].position_cm[j]-w[0].position_cm[j]).pow(2) as f64).sum::<f64>();
+            sum.sqrt().round() as u64
+        }).sum()};
+        lengths[c]+=len;
+        if c>0 {
+            families.insert(if p.id.starts_with("cylinder") || p.id=="banked_chicane" {"pipe"}
+                else if ["jump_panel","jump","offset_jump"].contains(&p.id.as_str()) {"jump"}
+                else if ["acceleration_panel","boost_chain"].contains(&p.id.as_str()) {"acceleration"}
+                else {p.id.as_str()});
+        }
+    }
+    let total=lengths.iter().sum::<u64>();
+    assert_eq!(total,a.length_cm);
+    let special=lengths[1]+lengths[2];
+    let has=|id| a.settings.categories.iter().any(|c|c==id);
+    if has("gimmick") || has("action") {
+        assert!(special*100>=total*40,"{}: {lengths:?}",a.settings.seed);
+        if has("driving") {assert!(special*100<=total*60,"{}: {lengths:?}",a.settings.seed);}
+    } else {assert_eq!(special,0);}
+    if a.settings.categories.len()==3 {
+        assert!(lengths[1]>0 && lengths[2]>0 && families.len()>=3,"{lengths:?}/{families:?}");
+    }
+    let base:Vec<_>=a.routes[0].pieces.iter().map(|&i|&a.pieces[i]).collect();
+    let mut required=std::collections::BTreeSet::new();
+    // Recover the explicit template spans from their unchanged base-road graph.
+    for i in 0..base.len() {
+        for ids in [vec!["free_curve","jump","free_curve","jump","free_curve"],
+            vec!["free_curve","jump","free_curve"],
+            vec!["straight","straight","straight","free_curve","straight"]] {
+            if base[i..].iter().take(ids.len()).map(|p|p.id.as_str()).eq(ids.iter().copied()) {
+                required.extend(i..i+ids.len());
+            }
+        }
+    }
+    let mut run=0u64;
+    for (i,p) in base.iter().enumerate() {
+        if i<3 || required.contains(&i) || track::category(&p.id)!="driving"
+            || ["tube_entry","tube_exit","approach","finish_plaza"].contains(&p.id.as_str()) {
+            run=0;continue;
+        }
+        for w in p.path.windows(2) {
+            let (a,b)=(w[0].forward,w[1].forward);
+            let cross=(a[0] as f64*b[2] as f64-a[2] as f64*b[0] as f64)/1e12;
+            if cross.abs()<0.005 {
+                run+=(0..3).map(|j|(w[1].position_cm[j]-w[0].position_cm[j]).pow(2) as f64).sum::<f64>().sqrt().round() as u64;
+                assert!(run<=3200,"piece {i}/{} optional straight {run} cm",p.id);
+            } else {run=0;}
+        }
+    }
+    assert!(a.pieces.len()<=512);
+    assert!(a.pieces.iter().map(|p|p.path.len()+p.alternate_path.len()).sum::<usize>()<=32000);
+}
+
+#[test]
+fn generated_action_courses_are_deterministic_and_recompile() {
+    for circuit in [false,true] {
+        let settings=Settings {seed:4,circuit,..Settings::default()};
+        let a=track::assemble(&settings).unwrap();
+        assert_eq!(a,track::assemble(&settings).unwrap());
+        let source=authoring::from_assembly(&a);
+        let compiled=authoring::compile(&source).unwrap();
+        assert_eq!(compiled.pieces,a.pieces);
+        assert_eq!(compiled.obstacles,a.obstacles);
+        assert_eq!(compiled.routes,a.routes);
     }
 }

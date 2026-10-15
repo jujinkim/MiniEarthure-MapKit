@@ -34,7 +34,10 @@ use these shared MapKit meshes, ports and clearance rules.
 ## Surface geometry
 
 - Curves sample the analytic centre and ribbon, quantizing only final centimetre
-  vertices: ≤4° tangent/frame change, ≤1 cm surface error, ≤1.5 m spacing.
+  vertices. Ordinary roads bound horizontal error to 8 cm, yaw to 12° and spacing
+  to 4 m; pitch/normal changes remain ≤4° (3.5° for spirals), with vertical error
+  ≤0.75 cm (0.6 cm for spirals). Special tracks retain ≤4° tangent/frame change,
+  ≤1 cm surface error and ≤1.5 m spacing.
 - Spirals are validated against a 23% grade on inside/centre/outside edges. Ramps
   ease over their first/last eighth. Loops and pipes use adaptive sampling without
   the ordinary grade cap.
@@ -66,7 +69,14 @@ use these shared MapKit meshes, ports and clearance rules.
   decoration has no driving collision.
 - Automatic attachments are skipped unless their swept footprint and a continuous
   220 cm bypass fit the actual ribbon. Manual placement reports the piece and
-  station in `E_TRACK_CLEARANCE`. Grind rails and air-ring dimensions are unchanged.
+  station in `E_TRACK_CLEARANCE`. Quarterpipes use their actual asymmetric collision
+  footprint: automatic left/right wall placement selects the matching rising side,
+  with the low entrance facing the road and the high end within 10 cm of the wall's
+  inner boundary. The complete footprint must fit the curved/tapered ribbon while
+  leaving a connected 220 cm strip at the opposite wall; otherwise the site is
+  skipped. Manual attachments keep their explicit handedness and wall side. Source
+  recompilation shares the same placement calculation; saved geometry is unchanged.
+  Grind rails and air-ring dimensions are unchanged.
 - Up to 64 display-only direction chevrons per stage at 24 m intervals on flat road
   (no collision, occupancy, spawn role or shadow).
 

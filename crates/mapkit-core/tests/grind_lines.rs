@@ -28,7 +28,9 @@ fn line() -> GrindLine {
     let key=archive_key(&"a".repeat(64),cell);
     let archive=encode_archive(&chunk,&key,archive_limit(&cost)).unwrap();
     assert_eq!(decode_archive(&archive,&key,cell,&cost).unwrap(),chunk);
-    let mut corrupt=d.clone();corrupt.grind_lines[0].capture_width_cm+=1;assert!(corrupt.validate().is_err());
+    let mut corrupt=d.clone();corrupt.grind_lines[0].capture_width_cm+=1;
+    corrupt.validate().unwrap(); // Stored geometry is independent of current source recompilation.
+    assert!(track::verify_document(&corrupt).is_err());
     source.grind_lines[0].control_points[1]=[0,100,10_000_000];assert!(compile(&source).is_err());
 }
 #[test] fn all_ordinary_curves_share_width_and_twist_refinement() {
@@ -37,15 +39,23 @@ fn line() -> GrindLine {
         if preset=="free_curve" {i.control_points=vec![[0,0,0],[0,0,4000],[4000,1200,4000],[8000,1200,4000]];}
         let p=piece(&i).unwrap();
         for w in p.path.windows(2) {
-            let dot=(0..3).map(|j|w[0].forward[j] as f64*w[1].forward[j] as f64/1e12).sum::<f64>();
-            assert!(dot>0.9997,"{preset}: tangent step={dot}");
+            let heading=|v: [i64;3]| (v[0] as f64).atan2(v[2] as f64);
+            let pitch=|v: [i64;3]| (v[1] as f64).atan2((v[0] as f64).hypot(v[2] as f64));
+            let delta=heading(w[1].forward)-heading(w[0].forward);
+            assert!(delta.sin().atan2(delta.cos()).abs()<=12.0f64.to_radians()+0.00001,"{preset}: yaw step");
+            let angle=if preset.starts_with("spiral") {3.5f64} else {4.0f64};
+            assert!((pitch(w[1].forward)-pitch(w[0].forward)).abs()<=angle.to_radians()+0.00001,"{preset}: pitch step");
+            let dot=(0..3).map(|j|w[0].normal[j] as f64*w[1].normal[j] as f64/1e12).sum::<f64>();
+            assert!(dot>=angle.to_radians().cos()-0.000002,"{preset}: normal step={dot}");
         }
     }
 }
 
 #[test] fn rail_preset_places_an_independent_editable_line() {
-    let i=instance("road","sprint_lane",400);
-    let attachment=Attachment{kind:"grind_rail".into(),piece:"road".into(),path:"main".into(),station_cm:800,side:1};
+    let i=instance("road","right90",600);
+    let path=piece(&i).unwrap().path;
+    let station_cm=path.windows(2).map(|w|(0..3).map(|j|(w[1].position_cm[j]-w[0].position_cm[j]).pow(2) as f64).sum::<f64>().sqrt().round() as u64).sum::<u64>()/2;
+    let attachment=Attachment{kind:"grind_rail".into(),piece:"road".into(),path:"main".into(),station_cm,side:1};
     let lines=attachment_lines(&i,&attachment).unwrap();
     assert_eq!(lines.len(),1);
     let mut source=Source::empty();source.instances.push(i);source.attachments.push(attachment);source.grind_lines=lines;
