@@ -961,4 +961,3 @@ pub(super) fn rail_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
     }
     out
 }
-
