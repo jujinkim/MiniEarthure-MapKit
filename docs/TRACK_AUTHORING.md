@@ -66,6 +66,14 @@ Seeded generation settings, categories, catalogue and geometry are owned by
   branch, coincident seams merge, and the exact start and plaza finish are kept.
   More than 64 shared checkpoints retries or fails with `E_TRACK_CHECKPOINT_LIMIT`.
   Manual lists bypass this policy.
+- Read-only `suggest_track_course(source_json)` returns ordered `checkpoints`, resolved
+  `gates`, `applicable` and located `diagnostics` (`code`, `message`, `blocking`,
+  nullable `piece`/`position_cm`). It uses the declared base/alternative paths, with
+  manual start/finish endpoints and the same intermediate selection policy. It
+  reserves sprint endpoints, omits overlapping intermediates and reports missing
+  connections, undeclared branches, geometry errors and the 64-gate limit. Editor
+  must explicitly adopt the proposal through its document command; querying never
+  replaces existing checkpoints or grants completion proof.
 - The shared first-wins checkpoint view feeds generation admission, course
   construction and Runtime progress metadata; raw authoring arrays are unchanged.
 - `shortcut_source()` composes a wide lower zigzag, narrow elevated straight, jump

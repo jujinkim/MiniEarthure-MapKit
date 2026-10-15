@@ -787,6 +787,12 @@ pub fn effective_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
 /// Select only after every branch and obstacle is known. Authored checkpoints
 /// never enter this selector. All selected samples have the same route order.
 pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
+    let Some(piece) = a.pieces.get(2) else { return vec![]; };
+    checkpoints_between(a, (2, piece.path.len()/2), None)
+}
+
+/// Shared placement policy with explicit endpoints. None retains the seed plaza finish.
+pub(super) fn checkpoints_between(a: &Assembly, start_at: (usize, usize), finish_at: Option<(usize, usize)>) -> Vec<(usize, usize)> {
     let Some(base) = a.routes.first() else { return vec![]; };
     let mut common = vec![];
     let mut previous = vec![0; a.routes.len()];
@@ -798,10 +804,10 @@ pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
             common.push((order,piece));
         }
     }
-    let Some(start)=common.iter().position(|(_,p)|*p==2) else {return vec![];};
+    let Some(start)=common.iter().position(|(_,p)|*p==start_at.0) else {return vec![];};
     let common=&common[start..];
     let mut selected=BTreeSet::new();
-    let start_key=(common[0].0,a.pieces[2].path.len()/2);
+    let start_key=(common[0].0,start_at.1);
     selected.insert(start_key);
     let ordinary=|i:usize| {
         let p=&a.pieces[i];
@@ -835,7 +841,8 @@ pub(super) fn automatic_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
     }
     if let Some(&(order,i))=common.last() {
         let piece=&a.pieces[i];
-        let sample=if let Some(plaza)=&a.finish_plaza {
+        let sample=if let Some((_,sample))=finish_at.filter(|(p,_)|*p==i) { sample }
+        else if let Some(plaza)=&a.finish_plaza {
             piece.path.iter().position(|p|p.position_cm==plaza.checkpoint_cm).unwrap_or(piece.path.len()-1)
         } else {piece.path.len()-1};
         selected.insert((order,sample));

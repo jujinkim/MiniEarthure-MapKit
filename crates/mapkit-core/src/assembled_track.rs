@@ -23,6 +23,7 @@ const SPEED: i64 = 900;
 const MAX_PIECES: usize = 512;
 const MAX_SAMPLES: usize = 32_000;
 pub mod authoring;
+pub mod course_suggestion;
 pub mod composite;
 pub mod surface;
 mod stored;

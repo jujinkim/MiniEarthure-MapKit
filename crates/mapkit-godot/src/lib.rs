@@ -151,6 +151,15 @@ impl MapKitBridge {
             Ok(serde_json::json!({"document":d}))
         })())
     }
+    /// Read-only candidates and located diagnostics; the consumer owns explicit adoption.
+    #[func]
+    fn suggest_track_course(&self, source_json: GString) -> GString {
+        response((|| {
+            let source = serde_json::from_value(engine_value(&source_json.to_string())?)
+                .map_err(|e| mapkit_core::error("E_TRACK_SOURCE", e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::assembled_track::course_suggestion::suggest(&source)?).unwrap())
+        })())
+    }
     #[func]
     fn apply_track_source(&self, document: GString, source: GString) -> GString {
         response((|| {
