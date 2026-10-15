@@ -483,7 +483,9 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
         'search: for offset in 0..end - begin {
             let site = &sites[begin + (start + offset) % (end - begin)];
             for n in 0..KINDS.len() {
-                let Some(o) = safe_site(a, site, automatic_kind(KINDS[(kind_start + n) % KINDS.len()], side), side)
+                let kind = KINDS[(kind_start + n) % KINDS.len()];
+                if kind == "grind_rail" { continue; } // Rails belong to measured optional curve shortcuts.
+                let Some(o) = safe_site(a, site, automatic_kind(kind, side), side)
                 else {
                     continue;
                 };
@@ -610,13 +612,17 @@ mod tests {
         )
     }
     #[test]
-    fn extra_wide_straight_preserves_seed_fence_attachments() {
-        let mut a=fixture("straight",1200);
-        a.pieces.resize(8,a.pieces[3].clone());
-        let original=seed_fence_lines(&a);
-        assert_eq!(original.len(),1);
-        a.pieces[7].id="straight_extra_wide".into();
-        assert_eq!(seed_fence_lines(&a),original);
+    fn automatic_obstacles_and_straight_fences_are_not_grind_routes() {
+        for preset in ["straight", "straight_extra_wide", "gentle90", "right90"] {
+            let mut a=fixture(preset,1200);
+            a.pieces.resize(8,a.pieces[3].clone());
+            for seed in 0..16 {
+                a.settings.seed=seed;
+                a.obstacles=place(&a).unwrap().0;
+                assert!(a.obstacles.iter().all(|o|o.kind!="grind_rail"));
+                assert!(grind_lines(&a).is_empty());
+            }
+        }
     }
     #[test]
     fn quarterpipes_face_outward_touch_the_wall_and_roundtrip_source() {
@@ -938,7 +944,7 @@ fn rc_parts(kind: &str) -> Option<Vec<CollisionConvex>> {
 pub(super) fn grind_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
     let mut out=a.authoring.as_ref().or(a.seed_source.as_ref()).map_or_else(Vec::new,|s|s.grind_lines.clone());
     if a.authoring.is_some() { return out; }
-    for line in rail_lines(a).into_iter().chain(seed_fence_lines(a)) {
+    for line in rail_lines(a) {
         if !out.iter().any(|existing|existing.id==line.id) { out.push(line); }
     }
     out
@@ -956,14 +962,3 @@ pub(super) fn rail_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
     out
 }
 
-pub(super) fn seed_fence_lines(a: &Assembly) -> Vec<crate::grind::GrindLine> {
-    let mut out=vec![];
-    // This is explicit generator placement, never collider name/material detection.
-    if a.authoring.is_none() && a.settings.categories.iter().any(|v|v=="gimmick") {
-        for (i,p) in a.pieces.iter().enumerate().filter(|(i,p)|*i>3 && *i%7==0 && base_preset(&p.id)=="straight") {
-            let points=[p.path.first().unwrap(),p.path.last().unwrap()].map(|s| add(offset(s,s.lateral_cm as i64),s.normal.map(|v|v*(WALL+1)/1_000_000)));
-            out.push(crate::grind::GrindLine{id:format!("fence-{i}"),control_points:points.to_vec(),up:p.path[0].normal,capture_width_cm:30,start_connections:vec![],end_connections:vec![]});
-        }
-    }
-    out
-}

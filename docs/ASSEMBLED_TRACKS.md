@@ -73,8 +73,14 @@ meshes, collision, clearance and width rules.
 `double_jump`, `air_ring_chain` and `grind_shortcut`. Double jumps have separate
 supported recovery and reentry space; ring chains have one launch, three rings and
 an extended landing. Both can enter the generated base route. Grind is an optional
-branch with shared split/merge checkpoints, a supporting rail and an explicit grind
-line. Template insertion transforms all roads, actions, structures and lines
+branch across a broad bend with shared split/merge checkpoints, supported entry and
+landing runways, a continuous solid rail and an explicit line on its top face.
+Including entry and exit, it must save at least 20% and 5 m against the ordinary
+route. Its corridor rejects unrelated road/obstacle interference; the base route
+remains continuous. Optional shortcuts may be omitted when safe placement and the
+requested duration cannot both be met. Automatic obstacle selection excludes short
+rails and straight fence grind lines; explicit authored attachments and stored v1
+products retain their declared geometry. Template insertion transforms all roads, actions, structures and lines
 consistently and rejects unsafe candidates through the regular compiler/budgets.
 The complete approach/recovery/merge stays free of generated obstacles; ring
 apertures reserve clearance above ordinary road envelopes.

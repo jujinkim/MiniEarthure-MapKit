@@ -400,3 +400,31 @@ fn generated_action_courses_are_deterministic_and_recompile() {
         assert_eq!(compiled.routes,a.routes);
     }
 }
+
+#[test]
+fn grind_shortcut_measures_whole_branch_and_matches_solid() {
+    let s=templates::source("grind_shortcut").unwrap();
+    let length=|path: &authoring::Path| path.pieces.iter()
+        .filter(|id| !id.starts_with("start-") && *id!="merge")
+        .map(|id| authoring::piece(s.instances.iter().find(|i|&i.id==id).unwrap()).unwrap()
+            .path.windows(2).map(|w|(0..3).map(|j|(w[1].position_cm[j]-w[0].position_cm[j]).pow(2) as f64).sum::<f64>().sqrt()).sum::<f64>()).sum::<f64>();
+    let main=length(&s.paths[0]);let rail=length(&s.paths[1]);
+    assert!(rail<=main*0.8 && main-rail>=500.0,"main={main} rail={rail}");
+    let line=&s.grind_lines[0];let solid=&s.structures[0];
+    for point in &line.control_points {
+        let corners:Vec<_>=solid.parts[0].vertices.iter().map(|v|std::array::from_fn::<_,3,_>(|j|v[j]+solid.position[j])).collect();
+        assert_eq!(point[1],corners.iter().map(|v|v[1]).max().unwrap());
+        assert!(corners.iter().any(|v|v[2]==point[2]));
+    }
+    for id in ["rail-entry","rail-exit"] {
+        let p=authoring::piece(s.instances.iter().find(|i|i.id==id).unwrap()).unwrap();
+        assert!(p.path.iter().all(|v|v.safe && v.lateral_cm>=200 && v.normal[1]>970000));
+    }
+    let mut base=authoring::Source::empty();base.settings.circuit=false;
+    base.instances.push(authoring::instance("anchor","straight",800));
+    let mut crossing=authoring::instance("crossing","straight",800);
+    crossing.position_cm=[0,40,7000];crossing.rotation_mdeg=[0,90000,0];
+    base.instances.push(crossing);
+    base.paths.push(authoring::Path{id:"base".into(),pieces:vec!["anchor".into()]});
+    assert_eq!(templates::append(&base,"grind_shortcut","anchor","rail").unwrap_err().code,"E_TRACK_CLEARANCE");
+}

@@ -100,19 +100,48 @@ pub fn source(id: &str) -> Result<Source> {
         }
         "grind_shortcut" => {
             let mut s = authoring::shortcut_source();
-            s.instances.retain(|i| i.id != "finish");
-            s.connections.retain(|c| c.to != "finish");
-            for p in &mut s.paths {
-                p.pieces.retain(|id| id != "finish");
+            s.instances.retain(|i| ["start-0", "start-1", "start-2", "lower-zigzag", "merge"].contains(&i.id.as_str()));
+            // A broad bend on the ordinary route. The rail connects its shared
+            // entry/rejoin, including supported approach and landing runways.
+            s.instances[3].control_points = vec![
+                [0,0,2400], [0,0,3200], [-4000,0,3200], [-4000,0,6400],
+                [-4000,0,9600], [0,0,9600], [0,0,10400],
+            ];
+            for (id, preset, points) in [
+                ("rail-entry", "free_curve", vec![[0,0,2400],[0,0,3000],[800,40,3800],[800,40,4400]]),
+                ("rail-span", "flight_curve", vec![[800,40,4400],[800,40,5700],[800,40,7100],[800,40,8400]]),
+                ("rail-exit", "free_curve", vec![[800,40,8400],[800,40,9000],[0,0,9800],[0,0,10400]]),
+            ] {
+                let mut item = authoring::instance(id, preset, 400);
+                if id == "rail-entry" { item.entry_width_cm = 800; }
+                if id == "rail-exit" { item.exit_width_cm = 800; }
+                item.control_points = points;
+                s.instances.push(item);
+            }
+            s.paths[0].pieces.retain(|id| id != "finish");
+            s.paths[1].pieces = ["start-0", "start-1", "start-2", "rail-entry", "rail-span", "rail-exit", "merge"].map(String::from).to_vec();
+            s.connections.clear();
+            for path in &s.paths {
+                for pair in path.pieces.windows(2) {
+                    let c = Connection { from: pair[0].clone(), to: pair[1].clone() };
+                    if !s.connections.contains(&c) { s.connections.push(c); }
+                }
             }
             s.checkpoints.retain(|cp| cp.piece != "finish");
-            let position = [800, 500, 6600];
+            s.actions.clear();
+            s.actions.push(Action {
+                id: "rail-entry-space".into(), kind: "manual_flight".into(), piece: "rail-entry".into(),
+                sample: authoring::piece(&s.instances[5])?.path.len()-2,
+                height_cm: 80, panel_width_percent: 50, panel_alignment: PanelAlignment::Center,
+                landing: Some(Checkpoint { piece: "rail-exit".into(), sample: 0 }),
+            });
+            let position = [800, 0, 6400];
             s.structures.push(Gimmick {
                 id: "authored-rail".into(),
                 position,
                 rotation_mdeg: [0; 3],
                 scale_per_mille: [1000; 3],
-                parts: vec![box_part([0, 20, 0], [40, 40, 1200])],
+                parts: vec![box_part([0, 20, 0], [40, 40, 4000])],
                 track: None,
                 curved_faces: vec![],
                 effect: None,
@@ -127,17 +156,28 @@ pub fn source(id: &str) -> Result<Source> {
                     impulse_cmps: [0; 3],
                     cooldown_ms: 1500,
                 },
-                safety_min_cm: position.map(|v| v - 2000),
-                safety_max_cm: position.map(|v| v + 2000),
+                safety_min_cm: position.map(|v| v - 4000),
+                safety_max_cm: position.map(|v| v + 4000),
             });
             s.grind_lines.push(crate::grind::GrindLine {
                 id: "rail".into(),
-                control_points: vec![[800, 540, 6000], [800, 540, 7200]],
+                control_points: vec![[800, 40, 4400], [800, 40, 8400]],
                 up: [0, 1_000_000, 0],
                 capture_width_cm: 40,
                 start_connections: vec![],
                 end_connections: vec![],
             });
+            let length = |path: &Path| -> Result<u64> {
+                path.pieces.iter().filter(|id| !id.starts_with("start-") && *id != "merge")
+                    .map(|id| authoring::piece(s.instances.iter().find(|i| &i.id == id).unwrap())
+                        .map(|p| p.path.windows(2).map(|w| distance(w[0].position_cm, w[1].position_cm)).sum::<u64>()))
+                    .sum()
+            };
+            let main = length(&s.paths[0])?;
+            let shortcut = length(&s.paths[1])?;
+            if shortcut * 5 > main * 4 || main.saturating_sub(shortcut) < 500 {
+                return Err(error("E_TRACK_CLEARANCE", "rail shortcut must save at least 20% and 5 m including entry/exit"));
+            }
             Ok(s)
         }
         _ => Err(error("E_TRACK_SOURCE", "unknown track template")),
@@ -182,6 +222,19 @@ pub(super) fn placed(id: &str, port: &Sample) -> Result<Source> {
 /// Reserve the entire ring aperture/rim, including clearance above the road's
 /// ordinary vehicle envelope. Module roads already passed their own geometry check.
 pub(super) fn clear_of_roads(fragment: &Source, others: &[Piece]) -> Result<bool> {
+    for line in &fragment.grind_lines {
+        for pair in line.control_points.windows(2) {
+            let steps = distance(pair[0], pair[1]).div_ceil(100).max(1);
+            for step in 0..=steps {
+                let center: Vertex = std::array::from_fn(|j| pair[0][j] + (pair[1][j]-pair[0][j])*step as i64/steps as i64);
+                if others.iter().flat_map(|p| p.path.iter().chain(&p.alternate_path)).any(|s| {
+                    let (point, radius, low, high) = geometry::volume(s);
+                    low < center[1]+235 && center[1]-40 < high
+                        && (center[0]-point[0]).pow(2)+(center[2]-point[2]).pow(2) < (radius+220).pow(2)
+                }) { return Ok(false); }
+            }
+        }
+    }
     for action in fragment.actions.iter().filter(|a| a.kind == "air_ring") {
         let piece = authoring::piece(
             fragment
@@ -314,7 +367,7 @@ pub fn append(source: &Source, id: &str, anchor: &str, prefix: &str) -> Result<S
     if !clear_of_roads(&fragment, &existing)? {
         return Err(error(
             "E_TRACK_CLEARANCE",
-            "template ring aperture needs clear flight space",
+            "template rail corridor or ring aperture needs clear space",
         ));
     }
     let mut out = source.clone();

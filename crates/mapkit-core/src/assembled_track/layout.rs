@@ -342,7 +342,8 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
     }
     let mut fragments:Vec<(usize,authoring::Source)>=vec![];
     let mut blocks=vec![];
-    if plan.shortcut && s.categories.len()==3 {
+    // Optional shortcuts may be omitted if they prevent a safe duration-feasible circuit.
+    if plan.shortcut && s.categories.len()==3 && attempt < 12 {
         let fragment=templates::placed("grind_shortcut",&end(&pieces))?;
         let start=pieces.len();
         for id in &fragment.paths[0].pieces {
