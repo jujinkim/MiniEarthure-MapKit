@@ -159,6 +159,8 @@ This page lists the domain invariants and links each feature's owner.
 - Sprint finish plaza (`Assembly.finish_plaza`):
   [TRACK_GEOMETRY](../docs/TRACK_GEOMETRY.md#sprint-finish-plaza).
 - Source/compiler API, drafts and checkpoints: [TRACK_AUTHORING](../docs/TRACK_AUTHORING.md).
+- Optional assembled Source `jump_shortcuts`:
+  [rings, platforms, openings and recovery](../docs/JUMP_SHORTCUTS.md).
 - `grind_lines` and RC attachments:
   [line contract](../docs/TRACK_AUTHORING.md#independent-grind-lines-and-rc-attachments)
   (`E_GRIND_SOURCE`, `E_GRIND_CONNECTION`, `E_GRIND_BUDGET`).

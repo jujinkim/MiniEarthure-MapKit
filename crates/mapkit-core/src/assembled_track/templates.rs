@@ -9,6 +9,7 @@ pub fn catalogue() -> serde_json::Value {
         serde_json::json!({"id":"air_ring_chain","category":"action"}),
         serde_json::json!({"id":"grind_shortcut","category":"gimmick"}),
     ];
+    rows.extend(jump_shortcuts::IDS.map(|id|serde_json::json!({"id":id,"category":"gimmick"})));
     rows.extend(corner_shortcuts::IDS.map(|id|serde_json::json!({"id":id,"category":"gimmick"})));
     serde_json::json!(rows)
 }
@@ -69,6 +70,7 @@ fn linear(ids: &[&str]) -> Result<Source> {
     Ok(s)
 }
 pub fn source(id: &str) -> Result<Source> {
+    if let Some(n)=jump_shortcuts::IDS.iter().position(|v|*v==id) {return jump_shortcuts::source(5+n,true);}
     if corner_shortcuts::IDS.contains(&id) { return corner_shortcuts::source(id,800,true); }
     match id {
         "double_jump" => linear(&[
@@ -216,6 +218,10 @@ pub(super) fn place(mut s: Source, port: &Sample) -> Result<Source> {
         g.safety_min_cm = g.position.map(|v| v - radius);
         g.safety_max_cm = g.position.map(|v| v + radius);
     }
+    for j in &mut s.jump_shortcuts {
+        for gate in [&mut j.start_ring,&mut j.end_ring] {gate.position_cm=point(gate.position_cm);gate.forward=geometry::rotate3(gate.forward,rotation);}
+        for p in &mut j.platforms {p.position_cm=point(p.position_cm);p.forward=geometry::rotate3(p.forward,rotation);}
+    }
     for l in &mut s.grind_lines {
         for p in &mut l.control_points {
             *p = point(*p);
@@ -329,6 +335,15 @@ pub(super) fn merge(s: &mut Source, fragment: &Source, base_ids: &[String], pref
         let mut g = g.clone();
         g.id = format!("authored-{prefix}-{}", g.id.trim_start_matches("authored-"));
         s.structures.push(g);
+    }
+    for j in &fragment.jump_shortcuts {
+        let mut j=j.clone();
+        j.id=format!("{prefix}-{}",j.id);
+        j.flight_piece=map[&j.flight_piece].clone();
+        for o in &mut j.openings {o.piece=map[&o.piece].clone();}
+        j.recovery.piece=map[&j.recovery.piece].clone();
+        j.merge.piece=map[&j.merge.piece].clone();
+        s.jump_shortcuts.push(j);
     }
     for l in &fragment.grind_lines {
         let mut l = l.clone();

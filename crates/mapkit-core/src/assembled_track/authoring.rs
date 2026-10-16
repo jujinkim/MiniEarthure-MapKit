@@ -78,6 +78,8 @@ pub struct Attachment {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub jump_shortcuts: Vec<jump_shortcuts::Shortcut>,
     /// Compile as an overlay on the existing terrain document.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub terrain_integration: bool,
@@ -104,6 +106,7 @@ pub struct Source {
 impl Source {
     pub fn empty() -> Self {
         Self {
+            jump_shortcuts: vec![],
             terrain_integration: false,
             terrain_policies: BTreeMap::new(),
             road_connections: vec![],
@@ -171,7 +174,8 @@ pub fn from_assembly(a: &Assembly) -> Source {
         })
         .collect();
     Source {
-        terrain_integration: false,
+        jump_shortcuts: vec![],
+            terrain_integration: false,
             terrain_policies: BTreeMap::new(),
             road_connections: vec![],
         original_seed: Some(a.settings.clone()),
@@ -349,6 +353,7 @@ pub(super) fn within_source_limits(source: &Source) -> bool {
         && source.actions.len() <= 64
         && source.attachments.len() <= 128
         && source.structures.len() <= 32
+        && source.jump_shortcuts.len() <= 2
         && source.terrain_policies.len() <= MAX_PIECES
         && source.road_connections.len() <= MAX_PIECES
 }
@@ -383,6 +388,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         }
         pieces.push(p);
     }
+    jump_shortcuts::validate(source,&pieces)?;
     if pieces.iter().map(|p| p.path.len()).sum::<usize>() > MAX_SAMPLES {
         return Err(error("E_TRACK_BUDGET", "sample budget exceeded"));
     }
@@ -605,6 +611,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                             .as_ref()
                             .is_some_and(|cp| Some(&cp.piece) == landing)
                 });
+            let declared = declared || source.jump_shortcuts.iter().any(|j|j.flight_piece==*id && Some(&j.merge.piece)==landing && at>0 && j.recovery.piece==path.pieces[at-1]);
             if !declared {
                 geometry_issues.push(format!(
                     "{}: flight requires an automatic or manual approach and declared supported landing",
@@ -617,7 +624,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
     for i in 0..pieces.len() {
         for j in 0..i {
             cancellation::checkpoint()?;
-            if pieces[i] == pieces[j] || conflict(&pieces[i], &pieces[j]) {
+            if !jump_shortcuts::shared_approach(source,i,j) && (pieces[i] == pieces[j] || conflict(&pieces[i], &pieces[j])) {
                 geometry_issues.push(format!(
                     "{} / {}: road clearance collision",
                     source.instances[i].id, source.instances[j].id
@@ -701,6 +708,17 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         }
     }
     if source.grounded_supports && !source.terrain_integration { grounding::apply(&mut assembly)?; }
+    if let Some(low)=source.jump_shortcuts.iter().flat_map(|j|&j.platforms).map(|p|p.position_cm[1]-400).min() {
+        assembly.floor.min_cm[1]=assembly.floor.min_cm[1].min(low);
+        assembly.floor.max_cm[1]=assembly.floor.min_cm[1];
+    }
+    for jump in &source.jump_shortcuts {
+        if let Err(e)=jump_shortcuts::clear(&assembly,jump) {
+            if e.code=="E_CANCELLED" {return Err(e);}
+            assembly.geometry_issues.push(e.message.clone());
+            assembly.issues.push(e.message);
+        }
+    }
     assembly.issues.sort();
     assembly.issues.dedup();
     Ok(assembly)
@@ -875,6 +893,7 @@ pub(super) fn action_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
         return Ok(vec![]);
     };
     let mut out = source.structures.clone();
+    out.extend(jump_shortcuts::gimmicks(source));
     for action in &source.actions {
         if action.kind == "manual_flight" { continue; }
         let i = source

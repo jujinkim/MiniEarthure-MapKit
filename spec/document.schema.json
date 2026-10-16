@@ -1206,6 +1206,34 @@
       },
       "additionalProperties": false
     },
+    "Gate": {
+      "type": "object",
+      "required": [
+        "forward",
+        "position_cm"
+      ],
+      "properties": {
+        "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
     "Gimmick": {
       "type": "object",
       "required": [
@@ -1723,6 +1751,35 @@
       },
       "additionalProperties": false
     },
+    "Opening": {
+      "type": "object",
+      "required": [
+        "first_sample",
+        "last_sample",
+        "piece",
+        "side"
+      ],
+      "properties": {
+        "first_sample": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "last_sample": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "piece": {
+          "type": "string"
+        },
+        "side": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false
+    },
     "PanelAlignment": {
       "type": "string",
       "enum": [
@@ -1945,6 +2002,50 @@
         "free",
         "road_snap"
       ]
+    },
+    "Platform": {
+      "type": "object",
+      "required": [
+        "forward",
+        "jump_height_cm",
+        "position_cm",
+        "size_cm"
+      ],
+      "properties": {
+        "forward": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "jump_height_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "position_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        },
+        "size_cm": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 3,
+          "minItems": 3
+        }
+      },
+      "additionalProperties": false
     },
     "PointOfInterest": {
       "type": "object",
@@ -2425,6 +2526,7 @@
           "type": "boolean"
         },
         "difficulty": {
+          "description": "Inert v1 preservation field. New generation always writes \"normal\".",
           "type": "string"
         },
         "duration_seconds": {
@@ -2441,6 +2543,52 @@
           "type": "integer",
           "format": "uint16",
           "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Shortcut": {
+      "type": "object",
+      "required": [
+        "end_ring",
+        "flight_piece",
+        "id",
+        "merge",
+        "openings",
+        "platforms",
+        "recovery",
+        "start_ring"
+      ],
+      "properties": {
+        "end_ring": {
+          "$ref": "#/definitions/Gate"
+        },
+        "flight_piece": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "merge": {
+          "$ref": "#/definitions/Checkpoint"
+        },
+        "openings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Opening"
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Platform"
+          }
+        },
+        "recovery": {
+          "$ref": "#/definitions/Checkpoint"
+        },
+        "start_ring": {
+          "$ref": "#/definitions/Gate"
         }
       },
       "additionalProperties": false
@@ -2495,6 +2643,12 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/Instance"
+          }
+        },
+        "jump_shortcuts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Shortcut"
           }
         },
         "original_seed": {

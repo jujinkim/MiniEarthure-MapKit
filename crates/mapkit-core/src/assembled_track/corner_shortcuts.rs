@@ -202,6 +202,7 @@ pub(super) fn clear(a: &Assembly, prefix: &str, base_ids: &[String]) -> Result<b
     if !templates::clear_of_roads(&corridor,&roads)? {return Ok(false);}
     let mut boxes = vec![];
     let mut objects = gimmicks(a)?;
+    objects.extend(jump_shortcuts::gimmicks(source));
     objects.extend(source.structures.iter().filter(|g|!g.id.starts_with(&format!("authored-{prefix}-"))).cloned());
     for g in objects {
         for part in &g.parts {

@@ -7,8 +7,10 @@ structures and grind lines without template-specific physics or protocol changes
 
 ## Selection and geometry
 
-Large hairpin, spatial-S and 360-degree spiral family selections expand into
-ordinary composite corners, using their existing family weights and road widths.
+Large hairpin and 360-degree spiral family selections expand into ordinary
+composite corners, using their existing family weights and road widths. Spatial-S
+selections reserve long main sections for [jump shortcuts](JUMP_SHORTCUTS.md);
+manual spatial-S rail templates remain available.
 The spiral has open, displaced portals and a smooth rise/fall. At each accepted
 large corner, an independent seed stream gives the corner a 1/3 shortcut ticket.
 The corner ordinal fixes the ticket across placement retries and backtracking.
@@ -41,7 +43,7 @@ a module at the base-route endpoint. No additional settings or physics are requi
 `mapkit-core` corner-shortcut tests cover all mirrored forms, supported widths,
 main-road connectivity, sampled beam tops after placement rotation, savings,
 obstacle/other-rail rejection, source budgets, atomic omission and all four route
-combinations. Seed tests cover zero/one/two rails, deterministic recompilation,
+combinations. Seed and composition tests cover zero/one/two rails, deterministic recompilation,
 category gating and completed-course budgets. Focused package tests compile,
 serialize and reopen every template and two branches with ordered shared gates.
 Existing packages are loaded without regeneration or edits.

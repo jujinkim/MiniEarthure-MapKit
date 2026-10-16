@@ -111,7 +111,7 @@ fn compound_templates_expand_to_editable_safe_v1_graphs() {
 #[test]
 fn seeded_compound_modules_reach_completed_routes() {
     let mut found = [false; 3];
-    for (seed,duration_seconds) in [(26,60),(50,60),(114,60),(1,60),(7,60),(31,60),(73,60),(21,120)] {
+    for (seed,duration_seconds) in [(26,60),(50,60),(114,60),(1,60),(7,60),(31,60),(73,60),(22,120)] {
         if found.iter().all(|v| *v) {break;}
         let a = track::assemble(&Settings {
             seed,

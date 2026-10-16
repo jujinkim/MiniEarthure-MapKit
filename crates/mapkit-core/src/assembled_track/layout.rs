@@ -434,8 +434,11 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             }
                 else if category(choice) == "action" { (choice, road_width(&mut rng, choice, section)) }
                 else { (choice, special_width(&mut rng, choice)) };
-            if let Some(template) = corner_shortcuts::template(id) {
-                let fragment = templates::place(corner_shortcuts::source(template,w,false)?, &end(&pieces))?;
+            if let Some(mut template) = corner_shortcuts::template(id) {
+                let (jump_selected,count)=jump_shortcuts::ticket(s.seed,corners.len());
+                let jump=base_preset(id).starts_with("spatial_s");
+                if jump {template=jump_shortcuts::IDS[count-5];}
+                let fragment = templates::place(if jump {jump_shortcuts::source(count,false)?} else {corner_shortcuts::source(template,w,false)?}, &end(&pieces))?;
                 let mut valid = true;
                 for id in &fragment.paths[0].pieces {
                     let p = authoring::piece(fragment.instances.iter().find(|i| &i.id==id).unwrap())?;
@@ -444,7 +447,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 }
                 if valid && pieces.len()<=MAX_PIECES && pieces.iter().map(|p|p.path.len()).sum::<usize>()<=MAX_SAMPLES
                     && Composition::measure(pieces.iter().enumerate(),&required_ranges(&fragments)).longest_straight<=MAX_STRAIGHT_CM {
-                    let selected = s.categories.iter().any(|c|c=="gimmick") && corner_shortcuts::selected(s.seed,corners.len());
+                    let selected = s.categories.iter().any(|c|c=="gimmick") && if jump {jump_selected} else {corner_shortcuts::selected(s.seed,corners.len())};
                     corners.insert(start,(template,w,selected));
                     blocks.push(start); fragments.push((start,fragment)); added=true; break;
                 }
@@ -489,16 +492,18 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
         source.checkpoints = vec![authoring::Checkpoint{piece:source.instances[2].id.clone(),sample:a.pieces[2].path.len()-1}];
         source = corner_shortcuts::with_checkpoints(source)?;
         let mut installed = 0;
+        let mut jumps = 0;
         for (start,(id,width,selected)) in corners {
-            if !selected || installed==2 {continue;}
-            let fragment = match corner_shortcuts::source(id,width,true).and_then(|s|templates::place(s,&a.pieces[start].path[0])) {
+            let jump_count=jump_shortcuts::IDS.iter().position(|v|*v==id).map(|n|n+5);
+            if !selected || (if jump_count.is_some() {jumps} else {installed})==2 {continue;}
+            let fragment = match (if let Some(count)=jump_count {jump_shortcuts::source(count,true)} else {corner_shortcuts::source(id,width,true)}).and_then(|s|templates::place(s,&a.pieces[start].path[0])) {
                 Ok(fragment)=>fragment,
                 Err(e) if e.code=="E_CANCELLED"=>return Err(e),
                 Err(_)=>continue,
             };
             let ids:Vec<_>=(start..start+fragment.paths[0].pieces.len()).map(|i|source.instances[i].id.clone()).collect();
-            if let Some(next) = corner_shortcuts::install(&source,&fragment,&ids,&format!("r{start}"))? {
-                source=next; installed+=1;
+            if let Some(next) = if jump_count.is_some() {jump_shortcuts::install(&source,&fragment,&ids,&format!("j{start}"))?} else {corner_shortcuts::install(&source,&fragment,&ids,&format!("r{start}"))?} {
+                source=next; if jump_count.is_some() {jumps+=1;} else {installed+=1;}
             }
         }
         let mut out=authoring::compile(&source)?;

@@ -323,7 +323,7 @@ mod tests {
                 let neighbor=materialize(&other);
                 for neighbors in [vec![],vec![&neighbor]] {
                     let mut volumes=vec![];
-                    generate_piece(&p,0,&mut transcript,&neighbors,&mut volumes).unwrap();
+                    generate_piece(&p,0,&mut transcript,&neighbors,&[],&mut volumes).unwrap();
                     emit(&volumes,&mut transcript).unwrap();
                 }
             }
@@ -346,7 +346,7 @@ mod tests {
         for id in ["straight","gentle90","curve_up","curve_left_down","spiral_up","straight_narrow","loop","finish_plaza"] {
             let p=materialize(&variant(id,600,400,600));
             let mut discarded=Mesh::default(); let mut volumes=vec![];
-            generate_piece(&p,0,&mut discarded,&[],&mut volumes).unwrap();
+            generate_piece(&p,0,&mut discarded,&[],&[],&mut volumes).unwrap();
             assert!(!volumes.is_empty(),"{id}");
             let mut out=Mesh::default(); emit(&volumes,&mut out).unwrap();
             assert!(!out.solids.is_empty());
@@ -393,7 +393,7 @@ mod tests {
                 assert!((p.path.len()-1) as f64 <= old as f64*ceiling,"{id}: simplification budget");
             }
             let mut road = Mesh::default(); let mut volumes = vec![];
-            generate_piece(&p,0,&mut road,&[],&mut volumes).unwrap();
+            generate_piece(&p,0,&mut road,&[],&[],&mut volumes).unwrap();
             let mut wall = Mesh::default(); emit(&volumes,&mut wall).unwrap();
             // Actual emitted wall triangles at 25339aa, not longitudinal stations.
             let baseline = match id { "gentle90"|"curve_up" => 360, "hairpin" => 472,

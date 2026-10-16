@@ -37,6 +37,7 @@ mod plan;
 mod composition;
 pub mod templates;
 mod corner_shortcuts;
+pub mod jump_shortcuts;
 pub use plan::track_seed_defaults;
 pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
 const ROAD_WIDTHS: &[u32] = &[400, 600, 800, 1200];
@@ -458,6 +459,7 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/composition.rs").as_slice(),
             include_bytes!("assembled_track/templates.rs").as_slice(),
             include_bytes!("assembled_track/corner_shortcuts.rs").as_slice(),
+            include_bytes!("assembled_track/jump_shortcuts.rs").as_slice(),
             include_bytes!("grind.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/panels.rs").as_slice(),
@@ -1882,13 +1884,13 @@ pub(crate) fn generate(a: &Assembly, b: &mut crate::generation::Builder) -> Resu
     let mut walls = vec![];
     cancellation::progress("geometry",0,Some(a.pieces.len() as u64),"pieces");
     for (index, p) in a.pieces.iter().enumerate() {
-        generate_piece(p, index, b, &junction::neighbors(a, index), &mut walls)?;
+        generate_piece(p, index, b, &junction::neighbors(a, index), &jump_shortcuts::openings(a,index), &mut walls)?;
         cancellation::progress("geometry",(index+1) as u64,Some(a.pieces.len() as u64),"pieces");
     }
     walls::emit(&walls, b)
 }
 
-fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], walls: &mut impl walls::WallSink) -> Result<()> {
+fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors: &[&Piece], openings: &[&jump_shortcuts::Opening], walls: &mut impl walls::WallSink) -> Result<()> {
     let neighbors=junction::Prepared::new(neighbors.iter().flat_map(|p|[&p.path[..],&p.alternate_path[..]]))?;
     if p.id == "finish_plaza" {
         return generate_plaza(p, index, b, &neighbors, walls);
@@ -1939,6 +1941,7 @@ fn generate_piece(p: &Piece, index: usize, b: &mut impl TrackGeometry, neighbors
                 continue;
             }
             for (side, edge_a, edge_b) in [(-1, al, bl), (1, ar, br)] {
+                if !branch && openings.iter().any(|o|o.side==side && segment>=o.first_sample && segment<o.last_sample) {continue;}
                 let rings = [(edge_a, &w[0], segment), (edge_b, &w[1], segment+1)].map(|(edge, sample, at)| {
                     let outward = prepared.outward_at(path, at, side);
                     let height = if branch { 30 }
@@ -1972,7 +1975,7 @@ pub(crate) fn cost(a: &Assembly, bounds: &Bounds) -> Result<(u64, u64, u64)> {
         clipping_scratch=clipping_scratch.max(junction::scratch_bytes(intervals)
             + walls::PreparedPath::scratch_bytes(p.path.len().max(p.alternate_path.len()))
             + road::Sections::scratch_bytes(p.path.len().max(p.alternate_path.len())));
-        generate_piece(p,index,&mut Discard,&neighbors,&mut walls)?;
+        generate_piece(p,index,&mut Discard,&neighbors,&jump_shortcuts::openings(a,index),&mut walls)?;
     }
     let segments = a
         .pieces

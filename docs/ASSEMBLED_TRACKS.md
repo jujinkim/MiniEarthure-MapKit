@@ -71,11 +71,12 @@ meshes, collision, clearance and width rules.
 
 `templates::source` / `track_template_source` return editable v1 graphs for
 `double_jump`, `air_ring_chain`, `grind_shortcut`, `grind_uturn_{left,right}`,
-`grind_s_{left,right}` and `grind_spiral_{left,right}_{up,down}`. Double jumps have
+`grind_s_{left,right}`, `grind_spiral_{left,right}_{up,down}` and
+`jump_shortcut_{5,6,7,8}`. Double jumps have
 separate supported recovery and reentry; ring chains have one launch, three rings
 and extended landing. Both can enter the generated base route.
 
-Large hairpin, S and open rising/falling spiral selections expand into ordinary
+Large hairpin and open rising/falling spiral selections expand into ordinary
 composite corners. With `gimmick` enabled, an independent seed ticket attempts a
 shortcut at 1/3 of these corners, with at most two installed per map and zero
 allowed. The 40 cm curved beam uses the grind line's samples/frames and requires
@@ -83,6 +84,13 @@ jump entry, safe supported merge and at least 20% / 5 m saving including entry/e
 Unsafe branches are omitted atomically. Two shortcuts have all four route
 combinations and common checkpoints. [Corner shortcuts](CORNER_SHORTCUTS.md) owns
 geometry, admission, template insertion and focused verification details.
+
+Spatial-S selections reserve long ordinary detours for disconnected jump routes.
+With `gimmick` enabled, an independent 1/3 ticket attempts a five-to-eight-platform
+branch with at least 30% saving, explicit fence openings and entry recovery.
+The limit is two jump routes separately from rails. Failed admission omits the
+entire branch; all retained branch combinations share checkpoints.
+[Jump shortcuts](JUMP_SHORTCUTS.md) owns the source and geometry contract.
 
 ## Circuit returns
 

@@ -39,7 +39,8 @@ fn stored_quarterpipe_placement_is_not_recomputed_on_open() {
 fn composed_seed_templates_roundtrip_as_editable_v1_sources() {
     for id in ["double_jump", "air_ring_chain", "grind_shortcut",
         "grind_uturn_left", "grind_uturn_right", "grind_s_left", "grind_s_right",
-        "grind_spiral_left_up", "grind_spiral_left_down", "grind_spiral_right_up", "grind_spiral_right_down"] {
+        "grind_spiral_left_up", "grind_spiral_left_down", "grind_spiral_right_up", "grind_spiral_right_down",
+        "jump_shortcut_5", "jump_shortcut_6", "jump_shortcut_7", "jump_shortcut_8"] {
         let source = templates::source(id).unwrap();
         let document = package::compile_source(&source).unwrap();
         let reopened = read_bytes(&pack_bytes(document.clone(), BTreeMap::new()).unwrap()).unwrap();
@@ -769,4 +770,21 @@ fn stored_narrow_v1_packages_open_exactly_but_recompile_is_rejected() {
         assert_eq!(reopened.document.gimmicks,document.gimmicks);
         assert_eq!(reopened.document.assembled_track,document.assembled_track);
     }
+}
+
+#[test]
+fn jump_routes_reopen_and_recompile_without_regenerating_source() {
+    let first=templates::source("jump_shortcut_5").unwrap();
+    let mut source=templates::append(&first,"jump_shortcut_8","merge","two").unwrap();
+    source.checkpoints.extend([
+        authoring::Checkpoint{piece:"two-split".into(),sample:0},
+        authoring::Checkpoint{piece:"two-merge".into(),sample:1},
+    ]);
+    let document=package::compile_source(&source).unwrap();
+    let reopened=read_bytes(&pack_bytes(document.clone(),BTreeMap::new()).unwrap()).unwrap();
+    assert_eq!(reopened.document.assembled_track,document.assembled_track);
+    assert_eq!(reopened.document.gimmicks,document.gimmicks);
+    assert_eq!(reopened.document.courses,document.courses);
+    assert_eq!(package::compile_source(&source).unwrap(),document);
+    verify_document(&reopened.document).unwrap();
 }

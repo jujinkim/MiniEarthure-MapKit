@@ -88,6 +88,7 @@ impl Assembly {
             if source.instances.len()!=self.pieces.len() || !authoring::within_source_limits(source) {
                 return Err(fail("source limits"));
             }
+            jump_shortcuts::validate(source,&self.pieces)?;
             let ids:BTreeMap<_,_>=source.instances.iter().enumerate().map(|(i,p)|(&p.id,i)).collect();
             if ids.len()!=source.instances.len() {return Err(fail("source identities"));}
             let checkpoint=|cp:&authoring::Checkpoint| ids.get(&cp.piece).is_some_and(|&i|cp.sample<self.pieces[i].path.len());

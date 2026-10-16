@@ -26,10 +26,10 @@ impl TrackGeometry for Mesh {
         Ok(())
     }
 }
-fn mesh(p: &Piece, index: usize, objects: &[Gimmick]) -> Result<Mesh> {
+fn mesh(p: &Piece, index: usize, objects: &[Gimmick], openings: &[&jump_shortcuts::Opening]) -> Result<Mesh> {
     let mut out = Mesh::default();
     let mut walls = vec![];
-    generate_piece(p, index, &mut out, &[], &mut walls)?;
+    generate_piece(p, index, &mut out, &[], openings, &mut walls)?;
     super::walls::emit(&walls, &mut out)?;
     for g in objects
         .iter()
@@ -160,7 +160,7 @@ pub(crate) fn terrain_supports(a: &Assembly, b: &mut crate::generation::Builder,
         if p.path.iter().chain(&p.alternate_path).all(|s|s.mode=="flight")
             || p.ordinary && a.terrain_policy(i)==crate::road_design::TerrainPolicy::AutoFit {continue;}
         if !crate::road_plan::hit(&[p.reserved_min_cm,p.reserved_max_cm],&b.bounds,20) {continue;}
-        let m=mesh(p,i,&objects)?;
+        let m=mesh(p,i,&objects,&jump_shortcuts::openings(a,i))?;
         let path=&p.path;
         let mut indices:Vec<_>=(0..path.len()).collect();
         indices.sort_by_key(|&n|n.abs_diff(path.len()/2));
@@ -350,7 +350,7 @@ pub(super) fn apply(a: &mut Assembly) -> Result<()> {
     let mut high = [i64::MIN; 3];
     for (i, p) in a.pieces.iter().enumerate() {
         cancellation::checkpoint()?;
-        for v in mesh(p, i, &road_objects)?.faces.iter().flatten() {
+        for v in mesh(p, i, &road_objects,&jump_shortcuts::openings(a,i))?.faces.iter().flatten() {
             for j in 0..3 {
                 low[j] = low[j].min(v[j]);
                 high[j] = high[j].max(v[j]);
@@ -361,7 +361,7 @@ pub(super) fn apply(a: &mut Assembly) -> Result<()> {
         a.supports.clear();
         return Ok(());
     }
-    let floor = low[1].div_euclid(100);
+    let floor = a.authoring.as_ref().or(a.seed_source.as_ref()).into_iter().flat_map(|s|&s.jump_shortcuts).flat_map(|j|&j.platforms).map(|p|p.position_cm[1]-400).min().unwrap_or(i64::MAX).min(low[1].div_euclid(100));
     a.floor = VenueFloor {
         min_cm: [
             low[0].div_euclid(100) - 1600,
@@ -388,7 +388,7 @@ pub(super) fn apply(a: &mut Assembly) -> Result<()> {
         }) {
             continue;
         }
-        let m = mesh(p, index, &road_objects)?;
+        let m = mesh(p, index, &road_objects,&jump_shortcuts::openings(a,index))?;
         // Deterministic centre-first longitudinal search; every quantized sample
         // is considered, alternating toward entry/exit. Lateral alternatives
         // stay under this piece, including a raised alternate branch.
@@ -495,7 +495,7 @@ mod tests {
                 .pieces
                 .iter()
                 .enumerate()
-                .flat_map(|(i, p)| mesh(p, i, &objects).unwrap().faces)
+                .flat_map(|(i, p)| mesh(p, i, &objects,&[]).unwrap().faces)
                 .flatten()
                 .map(|v| v[1])
                 .min()
@@ -511,7 +511,7 @@ mod tests {
                 assert_eq!(hi[0] - lo[0], 20);
                 assert_eq!(hi[2] - lo[2], 20);
                 assert_eq!(lo[1], a.floor.min_cm[1]);
-                let m = mesh(&a.pieces[s.piece_index], s.piece_index, &objects).unwrap();
+                let m = mesh(&a.pieces[s.piece_index], s.piece_index, &objects,&[]).unwrap();
                 assert_eq!(Some(hi[1]), m.cap((lo[0] + hi[0]) / 2, (lo[2] + hi[2]) / 2));
                 for x in lo[0]..=hi[0] {
                     for z in lo[2]..=hi[2] {

@@ -68,11 +68,11 @@ pub(super) fn fit(a: &Assembly, index: usize, g: &mut Gimmick, lateral: u32, wid
     g.scale_per_mille=[100;3];
     g.parts.clear();
     let mut surface=PanelSurface {g,basis,left,right:left+span,area:0.0};
-    generate_piece(&a.pieces[index],index,&mut surface,&[],&mut Discard)?;
+    generate_piece(&a.pieces[index],index,&mut surface,&[],&[],&mut Discard)?;
     // Connected seams share the same source triangles. Unrelated stacked roads
     // cannot supply a missing panel surface.
     for p in junction::neighbors(a,index) {
-        generate_piece(p,index,&mut surface,&[],&mut Discard)?;
+        generate_piece(p,index,&mut surface,&[],&[],&mut Discard)?;
     }
     if surface.area<1.0 || surface.g.parts.is_empty() {
         return Err(error("E_TRACK_PANEL_SUPPORT","panel has no supporting road triangles"));

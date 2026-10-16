@@ -76,6 +76,10 @@ Seeded generation settings, categories, catalogue and geometry are owned by
   replaces existing checkpoints or grants completion proof.
 - The shared first-wins checkpoint view feeds generation admission, course
   construction and Runtime progress metadata; raw authoring arrays are unchanged.
+- Optional `jump_shortcuts` links rings, flight hints, independent platforms, fence
+  openings and ordinary-road recovery/merge samples. It survives saved Assembly
+  round trips; the compiler validates all references and complete route clearance.
+  See [jump shortcuts](JUMP_SHORTCUTS.md).
 - `shortcut_source()` composes a wide lower zigzag, narrow elevated straight, jump
   approach, flight path and common merge; the 4 m elevated lane and 8 m base road
   share progress sections.
