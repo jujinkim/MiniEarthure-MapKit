@@ -331,8 +331,16 @@ fn special_choice(rng: &mut u64, category: usize, seen: &std::collections::BTree
     variants[next(rng) as usize % variants.len()]
 }
 fn required_ranges(fragments: &[(usize,authoring::Source)]) -> Required {
-    fragments.iter().map(|(start,f)| *start..*start+f.paths[0].pieces.len()).collect()
+    fragments.iter().flat_map(|(start,f)| {
+        if f.instances.iter().any(|i|i.id=="corner") {
+            // Only the shared approach/merge is mandatory recovery. The large
+            // ordinary bend still participates in the continuous-straight limit.
+            vec![*start..*start+1,*start+2..*start+3]
+        } else {vec![*start..*start+f.paths[0].pieces.len()]}
+    }).collect()
 }
+type Fragments = Vec<(usize,authoring::Source)>;
+type Corners = std::collections::BTreeMap<usize,(&'static str,u32,bool)>;
 fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(Assembly,Required)>> {
     let mut rng = s.seed ^ attempt.wrapping_mul(0xa0761d6478bd642f);
     let mut pieces = vec![];
@@ -342,17 +350,9 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
     }
     let mut fragments:Vec<(usize,authoring::Source)>=vec![];
     let mut blocks=vec![];
-    // Optional shortcuts may be omitted if they prevent a safe duration-feasible circuit.
-    if plan.shortcut && s.categories.len()==3 && attempt < 12 {
-        let fragment=templates::placed("grind_shortcut",&end(&pieces))?;
-        let start=pieces.len();
-        for id in &fragment.paths[0].pieces {
-            pieces.push(authoring::piece(fragment.instances.iter().find(|i|&i.id==id).unwrap())?);
-        }
-        blocks.push(start);fragments.push((start,fragment));
-    }
+    let mut corners = Corners::new();
     let target = u32::from(s.duration_seconds) * 1000;
-    let mut best: Option<(Assembly,Vec<(usize,authoring::Source)>)> = None;
+    let mut best: Option<(Assembly,Fragments,Corners)> = None;
     let mut backtracks = 0;
     let mut closure_after=target/3;
     for _ in 0..MAX_PIECES {
@@ -372,11 +372,11 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 if authoring::checkpoint_budget(&a).is_ok() && best.as_ref().is_none_or(|b| {
                     plan.rank(&a,&required) < plan.rank(&b.0,&required_ranges(&b.1))
                 }) {
-                    best = Some((a,fragments.clone()));
+                    best = Some((a,fragments.clone(),corners.clone()));
                 }
                 if best
                     .as_ref()
-                    .is_some_and(|(a,f)| a.estimated_msec.abs_diff(target) <= target/10 && Composition::assembly(a,&required_ranges(f)).valid(s))
+                    .is_some_and(|(a,f,_)| a.estimated_msec.abs_diff(target) <= target/10 && Composition::assembly(a,&required_ranges(f)).valid(s))
                 {
                     break;
                 }
@@ -434,6 +434,22 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             }
                 else if category(choice) == "action" { (choice, road_width(&mut rng, choice, section)) }
                 else { (choice, special_width(&mut rng, choice)) };
+            if let Some(template) = corner_shortcuts::template(id) {
+                let fragment = templates::place(corner_shortcuts::source(template,w,false)?, &end(&pieces))?;
+                let mut valid = true;
+                for id in &fragment.paths[0].pieces {
+                    let p = authoring::piece(fragment.instances.iter().find(|i| &i.id==id).unwrap())?;
+                    if pieces.iter().any(|other|authoring::conflict(&p,other)) {valid=false;break;}
+                    pieces.push(p);
+                }
+                if valid && pieces.len()<=MAX_PIECES && pieces.iter().map(|p|p.path.len()).sum::<usize>()<=MAX_SAMPLES
+                    && Composition::measure(pieces.iter().enumerate(),&required_ranges(&fragments)).longest_straight<=MAX_STRAIGHT_CM {
+                    let selected = s.categories.iter().any(|c|c=="gimmick") && corner_shortcuts::selected(s.seed,corners.len());
+                    corners.insert(start,(template,w,selected));
+                    blocks.push(start); fragments.push((start,fragment)); added=true; break;
+                }
+                pieces.truncate(start); continue;
+            }
             if add_block(&mut pieces, id, w) {
                 if Composition::measure(pieces.iter().enumerate(),&required_ranges(&fragments)).longest_straight<=MAX_STRAIGHT_CM {
                     blocks.push(start);added = true;break;
@@ -446,11 +462,11 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 break;
             }
             let start=blocks.pop().unwrap_or(START_PIECES);
-            pieces.truncate(start);fragments.retain(|(at,_)|*at<start);
+            pieces.truncate(start);fragments.retain(|(at,_)|*at<start);corners.retain(|at,_|*at<start);
             backtracks += 1;
         }
     }
-    if let Some((mut a,fragments)) = best {
+    if let Some((mut a,fragments,corners)) = best {
         let required=required_ranges(&fragments);
         let quality=Composition::assembly(&a,&required);
         if !quality.valid(s) {return Err(error("E_TRACK_DURATION",quality.reason()));}
@@ -470,13 +486,21 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             let ids:Vec<_>=(start..start+fragment.paths[0].pieces.len()).map(|i|source.instances[i].id.clone()).collect();
             templates::merge(&mut source,&fragment,&ids,&format!("t{start}"));
         }
-        source.checkpoints.clear();
-        let compiled=authoring::compile(&source)?;
-        if !compiled.geometry_issues.is_empty() {return Ok(None);}
-        source.checkpoints=authoring::automatic_checkpoints(&compiled).into_iter().map(|(i,sample)|authoring::Checkpoint{piece:source.instances[i].id.clone(),sample}).collect();
-        if source.checkpoints.is_empty() {return Ok(None);}
-        source.checkpoints[0]=authoring::Checkpoint{piece:source.instances[2].id.clone(),sample:compiled.pieces[2].path.len()-1};
-        source.checkpoints.dedup();
+        source.checkpoints = vec![authoring::Checkpoint{piece:source.instances[2].id.clone(),sample:a.pieces[2].path.len()-1}];
+        source = corner_shortcuts::with_checkpoints(source)?;
+        let mut installed = 0;
+        for (start,(id,width,selected)) in corners {
+            if !selected || installed==2 {continue;}
+            let fragment = match corner_shortcuts::source(id,width,true).and_then(|s|templates::place(s,&a.pieces[start].path[0])) {
+                Ok(fragment)=>fragment,
+                Err(e) if e.code=="E_CANCELLED"=>return Err(e),
+                Err(_)=>continue,
+            };
+            let ids:Vec<_>=(start..start+fragment.paths[0].pieces.len()).map(|i|source.instances[i].id.clone()).collect();
+            if let Some(next) = corner_shortcuts::install(&source,&fragment,&ids,&format!("r{start}"))? {
+                source=next; installed+=1;
+            }
+        }
         let mut out=authoring::compile(&source)?;
         if authoring::executable(&out).is_err() {return Ok(None);}
         authoring::checkpoint_budget(&out)?;

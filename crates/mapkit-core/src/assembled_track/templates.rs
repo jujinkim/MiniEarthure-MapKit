@@ -4,11 +4,13 @@ use super::*;
 use authoring::{Action, Checkpoint, Connection, PanelAlignment, Path, Source};
 
 pub fn catalogue() -> serde_json::Value {
-    serde_json::json!([
-        {"id":"double_jump","category":"action"},
-        {"id":"air_ring_chain","category":"action"},
-        {"id":"grind_shortcut","category":"gimmick"}
-    ])
+    let mut rows = vec![
+        serde_json::json!({"id":"double_jump","category":"action"}),
+        serde_json::json!({"id":"air_ring_chain","category":"action"}),
+        serde_json::json!({"id":"grind_shortcut","category":"gimmick"}),
+    ];
+    rows.extend(corner_shortcuts::IDS.map(|id|serde_json::json!({"id":id,"category":"gimmick"})));
+    serde_json::json!(rows)
 }
 fn linear(ids: &[&str]) -> Result<Source> {
     let mut s = Source::empty();
@@ -67,6 +69,7 @@ fn linear(ids: &[&str]) -> Result<Source> {
     Ok(s)
 }
 pub fn source(id: &str) -> Result<Source> {
+    if corner_shortcuts::IDS.contains(&id) { return corner_shortcuts::source(id,800,true); }
     match id {
         "double_jump" => linear(&[
             "straight", "straight", "jump", "straight", "straight", "straight", "straight",
@@ -187,7 +190,9 @@ pub fn source(id: &str) -> Result<Source> {
 /// Rigidly place a template at a supported port. References stay local until
 /// merge; roads, solid rail and interaction line all receive the same transform.
 pub(super) fn placed(id: &str, port: &Sample) -> Result<Source> {
-    let mut s = source(id)?;
+    place(source(id)?, port)
+}
+pub(super) fn place(mut s: Source, port: &Sample) -> Result<Source> {
     let first = authoring::snap_surface(&s.instances[0], port)?;
     let rotation = first.rotation_mdeg;
     let origin = first.position_cm;
@@ -207,14 +212,20 @@ pub(super) fn placed(id: &str, port: &Sample) -> Result<Source> {
     for g in &mut s.structures {
         g.position = point(g.position);
         g.rotation_mdeg = rotate(g.rotation_mdeg);
-        g.safety_min_cm = g.position.map(|v| v - 5000);
-        g.safety_max_cm = g.position.map(|v| v + 5000);
+        let radius = g.parts.iter().flat_map(|p|&p.vertices).map(|v|v.iter().map(|n|n.abs()).sum::<i64>()).max().unwrap_or(5000);
+        g.safety_min_cm = g.position.map(|v| v - radius);
+        g.safety_max_cm = g.position.map(|v| v + radius);
     }
     for l in &mut s.grind_lines {
         for p in &mut l.control_points {
             *p = point(*p);
         }
         l.up = geometry::rotate3(l.up, rotation);
+    }
+    if s.instances.iter().any(|i|i.id=="corner") && !s.grind_lines.is_empty() {
+        // Placement rounds control points to cm. Resample the final curve once
+        // so its collision and interaction frames remain identical after yaw.
+        s.structures = s.grind_lines.iter().flat_map(corner_shortcuts::rail_solids).collect();
     }
     Ok(s)
 }
@@ -223,7 +234,8 @@ pub(super) fn placed(id: &str, port: &Sample) -> Result<Source> {
 /// ordinary vehicle envelope. Module roads already passed their own geometry check.
 pub(super) fn clear_of_roads(fragment: &Source, others: &[Piece]) -> Result<bool> {
     for line in &fragment.grind_lines {
-        for pair in line.control_points.windows(2) {
+        for pair in line.samples().windows(2) {
+            let pair = [pair[0].position_cm, pair[1].position_cm];
             let steps = distance(pair[0], pair[1]).div_ceil(100).max(1);
             for step in 0..=steps {
                 let center: Vertex = std::array::from_fn(|j| pair[0][j] + (pair[1][j]-pair[0][j])*step as i64/steps as i64);
@@ -293,19 +305,16 @@ pub(super) fn merge(s: &mut Source, fragment: &Source, base_ids: &[String], pref
             s.connections.push(edge);
         }
     }
+    let existing = s.paths.clone();
     for path in fragment.paths.iter().skip(1) {
-        let mut route = s.paths[0].clone();
-        route.id = format!("{prefix}-{}", path.id);
-        let first = route
-            .pieces
-            .iter()
-            .position(|id| id == &base_ids[0])
-            .unwrap();
-        route.pieces.splice(
-            first..first + base_ids.len(),
-            path.pieces.iter().map(|id| map[id].clone()),
-        );
-        s.paths.push(route);
+        for prior in &existing {
+            if let Some(first) = prior.pieces.windows(base_ids.len()).position(|ids|ids==base_ids) {
+                let mut route = prior.clone();
+                route.id = format!("{}-{prefix}-{}", prior.id, path.id);
+                route.pieces.splice(first..first + base_ids.len(), path.pieces.iter().map(|id| map[id].clone()));
+                s.paths.push(route);
+            }
+        }
     }
     for a in &fragment.actions {
         let mut a = a.clone();
@@ -411,5 +420,8 @@ pub fn append(source: &Source, id: &str, anchor: &str, prefix: &str) -> Result<S
         }
     }
     merge(&mut out, &fragment, &ids, prefix);
+    if corner_shortcuts::IDS.contains(&id) && !corner_shortcuts::clear(&authoring::compile(&out)?,prefix,&ids)? {
+        return Err(error("E_TRACK_CLEARANCE","template rail corridor is occupied"));
+    }
     Ok(out)
 }

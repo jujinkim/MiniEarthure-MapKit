@@ -70,21 +70,19 @@ spatial S roads (mirrored bends and smooth rise/fall), and swept spiral cylinder
 meshes, collision, clearance and width rules.
 
 `templates::source` / `track_template_source` return editable v1 graphs for
-`double_jump`, `air_ring_chain` and `grind_shortcut`. Double jumps have separate
-supported recovery and reentry space; ring chains have one launch, three rings and
-an extended landing. Both can enter the generated base route. Grind is an optional
-branch across a broad bend with shared split/merge checkpoints, supported entry and
-landing runways, a continuous solid rail and an explicit line on its top face.
-Including entry and exit, it must save at least 20% and 5 m against the ordinary
-route. Its corridor rejects unrelated road/obstacle interference; the base route
-remains continuous. Optional shortcuts may be omitted when safe placement and the
-requested duration cannot both be met. Automatic obstacle selection excludes short
-rails and straight fence grind lines; explicit authored attachments and stored v1
-products retain their declared geometry. Template insertion transforms all roads, actions, structures and lines
-consistently and rejects unsafe candidates through the regular compiler/budgets.
-The complete approach/recovery/merge stays free of generated obstacles; ring
-apertures reserve clearance above ordinary road envelopes.
-`append_track_template` expands a module at the base-route endpoint for authoring.
+`double_jump`, `air_ring_chain`, `grind_shortcut`, `grind_uturn_{left,right}`,
+`grind_s_{left,right}` and `grind_spiral_{left,right}_{up,down}`. Double jumps have
+separate supported recovery and reentry; ring chains have one launch, three rings
+and extended landing. Both can enter the generated base route.
+
+Large hairpin, S and open rising/falling spiral selections expand into ordinary
+composite corners. With `gimmick` enabled, an independent seed ticket attempts a
+shortcut at 1/3 of these corners, with at most two installed per map and zero
+allowed. The 40 cm curved beam uses the grind line's samples/frames and requires
+jump entry, safe supported merge and at least 20% / 5 m saving including entry/exit.
+Unsafe branches are omitted atomically. Two shortcuts have all four route
+combinations and common checkpoints. [Corner shortcuts](CORNER_SHORTCUTS.md) owns
+geometry, admission, template insertion and focused verification details.
 
 ## Circuit returns
 
@@ -113,7 +111,9 @@ the instance ID and width fields; it never widens source data automatically.
 
 Validation: `seed_track_plan` covers deterministic environment, preserved fields,
 completed-course distance density/diversity, category/time/resource bounds,
-source recompilation and template geometry. Obstacle unit tests cover quarterpipe
+source recompilation and template geometry. `corner_shortcuts` covers seed tickets,
+zero/one/two placements, all route combinations, curved solids and atomic omission;
+package tests cover every new template and two-branch save/reopen. Obstacle unit tests cover quarterpipe
 handedness, actual wall distance, curved/tapered rejection and the continuous bypass; focused
 `mapkit-core` assembled/track_winding/wall/special-track tests
 and `mapkit-package` assembled-track tests. Detailed driving is user verification.

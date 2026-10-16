@@ -38,7 +38,6 @@ pub(super) struct Section {
 pub(super) struct Plan {
     pub sections: Vec<Section>,
     pub obstacle_spacing: u64,
-    pub shortcut: bool,
 }
 impl Plan {
     pub fn new(seed: u64) -> Self {
@@ -53,7 +52,7 @@ impl Plan {
         let action = 20 + draw(&mut rng, 21) as u32;
         let width = draw(&mut rng, 4) as usize + 1;
         let obstacle_spacing = 1600 + draw(&mut rng, 113) * 100;
-        let shortcut = draw(&mut rng, 4) == 0;
+        let _ = draw(&mut rng, 4); // Keep the section stream independent of shortcut tickets.
         let count = 4 + draw(&mut rng, 3) as usize;
         let mut sections = Vec::new();
         for _ in 0..count {
@@ -92,7 +91,6 @@ impl Plan {
         Self {
             sections,
             obstacle_spacing,
-            shortcut,
         }
     }
     pub fn section(&self, elapsed: u32, target: u32) -> &Section {

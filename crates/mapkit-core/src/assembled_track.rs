@@ -36,6 +36,7 @@ mod layout;
 mod plan;
 mod composition;
 pub mod templates;
+mod corner_shortcuts;
 pub use plan::track_seed_defaults;
 pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
 const ROAD_WIDTHS: &[u32] = &[400, 600, 800, 1200];
@@ -456,6 +457,8 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/plan.rs").as_slice(),
             include_bytes!("assembled_track/composition.rs").as_slice(),
             include_bytes!("assembled_track/templates.rs").as_slice(),
+            include_bytes!("assembled_track/corner_shortcuts.rs").as_slice(),
+            include_bytes!("grind.rs").as_slice(),
             include_bytes!("assembled_track/geometry.rs").as_slice(),
             include_bytes!("assembled_track/panels.rs").as_slice(),
             include_bytes!("assembled_track/junction.rs").as_slice(),

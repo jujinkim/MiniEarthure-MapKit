@@ -37,7 +37,9 @@ fn stored_quarterpipe_placement_is_not_recomputed_on_open() {
 
 #[test]
 fn composed_seed_templates_roundtrip_as_editable_v1_sources() {
-    for id in ["double_jump", "air_ring_chain", "grind_shortcut"] {
+    for id in ["double_jump", "air_ring_chain", "grind_shortcut",
+        "grind_uturn_left", "grind_uturn_right", "grind_s_left", "grind_s_right",
+        "grind_spiral_left_up", "grind_spiral_left_down", "grind_spiral_right_up", "grind_spiral_right_down"] {
         let source = templates::source(id).unwrap();
         let document = package::compile_source(&source).unwrap();
         let reopened = read_bytes(&pack_bytes(document.clone(), BTreeMap::new()).unwrap()).unwrap();
@@ -47,6 +49,26 @@ fn composed_seed_templates_roundtrip_as_editable_v1_sources() {
         assert_eq!(reopened.document.courses, document.courses);
         assert_eq!(reopened.document.assembled_track.as_ref().unwrap().authoring.as_ref().unwrap(), &source);
     }
+}
+
+#[test]
+fn two_grind_shortcuts_preserve_all_routes_and_shared_gates_in_package() {
+    let first=templates::source("grind_s_right").unwrap();
+    let mut source=templates::append(&first,"grind_s_right","merge","two").unwrap();
+    let end=authoring::piece(source.instances.iter().find(|p|p.id=="two-merge").unwrap()).unwrap();
+    source.checkpoints.extend([
+        authoring::Checkpoint{piece:"two-split".into(),sample:authoring::piece(source.instances.iter().find(|p|p.id=="two-split").unwrap()).unwrap().path.len()-1},
+        authoring::Checkpoint{piece:"two-merge".into(),sample:0},
+        authoring::Checkpoint{piece:"two-merge".into(),sample:end.path.len()-1},
+    ]);
+    let d=package::compile_source(&source).unwrap();
+    authoring::executable(d.assembled_track.as_ref().unwrap()).unwrap();
+    assert_eq!(d.assembled_track.as_ref().unwrap().routes.len(),4);
+    let loaded=read_bytes(&pack_bytes(d.clone(),BTreeMap::new()).unwrap()).unwrap();
+    assert_eq!(loaded.document.assembled_track,d.assembled_track);
+    assert_eq!(loaded.document.courses,d.courses);
+    assert_eq!(loaded.document.grind_lines,d.grind_lines);
+    verify_document(&loaded.document).unwrap();
 }
 
 #[test]
