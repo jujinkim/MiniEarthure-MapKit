@@ -37,22 +37,21 @@ and package checkpoints retain their explicit positions.
 - Search: at most 24 candidates, 512 pieces, 32,000 samples, within cancellation,
   package, cell and memory budgets. Failure returns `E_TRACK_DURATION` with the
   requested/closest time and reason; callers keep their current map.
-- A seed first plans the whole course as four to six ordered sections. Independent
-  draws choose corner families, elevation, road widths, obstacle spacing and
-  positive gimmick/action weights; sections arrange bends and action sequences.
-  Section and whole-course distance deficits prioritize specials during growth.
-  Retry randomness changes placement candidates, while the section plan stays fixed.
-  Candidate ranking and early exit require both time and composition feasibility,
-  then compare duration error and section distance composition with the seed plan.
-  Attachments, quarterpipes and optional shortcuts never contribute special distance;
-  tube transitions and composed-module preparation/recovery count as ordinary road.
-  Optional ordinary straights are limited to 32 m continuously across piece and
-  width boundaries, including return seams. The start runway and required
-  approach/recovery lengths remain intact. These are generation rules, not
-  restrictions on manual sources or stored-v1 package loading.
-- Width choices stay 4/6/8/12/18 m, restricted to each preset's supported dimensions.
-  Runways, merges and returns use 8 m. Pipe bores use the catalogue's 4/6 m choices.
-  Obstacles use independent seeded spacing and must retain the continuous bypass.
+- A seed first plans four to six sections with open driving, corners/elevation,
+  gimmick challenge and recovery roles. The plan selects type priorities before
+  layout attempts. Growth and attachments prefer unused types; backtracking uses
+  actual retained placements. The base-route special-distance and straight limits
+  remain hard constraints; preparation/recovery and optional routes add no special
+  distance. Attachments preserve footprint clearance and the continuous bypass.
+- [Diversity and narrow roads](TRACK_DIVERSITY.md) owns the independent piece/gimmick
+  50% goals, taxonomy, candidate ordering and response-only `generation_summary`.
+  After time/safety feasibility, candidates compare largest diversity deficit,
+  combined deficit, time error and section-plan fit. Both goals permit early exit;
+  a shortfall searches up to the existing 24-candidate cap and returns actual counts.
+- Ordinary generated roads use 6/8/12/18 m within preset limits. At most one
+  smoothly tapered 4 m ordinary-road run may occupy at most 5% of base distance,
+  shared across main/optional routes and circuit seams; unsafe narrowing is omitted.
+  Dedicated structures and required tube portals retain their own dimensions.
 - `track_seed_defaults(seed)` returns `time_minutes` and `weather`, drawn uniformly
   from 06/09/12/17/18/21 hours and clear/cloudy/rain/snow using an independent stream.
   The Godot bridge exposes the same query. Generation stores this seed time in the
@@ -96,15 +95,15 @@ entire branch; all retained branch combinations share checkpoints.
 ## Circuit returns
 
 Closure runs a bounded best-first search over straight, right-angle, 45°, grade
-and height-return spiral modules, available regardless of category, plus action
-modules when selected. It tracks distance deficits and remaining straight length;
+and height-return spiral modules, available regardless of category, plus selected action modules and loop/overpass returns with their
+ordinary width preparation. It tracks distance deficits and remaining straight length;
 completed returns must satisfy the same composition and sequence rules as growth. A final cubic
 seam is allowed only between endpoints ≤800 cm apart with control-polygon length
 ≤1600 cm, forward-facing tangents and ≤23% vertical tangent component. A closure
 stores at most 4096 nodes and 64 added modules, is attempted after four more
 reference seconds of growth, and stops once time (±10%) and composition are feasible. Equivalent
 50 cm pose bins distinguish straight allowance, special-distance share and the
-last family before keeping the cheapest arrival. Hand-authored curves are not limited.
+last family and portal width before keeping the cheapest arrival. Hand-authored curves are not limited.
 
 ## Saved-package verification
 

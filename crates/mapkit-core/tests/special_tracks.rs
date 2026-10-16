@@ -267,15 +267,22 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
             "real bend, not axial roll"
         );
         // Measure actual circular coordinates; a preset name cannot certify radius.
-        let sign = if p.id.ends_with("left") { -1.0 } else { 1.0 };
-        let centers = if p.id.contains("curve") || p.id.contains("uturn") {
+        let sign = if p.id.contains("left") { -1.0 } else { 1.0 };
+        let spiral=p.id.contains("spiral");
+        let expected_radius=if spiral {f64::from(p.width_cm/2+900)} else {400.0};
+        let centers = if spiral {
+            vec![[sign*expected_radius,800.0]]
+        } else if p.id.contains("curve") || p.id.contains("uturn") {
             vec![[sign * 400.0, 400.0]]
         } else {
             vec![[-400.0, 800.0], [-400.0, 1600.0], [-400.0, 2400.0]]
         };
         for sample in &samples {
             let z = sample.position_cm[2];
-            if !p.id.contains("curve") && !p.id.contains("uturn") && !(800..=2400).contains(&z) {
+            // Spiral portals are level leads; only the rising/falling body is
+            // circular. Its radius follows the catalogue's bore-aware formula.
+            if spiral && (sample.position_cm[1]==p.path[0].position_cm[1] || sample.position_cm[1]==p.path.last().unwrap().position_cm[1]) {continue;}
+            if !spiral && !p.id.contains("curve") && !p.id.contains("uturn") && !(800..=2400).contains(&z) {
                 continue;
             }
             if p.id.contains("curve") && (z < 400 || sample.position_cm[0].abs() > 400) {
@@ -292,7 +299,7 @@ fn swept_tubes_share_hollow_geometry_frames_and_bounds() {
                 })
                 .fold(f64::INFINITY, f64::min);
             assert!(
-                (radius - 400.0).abs() < 1.0,
+                (radius - expected_radius).abs() < 1.0,
                 "{} measured radius {radius}",
                 p.id
             );

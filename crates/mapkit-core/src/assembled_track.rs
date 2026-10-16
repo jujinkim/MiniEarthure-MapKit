@@ -35,6 +35,9 @@ mod walls;
 mod layout;
 mod plan;
 mod composition;
+mod diversity;
+mod narrow;
+pub use diversity::{generation_summary, GenerationSummary, TypeSummary};
 pub mod templates;
 mod corner_shortcuts;
 pub mod jump_shortcuts;
@@ -457,6 +460,8 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/plan.rs").as_slice(),
             include_bytes!("assembled_track/composition.rs").as_slice(),
+            include_bytes!("assembled_track/diversity.rs").as_slice(),
+            include_bytes!("assembled_track/narrow.rs").as_slice(),
             include_bytes!("assembled_track/templates.rs").as_slice(),
             include_bytes!("assembled_track/corner_shortcuts.rs").as_slice(),
             include_bytes!("assembled_track/jump_shortcuts.rs").as_slice(),

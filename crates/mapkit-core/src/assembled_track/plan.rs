@@ -27,7 +27,15 @@ fn draw(rng: &mut u64, count: u64) -> u64 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Role {
+    Open,
+    Corner,
+    Challenge,
+    Recovery,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Section {
+    pub role: Role,
     pub families: [u32; 13],
     pub categories: [u32; 3],
     pub widths: [u32; 5],
@@ -38,6 +46,7 @@ pub(super) struct Section {
 pub(super) struct Plan {
     pub sections: Vec<Section>,
     pub obstacle_spacing: u64,
+    pub types: Vec<usize>,
 }
 impl Plan {
     pub fn new(seed: u64) -> Self {
@@ -55,18 +64,41 @@ impl Plan {
         let _ = draw(&mut rng, 4); // Keep the section stream independent of shortcut tickets.
         let count = 4 + draw(&mut rng, 3) as usize;
         let mut sections = Vec::new();
-        for _ in 0..count {
+        for index in 0..count {
             // Pick the flow for a whole section before selecting any pieces.
             // A recovery straight, corner sequence or action sequence persists
             // across every layout attempt for this seed.
-            let flow = draw(&mut rng, 3);
-            let mut widths = [1, 5, 18, 18, 8];
+            let role = match index {
+                0 => Role::Open,
+                1 => Role::Corner,
+                2 => Role::Challenge,
+                n if n == count - 1 => Role::Recovery,
+                _ => {
+                    if draw(&mut rng, 2) == 0 {
+                        Role::Corner
+                    } else {
+                        Role::Challenge
+                    }
+                }
+            };
+            let mut widths = match role {
+                Role::Open => [0, 2, 12, 30, 24],
+                Role::Corner => [0, 12, 30, 16, 4],
+                Role::Challenge => [0, 16, 24, 20, 4],
+                Role::Recovery => [0, 4, 30, 24, 12],
+            };
             widths[width] += 50;
             sections.push(Section {
+                role: role.clone(),
                 families: [
-                    straight,
-                    elevation,
-                    turn,
+                    straight
+                        * if matches!(role, Role::Open | Role::Recovery) {
+                            3
+                        } else {
+                            1
+                        },
+                    elevation + if matches!(role, Role::Corner) { 30 } else { 0 },
+                    turn + if matches!(role, Role::Corner) { 30 } else { 0 },
                     turn / 2,
                     turn / 3,
                     turn / 4,
@@ -79,18 +111,38 @@ impl Plan {
                     3 + turn / 3,
                 ],
                 categories: [
-                    30,
-                    gimmick * if flow == 2 { 3 } else { 1 },
-                    action * if flow == 2 { 3 } else { 1 },
+                    if matches!(role, Role::Open | Role::Recovery) {
+                        90
+                    } else {
+                        30
+                    },
+                    gimmick
+                        * if matches!(role, Role::Challenge) {
+                            3
+                        } else {
+                            1
+                        },
+                    action
+                        * if matches!(role, Role::Challenge) {
+                            3
+                        } else {
+                            1
+                        },
                 ],
                 widths,
                 left: draw(&mut rng, 2) == 0,
                 up: draw(&mut rng, 2) == 0,
             });
         }
+        let mut types: Vec<_> = (0..diversity::PIECES.len()).collect();
+        for i in (1..types.len()).rev() {
+            let j = draw(&mut rng, (i + 1) as u64) as usize;
+            types.swap(i, j);
+        }
         Self {
             sections,
             obstacle_spacing,
+            types,
         }
     }
     pub fn section(&self, elapsed: u32, target: u32) -> &Section {
@@ -155,14 +207,21 @@ impl Plan {
         }
         residual / self.sections.len() as u64
     }
-    pub fn rank(&self, a: &Assembly, required: &composition::Required) -> (bool, u64) {
+    pub fn rank(
+        &self,
+        a: &Assembly,
+        required: &composition::Required,
+    ) -> (bool, u64, u64, u32, u64) {
         let target = u32::from(a.settings.duration_seconds) * 1000;
         let delta = a.estimated_msec.abs_diff(target);
         let quality = composition::Composition::assembly(a, required);
+        let (largest, sum) = generation_summary(a).deficit();
         (
             delta > target / 10 || !quality.valid(&a.settings),
-            quality.penalty(&a.settings) * 1000 / quality.total()
-                + u64::from(delta) * 1000 / u64::from(target) + self.fit(a),
+            largest,
+            sum,
+            delta,
+            self.fit(a),
         )
     }
 }

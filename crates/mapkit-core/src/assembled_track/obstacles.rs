@@ -426,6 +426,9 @@ pub(super) fn authored(a: &Assembly, index: usize, o: &authoring::Attachment) ->
     )
 }
 pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
+    place_reserved(a,&vec![])
+}
+pub(super) fn place_reserved(a: &Assembly, reserved: &composition::Required) -> Result<(Vec<Obstacle>, u64, u32)> {
     if !a.settings.categories.iter().any(|id| id == "gimmick") {
         return Ok((vec![], 0, 0));
     }
@@ -433,7 +436,7 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
     let mut eligible = 0;
     for (i, p) in a.pieces.iter().enumerate() {
         cancellation::checkpoint()?;
-        if !eligible_piece(i, p) {
+        if !eligible_piece(i, p) || reserved.iter().any(|r|r.contains(&i)) {
             continue;
         }
         for (branch, path) in [(false, &p.path), (true, &p.alternate_path)] {
@@ -466,25 +469,34 @@ pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
             }
         }
     }
-    let spacing = plan::Plan::new(a.settings.seed).obstacle_spacing;
+    let plan = plan::Plan::new(a.settings.seed);
+    let spacing = plan.obstacle_spacing;
     let target = ((eligible + spacing / 2) / spacing).max(1) as u32;
     let road_objects = road_gimmicks(a)?;
     let available = crate::gimmick::MAX_GIMMICKS.saturating_sub(road_objects.len());
     let count = (target as usize).min(available).min(sites.len());
     let mut rng = a.settings.seed ^ 0xd1b54a32d192ed03;
+    let mut kinds:Vec<_>=KINDS.iter().copied().filter(|k|*k!="quarterpipe_right" && *k!="grind_rail").collect();
+    for i in (1..kinds.len()).rev() {let j=next(&mut rng) as usize%(i+1);kinds.swap(i,j);}
     let mut out: Vec<Obstacle> = vec![];
     for bin in 0..count {
         cancellation::checkpoint()?;
         let begin = bin * sites.len() / count;
         let end = (bin + 1) * sites.len() / count;
         let start = next(&mut rng) as usize % (end - begin);
-        let kind_start = next(&mut rng) as usize % KINDS.len();
         let side = if next(&mut rng) % 2 == 0 { 1 } else { -1 };
-        'search: for offset in 0..end - begin {
-            let site = &sites[begin + (start + offset) % (end - begin)];
-            for n in 0..KINDS.len() {
-                let kind = KINDS[(kind_start + n) % KINDS.len()];
-                if kind == "grind_rail" { continue; } // Rails belong to measured optional curve shortcuts.
+        let seen:std::collections::BTreeSet<_>=out.iter().filter_map(|o|diversity::obstacle_kind(&o.kind)).collect();
+        let mut ordered=kinds.clone();
+        ordered.sort_by_key(|k|seen.contains(&diversity::obstacle_kind(k).unwrap()));
+        // Search an unused type's suitable sites before falling back to a used
+        // type. The attachment count and continuous bypass budget stay fixed.
+        'search: for kind in ordered {
+            for offset in 0..end - begin {
+                cancellation::checkpoint()?;
+                let site = &sites[begin + (start + offset) % (end - begin)];
+                let elapsed:u32=a.pieces.iter().take(site.piece).map(|p|p.reference_msec).sum();
+                let role=&plan.section(elapsed,u32::from(a.settings.duration_seconds)*1000).role;
+                if matches!(role,plan::Role::Recovery) {continue;}
                 let Some(o) = safe_site(a, site, automatic_kind(kind, side), side)
                 else {
                     continue;
@@ -595,6 +607,19 @@ pub(super) fn gimmick(a: &Assembly, o: &Obstacle, index: usize) -> Gimmick {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn suitable_wide_road_fixture_reaches_the_gimmick_type_goal_without_more_objects() {
+        let seed=(0..256).find(|&seed|plan::Plan::new(seed).obstacle_spacing<=2400).unwrap();
+        let mut pieces=vec![];let mut at=[0;3];
+        for _ in 0..40 {push_piece(&mut pieces,&mut at,0,"sprint_lane",800,true,[0;3]);}
+        let mut a=layout::finish(pieces,&Settings{seed,circuit:false,..Settings::default()});
+        let (placed,eligible,target)=place(&a).unwrap();
+        assert!(placed.len()<=target as usize);
+        assert_eq!(target,((eligible+plan::Plan::new(seed).obstacle_spacing/2)/plan::Plan::new(seed).obstacle_spacing).max(1) as u32);
+        a.obstacles=placed;
+        let summary=generation_summary(&a);
+        assert!(summary.gimmicks.used>=summary.gimmicks.target,"{summary:?}");
+    }
     fn fixture(id: &str, width: u32) -> Assembly {
         let mut pieces = vec![];
         let mut origin = [0; 3];

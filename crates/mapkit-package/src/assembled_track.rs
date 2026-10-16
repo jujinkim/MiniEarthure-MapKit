@@ -116,11 +116,12 @@ pub fn verify_course(document: &MapDocument, world: &str, candidate: &Course) ->
 }
 pub fn save(settings: &track::Settings, path: &Path) -> Result<serde_json::Value> {
     let document = generate(settings)?;
+    let generation_summary = track::generation_summary(document.assembled_track.as_ref().unwrap());
     let bytes = pack_bytes(document.clone(), BTreeMap::new())?;
     mapkit_core::cancellation::checkpoint()?;
     write_new(path, &bytes)?;
     Ok(
-        serde_json::json!({"document":document,"path":path,"package_sha256":sha256(&bytes),"package_bytes":bytes.len()}),
+        serde_json::json!({"document":document,"generation_summary":generation_summary,"path":path,"package_sha256":sha256(&bytes),"package_bytes":bytes.len()}),
     )
 }
 

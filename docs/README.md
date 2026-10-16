@@ -21,6 +21,7 @@ essential validation; edit existing sections instead of appending dated logs.
 | --- | --- |
 | Track source, compiler and manual authoring | [TRACK_AUTHORING](TRACK_AUTHORING.md) |
 | Seeded track generation | [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md) |
+| Generation diversity and narrow-road budget | [TRACK_DIVERSITY](TRACK_DIVERSITY.md) |
 | Jump platforms, route gates and entry recovery | [JUMP_SHORTCUTS](JUMP_SHORTCUTS.md) |
 | Optional curved corner rails and route combinations | [CORNER_SHORTCUTS](CORNER_SHORTCUTS.md) |
 | Catalogue and surface geometry | [TRACK_GEOMETRY](TRACK_GEOMETRY.md) |

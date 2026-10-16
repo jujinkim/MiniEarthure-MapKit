@@ -53,13 +53,16 @@ fn end(pieces: &[Piece]) -> Sample {
     pieces.last().unwrap().path.last().unwrap().clone()
 }
 fn append(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
+    append_exit(pieces,id,w,None)
+}
+fn append_exit(pieces: &mut Vec<Piece>, id: &str, w: u32, exit: Option<u32>) -> bool {
     let last = end(pieces);
     let yaw = round(
         libm::atan2(last.forward[0] as f64, last.forward[2] as f64) * 180000.0
             / std::f64::consts::PI,
     ) as i32;
     // The exit transition widens back into an ordinary road.
-    let exit = if id == "tube_exit" && pieces.last().is_some_and(|p| p.id.starts_with("cylinder")) { w * 2 } else { w };
+    let exit = exit.unwrap_or_else(||if id == "tube_exit" && pieces.last().is_some_and(|p| p.id.starts_with("cylinder")) { w * 2 } else { w });
     let mut p = variant(id, w, last.lateral_cm * 2, exit);
     p.rotation_mdeg = [0, yaw, 0];
     p.quarter_turns = (yaw.rem_euclid(360000) / 90000) as u8;
@@ -89,7 +92,7 @@ fn add_block(pieces: &mut Vec<Piece>, id: &str, w: u32) -> bool {
     let size = pieces.len();
     if ["loop", "banked_chicane", "overpass"].contains(&id)
         && end(pieces).lateral_cm != 200
-        && !append(pieces, "straight", 400)
+        && !append_exit(pieces, "straight", 600, Some(400))
     {
         return false;
     }
@@ -127,7 +130,11 @@ fn short_seam(last: &Sample, goal: &Sample) -> Option<Piece> {
 fn return_piece(previous: &Piece, id: &str, templates: &mut std::collections::BTreeMap<(String,u32),Piece>) -> Piece {
     let last=previous.path.last().unwrap();
     let yaw=round(libm::atan2(last.forward[0] as f64,last.forward[2] as f64)*180000.0/std::f64::consts::PI) as i32;
-    let template=templates.entry((id.into(),last.lateral_cm*2)).or_insert_with(||materialize(&variant(id,800,last.lateral_cm*2,800)));
+    let template=templates.entry((id.into(),last.lateral_cm*2)).or_insert_with(||{
+        let (preset,width,exit)=if id=="return_prepare" {("straight",600,400)}
+            else if ["loop","overpass"].contains(&id) {(id,400,400)} else {(id,800,800)};
+        materialize(&variant(preset,width,last.lateral_cm*2,exit))
+    });
     let mut p=template.clone();
     p.origin_cm=last.position_cm;
     p.rotation_mdeg=[0,yaw,0];
@@ -146,7 +153,7 @@ fn closure(pieces: &mut Vec<Piece>, s: &Settings, required: &Required) -> Result
     };
     let key=|sample: &Sample| {
         let yaw=round(libm::atan2(sample.forward[0] as f64,sample.forward[2] as f64)*4.0/std::f64::consts::PI);
-        (sample.position_cm[0].div_euclid(50),sample.position_cm[1].div_euclid(50),sample.position_cm[2].div_euclid(50),yaw)
+        (sample.position_cm[0].div_euclid(50),sample.position_cm[1].div_euclid(50),sample.position_cm[2].div_euclid(50),yaw,sample.lateral_cm)
     };
     let state_key=|sample: &Sample, quality: &Composition, id: &str| {
         (key(sample), quality.tail/400, quality.special()*10/quality.total(), family(id).to_owned())
@@ -186,6 +193,10 @@ fn closure(pieces: &mut Vec<Piece>, s: &Settings, required: &Required) -> Result
         if nodes.len()>=CLOSURE_NODES || node.depth>=64 || pieces.len()+node.depth+2>=MAX_PIECES {continue;}
         let mut choices=vec!["straight","right90","right90_left","gentle45","gentle45_left"];
         if s.categories.iter().any(|c|c=="action") { choices.extend(["jump_panel","acceleration_panel","air_ring"]); }
+        if s.categories.iter().any(|c|c=="gimmick") {
+            if last.lateral_cm==200 {choices.extend(["loop","overpass"]);}
+            else {choices.push("return_prepare");}
+        }
         let height=last.position_cm[1]-goal.position_cm[1];
         if height>0 {choices.push("slope_down");}
         if height<0 {choices.push("slope_up");}
@@ -203,12 +214,12 @@ fn closure(pieces: &mut Vec<Piece>, s: &Settings, required: &Required) -> Result
             let cost=node.cost+u64::from(p.reference_msec);
             let endpoint=p.path.last().unwrap();
             let mut quality=node.quality.clone();
-            let c=composition::category_index(id);
+            let c=composition::category_index(&p.id);
             quality.lengths[c]+=race_length(&p);
             if c!=0 {quality.families.insert(family(id).into());}
             quality.longest_straight=quality.longest_straight.max(longest);
             quality.tail=straight_tail;
-            let k=state_key(endpoint,&quality,id);
+            let k=state_key(endpoint,&quality,&p.id);
             let minimum=distance(endpoint.position_cm,goal.position_cm).max(endpoint.position_cm[1].abs_diff(goal.position_cm[1])*6)*1000/SPEED as u64;
             if cost+minimum>u64::from(budget)+64 || node.samples+p.path.len()>MAX_SAMPLES
                 || visited.get(&k).is_some_and(|old|*old<=cost) || !clear(&p) {continue;}
@@ -281,54 +292,41 @@ fn weighted_index(rng: &mut u64, weights: &[u32]) -> usize {
     }
     unreachable!("nonempty positive weight distribution")
 }
-fn driving_choice(rng: &mut u64, section: &plan::Section) -> &'static str {
-    let family = DRIVING_FAMILIES[weighted_index(rng, &section.families)];
-    let left=if next(rng)%4==0 {!section.left} else {section.left};
-    let up=if next(rng)%4==0 {!section.up} else {section.up};
-    let variants:Vec<_>=family.iter().copied().filter(|id| {
-        (!family.iter().any(|v|v.contains("left")) || id.contains("left")==left)
-            && (!id.ends_with("up") && !id.ends_with("down") || id.ends_with("up")==up)
-    }).collect();
-    variants[next(rng) as usize % variants.len()]
-}
 fn road_width(rng: &mut u64, id: &str, section: &plan::Section) -> u32 {
-    let widths = if ULTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id) { WIDTHS } else { supported_widths(id) };
+    let widths:Vec<_> = (if ULTRA_WIDE_PRESETS.iter().any(|(_, base)| *base == id) { WIDTHS } else { supported_widths(id) }).iter().copied().filter(|w|*w>=600).collect();
     let weights: Vec<_> = widths.iter().map(|w| section.widths[WIDTHS.iter().position(|v| v == w).unwrap()]).collect();
     widths[weighted_index(rng, &weights)]
 }
-fn driving_piece(rng: &mut u64, section: &plan::Section) -> (&'static str, u32) {
-    let id = driving_choice(rng, section);
-    let width = road_width(rng, id, section);
-    let preset = if width == 1800 {
-        ULTRA_WIDE_PRESETS.iter().find(|(_, base)| *base == id).map_or(id, |(wide, _)| *wide)
-    } else if width == 1200 {
-        EXTRA_WIDE_PRESETS.iter().find(|(_, base)| *base == id).map_or(id, |(wide, _)| *wide)
-    } else { id };
-    (preset, width)
+fn driving_variant(rng: &mut u64, id: &'static str, section: &plan::Section) -> (&'static str,u32) {
+    let width=road_width(rng,id,section);
+    let preset=if width==1800 {ULTRA_WIDE_PRESETS.iter().find(|(_,base)|*base==id).map_or(id,|(wide,_)|*wide)}
+        else if width==1200 {EXTRA_WIDE_PRESETS.iter().find(|(_,base)|*base==id).map_or(id,|(wide,_)|*wide)} else {id};
+    (preset,width)
 }
 fn special_width(rng: &mut u64, id: &str) -> u32 {
     // Same bore choices as manual authoring.
     let widths = supported_widths(id);
     widths[next(rng) as usize % widths.len()]
 }
-const SPECIAL_FAMILIES: &[&[&[&str]]] = &[
-    &[
-        &["cylinder", "cylinder_curve", "cylinder_curve_left", "cylinder_uturn", "cylinder_uturn_left",
-          "cylinder_s_rise", "cylinder_spiral_right_up", "cylinder_spiral_right_down",
-          "cylinder_spiral_left_up", "cylinder_spiral_left_down", "banked_chicane"],
-        &["overpass"], &["loop"],
-    ],
-    &[
-        &["jump_panel", "jump", "offset_jump", "double_jump"],
-        &["acceleration_panel", "boost_chain"],
-        &["air_ring", "air_ring_chain"],
-    ],
-];
-fn special_choice(rng: &mut u64, category: usize, seen: &std::collections::BTreeSet<String>) -> &'static str {
-    let families = SPECIAL_FAMILIES[category - 1];
-    let weights: Vec<_> = families.iter().map(|variants| if seen.contains(family(variants[0])) { 1 } else { 3 }).collect();
-    let variants = families[weighted_index(rng, &weights)];
-    variants[next(rng) as usize % variants.len()]
+fn planned_choice(rng: &mut u64, plan: &plan::Plan, c: usize, section: &plan::Section,
+    seen: &std::collections::BTreeSet<&str>, tried: &mut std::collections::BTreeSet<&'static str>) -> Option<&'static str> {
+    let all:Vec<_>=plan.types.iter().map(|&i|&diversity::PIECES[i])
+        .filter(|k|k.category==selection_ids()[c] && !tried.contains(k.id)).collect();
+    let unused=all.iter().any(|k|!seen.contains(k.id));
+    let choices:Vec<_>=all.into_iter().filter(|k|!unused || !seen.contains(k.id)).collect();
+    if choices.is_empty() {return None;}
+    let weights:Vec<_>=choices.iter().enumerate().map(|(i,k)| {
+        let f=DRIVING_FAMILIES.iter().position(|ids|ids.iter().any(|id|k.variants.contains(id)));
+        let preference=f.map_or(10,|i|section.families[i].max(1));
+        preference*(choices.len()-i) as u32
+    }).collect();
+    let k=choices[weighted_index(rng,&weights)]; tried.insert(k.id);
+    let variants:Vec<_>=k.variants.iter().copied().filter(|id| {
+        !id.contains("_wide") && !id.contains("extra_wide") && !id.contains("ultra_wide") && !id.ends_with("_narrow")
+            && (!k.variants.iter().any(|v|v.contains("left")) || id.contains("left")==section.left)
+            && (!id.ends_with("up") && !id.ends_with("down") || id.ends_with("up")==section.up)
+    }).collect();
+    Some(variants[next(rng) as usize % variants.len()])
 }
 fn required_ranges(fragments: &[(usize,authoring::Source)]) -> Required {
     fragments.iter().flat_map(|(start,f)| {
@@ -383,6 +381,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             }
         }
         let mut added = false;
+        let mut tried=std::collections::BTreeSet::new();
         for _ in 0..12 {
             let section=plan.section(elapsed,target);
             let mut category_weights=section.categories;
@@ -400,7 +399,8 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             });
             let local=Composition::measure(section_pieces,&required_ranges(&fragments));
             let desired=if s.circuit {55} else {50};
-            let deficit=quality.special()*100<quality.total()*desired || local.special()*100<local.total()*45;
+            let local_share=match section.role {plan::Role::Open=>30,plan::Role::Corner=>45,plan::Role::Challenge=>65,plan::Role::Recovery=>20};
+            let deficit=(elapsed>target/3 && quality.special()*100<quality.total()*desired) || local.special()*100<local.total()*local_share;
             if category_weights[1]+category_weights[2]>0 {
                 if deficit { category_weights[0]=0; }
                 else if quality.special()*100>quality.total()*57 && category_weights[0]>0 {
@@ -412,7 +412,9 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 }
             }
             let c=weighted_index(&mut rng,&category_weights);
-            let choice=if c==0 {"driving"} else {special_choice(&mut rng,c,&quality.families)};
+            let mut seen=diversity::placed(&pieces);
+            if fragments.iter().any(|(_,s)|s.actions.iter().any(|a|a.kind=="air_ring")) {seen.insert("air_ring");}
+            let Some(choice)=planned_choice(&mut rng,plan,c,section,&seen,&mut tried) else {continue;};
             let start=pieces.len();
             if ["double_jump","air_ring_chain"].contains(&choice) {
                 let fragment=templates::placed(choice,&end(&pieces))?;
@@ -427,14 +429,13 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 }
                 pieces.truncate(start);continue;
             }
-            let (id, w) = if choice == "driving" {
-                let mut section=section.clone();
-                if quality.tail>=1600 {section.families[0]=0;section.families[1]=0;}
-                driving_piece(&mut rng, &section)
+            if c==0 && quality.tail>=1600 && ["straight","sprint_lane","slope","slope_up","slope_down"].contains(&choice) {continue;}
+            let (id, w) = if c==0 {
+                driving_variant(&mut rng,choice,section)
             }
                 else if category(choice) == "action" { (choice, road_width(&mut rng, choice, section)) }
                 else { (choice, special_width(&mut rng, choice)) };
-            if let Some(mut template) = corner_shortcuts::template(id) {
+            if let Some(mut template) = corner_shortcuts::template(id).filter(|_|!id.starts_with("banked_hairpin")) {
                 let (jump_selected,count)=jump_shortcuts::ticket(s.seed,corners.len());
                 // Keep the existing S rail shape alongside the longer jump detour.
                 // Shape choice uses layout RNG; branch admission keeps its independent ticket.
@@ -476,7 +477,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
         let quality=Composition::assembly(&a,&required);
         if !quality.valid(s) {return Err(error("E_TRACK_DURATION",quality.reason()));}
         if !valid_runs(&a.pieces,s.circuit) || a.pieces.iter().any(|p|geometry::self_intersects(p) || !geometry::ordinary_grade_valid(p)) {return Ok(None);}
-        let (obstacles, eligible, target) = obstacles::place(&a)?;
+        let (obstacles, eligible, target) = obstacles::place_reserved(&a,&required)?;
         a.obstacles=obstacles;a.obstacle_eligible_length_cm=eligible;a.obstacle_target_count=target;
         // A composed module reserves its full approach, recovery and merge.
         a.obstacles.retain(|obstacle| !fragments.iter().any(|(start, fragment)|
@@ -498,7 +499,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
         for (start,(id,width,selected)) in corners {
             let jump_count=jump_shortcuts::IDS.iter().position(|v|*v==id).map(|n|n+5);
             if !selected || (if jump_count.is_some() {jumps} else {installed})==2 {continue;}
-            let fragment = match (if let Some(count)=jump_count {jump_shortcuts::source(count,true)} else {corner_shortcuts::source(id,width,true)}).and_then(|s|templates::place(s,&a.pieces[start].path[0])) {
+            let fragment = match (if let Some(count)=jump_count {jump_shortcuts::source(count,true)} else {corner_shortcuts::source(id,width,true)}).and_then(|mut s|{narrow::prepare_fragment(&mut s);templates::place(s,&a.pieces[start].path[0])}) {
                 Ok(fragment)=>fragment,
                 Err(e) if e.code=="E_CANCELLED"=>return Err(e),
                 Err(_)=>continue,
@@ -511,9 +512,11 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
         let mut out=authoring::compile(&source)?;
         if authoring::executable(&out).is_err() {return Ok(None);}
         authoring::checkpoint_budget(&out)?;
+        out=narrow::try_section(&source,&out,&required)?;
+        source=out.seed_source.clone().unwrap_or(source);
         out.authoring=None;out.seed_source=Some(source);
         out.validate()?;
-        if !Composition::assembly(&out,&required).valid(s) {return Ok(None);}
+        if !Composition::assembly(&out,&required).valid(s) || !narrow::valid(&out) {return Ok(None);}
         return Ok(Some((out,required)));
     }
     Ok(None)
@@ -544,7 +547,7 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
                 best = Some((a,required));
             }
             // The final result and early exit share the same feasibility contract.
-            if best.as_ref().is_some_and(|(a,r)|a.estimated_msec.abs_diff(target)<=target/10 && Composition::assembly(a,r).valid(&s)) {break;}
+            if best.as_ref().is_some_and(|(a,r)|a.estimated_msec.abs_diff(target)<=target/10 && Composition::assembly(a,r).valid(&s) && generation_summary(a).targets_met()) {break;}
         }
     }
     if best.is_none() { if let Some(e)=composition_failure {return Err(error("E_TRACK_DURATION",format!("Requested {} s; no feasible course within 24 candidates: {}",s.duration_seconds,e.message)));} }
@@ -568,13 +571,17 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
 mod tests {
     use super::*;
     #[test]
-    fn special_selection_balances_families_and_groups_variants() {
+    fn planned_selection_prefers_unplaced_types_and_keeps_repeat_families() {
         let mut rng=42;
-        let seen=["cylinder","loop","overpass"].map(String::from).into();
-        let mut counts=std::collections::BTreeMap::new();
-        for _ in 0..6000 { *counts.entry(family(special_choice(&mut rng,1,&seen))).or_insert(0)+=1; }
-        assert_eq!(counts.len(),3);
-        assert!(counts.values().all(|&n|(1800..2200).contains(&n)),"{counts:?}");
+        let plan=plan::Plan::new(42);
+        let seen=["cylinder","loop","overpass"].into();
+        let mut tried=std::collections::BTreeSet::new();
+        let mut chosen=std::collections::BTreeSet::new();
+        for _ in 0..5 {
+            let id=planned_choice(&mut rng,&plan,1,&plan.sections[2],&seen,&mut tried).unwrap();
+            let kind=diversity::piece_kind(&catalogue_piece(id)).unwrap();
+            assert!(!seen.contains(kind));assert!(chosen.insert(kind));
+        }
         for ids in [["cylinder","cylinder_curve_left","banked_chicane"],
             ["jump","offset_jump","jump_panel"],
             ["acceleration_panel","boost_chain","acceleration_panel"]] {
@@ -609,10 +616,11 @@ mod tests {
         assert!(plans.iter().any(|p|p.sections[0].families[0]<25));
         assert!(plans.iter().any(|p|p.sections[0].categories[2]>30));
         assert!(plans.iter().all(|p|p.sections.iter().all(|s|s.categories[1]>0 && s.categories[2]>0)));
-        for plan in plans {for section in plan.sections {
+        for plan in plans {for section in &plan.sections {
             let mut rng=42;
             for _ in 0..100 {
-                let (id,width)=driving_piece(&mut rng,&section);
+                let choice=planned_choice(&mut rng,&plan,0,&section,&std::collections::BTreeSet::new(),&mut std::collections::BTreeSet::new()).unwrap();
+                let (id,width)=driving_variant(&mut rng,choice,&section);
                 assert!(supported_widths(id).contains(&width));
                 let p=materialize(&variant(id,width,width,width));
                 assert!(!geometry::self_intersects(&p),"{id}/{width}");

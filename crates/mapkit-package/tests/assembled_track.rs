@@ -4,6 +4,21 @@ use mapkit_package::{assembled_track as package, *};
 use std::collections::BTreeMap;
 
 #[test]
+fn generation_summary_is_response_metadata_and_saved_maps_remain_v1() {
+    let path=std::env::temp_dir().join(format!("mapkit-diversity-{}.memap",std::process::id()));
+    assert!(!path.exists());
+    let result=package::save(&Settings{seed:17,circuit:false,categories:vec!["driving".into()],..Settings::default()},&path).unwrap();
+    let reopened=read(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    let assembly=reopened.document.assembled_track.as_ref().unwrap();
+    assert_eq!(result["generation_summary"],serde_json::to_value(generation_summary(assembly)).unwrap());
+    assert!(result["document"].get("generation_summary").is_none());
+    assert!(result["document"]["assembled_track"].get("generation_summary").is_none());
+    assert_eq!(reopened.document.recipe_version,1);
+    assert_eq!(result["generation_summary"]["gimmicks"]["total"],0);
+}
+
+#[test]
 fn stored_quarterpipe_placement_is_not_recomputed_on_open() {
     let mut source=authoring::Source::empty();
     source.settings.circuit=false;
