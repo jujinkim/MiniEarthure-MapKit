@@ -12,13 +12,13 @@ float material_detail_weight(float distance_to_camera) {
 }
 // Packed tiles are centred around 0.65 luminance. Relief must not darken the
 // whole material when it enters the detail range or changes quality tier.
-float detail_luminance(float value) { return clamp(value/0.65,0.45,1.5); }
+float detail_luminance(float value) { return clamp(value/0.65,0.88,1.12); }
 vec2 detail_uv(vec3 p, vec3 n) {
     vec3 a=abs(n);
     return (a.y>max(a.x,a.z) ? p.xz : (a.x>a.z ? p.zy : p.xy))*detail_scale;
 }
 vec3 detail_bump(vec3 p, vec3 n) {
-    vec2 d=(texture(detail_tile,detail_uv(p,n)).ba*2.0-1.0)*0.13;
+    vec2 d=(texture(detail_tile,detail_uv(p,n)).ba*2.0-1.0)*0.035;
     vec3 a=abs(n);
     return a.y>max(a.x,a.z) ? vec3(-d.x,0.0,-d.y) : (a.x>a.z ? vec3(0.0,-d.y,-d.x) : vec3(-d.x,-d.y,0.0));
 }

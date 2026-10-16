@@ -65,13 +65,14 @@ cell estimates, not measured work time or RSS.
 ## Weather and distance fog
 
 `color_grade.gd` supplies a scene-owned 256px HDR channel LUT to Godot's built-in
-`Environment.adjustment_color_correction`. Daylight uses amber highlights, olive
-midtones and deep shadows; night keeps cool shadows and true black. Accumulated
+`Environment.adjustment_color_correction`. Daylight balances a bright casual palette with sepia: warm cream highlights, olive
+shadows and lifted midtones; night keeps cool shadows and true black. Accumulated
 snow blends the daylight curves towards neutral. Updates reuse one gradient and
 texture, within the existing atmosphere allowance; retained LUT resources keep
 that lease alive. The grade covers sky, vehicles and scenery after tonemapping,
 while Canvas HUD colours stay unchanged. Materials retain their authored colours.
-Direct light follows solar elevation, with cooler snow illumination. Existing
+Direct light follows solar elevation, with cooler snow illumination and brighter
+olive-neutral ambient fill for readable shaded faces. Existing
 light/shadow pools, authority and display-distance limits are unchanged.
 
 Precipitation uses a bounded camera-centred GPU volume and an overhead shelter ray.

@@ -30,6 +30,7 @@ func run() -> void:
 	var day := await capture()
 	var warm := day.get_pixel(64,64)
 	check(warm.r-warm.b>.10 and warm.g>warm.b,"daytime amber/olive grade reaches rendered background")
+	check(warm.r>.55 and warm.b>.44,"daylight midtones stay bright and retain colour separation")
 	grade.update(0,0)
 	var night := await capture()
 	var cool := night.get_pixel(64,64)

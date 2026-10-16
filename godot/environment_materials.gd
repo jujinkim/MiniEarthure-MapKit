@@ -30,7 +30,7 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 	if tile_cursor >= TILE_KINDS.size() or load_failed: return true
 	var kind: String = TILE_KINDS[tile_cursor]
 	if tile_image == null:
-		var path: String = get_script().resource_path.get_base_dir().path_join("textures/"+(str(tile_size)+"/" if tile_size != 256 else "")+kind+".png")
+		var path: String = get_script().resource_path.get_base_dir().path_join("textures/racing/"+(str(tile_size)+"/" if tile_size != 256 else "")+kind+".png")
 		# Trusted engine import remapping also works in exports. Decode and GPU
 		# upload are separate admitted steps; never preload texture owners.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D

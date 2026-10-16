@@ -70,7 +70,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	settings.fog_density = 0.0008
 	settings.glow_enabled = false
 	settings.adjustment_enabled = true
-	settings.adjustment_saturation = .92
+	settings.adjustment_saturation = .98
 	settings.adjustment_contrast = 1.0
 	settings.adjustment_color_correction = color_grade.texture
 	add_to_group("mapkit_quality_targets")
@@ -159,11 +159,11 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	moon.light_energy = maxf(0.0,sin(float(celestial.moon_altitude)))*float(celestial.moon_phase)*0.12*(1.0-_clouds*0.85)
 	sun.shadow_enabled = float(celestial.altitude) > 0.0
 	moon.shadow_enabled = not sun.shadow_enabled and moon.light_energy > 0.01
-	settings.ambient_light_color = night_color.lerp(Color(0.61,0.65,0.70),day)
-	settings.ambient_light_energy = lerpf(night_ambient,0.38,day)*(1.0-_clouds*0.50)
+	settings.ambient_light_color = night_color.lerp(Color(0.72,0.73,0.66),day)
+	settings.ambient_light_energy = lerpf(night_ambient,0.52,day)*(1.0-_clouds*0.38)
 	# Preserve night blacks and snow whites without a quality-dependent grade.
 	color_grade.update(day,clampf(_snow*2.0,0.0,1.0))
-	settings.adjustment_saturation = lerpf(1.0,.92,day*(1.0-_snow*2.0))
+	settings.adjustment_saturation = lerpf(1.0,.98,day*(1.0-_snow*2.0))
 	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.48,0.49,0.46),day)
 	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
 	_weather_fog_energy = lerpf(0.04,0.6,day)

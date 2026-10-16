@@ -11,10 +11,10 @@ import random
 import struct
 from world_geometry import Model, cm, canonical
 
-STONE=(.55,.52,.44,1); CREAM=(.82,.78,.65,1); TRIM=(.86,.84,.73,1)
-BRICK=(.50,.26,.17,1); ROOF=(.31,.17,.13,1); SLATE=(.21,.26,.27,1)
-WOOD=(.34,.24,.15,1); DARK=(.13,.17,.17,1); GLASS=(.17,.29,.31,1)
-GREEN=(.23,.36,.25,1); BLUE=(.32,.46,.49,1); RUST=(.55,.28,.17,1)
+STONE=(.64,.61,.50,1); CREAM=(.91,.86,.72,1); TRIM=(.95,.91,.79,1)
+BRICK=(.66,.36,.22,1); ROOF=(.42,.24,.17,1); SLATE=(.28,.34,.33,1)
+WOOD=(.46,.33,.20,1); DARK=(.17,.20,.19,1); GLASS=(.20,.39,.42,1)
+GREEN=(.34,.44,.24,1); BLUE=(.37,.55,.57,1); RUST=(.69,.37,.20,1)
 PALETTE={STONE:'stone',CREAM:'plaster',TRIM:'plaster',BRICK:'brick',ROOF:'brick',
          SLATE:'stone',WOOD:'wood',DARK:'metal',GLASS:'glass',GREEN:'wood',BLUE:'plaster',RUST:'metal'}
 
@@ -35,7 +35,7 @@ class Mesh(Model):
         faces=outward(vertices,faces);self.faces(vertices,faces,color)
         if physical:self.convex.append(dict(vertices=[cm(v) for v in vertices],faces=faces))
     def detail(self, center, size, color):
-        if not self.distant:self.solid(center,size,color)
+        if not self.distant and sorted(size)[1]>=.12:self.solid(center,size,color)
     def export(self):
         data=super().export();n=struct.unpack_from('<I',data,12)[0]
         doc=json.loads(data[20:20+n]);binary=data[28+n:]
@@ -48,6 +48,7 @@ class Mesh(Model):
 
 def beam(m,a,b,r,color,sides=8,r2=None):
     """Tapered circular member, stable around arbitrary axes."""
+    sides=min(sides,8)
     axis=[b[i]-a[i] for i in range(3)];length=math.sqrt(sum(v*v for v in axis));axis=[v/length for v in axis]
     ref=[0,1,0] if abs(axis[1])<.9 else [1,0,0]
     cross=lambda u,v:[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
@@ -97,11 +98,6 @@ def gable(m,w,d,h,rise,color=ROOF,x=0,z=0):
         for side in (-1,1):
             m.solid((x+side*w/2,h-.05,z),(.13,.16,d+.12),TRIM)
             for end in (-1,1):beam(m,(x+side*w/2,h,z+end*d/2),(x,h+rise,z+end*d/2),.075,TRIM)
-        for row in range(1,7):
-            a=row/7
-            for side in (-1,1):
-                beam(m,(x+side*w/2*a,h+rise*(1-a)+.025,z-d/2),
-                     (x+side*w/2*a,h+rise*(1-a)+.025,z+d/2),.018,color,4)
 
 def window(m,x,y,z,w=1.15,h=1.35,shutters=False):
     # Dark reveal behind the glass, with projecting frame and lintel shadows.
@@ -111,13 +107,10 @@ def window(m,x,y,z,w=1.15,h=1.35,shutters=False):
     for dy in (-h/2,h/2):m.solid((x,y+dy,z-.14),(w+.20,.10,.22),TRIM)
     m.solid((x,y+h/2+.12,z-.12),(w+.36,.12,.30),STONE)
     if not m.distant:
-        for dx in [-w/2,0,w/2]:m.solid((x+dx,y,z-.10),(.055,h,.055),TRIM)
-        m.solid((x,y-.12,z-.10),(w,.055,.055),TRIM)
         m.solid((x,y-h/2-.09,z-.11),(w+.27,.12,.24),STONE)
         if shutters:
             for side in (-1,1):
                 m.solid((x+side*(w*.75+.11),y,z-.04),(w*.42,h+.10,.11),GREEN)
-                for dy in (-.4,-.2,0,.2,.4):m.solid((x+side*(w*.75+.11),y+dy,z-.11),(w*.40,.035,.035),DARK)
 
 def door(m,x,z,w=1.05,h=2.2,color=WOOD):
     m.solid((x,h/2+.12,z),(w+.22,h+.20,.15),TRIM)
@@ -207,7 +200,7 @@ def shop(variant=0,distant=False):
     if variant!=3:
         for x in (-w*.28,0,w*.28):window(m,x,4.85,z,1.15,1.35,variant==2)
     # The striped canvas has a physical sloping canopy and a thin scalloped edge.
-    count=3 if distant else 12
+    count=3 if distant else 6
     for i in range(count):
         x=-w/2+(i+.5)*w/count
         color=accent if i%2==0 else TRIM

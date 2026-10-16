@@ -18,6 +18,20 @@ class RicherAssets(unittest.TestCase):
                     self.assertNotEqual(normal,[0,0,0])
                     sides=[sum(normal[i]*(p[i]-a[i]) for i in range(3)) for p in c['vertices']]
                     self.assertEqual(max(sides),0);self.assertLess(min(sides),0)
+    def test_racing_tiles_are_separate_bounded_and_reproducible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tiles=Path(tmp);textures(tiles,racing=True)
+            for tile in tiles.rglob('*.png'):
+                self.assertEqual(tile.read_bytes(),(ROOT/'godot/textures/racing'/tile.relative_to(tiles)).read_bytes())
+                with Image.open(tile) as image:
+                    light=list(image.getchannel('R').getdata())
+                    self.assertAlmostEqual(sum(light)/len(light)/255,.65,delta=.003)
+                    self.assertGreater(max(light)-min(light),8)
+                    self.assertLess(max(light)-min(light),30)
+                    # Small relief, no grain normal spikes at any texture tier.
+                    for channel in ('B','A'):
+                        self.assertLess(max(image.getchannel(channel).getdata())-min(image.getchannel(channel).getdata()),15)
+
     def test_common_library_and_tiles_reproduce_without_embedded_bitmaps(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'library';create(p);tiles=Path(tmp)/'tiles';textures(tiles)

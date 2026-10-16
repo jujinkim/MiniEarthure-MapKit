@@ -73,7 +73,8 @@ func run() -> void:
 				sum += value; square += value*value; count += 1
 		means.append(sum/count)
 		print("TILE_PIXELS ",level," mean=",sum/count," variance=",square/count-pow(sum/count,2)," enabled=",textured.get_shader_parameter("detail_enabled"))
-		check(square/count-pow(sum/count,2)>.0001,"base texture remains visible at quality "+str(level))
+		var variance := square/count-pow(sum/count,2)
+		check(variance>.00001 and variance<.0004,"quiet broad texture without flat fill or noisy grain at quality "+str(level))
 	textured.set_shader_parameter("detail_enabled",false)
 	var far_color := await pixel()
 	print("TILE_FAR ",far_color)

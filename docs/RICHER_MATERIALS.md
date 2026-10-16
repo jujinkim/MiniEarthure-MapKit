@@ -1,21 +1,19 @@
 # Shared world materials and display quality
 
-Original MIT library assets use metre UVs, framed panes, foundations,
-eaves, signs, groves and faceted rocks. Containers have corrugations and door
-hardware; lamps have a cap and base, with corresponding collision proxies.
-Built-in fences/trunks/lights use wood/metal detail and the canopy uses a bounded
-LOD mesh with a leaf material. Existing user assets and generated packages survive.
+Original MIT models use angular silhouettes, broad painted faces and restrained
+street graphics. Architecture keeps window reveals, foundations, roof fascia and
+real openings. Near/far models share their palette and structural envelopes;
+small roof seams, window mullions and narrow decorative joinery are omitted.
+Circular scenery members use at most eight flat sides. Existing packages and
+imported models are preserved; new default worlds carry new content-addressed GLBs.
 
-`scripts/richer_assets.py` generates ten shared tiles (brick, plaster, wood, stone,
-asphalt, concrete, earth, grass, metal, leaf) at 128/256/512px. Channels contain
-mean-normalized albedo variation, roughness and baked normal XY. Asphalt has
-aggregate, repair patches and sealed cracks; brick/plaster have joints and stains;
-concrete has panel joints and discolouration, and metal has seams and wear.
-The shared master supplies 128/256/512px tiers. Low keeps base colour patterns,
-medium adds roughness/AO, and high uses the normal from the same tile. All tiers
-fade detail continuously at 32–48m to the authored mean colour. Tile luminance is
-centred at 0.65; leaf variation stays broad and quiet. Road markings are applied
-after base detail, preserving lane/hazard colours.
+`scripts/richer_assets.py --textures --racing` creates separate shared tiles under
+`godot/textures/racing` at 128/256/512px. Broad tonal variation replaces small grain,
+dirt and repair noise. The original tiles remain available as source artifacts.
+The shader bounds variation to 88–112% of the authored colour and reduces relief.
+Low retains the same base colours; medium adds roughness/AO and high adds restrained
+normals. Detail fades continuously at 32–48m to the authored mean colour.
+Tile luminance stays centred at 0.65 and road markings follow base detail.
 Imported normal/AO/roughness/metallic maps, puddle ripples and window masks fade
 through the last fifth of the existing quality effect distance (48/96/160m).
 Far windows retain average emission and the authority-owned lighting schedule.

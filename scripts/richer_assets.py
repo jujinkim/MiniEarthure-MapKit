@@ -188,7 +188,7 @@ def library():
     result['dock-crane']=m
     return result
 
-def textures(destination):
+def textures(destination, racing=False):
     """Mean-normalized albedo variation, roughness and normal XY; all tiers share a master."""
     destination.mkdir(parents=True,exist_ok=True)
     kinds=['brick','plaster','wood','stone','asphalt','concrete','earth','grass','metal','leaf']
@@ -225,6 +225,11 @@ def textures(destination):
                 light=.65+noise*.10+broad*.09+grain*.10+strata*.06+aggregate*.025-seam*.25-wear*.25-repair*.15
                 rough=(.45 if kind=='metal' else .84)+noise*.08+seam*.09+wear*.25-repair*.18
                 if kind=='leaf':light=.65+noise*.035+broad*.06+grain*.04
+                if racing:
+                    # Broad, quiet tonal blocks; no dirt, scratches or aggregate.
+                    light=.65+broad*.035+strata*.008-seam*.025
+                    rough=.52 if kind=='metal' else .86
+                    heights[-1]=.5+broad*.012-seam*.008
                 base.append((light,rough))
         mean=sum(value[0] for value in base)/len(base)
         pixels=[]
@@ -250,5 +255,5 @@ def create(destination):
     (destination/'library.json').write_text(json.dumps(dict(version=1,assets=assets,sha256=hashes,license='MIT'),indent=2)+'\n')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');a=p.parse_args()
-    textures(a.destination) if a.textures else create(a.destination)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');p.add_argument('--racing',action='store_true');a=p.parse_args()
+    textures(a.destination,a.racing) if a.textures else create(a.destination)

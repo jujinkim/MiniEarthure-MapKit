@@ -2,7 +2,7 @@ extends RefCounted
 ## Scene-owned SDR channel curves for Environment's built-in LUT. Canvas UI is
 ## composed afterwards. A fixed 256px texture fits the existing atmosphere lease.
 const STOPS := [0.0,0.08,0.25,0.5,0.75,1.0]
-const DAY := [Color(0.004,0.005,0.006),Color(0.045,0.050,0.038),Color(0.23,0.235,0.15),Color(0.55,0.52,0.36),Color(0.83,0.77,0.57),Color(1.0,0.97,0.83)]
+const DAY := [Color(0.008,0.010,0.008),Color(0.085,0.090,0.068),Color(0.285,0.290,0.235),Color(0.59,0.57,0.47),Color(0.85,0.81,0.70),Color(1.0,0.98,0.91)]
 const NIGHT := [Color(0,0,0),Color(0.072,0.081,0.096),Color(0.235,0.25,0.275),Color(0.485,0.505,0.535),Color(0.745,0.765,0.79),Color(1,1,1)]
 var texture := GradientTexture1D.new()
 var _day := -1.0
