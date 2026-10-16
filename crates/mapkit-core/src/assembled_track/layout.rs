@@ -436,7 +436,9 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 else { (choice, special_width(&mut rng, choice)) };
             if let Some(mut template) = corner_shortcuts::template(id) {
                 let (jump_selected,count)=jump_shortcuts::ticket(s.seed,corners.len());
-                let jump=base_preset(id).starts_with("spatial_s");
+                // Keep the existing S rail shape alongside the longer jump detour.
+                // Shape choice uses layout RNG; branch admission keeps its independent ticket.
+                let jump=base_preset(id).starts_with("spatial_s") && next(&mut rng)%2==0;
                 if jump {template=jump_shortcuts::IDS[count-5];}
                 let fragment = templates::place(if jump {jump_shortcuts::source(count,false)?} else {corner_shortcuts::source(template,w,false)?}, &end(&pieces))?;
                 let mut valid = true;

@@ -18,7 +18,7 @@ fn jump_templates_are_disconnected_v1_routes() {
 
 #[test]
 fn seeded_jump_routes_reproduce_and_obey_category_gate() {
-    for (seed,count) in [(0,0),(16,1)] {
+    for (seed,count) in [(0,0),(94,1)] {
         let settings=track::Settings{seed,circuit:false,duration_seconds:120,..Default::default()};
         let a=track::assemble(&settings).unwrap();
         assert_eq!(a.seed_source.as_ref().unwrap().jump_shortcuts.len(),count);

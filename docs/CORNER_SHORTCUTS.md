@@ -7,10 +7,10 @@ structures and grind lines without template-specific physics or protocol changes
 
 ## Selection and geometry
 
-Large hairpin and 360-degree spiral family selections expand into ordinary
-composite corners, using their existing family weights and road widths. Spatial-S
-selections reserve long main sections for [jump shortcuts](JUMP_SHORTCUTS.md);
-manual spatial-S rail templates remain available.
+Large hairpin, spatial-S and 360-degree spiral family selections expand into
+ordinary composite corners, using their existing family weights and road widths.
+Spatial-S selections also include a long main-section shape for
+[jump shortcuts](JUMP_SHORTCUTS.md), alongside the existing rail shape.
 The spiral has open, displaced portals and a smooth rise/fall. At each accepted
 large corner, an independent seed stream gives the corner a 1/3 shortcut ticket.
 The corner ordinal fixes the ticket across placement retries and backtracking.

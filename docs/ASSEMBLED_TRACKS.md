@@ -76,7 +76,7 @@ meshes, collision, clearance and width rules.
 separate supported recovery and reentry; ring chains have one launch, three rings
 and extended landing. Both can enter the generated base route.
 
-Large hairpin and open rising/falling spiral selections expand into ordinary
+Large hairpin, S and open rising/falling spiral selections expand into ordinary
 composite corners. With `gimmick` enabled, an independent seed ticket attempts a
 shortcut at 1/3 of these corners, with at most two installed per map and zero
 allowed. The 40 cm curved beam uses the grind line's samples/frames and requires
@@ -85,7 +85,8 @@ Unsafe branches are omitted atomically. Two shortcuts have all four route
 combinations and common checkpoints. [Corner shortcuts](CORNER_SHORTCUTS.md) owns
 geometry, admission, template insertion and focused verification details.
 
-Spatial-S selections reserve long ordinary detours for disconnected jump routes.
+Spatial-S selections mix the existing rail shape with long ordinary detours for
+disconnected jump routes.
 With `gimmick` enabled, an independent 1/3 ticket attempts a five-to-eight-platform
 branch with at least 30% saving, explicit fence openings and entry recovery.
 The limit is two jump routes separately from rails. Failed admission omits the
