@@ -10,6 +10,7 @@ pub mod special_track;
 pub mod cancellation;
 mod convex;
 pub mod course;
+pub mod road_course;
 pub mod environment;
 pub use convex::{CollisionConvex, GeneratedConvex};
 use schemars::JsonSchema;

@@ -161,6 +161,15 @@ impl MapKitBridge {
         })())
     }
     #[func]
+    fn suggest_road_course(&self, document: GString, request: GString) -> GString {
+        response((|| {
+            let d = engine_document(&document.to_string())?;
+            let request = serde_json::from_value(engine_value(&request.to_string())?)
+                .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::road_course::suggest(&d, &request)?).unwrap())
+        })())
+    }
+    #[func]
     fn apply_track_source(&self, document: GString, source: GString) -> GString {
         response((|| {
             let document = engine_document(&document.to_string())?;

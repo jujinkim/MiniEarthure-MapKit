@@ -96,6 +96,12 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_TRACK_ENVIRONMENT` | Terrain or an environment solid penetrates or crowds the track's driving space. |
 | `E_TRACK_SUPPORT` | No clear terrain support site or support that keeps the driving/flight space and 110 cm passage. |
 | `E_TRACK_CHECKPOINT_LIMIT` | Final routes need more than 64 shared checkpoints. |
+| `E_TRACK_ROUTE` | Course proposal: a declared route is broken or routes do not share start and finish. |
+| `E_TRACK_BRANCH` | Course proposal: a connection is outside every declared base/alternative path. |
+| `E_TRACK_CONNECTION` | Course proposal: consecutive path pieces have no port connection. |
+| `E_TRACK_START` | Course proposal: the first route piece has no supported starting sample. |
+| `E_TRACK_CHECKPOINT_OVERLAP` | Course proposal: sprint start and finish overlap. |
+| `E_TRACK_CHECKPOINT_COUNT` | Course proposal: fewer than two non-overlapping checkpoints. |
 | `E_TRACK_DURATION` | No connected seed layout within ±10% of the requested duration in 24 candidates. |
 | `E_TRACK_PANEL_SUPPORT` | Panel has no supporting production road triangles or no representable convex surface. |
 | `E_TRACK_PANEL_BUDGET` | Panel exceeds the 32-part limit. |
@@ -108,6 +114,12 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_CHECKPOINT` | Invalid or unsupported authored checkpoint. |
 | `E_RACE_SIZE` | Unsupported race participant count. |
 | `E_COURSE` | Invalid course definition or requested operation. |
+| `E_ROAD_COURSE_REQUEST` | Road course request is malformed, outside the map or not 20–300 s. |
+| `E_ROAD_COURSE_START` | No eligible road centreline within 50 m of the requested start. |
+| `E_ROAD_COURSE_ROUTE` | No road route or loop fits the request within the search budget. |
+| `E_ROAD_COURSE_CHECKPOINT_LIMIT` | Road route needs more than 64 required checkpoints. |
+| `E_ROAD_COURSE_CHECKPOINT_COUNT` | Road route has fewer than two non-overlapping checkpoints. |
+| `E_ROAD_COURSE_BOUNDS` | A proposed road checkpoint lies outside the map bounds. |
 | `E_COURSE_JSON` | Malformed course JSON. |
 | `E_COURSE_VERSION` | Unsupported course format. |
 | `E_COURSE_LIMIT` | Course count/size limit exceeded. |

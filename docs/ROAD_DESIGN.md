@@ -57,6 +57,28 @@ and `station_cm`. Ordinary road IDs and `track:<instance-id>` share one resolver
 (`surface::{path,resolve,apply}`). Derived physical geometry and rail interaction
 lines move with the source surface.
 
+## Road course proposals
+
+Read-only `road_course::suggest(document, request)` (Godot
+`suggest_road_course(document_json, request_json)`) proposes a sprint or circuit
+over the authored road graph without changing the document.
+
+- Request: `start_cm` (map x/z), optional `heading`, `mode`, `duration_seconds`
+  20–300 (length at the shared 900 cm/s reference speed) and optional
+  `min_width_cm`. The start snaps to the nearest eligible centreline within 50 m.
+- Routes use explicit graph nodes only, never geometric crossings, and skip
+  self-loop roads and arms sharper than 150°. The search is deterministic and
+  bounded (200,000 expansions, 512 roads): straightest arms first; circuits head
+  home after 40% of the target and accept 40–160% of it, stopping within 10%.
+  Sprints finish inside the last road at the target length.
+- Gates sit on the road centreline height with radius half width + 30 cm
+  (≥ 100 cm): start, sprint finish, every junction turning ≥ 30°, then even fill
+  at max(50 m, length/48). Earlier gates win overlaps; more than 64 gates blocks.
+- Result: `mode`, `start_direction`, `gates`, ordered `roads`, `length_cm`,
+  `target_cm`, `diagnostics` (`code`, `message`, `blocking`, nullable
+  `road`/`position_cm`) and `applicable`. Consumers seal gates as an ordinary v1
+  course; roads outside the course stay drivable.
+
 ## Export rules
 
 - Driving-content edits make existing course hashes/proofs stale.
