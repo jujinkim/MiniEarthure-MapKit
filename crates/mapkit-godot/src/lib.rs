@@ -170,6 +170,17 @@ impl MapKitBridge {
         })())
     }
     #[func]
+    fn apply_road_course_gimmicks(&self, document: GString, designs: GString, attachments: GString) -> GString {
+        response((|| {
+            let d = engine_document(&document.to_string())?;
+            let designs: Vec<mapkit_core::road_course::RoadDesign> = serde_json::from_value(engine_value(&designs.to_string())?)
+                .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
+            let attachments: Vec<mapkit_core::assembled_track::surface::Attachment> = serde_json::from_value(engine_value(&attachments.to_string())?)
+                .map_err(|e| mapkit_core::error("E_SURFACE_ATTACHMENT", e.to_string()))?;
+            Ok(serde_json::json!({"document": mapkit_core::road_course::apply_gimmicks(&d, &designs, &attachments)?}))
+        })())
+    }
+    #[func]
     fn apply_track_source(&self, document: GString, source: GString) -> GString {
         response((|| {
             let document = engine_document(&document.to_string())?;

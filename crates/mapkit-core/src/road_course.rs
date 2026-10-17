@@ -1,6 +1,8 @@
 //! Read-only course proposals over the authored road graph. The document is never
 //! changed; consumers seal the returned gates as an ordinary v1 course.
 use crate::course::{Checkpoint, CheckpointShape, Mode, PlacementMode};
+use crate::assembled_track::{authoring::PanelAlignment, surface::{self, Attachment, Reference}};
+use crate::road_design::Design;
 use crate::{cancellation, error, MapDocument, Point, Result, Road, Vertex};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,6 +20,14 @@ const MAX_TURN_DEG: f64 = 150.0;
 const TURN_GATE_DEG: f64 = 30.0;
 const MIN_SPACING_CM: f64 = 5_000.0;
 const MAX_GATES: usize = 64;
+const MAX_GIMMICKS: u8 = 16;
+/// Kinds whose geometry or effect follows the road's own forward direction.
+const GIMMICK_KINDS: [&str; 5] = ["acceleration_panel", "jump_panel", "boost_chain", "ramp_low", "grind_rail"];
+const GIMMICK_MARGIN_CM: u64 = 2_000;
+/// Validated placements tried per requested gimmick.
+const GIMMICK_TRIES: usize = 24;
+/// Launching kinds keep this much road clear before the next turning junction.
+const GIMMICK_RUNOUT_CM: f64 = 4_000.0;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +42,11 @@ pub struct Request {
     /// Roads with any narrower segment are not used.
     #[serde(default)]
     pub min_width_cm: u32,
+    /// Optional attachments to propose along the course (0–16), chosen by `seed`.
+    #[serde(default)]
+    pub gimmicks: u8,
+    #[serde(default)]
+    pub seed: u64,
 }
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Diagnostic {
@@ -40,6 +55,12 @@ pub struct Diagnostic {
     pub blocking: bool,
     pub road: Option<String>,
     pub position_cm: Option<Vertex>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RoadDesign {
+    pub road_id: String,
+    pub design: Design,
 }
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Suggestion {
@@ -50,6 +71,10 @@ pub struct Suggestion {
     pub roads: Vec<String>,
     pub length_cm: u64,
     pub target_cm: u64,
+    /// Proposed `surface_attachments` to append; never applied here.
+    pub attachments: Vec<Attachment>,
+    /// Default alignments that unaligned host roads need first (Editor Apply alignment).
+    pub road_designs: Vec<RoadDesign>,
     pub diagnostics: Vec<Diagnostic>,
     pub applicable: bool,
 }
@@ -60,7 +85,7 @@ impl Suggestion {
 }
 
 #[derive(Clone)]
-struct Leg { road: usize, points: Vec<Vertex>, end: String }
+struct Leg { road: usize, points: Vec<Vertex>, end: String, forward: bool }
 #[derive(Clone)]
 struct Route { legs: Vec<Leg>, length: f64 }
 
@@ -143,7 +168,7 @@ impl Search<'_> {
             let length = route.length + polyline(&points);
             if self.circuit {
                 if end == self.home {
-                    let closed = Route { legs: [route.legs.clone(), vec![Leg { road, points, end }]].concat(), length: length + tail };
+                    let closed = Route { legs: [route.legs.clone(), vec![Leg { road, points, end, forward }]].concat(), length: length + tail };
                     if self.score(closed.length) <= self.target * 0.6 { self.offer(&closed); }
                     if self.done() { return Ok(()); }
                     continue;
@@ -154,7 +179,7 @@ impl Search<'_> {
             }
             if visited.contains(&end) { continue; }
             visited.insert(end.clone());
-            route.legs.push(Leg { road, points, end: end.clone() });
+            route.legs.push(Leg { road, points, end: end.clone(), forward });
             let before = route.length;
             route.length = length;
             if !self.circuit { self.offer(route); }
@@ -173,13 +198,14 @@ impl Search<'_> {
 pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
     if !(MIN_SECONDS..=MAX_SECONDS).contains(&request.duration_seconds)
         || request.heading.iter().any(|v| v.unsigned_abs() > 1_000_000_000)
+        || request.gimmicks > MAX_GIMMICKS || request.seed > 9_007_199_254_740_991
         || !d.bounds.contains(request.start_cm) {
-        return Err(error("E_ROAD_COURSE_REQUEST", "start must lie inside the map and duration must be 20–300 s"));
+        return Err(error("E_ROAD_COURSE_REQUEST", "start must lie inside the map, duration must be 20–300 s and gimmicks 0–16"));
     }
     let target = (u64::from(request.duration_seconds) * REFERENCE_SPEED_CMPS) as f64;
     let circuit = request.mode == Mode::Circuit;
     let mut out = Suggestion { mode: request.mode.clone(), start_direction: [0, 1_000_000], gates: vec![], roads: vec![], length_cm: 0,
-        target_cm: target as u64, diagnostics: vec![], applicable: false };
+        target_cm: target as u64, attachments: vec![], road_designs: vec![], diagnostics: vec![], applicable: false };
     let positions: BTreeMap<&str, Vertex> = d.nodes.iter().map(|n| (n.id.as_str(), n.position)).collect();
     let usable: Vec<usize> = (0..d.roads.len()).filter(|&i| {
         let r = &d.roads[i];
@@ -221,7 +247,7 @@ pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
         let mut behind = vec![start]; behind.extend_from_slice(&r.points[segment + 1..]); behind.reverse();
         (ahead, behind, r.from.clone(), r.to.clone())
     };
-    let first = Leg { road: start_road, points: ahead, end: end.clone() };
+    let first = Leg { road: start_road, points: ahead, end: end.clone(), forward };
     let mut search = Search { d, arms, positions, target, circuit, home: home.clone(), excluded: start_road, expansions: 0, exhausted: false, best: None };
     let mut route = Route { length: polyline(&first.points), legs: vec![first] };
     let tail = polyline(&behind);
@@ -233,7 +259,7 @@ pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
         out.issue("E_ROAD_COURSE_ROUTE", message, true, Some(&r.id), Some(start));
         return Ok(out);
     };
-    if circuit { best.legs.push(Leg { road: start_road, points: behind, end: home }); }
+    if circuit { best.legs.push(Leg { road: start_road, points: behind, end: home, forward }); }
     else if best.length > target {
         // Finish inside the last road at the requested length.
         let leg = best.legs.last_mut().unwrap();
@@ -258,7 +284,9 @@ pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
     let mut chain: Vec<(f64, Vertex, usize)> = Vec::new();
     let mut at = 0.0;
     let mut turns: Vec<(f64, Vertex, u32, String)> = Vec::new();
+    let mut starts: Vec<f64> = Vec::new();
     for (i, leg) in best.legs.iter().enumerate() {
+        starts.push(at);
         for (j, &p) in leg.points.iter().enumerate() {
             if j > 0 { at += len3(leg.points[j - 1], p); }
             if j > 0 || i == 0 { chain.push((at, p, leg.road)); }
@@ -318,6 +346,115 @@ pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
     if out.gates.iter().any(|g| !d.bounds.contains([g.position_cm[0], g.position_cm[2]])) {
         out.issue("E_ROAD_COURSE_BOUNDS", "A checkpoint lies outside the map bounds", true, None, None);
     }
+    if request.gimmicks > 0 && !out.diagnostics.iter().any(|d| d.blocking) {
+        let turning: Vec<f64> = turns.iter().map(|t| t.0).collect();
+        gimmicks(d, request, &best, &starts, &turning, total, &mut out)?;
+    }
     out.applicable = !out.diagnostics.iter().any(|d| d.blocking);
     Ok(out)
+}
+
+fn station_of(path: &[crate::assembled_track::Sample], p: Vertex) -> u64 {
+    let mut station = 0;
+    let mut best = (f64::INFINITY, 0);
+    for (i, s) in path.iter().enumerate() {
+        if i > 0 { station += len3(path[i - 1].position_cm, s.position_cm) as u64; }
+        let gap = h(s.position_cm, p)[0].hypot(h(s.position_cm, p)[1]);
+        if gap < best.0 { best = (gap, station); }
+    }
+    best.1
+}
+/// The Editor's default alignment for an imported road (Apply alignment).
+fn default_design(r: &Road) -> Result<Design> {
+    let mut design = crate::road_design::from_points(&r.points)?;
+    if r.kind != crate::RoadKind::Ground { design.terrain_policy = crate::road_design::TerrainPolicy::Elevated; }
+    Ok(design)
+}
+fn design_width(r: &Road) -> u32 { r.widths_cm.iter().copied().max().unwrap_or(100) }
+
+/// Seeded, evenly spread attachments on forward-travelled course roads. Each one is
+/// checked with the shared attachment resolver together with the map's existing ones.
+/// Unaligned hosts receive the Editor's default alignment, returned for explicit apply.
+fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], turns: &[f64], total: f64, out: &mut Suggestion) -> Result<()> {
+    let mut sites: Vec<(f64, usize, Vertex)> = Vec::new();
+    for (i, leg) in route.legs.iter().enumerate() {
+        if !leg.forward { continue; }
+        let mut offset = 0.0;
+        let mut next = GIMMICK_MARGIN_CM as f64;
+        let length = polyline(&leg.points);
+        for w in leg.points.windows(2) {
+            let l = len3(w[0], w[1]);
+            while next <= offset + l && next + GIMMICK_MARGIN_CM as f64 <= length {
+                let f = if l > 0.0 { (next - offset) / l } else { 0.0 };
+                sites.push((starts[i] + next, leg.road, std::array::from_fn(|k| w[0][k] + libm::round((w[1][k] - w[0][k]) as f64 * f) as i64)));
+                next += GIMMICK_MARGIN_CM as f64;
+            }
+            offset += l;
+        }
+    }
+    let wanted = usize::from(request.gimmicks).min(64usize.saturating_sub(d.surface_attachments.len()));
+    let mut work = d.clone();
+    let mut rejected: BTreeSet<usize> = BTreeSet::new();
+    let mut designed: BTreeSet<usize> = BTreeSet::new();
+    let mut chosen: Vec<(f64, usize, Attachment)> = Vec::new();
+    let gap = total / (wanted.max(1) as f64 * 2.0);
+    for k in 0..wanted {
+        let hash = crate::sha256(format!("{}:{k}", request.seed).as_bytes());
+        let kind = GIMMICK_KINDS[usize::from_str_radix(&hash[..8], 16).unwrap() % GIMMICK_KINDS.len()];
+        let launching = kind != "grind_rail";
+        let aim = total * (k as f64 + 0.5) / wanted as f64;
+        let mut order: Vec<&(f64, usize, Vertex)> = sites.iter().collect();
+        order.sort_by(|a, b| (a.0 - aim).abs().total_cmp(&(b.0 - aim).abs()).then(a.1.cmp(&b.1)).then(a.0.total_cmp(&b.0)));
+        let mut tries = 0;
+        for &(at, road, point) in order {
+            cancellation::checkpoint()?;
+            if rejected.contains(&road) || chosen.iter().any(|(other, _, _)| (other - at).abs() < gap) { continue; }
+            if launching && turns.iter().any(|t| *t > at - 1_000.0 && *t < at + GIMMICK_RUNOUT_CM) { continue; }
+            if work.roads[road].design.is_none() {
+                let r = &work.roads[road];
+                match default_design(r).and_then(|design| crate::road_design::edit(&work, &r.id.clone(), design, design_width(r))) {
+                    Ok(next) => { work = next; designed.insert(road); }
+                    Err(_) => { rejected.insert(road); continue; }
+                }
+            }
+            let path = crate::road_design::path(&work.roads[road])?;
+            let item = Attachment { id: format!("course-{}-{k}", &hash[..12]),
+                surface: Reference { surface_id: work.roads[road].id.clone(), station_cm: station_of(&path, point) },
+                kind: kind.into(), height_cm: 200, panel_width_percent: 50, panel_alignment: PanelAlignment::Center, side: 1 };
+            if work.surface_attachments.iter().any(|a| a.id == item.id) { continue; }
+            let mut all = work.surface_attachments.clone();
+            all.extend(chosen.iter().map(|c| c.2.clone()));
+            all.push(item.clone());
+            // Full document validation also checks swept and landing bounds.
+            tries += 1;
+            if surface::apply(&work, all).is_err() { if tries >= GIMMICK_TRIES { break; } continue; }
+            chosen.push((at, road, item));
+            break;
+        }
+    }
+    if chosen.len() < wanted {
+        out.issue("W_ROAD_COURSE_GIMMICKS", format!("Placed {} of {} requested gimmicks", chosen.len(), wanted), false, None, None);
+    }
+    chosen.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let hosts: BTreeSet<usize> = chosen.iter().map(|c| c.1).filter(|r| designed.contains(r)).collect();
+    out.road_designs = hosts.into_iter().map(|r| RoadDesign { road_id: work.roads[r].id.clone(), design: work.roads[r].design.clone().unwrap() }).collect();
+    out.attachments = chosen.into_iter().map(|c| c.2).collect();
+    Ok(())
+}
+
+/// Explicit apply of a proposal's alignments and attachments, after the map's own.
+pub fn apply_gimmicks(d: &MapDocument, designs: &[RoadDesign], attachments: &[Attachment]) -> Result<MapDocument> {
+    if designs.len() > usize::from(MAX_GIMMICKS) || attachments.len() > usize::from(MAX_GIMMICKS) {
+        return Err(error("E_ROAD_COURSE_REQUEST", "too many proposed alignments or attachments"));
+    }
+    let mut next = d.clone();
+    for item in designs {
+        let r = next.roads.iter().find(|r| r.id == item.road_id).ok_or_else(|| error("E_REFERENCE", "road missing"))?;
+        if r.design.is_some() { return Err(error("E_ROAD_COURSE_REQUEST", "proposed alignment targets an aligned road")); }
+        let width = design_width(r);
+        next = crate::road_design::edit(&next, &item.road_id, item.design.clone(), width)?;
+    }
+    let mut all = next.surface_attachments.clone();
+    all.extend_from_slice(attachments);
+    surface::apply(&next, all)
 }

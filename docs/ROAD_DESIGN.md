@@ -75,9 +75,20 @@ over the authored road graph without changing the document.
   (≥ 100 cm): start, sprint finish, every junction turning ≥ 30°, then even fill
   at max(50 m, length/48). Earlier gates win overlaps; more than 64 gates blocks.
 - Result: `mode`, `start_direction`, `gates`, ordered `roads`, `length_cm`,
-  `target_cm`, `diagnostics` (`code`, `message`, `blocking`, nullable
+  `target_cm`, `attachments`, `road_designs`, `diagnostics` (`code`, `message`, `blocking`, nullable
   `road`/`position_cm`) and `applicable`. Consumers seal gates as an ordinary v1
   course; roads outside the course stay drivable.
+- Optional `gimmicks` (0–16) with `seed` propose `attachments`: seeded kinds from
+  acceleration panel, jump panel, boost chain, low ramp and grind rail, spread
+  evenly along the course on roads travelled in their own direction, at least 20 m
+  from leg ends; launching kinds keep 40 m before a turning junction. Each one must
+  pass full document validation with the map's existing attachments (≤ 24 tries
+  each; edge-of-map safety bounds reject). Unaligned host roads get the Editor's
+  default alignment, returned as `road_designs`; shortfalls warn
+  `W_ROAD_COURSE_GIMMICKS`.
+- `apply_gimmicks(document, road_designs, attachments)` (Godot
+  `apply_road_course_gimmicks`) applies those alignments, then appends the
+  attachments; it refuses alignments for already aligned roads.
 
 ## Export rules
 

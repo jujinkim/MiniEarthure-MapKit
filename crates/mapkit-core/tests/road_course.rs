@@ -4,8 +4,8 @@ use mapkit_core::{course::{effective_checkpoint_indices, Mode}, road_course::{su
 fn grid(n: i64) -> MapDocument {
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
     let block = 10_000;
-    d.bounds.max = [block * (n - 1) + 2_000, block * (n - 1) + 2_000];
-    d.bounds.min = [-2_000, -2_000];
+    d.bounds.max = [block * (n - 1) + 8_000, block * (n - 1) + 8_000];
+    d.bounds.min = [-8_000, -8_000];
     let id = |x: i64, z: i64| format!("n{x}-{z}");
     let mut nodes = vec![];
     let mut roads = vec![];
@@ -23,7 +23,7 @@ fn grid(n: i64) -> MapDocument {
     d
 }
 fn request(mode: Mode, seconds: u16) -> Request {
-    Request { start_cm: [5_000, 0], heading: [1, 0], mode, duration_seconds: seconds, min_width_cm: 0 }
+    Request { start_cm: [5_000, 0], heading: [1, 0], mode, duration_seconds: seconds, min_width_cm: 0, gimmicks: 0, seed: 0 }
 }
 
 #[test]
@@ -84,4 +84,24 @@ fn short_network_warns_without_blocking() {
     assert!(result.applicable, "{:?}", result.diagnostics);
     assert!(result.diagnostics.iter().any(|d| d.code == "W_ROAD_COURSE_LENGTH"));
     assert!(result.length_cm < 108_000);
+}
+#[test]
+fn seeded_gimmicks_attach_to_forward_course_roads() {
+    let d = grid(6);
+    let mut r = request(Mode::Circuit, 90);
+    r.gimmicks = 4;
+    r.seed = 11;
+    let result = suggest(&d, &r).unwrap();
+    assert!(result.applicable, "{:?}", result.diagnostics);
+    assert!(!result.attachments.is_empty() && result.attachments.len() <= 4, "{:?}", result.diagnostics);
+    assert_eq!(result, suggest(&d, &r).unwrap());
+    assert!(result.attachments.iter().all(|a| result.roads.contains(&a.surface.surface_id)));
+    // Unaligned synthetic roads receive default alignments only through explicit apply.
+    assert!(!result.road_designs.is_empty() && d.roads.iter().all(|r| r.design.is_none()));
+    let applied = mapkit_core::road_course::apply_gimmicks(&d, &result.road_designs, &result.attachments).unwrap();
+    assert_eq!(applied.surface_attachments.len(), result.attachments.len());
+    assert!(mapkit_core::road_course::apply_gimmicks(&applied, &result.road_designs, &result.attachments).is_err());
+    assert!(applied.gimmicks.len() >= result.attachments.len());
+    r.gimmicks = 17;
+    assert!(suggest(&d, &r).is_err());
 }
