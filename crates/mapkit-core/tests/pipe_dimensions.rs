@@ -118,10 +118,16 @@ fn catalogue_and_all_ribbons_obey_new_authoring_minimum() {
             assert!(p.path.iter().chain(&p.alternate_path).all(|s|s.lateral_cm>=200), "{id}/{width}: internal bottleneck");
         }
     }
-    for (preset,width) in [("straight",200),("straight",300),("cylinder",200),("cylinder",300)] {
+    for (preset,width) in [("straight",250),("cylinder",200),("cylinder",300),("loop",200)] {
         let item=instance("narrow-source",preset,width);
         let failure=piece(&item).unwrap_err();
         assert!(failure.message.contains("narrow-source") && failure.message.contains("width_cm"));
+    }
+    // Region widths compile only as overlays on an existing map (§44.367).
+    for width in [150,200,300] {
+        assert!(piece(&instance("region","straight",width)).is_ok());
+        let mut standalone=Source::empty();standalone.instances.push(instance("region","straight",width));
+        assert_eq!(compile(&standalone).unwrap_err().code,"E_TRACK_SOURCE");
     }
 }
 

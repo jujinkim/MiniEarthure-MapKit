@@ -45,6 +45,13 @@ pub use plan::track_seed_defaults;
 pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
 const ROAD_WIDTHS: &[u32] = &[400, 600, 800, 1200];
 pub const MAX_PORT_WIDTH_CM: u32 = 1800;
+/// Region-scale widths for ordinary pieces in map overlays, matching 1:8 roads
+/// (150 cm import floor). Seeded generation and special pieces never use them.
+pub const REGION_WIDTHS: &[u32] = &[150, 200, 300];
+pub const REGION_MIN_WIDTH_CM: u32 = 150;
+const REGION_PRESETS: &[&str] = &["straight", "curve", "curve_left", "sharp_curve", "sharp_curve_left", "gentle45", "gentle45_left",
+    "gentle90", "gentle90_left", "right90", "right90_left", "slope", "slope_up", "slope_down", "curve_up", "curve_down",
+    "curve_left_up", "curve_left_down", "free_curve"];
 mod grounding;
 pub use grounding::Support;
 pub(crate) use grounding::terrain_supports;
@@ -488,9 +495,9 @@ pub fn runtime_metadata(a: &Assembly) -> serde_json::Value {
 }
 pub fn catalogue() -> serde_json::Value {
     serde_json::json!({"format_version":1,"width_cm":WIDTH,"wall_height_cm":WALL,"wall_thickness_cm":WALL_THICKNESS_CM,
-        "min_width_cm":MIN_WIDTH_CM,"loop_min_width_cm":MIN_WIDTH_CM,"pipe_default_radius_cm":SpecialTrack::DEFAULT_PIPE_RADIUS_CM,"pipe_radii_cm":SpecialTrack::PIPE_RADII_CM,"loop_default_width_cm":MIN_WIDTH_CM,"pipe_min_radius_cm":crate::special_track::SpecialTrack::MIN_PIPE_RADIUS_CM,"tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
+        "min_width_cm":MIN_WIDTH_CM,"region_min_width_cm":REGION_MIN_WIDTH_CM,"loop_min_width_cm":MIN_WIDTH_CM,"pipe_default_radius_cm":SpecialTrack::DEFAULT_PIPE_RADIUS_CM,"pipe_radii_cm":SpecialTrack::PIPE_RADII_CM,"loop_default_width_cm":MIN_WIDTH_CM,"pipe_min_radius_cm":crate::special_track::SpecialTrack::MIN_PIPE_RADIUS_CM,"tile_size_cm":TILE_CM,"defaults":Settings::default(),"generator_fingerprint":fingerprint(),
         "selection_ids":selection_ids(),"templates":templates::catalogue(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
-        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"max_port_width_cm":maximum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
+        "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"region_widths_cm":region_widths(id),"max_port_width_cm":maximum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
             "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
@@ -526,6 +533,10 @@ pub fn supported_widths(id: &str) -> &'static [u32] {
     }
 }
 pub fn minimum_port_width(_id: &str) -> u32 { MIN_WIDTH_CM }
+/// Additional overlay-only body widths; empty for presets that keep 400 cm.
+pub fn region_widths(id: &str) -> &'static [u32] {
+    if REGION_PRESETS.contains(&id) && catalogue_ids().contains(&id) { REGION_WIDTHS } else { &[] }
+}
 pub fn maximum_port_width(id: &str) -> u32 {
     if pipe_piece(id) || ["loop", "overpass"].contains(&id) { 1200 } else { MAX_PORT_WIDTH_CM }
 }

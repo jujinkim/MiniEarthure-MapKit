@@ -232,10 +232,12 @@ pub fn piece(instance: &Instance) -> Result<Piece> {
         && [instance.width_cm, instance.entry_width_cm, instance.exit_width_cm].iter().any(|v| *v < MIN_WIDTH_CM) {
         return Err(error("E_PIPE_DIMENSIONS", format!("instance {}: width_cm, entry_width_cm and exit_width_cm require a bore/port of at least 400 cm (radius 200 cm); source was not modified", instance.id)));
     }
+    let region = !region_widths(&instance.preset).is_empty();
+    let min_port = if region { REGION_MIN_WIDTH_CM } else { minimum_port_width(&instance.preset) };
     if !catalogue_ids().contains(&instance.preset.as_str())
-        || !supported_widths(&instance.preset).contains(&instance.width_cm)
-        || !(minimum_port_width(&instance.preset)..=maximum_port_width(&instance.preset)).contains(&instance.entry_width_cm)
-        || !(minimum_port_width(&instance.preset)..=maximum_port_width(&instance.preset)).contains(&instance.exit_width_cm)
+        || !(supported_widths(&instance.preset).contains(&instance.width_cm) || region_widths(&instance.preset).contains(&instance.width_cm))
+        || !(min_port..=maximum_port_width(&instance.preset)).contains(&instance.entry_width_cm)
+        || !(min_port..=maximum_port_width(&instance.preset)).contains(&instance.exit_width_cm)
         || instance
             .position_cm
             .iter()
@@ -394,6 +396,10 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
     }
     if source.terrain_policies.keys().any(|id|!names.contains_key(id)) {
         return Err(error("E_TRACK_SOURCE","terrain policy references missing piece"));
+    }
+    // Region widths belong to overlays on real maps, never standalone tracks.
+    if !source.terrain_integration && source.instances.iter().any(|i| [i.width_cm, i.entry_width_cm, i.exit_width_cm].iter().any(|w| *w < MIN_WIDTH_CM)) {
+        return Err(error("E_TRACK_SOURCE", "widths below 400 cm require a track overlay on an existing map"));
     }
     let mut connected = BTreeSet::new();
     for link in &source.road_connections {

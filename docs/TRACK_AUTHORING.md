@@ -17,6 +17,13 @@ Seeded generation settings, categories, catalogue and geometry are owned by
   and default for consumers, including `max_port_width_cm` per entry (1800 cm
   for ordinary roads/transitions). Fixed 18 m bodies use the ultra-wide presets.
   Stored v1 validation is separate from compilation.
+- Region widths (§44.367): in overlays on an existing map (`terrain_integration`),
+  19 ordinary presets (straight, curves, 45°/90° bends, slopes, free curve) also
+  accept 150/200/300 cm bodies and ports down to 150 cm, matching 1:8 roads. The
+  catalogue lists them per entry as `region_widths_cm` plus `region_min_width_cm`.
+  Standalone sources with any width below 400 cm fail `E_TRACK_SOURCE`; loops,
+  pipes, cylinders and other specials keep 400 cm, and seeded generation never
+  picks region widths.
   Project opening materializes a preview from validated saved geometry; it does not
   recompile or resize old sources. Explicit execution export uses current authoring
   verification and reports narrow instances and fields.
