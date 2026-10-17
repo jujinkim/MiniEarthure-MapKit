@@ -2,6 +2,8 @@
 //! changed; consumers seal the returned gates as an ordinary v1 course.
 use crate::course::{Checkpoint, CheckpointShape, Mode, PlacementMode};
 use crate::assembled_track::{authoring::PanelAlignment, surface::{self, Attachment, Reference}};
+mod shortcut;
+pub use shortcut::{Shortcut, MAX_SHORTCUTS};
 use crate::road_design::Design;
 use crate::{cancellation, error, MapDocument, Point, Result, Road, Vertex};
 use serde::{Deserialize, Serialize};
@@ -48,6 +50,9 @@ pub struct Request {
     pub gimmicks: u8,
     #[serde(default)]
     pub seed: u64,
+    /// Optional ordinary-road corner shortcuts to propose (0–4).
+    #[serde(default)]
+    pub shortcuts: u8,
 }
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Diagnostic {
@@ -76,6 +81,8 @@ pub struct Suggestion {
     pub attachments: Vec<Attachment>,
     /// Default alignments that unaligned host roads need first (Editor Apply alignment).
     pub road_designs: Vec<RoadDesign>,
+    /// Corner shortcuts; gates they bypass are already omitted from `gates`.
+    pub shortcuts: Vec<Shortcut>,
     pub diagnostics: Vec<Diagnostic>,
     pub applicable: bool,
 }
@@ -199,14 +206,14 @@ impl Search<'_> {
 pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
     if !(MIN_SECONDS..=MAX_SECONDS).contains(&request.duration_seconds)
         || request.heading.iter().any(|v| v.unsigned_abs() > 1_000_000_000)
-        || request.gimmicks > MAX_GIMMICKS || request.seed > 9_007_199_254_740_991
+        || request.gimmicks > MAX_GIMMICKS || request.shortcuts > MAX_SHORTCUTS || request.seed > 9_007_199_254_740_991
         || !d.bounds.contains(request.start_cm) {
-        return Err(error("E_ROAD_COURSE_REQUEST", "start must lie inside the map, duration must be 20–300 s and gimmicks 0–16"));
+        return Err(error("E_ROAD_COURSE_REQUEST", "start must lie inside the map, duration must be 20–300 s, gimmicks 0–16 and shortcuts 0–4"));
     }
     let target = (u64::from(request.duration_seconds) * REFERENCE_SPEED_CMPS) as f64;
     let circuit = request.mode == Mode::Circuit;
     let mut out = Suggestion { mode: request.mode.clone(), start_direction: [0, 1_000_000], gates: vec![], roads: vec![], length_cm: 0,
-        target_cm: target as u64, attachments: vec![], road_designs: vec![], diagnostics: vec![], applicable: false };
+        target_cm: target as u64, attachments: vec![], road_designs: vec![], shortcuts: vec![], diagnostics: vec![], applicable: false };
     let positions: BTreeMap<&str, Vertex> = d.nodes.iter().map(|n| (n.id.as_str(), n.position)).collect();
     let usable: Vec<usize> = (0..d.roads.len()).filter(|&i| {
         let r = &d.roads[i];
@@ -335,6 +342,15 @@ pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
         accepted.push((distance, cp));
     }
     accepted.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let proposed = if request.shortcuts > 0 { Some(shortcut::propose(d, request, &best, &starts, start_road)?) } else { None };
+    if let Some(p) = &proposed {
+        // Racers taking a shortcut never reach the corner it bypasses.
+        accepted.retain(|(at, _)| !p.bypassed.iter().any(|(lo, hi)| at > lo && at < hi));
+        if p.shortcuts.len() < usize::from(request.shortcuts) {
+            out.issue("W_ROAD_COURSE_SHORTCUTS", format!("Placed {} of {} requested shortcuts", p.shortcuts.len(), request.shortcuts), false, None, None);
+        }
+        out.shortcuts = p.shortcuts.clone();
+    }
     out.gates = accepted.into_iter().map(|(_, cp)| cp).collect();
     let direction = exit(&best.legs[0].points);
     let norm = direction[0].hypot(direction[1]);
@@ -349,7 +365,8 @@ pub fn suggest(d: &MapDocument, request: &Request) -> Result<Suggestion> {
     }
     if request.gimmicks > 0 && !out.diagnostics.iter().any(|d| d.blocking) {
         let turning: Vec<f64> = turns.iter().map(|t| t.0).collect();
-        gimmicks(d, request, &best, &starts, &turning, total, &mut out)?;
+        let (host, skip) = proposed.as_ref().map_or((d, BTreeSet::new()), |p| (&p.document, p.split.clone()));
+        gimmicks(host, d, &skip, request, &best, &starts, &turning, total, &mut out)?;
     }
     out.applicable = !out.diagnostics.iter().any(|d| d.blocking);
     Ok(out)
@@ -376,10 +393,11 @@ fn design_width(r: &Road) -> u32 { r.widths_cm.iter().copied().max().unwrap_or(1
 /// Seeded, evenly spread attachments on forward-travelled course roads. Each one is
 /// checked with the shared attachment resolver together with the map's existing ones.
 /// Unaligned hosts receive the Editor's default alignment, returned for explicit apply.
-fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], turns: &[f64], total: f64, out: &mut Suggestion) -> Result<()> {
-    let mut sites: Vec<(f64, usize, Vertex)> = Vec::new();
+/// `d` may already contain shortcuts; roads are found by ID and split roads are skipped.
+fn gimmicks(d: &MapDocument, original: &MapDocument, skip: &BTreeSet<usize>, request: &Request, route: &Route, starts: &[f64], turns: &[f64], total: f64, out: &mut Suggestion) -> Result<()> {
+    let mut sites: Vec<(f64, String, Vertex)> = Vec::new();
     for (i, leg) in route.legs.iter().enumerate() {
-        if !leg.forward { continue; }
+        if !leg.forward || skip.contains(&leg.road) { continue; }
         let mut offset = 0.0;
         let mut next = GIMMICK_MARGIN_CM as f64;
         let length = polyline(&leg.points);
@@ -387,7 +405,7 @@ fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], t
             let l = len3(w[0], w[1]);
             while next <= offset + l && next + GIMMICK_MARGIN_CM as f64 <= length {
                 let f = if l > 0.0 { (next - offset) / l } else { 0.0 };
-                sites.push((starts[i] + next, leg.road, std::array::from_fn(|k| w[0][k] + libm::round((w[1][k] - w[0][k]) as f64 * f) as i64)));
+                sites.push((starts[i] + next, original.roads[leg.road].id.clone(), std::array::from_fn(|k| w[0][k] + libm::round((w[1][k] - w[0][k]) as f64 * f) as i64)));
                 next += GIMMICK_MARGIN_CM as f64;
             }
             offset += l;
@@ -395,37 +413,40 @@ fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], t
     }
     let wanted = usize::from(request.gimmicks).min(64usize.saturating_sub(d.surface_attachments.len()));
     let mut work = d.clone();
-    let mut rejected: BTreeSet<usize> = BTreeSet::new();
-    let mut designed: BTreeSet<usize> = BTreeSet::new();
-    let mut chosen: Vec<(f64, usize, Attachment)> = Vec::new();
+    let mut rejected: BTreeSet<String> = BTreeSet::new();
+    let mut designed: BTreeSet<String> = BTreeSet::new();
+    let mut chosen: Vec<(f64, String, Attachment)> = Vec::new();
     // Kinds whose local geometry already failed at a road width.
     let mut unfit: BTreeSet<(&str, u32)> = BTreeSet::new();
     let gap = total / (wanted.max(1) as f64 * 2.0);
+    let find = |doc: &MapDocument, id: &str| doc.roads.iter().position(|r| r.id == id);
     for k in 0..wanted {
         let hash = crate::sha256(format!("{}:{k}", request.seed).as_bytes());
         let first = usize::from_str_radix(&hash[..8], 16).unwrap() % GIMMICK_KINDS.len();
         let aim = total * (k as f64 + 0.5) / wanted as f64;
-        let mut order: Vec<&(f64, usize, Vertex)> = sites.iter().collect();
+        let mut order: Vec<&(f64, String, Vertex)> = sites.iter().collect();
         order.sort_by(|a, b| (a.0 - aim).abs().total_cmp(&(b.0 - aim).abs()).then(a.1.cmp(&b.1)).then(a.0.total_cmp(&b.0)));
         // The seeded kind first; kinds that do not fit (e.g. ramps on narrow roads) yield.
         'kinds: for offset in 0..GIMMICK_KINDS.len() {
             let kind = GIMMICK_KINDS[(first + offset) % GIMMICK_KINDS.len()];
             let launching = kind != "grind_rail";
             let mut tries = 0;
-            for &&(at, road, point) in &order {
+            for &&(at, ref id, point) in &order {
                 cancellation::checkpoint()?;
-                if rejected.contains(&road) || unfit.contains(&(kind, design_width(&work.roads[road]))) || chosen.iter().any(|(other, _, _)| (other - at).abs() < gap) { continue; }
+                let Some(road) = find(&work, id) else { continue; };
+                if rejected.contains(id) || unfit.contains(&(kind, design_width(&work.roads[road]))) || chosen.iter().any(|(other, _, _)| (other - at).abs() < gap) { continue; }
                 if launching && turns.iter().any(|t| *t > at - 1_000.0 && *t < at + GIMMICK_RUNOUT_CM) { continue; }
                 if work.roads[road].design.is_none() {
                     let r = &work.roads[road];
-                    match default_design(r).and_then(|design| crate::road_design::edit(&work, &r.id.clone(), design, design_width(r))) {
-                        Ok(next) => { work = next; designed.insert(road); }
-                        Err(_) => { rejected.insert(road); continue; }
+                    match default_design(r).and_then(|design| crate::road_design::edit(&work, id, design, design_width(r))) {
+                        Ok(next) => { work = next; designed.insert(id.clone()); }
+                        Err(_) => { rejected.insert(id.clone()); continue; }
                     }
                 }
+                let Some(road) = find(&work, id) else { continue; };
                 let path = crate::road_design::path(&work.roads[road])?;
                 let item = Attachment { id: format!("course-{}-{k}", &hash[..12]),
-                    surface: Reference { surface_id: work.roads[road].id.clone(), station_cm: station_of(&path, point) },
+                    surface: Reference { surface_id: id.clone(), station_cm: station_of(&path, point) },
                     kind: kind.into(), height_cm: 100, panel_width_percent: 50, panel_alignment: PanelAlignment::Center, side: 1 };
                 if work.surface_attachments.iter().any(|a| a.id == item.id) { continue; }
                 let mut all = work.surface_attachments.clone();
@@ -435,7 +456,7 @@ fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], t
                 if surface::derived(&work, &all).is_err() { unfit.insert((kind, design_width(&work.roads[road]))); continue; }
                 tries += 1;
                 if surface::apply(&work, all).is_err() { if tries >= GIMMICK_TRIES { break; } continue; }
-                chosen.push((at, road, item));
+                chosen.push((at, id.clone(), item));
                 break 'kinds;
             }
         }
@@ -444,18 +465,30 @@ fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], t
         out.issue("W_ROAD_COURSE_GIMMICKS", format!("Placed {} of {} requested gimmicks", chosen.len(), wanted), false, None, None);
     }
     chosen.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let hosts: BTreeSet<usize> = chosen.iter().map(|c| c.1).filter(|r| designed.contains(r)).collect();
-    out.road_designs = hosts.into_iter().map(|r| RoadDesign { road_id: work.roads[r].id.clone(), design: work.roads[r].design.clone().unwrap() }).collect();
+    let hosts: BTreeSet<String> = chosen.iter().map(|c| c.1.clone()).filter(|r| designed.contains(r)).collect();
+    out.road_designs = hosts.into_iter().map(|id| RoadDesign { design: work.roads[find(&work, &id).unwrap()].design.clone().unwrap(), road_id: id }).collect();
     out.attachments = chosen.into_iter().map(|c| c.2).collect();
     Ok(())
 }
 
-/// Explicit apply of a proposal's alignments and attachments, after the map's own.
-pub fn apply_gimmicks(d: &MapDocument, designs: &[RoadDesign], attachments: &[Attachment]) -> Result<MapDocument> {
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Extras {
+    #[serde(default)]
+    pub shortcuts: Vec<Shortcut>,
+    #[serde(default)]
+    pub road_designs: Vec<RoadDesign>,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
+}
+/// Explicit apply of a proposal's shortcuts, alignments and attachments, in that order,
+/// after the map's own attachments.
+pub fn apply_extras(d: &MapDocument, extras: &Extras) -> Result<MapDocument> {
+    let (designs, attachments) = (&extras.road_designs, &extras.attachments);
     if designs.len() > usize::from(MAX_GIMMICKS) || attachments.len() > usize::from(MAX_GIMMICKS) {
         return Err(error("E_ROAD_COURSE_REQUEST", "too many proposed alignments or attachments"));
     }
-    let mut next = d.clone();
+    let mut next = if extras.shortcuts.is_empty() { d.clone() } else { shortcut::apply(d, &extras.shortcuts)? };
     for item in designs {
         let r = next.roads.iter().find(|r| r.id == item.road_id).ok_or_else(|| error("E_REFERENCE", "road missing"))?;
         if r.design.is_some() { return Err(error("E_ROAD_COURSE_REQUEST", "proposed alignment targets an aligned road")); }
@@ -464,5 +497,6 @@ pub fn apply_gimmicks(d: &MapDocument, designs: &[RoadDesign], attachments: &[At
     }
     let mut all = next.surface_attachments.clone();
     all.extend_from_slice(attachments);
+    if all.is_empty() { return Ok(next); }
     surface::apply(&next, all)
 }

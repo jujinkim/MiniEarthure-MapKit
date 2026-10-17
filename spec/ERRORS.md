@@ -120,6 +120,7 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_ROAD_COURSE_CHECKPOINT_LIMIT` | Road route needs more than 64 required checkpoints. |
 | `E_ROAD_COURSE_CHECKPOINT_COUNT` | Road route has fewer than two non-overlapping checkpoints. |
 | `E_ROAD_COURSE_BOUNDS` | A proposed road checkpoint lies outside the map bounds. |
+| `E_ROAD_COURSE_STALE` | A proposed shortcut's split road changed after the proposal. |
 | `E_COURSE_JSON` | Malformed course JSON. |
 | `E_COURSE_VERSION` | Unsupported course format. |
 | `E_COURSE_LIMIT` | Course count/size limit exceeded. |

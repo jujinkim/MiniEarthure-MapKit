@@ -75,8 +75,8 @@ over the authored road graph without changing the document.
   (≥ 100 cm): start, sprint finish, every junction turning ≥ 30°, then even fill
   at max(50 m, length/48). Earlier gates win overlaps; more than 64 gates blocks.
 - Result: `mode`, `start_direction`, `gates`, ordered `roads`, `length_cm`,
-  `target_cm`, `attachments`, `road_designs`, `diagnostics` (`code`, `message`, `blocking`, nullable
-  `road`/`position_cm`) and `applicable`. Consumers seal gates as an ordinary v1
+  `target_cm`, `attachments`, `road_designs`, `shortcuts`, `diagnostics` (`code`,
+  `message`, `blocking`, nullable `road`/`position_cm`) and `applicable`. Consumers seal gates as an ordinary v1
   course; roads outside the course stay drivable.
 - Optional `gimmicks` (0–16) with `seed` propose `attachments`: seeded kinds from
   acceleration panel, jump panel, boost chain, low ramp and grind rail, spread
@@ -88,9 +88,19 @@ over the authored road graph without changing the document.
   kind; edge-of-map safety bounds reject). Unaligned host roads get the Editor's
   default alignment, returned as `road_designs`; shortfalls warn
   `W_ROAD_COURSE_GIMMICKS`.
-- `apply_gimmicks(document, road_designs, attachments)` (Godot
-  `apply_road_course_gimmicks`) applies those alignments, then appends the
-  attachments; it refuses alignments for already aligned roads.
+- Optional `shortcuts` (0–4) propose ordinary-road corner cuts: at junctions where
+  the course turns ≥ 60°, a straight ground chord joins new graph nodes 15, 10 or
+  6 m before and after the junction (longest that fits; hosts keep 2 m beyond).
+  Hosts must be unaligned ground roads without attachments or track ports, not the
+  start road and not already split. The chord takes the narrower host width and
+  keeps half its width + 30 cm from buildings, water and other roads; the split
+  map must validate. Gates inside the bypassed stretch are omitted so both paths
+  count; gimmicks skip split roads. Shortfalls warn `W_ROAD_COURSE_SHORTCUTS`.
+  Each `Shortcut` carries the exact `replaces` records, the `[kept, new]` halves per
+  host (first keeps the road ID), the chord and two nodes.
+- `apply_extras(document, extras)` (Godot `apply_road_course_extras`) applies
+  `shortcuts` (stale hosts fail `E_ROAD_COURSE_STALE`), then `road_designs`, then
+  appends `attachments`; it refuses alignments for already aligned roads.
 
 ## Export rules
 

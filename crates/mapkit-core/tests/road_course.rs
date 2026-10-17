@@ -1,4 +1,8 @@
-use mapkit_core::{course::{effective_checkpoint_indices, Mode}, road_course::{suggest, Request}, MapDocument};
+use mapkit_core::{course::{effective_checkpoint_indices, Mode}, road_course::{apply_extras, suggest, Extras, Request, Suggestion}, MapDocument};
+
+fn extras(s: &Suggestion) -> Extras {
+    Extras { shortcuts: s.shortcuts.clone(), road_designs: s.road_designs.clone(), attachments: s.attachments.clone() }
+}
 
 /// Synthetic n×n street grid, 100 m blocks, 8 m wide ground roads.
 fn grid(n: i64) -> MapDocument { scaled_grid(n, 10_000, 800) }
@@ -24,7 +28,7 @@ fn scaled_grid(n: i64, block: i64, width: u32) -> MapDocument {
     d
 }
 fn request(mode: Mode, seconds: u16) -> Request {
-    Request { start_cm: [5_000, 0], heading: [1, 0], mode, duration_seconds: seconds, min_width_cm: 0, gimmicks: 0, seed: 0 }
+    Request { start_cm: [5_000, 0], heading: [1, 0], mode, duration_seconds: seconds, min_width_cm: 0, gimmicks: 0, seed: 0, shortcuts: 0 }
 }
 
 #[test]
@@ -99,9 +103,9 @@ fn seeded_gimmicks_attach_to_forward_course_roads() {
     assert!(result.attachments.iter().all(|a| result.roads.contains(&a.surface.surface_id)));
     // Unaligned synthetic roads receive default alignments only through explicit apply.
     assert!(!result.road_designs.is_empty() && d.roads.iter().all(|r| r.design.is_none()));
-    let applied = mapkit_core::road_course::apply_gimmicks(&d, &result.road_designs, &result.attachments).unwrap();
+    let applied = mapkit_core::road_course::apply_extras(&d, &extras(&result)).unwrap();
     assert_eq!(applied.surface_attachments.len(), result.attachments.len());
-    assert!(mapkit_core::road_course::apply_gimmicks(&applied, &result.road_designs, &result.attachments).is_err());
+    assert!(mapkit_core::road_course::apply_extras(&applied, &extras(&result)).is_err());
     assert!(applied.gimmicks.len() >= result.attachments.len());
     r.gimmicks = 17;
     assert!(suggest(&d, &r).is_err());
@@ -110,9 +114,64 @@ fn seeded_gimmicks_attach_to_forward_course_roads() {
 fn city_scale_blocks_still_receive_gimmicks() {
     // 1:8 import: about 12.5 m blocks and 1 m primary roads.
     let d = scaled_grid(8, 1_250, 100);
-    let r = Request { start_cm: [600, 0], heading: [1, 0], mode: Mode::Circuit, duration_seconds: 20, min_width_cm: 0, gimmicks: 4, seed: 3 };
+    let r = Request { start_cm: [600, 0], heading: [1, 0], mode: Mode::Circuit, duration_seconds: 20, min_width_cm: 0, gimmicks: 4, seed: 3, shortcuts: 0 };
     let result = suggest(&d, &r).unwrap();
     assert!(result.applicable, "{:?}", result.diagnostics);
     assert!(!result.attachments.is_empty(), "{:?}", result.diagnostics);
-    mapkit_core::road_course::apply_gimmicks(&d, &result.road_designs, &result.attachments).unwrap();
+    mapkit_core::road_course::apply_extras(&d, &extras(&result)).unwrap();
+}
+#[test]
+fn corner_shortcuts_split_course_roads_and_bypass_corner_gates() {
+    let d = grid(6);
+    let mut r = request(Mode::Circuit, 60);
+    let plain = suggest(&d, &r).unwrap();
+    r.shortcuts = 2;
+    let result = suggest(&d, &r).unwrap();
+    assert!(result.applicable, "{:?}", result.diagnostics);
+    assert_eq!(result.shortcuts.len(), 2, "{:?}", result.diagnostics);
+    assert!(result.gates.len() < plain.gates.len());
+    assert_eq!(result, suggest(&d, &r).unwrap());
+    let applied = apply_extras(&d, &extras(&result)).unwrap();
+    assert_eq!(applied.roads.len(), d.roads.len() + 2 * 3);
+    assert_eq!(applied.nodes.len(), d.nodes.len() + 2 * 2);
+    // The new junctions and chords generate with the ordinary road pipeline.
+    for node in applied.nodes.iter().filter(|n| n.id.starts_with("shortcut-")) {
+        let cell = applied.cell_at([node.position[0], node.position[2]]).unwrap();
+        let chunk = mapkit_core::generate(mapkit_core::GenerationInput { document: &applied, cell, heightgrid: None, max_triangles: 400_000 }).unwrap();
+        assert!(chunk.triangles.iter().any(|t| t.object_id.starts_with("shortcut-")), "{cell:?}");
+    }
+    // Every gate still lies on a road of the applied map, and stale proposals are refused.
+    assert!(apply_extras(&applied, &extras(&result)).is_err());
+    // Shortcuts and gimmicks combine; gimmicks avoid the split roads.
+    r.gimmicks = 4; r.seed = 5;
+    let both = suggest(&d, &r).unwrap();
+    assert!(both.applicable, "{:?}", both.diagnostics);
+    let split: Vec<&String> = both.shortcuts.iter().flat_map(|s| s.replaces.iter().map(|r| &r.id)).collect();
+    assert!(both.attachments.iter().all(|a| !split.contains(&&a.surface.surface_id)));
+    apply_extras(&d, &extras(&both)).unwrap();
+}
+#[test]
+fn buildings_on_the_inside_corner_block_a_shortcut() {
+    let mut d = grid(6);
+    let mut blocks = vec![];
+    for x in 0..5 { for z in 0..5 {
+        let (x0, z0) = (x * 10_000 + 700, z * 10_000 + 700);
+        blocks.push(serde_json::json!({"id":format!("b{x}-{z}"),"footprint":[[x0,z0],[x0+8_600,z0],[x0+8_600,z0+8_600],[x0,z0+8_600]],
+            "base_cm":0,"height_cm":800,"usage":"commercial","material":"concrete","roof":"flat"}));
+    }}
+    d.buildings = serde_json::from_value(blocks.into()).unwrap();
+    let mut r = request(Mode::Circuit, 60);
+    r.shortcuts = 2;
+    let result = suggest(&d, &r).unwrap();
+    assert!(result.applicable, "{:?}", result.diagnostics);
+    assert!(result.shortcuts.is_empty());
+    assert!(result.diagnostics.iter().any(|d| d.code == "W_ROAD_COURSE_SHORTCUTS"));
+}
+#[test]
+fn city_scale_corners_receive_shortcuts() {
+    let d = scaled_grid(8, 1_250, 100);
+    let r = Request { start_cm: [600, 0], heading: [1, 0], mode: Mode::Circuit, duration_seconds: 20, min_width_cm: 0, gimmicks: 0, seed: 0, shortcuts: 2 };
+    let result = suggest(&d, &r).unwrap();
+    assert!(result.applicable && !result.shortcuts.is_empty(), "{:?}", result.diagnostics);
+    apply_extras(&d, &extras(&result)).unwrap();
 }
