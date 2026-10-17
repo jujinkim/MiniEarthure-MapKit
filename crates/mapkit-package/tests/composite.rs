@@ -70,7 +70,8 @@ fn race_export_binds_the_current_overlay_course_without_completion_proof() {
 #[test]
 fn every_current_palette_piece_compiles_alongside_terrain() {
     for id in track::catalogue_ids() {
-        let mut source=Source::empty();let mut i=instance("piece",id,400);i.position_cm=[0,0,0];
+        let mut source=Source::empty();// Fixed-body presets exist only at their catalogue width.
+        let mut i=instance("piece",id,track::supported_widths(id)[0]);i.position_cm=[0,0,0];
         if ["free_curve","flight_curve"].contains(&id) {i.control_points=vec![[0,0,0],[0,0,600],[600,0,1200],[1200,0,1200]];}
         source.instances.push(i);
         let d=track::composite::apply_source(&base(),&source).unwrap_or_else(|e|panic!("{id}: {e}"));

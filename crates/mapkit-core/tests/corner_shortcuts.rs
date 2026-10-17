@@ -1,7 +1,8 @@
 use mapkit_core::assembled_track::{self as track,authoring,Settings};
 #[test]
 fn seeded_corner_shortcuts_are_reproducible_and_bounded() {
-    for (seed,count) in [(0,0),(22,1)] {
+    // Seeds re-chosen after the §44.363 diversity generator; 11 places one corner rail.
+    for (seed,count) in [(0,0),(11,1)] {
         let settings=Settings{seed,circuit:false,duration_seconds:120,..Settings::default()};
         let a=track::assemble(&settings).unwrap();
         let s=a.seed_source.as_ref().unwrap();
