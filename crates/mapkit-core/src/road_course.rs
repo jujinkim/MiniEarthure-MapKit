@@ -23,11 +23,12 @@ const MAX_GATES: usize = 64;
 const MAX_GIMMICKS: u8 = 16;
 /// Kinds whose geometry or effect follows the road's own forward direction.
 const GIMMICK_KINDS: [&str; 5] = ["acceleration_panel", "jump_panel", "boost_chain", "ramp_low", "grind_rail"];
-const GIMMICK_MARGIN_CM: u64 = 2_000;
-/// Validated placements tried per requested gimmick.
-const GIMMICK_TRIES: usize = 24;
+/// Sized for 1:8 city blocks (about 12.5 m between junctions).
+const GIMMICK_MARGIN_CM: u64 = 300;
+/// Validated placements tried per kind for each requested gimmick.
+const GIMMICK_TRIES: usize = 12;
 /// Launching kinds keep this much road clear before the next turning junction.
-const GIMMICK_RUNOUT_CM: f64 = 4_000.0;
+const GIMMICK_RUNOUT_CM: f64 = 1_500.0;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -397,39 +398,46 @@ fn gimmicks(d: &MapDocument, request: &Request, route: &Route, starts: &[f64], t
     let mut rejected: BTreeSet<usize> = BTreeSet::new();
     let mut designed: BTreeSet<usize> = BTreeSet::new();
     let mut chosen: Vec<(f64, usize, Attachment)> = Vec::new();
+    // Kinds whose local geometry already failed at a road width.
+    let mut unfit: BTreeSet<(&str, u32)> = BTreeSet::new();
     let gap = total / (wanted.max(1) as f64 * 2.0);
     for k in 0..wanted {
         let hash = crate::sha256(format!("{}:{k}", request.seed).as_bytes());
-        let kind = GIMMICK_KINDS[usize::from_str_radix(&hash[..8], 16).unwrap() % GIMMICK_KINDS.len()];
-        let launching = kind != "grind_rail";
+        let first = usize::from_str_radix(&hash[..8], 16).unwrap() % GIMMICK_KINDS.len();
         let aim = total * (k as f64 + 0.5) / wanted as f64;
         let mut order: Vec<&(f64, usize, Vertex)> = sites.iter().collect();
         order.sort_by(|a, b| (a.0 - aim).abs().total_cmp(&(b.0 - aim).abs()).then(a.1.cmp(&b.1)).then(a.0.total_cmp(&b.0)));
-        let mut tries = 0;
-        for &(at, road, point) in order {
-            cancellation::checkpoint()?;
-            if rejected.contains(&road) || chosen.iter().any(|(other, _, _)| (other - at).abs() < gap) { continue; }
-            if launching && turns.iter().any(|t| *t > at - 1_000.0 && *t < at + GIMMICK_RUNOUT_CM) { continue; }
-            if work.roads[road].design.is_none() {
-                let r = &work.roads[road];
-                match default_design(r).and_then(|design| crate::road_design::edit(&work, &r.id.clone(), design, design_width(r))) {
-                    Ok(next) => { work = next; designed.insert(road); }
-                    Err(_) => { rejected.insert(road); continue; }
+        // The seeded kind first; kinds that do not fit (e.g. ramps on narrow roads) yield.
+        'kinds: for offset in 0..GIMMICK_KINDS.len() {
+            let kind = GIMMICK_KINDS[(first + offset) % GIMMICK_KINDS.len()];
+            let launching = kind != "grind_rail";
+            let mut tries = 0;
+            for &&(at, road, point) in &order {
+                cancellation::checkpoint()?;
+                if rejected.contains(&road) || unfit.contains(&(kind, design_width(&work.roads[road]))) || chosen.iter().any(|(other, _, _)| (other - at).abs() < gap) { continue; }
+                if launching && turns.iter().any(|t| *t > at - 1_000.0 && *t < at + GIMMICK_RUNOUT_CM) { continue; }
+                if work.roads[road].design.is_none() {
+                    let r = &work.roads[road];
+                    match default_design(r).and_then(|design| crate::road_design::edit(&work, &r.id.clone(), design, design_width(r))) {
+                        Ok(next) => { work = next; designed.insert(road); }
+                        Err(_) => { rejected.insert(road); continue; }
+                    }
                 }
+                let path = crate::road_design::path(&work.roads[road])?;
+                let item = Attachment { id: format!("course-{}-{k}", &hash[..12]),
+                    surface: Reference { surface_id: work.roads[road].id.clone(), station_cm: station_of(&path, point) },
+                    kind: kind.into(), height_cm: 100, panel_width_percent: 50, panel_alignment: PanelAlignment::Center, side: 1 };
+                if work.surface_attachments.iter().any(|a| a.id == item.id) { continue; }
+                let mut all = work.surface_attachments.clone();
+                all.extend(chosen.iter().map(|c| c.2.clone()));
+                all.push(item.clone());
+                // The local resolver is cheap; full validation also checks swept and landing bounds.
+                if surface::derived(&work, &all).is_err() { unfit.insert((kind, design_width(&work.roads[road]))); continue; }
+                tries += 1;
+                if surface::apply(&work, all).is_err() { if tries >= GIMMICK_TRIES { break; } continue; }
+                chosen.push((at, road, item));
+                break 'kinds;
             }
-            let path = crate::road_design::path(&work.roads[road])?;
-            let item = Attachment { id: format!("course-{}-{k}", &hash[..12]),
-                surface: Reference { surface_id: work.roads[road].id.clone(), station_cm: station_of(&path, point) },
-                kind: kind.into(), height_cm: 200, panel_width_percent: 50, panel_alignment: PanelAlignment::Center, side: 1 };
-            if work.surface_attachments.iter().any(|a| a.id == item.id) { continue; }
-            let mut all = work.surface_attachments.clone();
-            all.extend(chosen.iter().map(|c| c.2.clone()));
-            all.push(item.clone());
-            // Full document validation also checks swept and landing bounds.
-            tries += 1;
-            if surface::apply(&work, all).is_err() { if tries >= GIMMICK_TRIES { break; } continue; }
-            chosen.push((at, road, item));
-            break;
         }
     }
     if chosen.len() < wanted {

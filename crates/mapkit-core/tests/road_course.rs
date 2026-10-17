@@ -1,9 +1,10 @@
 use mapkit_core::{course::{effective_checkpoint_indices, Mode}, road_course::{suggest, Request}, MapDocument};
 
 /// Synthetic n×n street grid, 100 m blocks, 8 m wide ground roads.
-fn grid(n: i64) -> MapDocument {
+fn grid(n: i64) -> MapDocument { scaled_grid(n, 10_000, 800) }
+/// Street grid with the given block length and road width.
+fn scaled_grid(n: i64, block: i64, width: u32) -> MapDocument {
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
-    let block = 10_000;
     d.bounds.max = [block * (n - 1) + 8_000, block * (n - 1) + 8_000];
     d.bounds.min = [-8_000, -8_000];
     let id = |x: i64, z: i64| format!("n{x}-{z}");
@@ -14,7 +15,7 @@ fn grid(n: i64) -> MapDocument {
         for (dx, dz) in [(1, 0), (0, 1)] {
             if x + dx >= n || z + dz >= n { continue; }
             roads.push(serde_json::json!({"id":format!("r{x}-{z}-{dx}{dz}"),"from":id(x,z),"to":id(x+dx,z+dz),
-                "points":[[x*block,0,z*block],[(x+dx)*block,0,(z+dz)*block]],"widths_cm":[800],"surfaces":["asphalt"],
+                "points":[[x*block,0,z*block],[(x+dx)*block,0,(z+dz)*block]],"widths_cm":[width],"surfaces":["asphalt"],
                 "kind":"ground","clearance_cm":null,"sidewalk_cm":null}));
         }
     }}
@@ -104,4 +105,14 @@ fn seeded_gimmicks_attach_to_forward_course_roads() {
     assert!(applied.gimmicks.len() >= result.attachments.len());
     r.gimmicks = 17;
     assert!(suggest(&d, &r).is_err());
+}
+#[test]
+fn city_scale_blocks_still_receive_gimmicks() {
+    // 1:8 import: about 12.5 m blocks and 1 m primary roads.
+    let d = scaled_grid(8, 1_250, 100);
+    let r = Request { start_cm: [600, 0], heading: [1, 0], mode: Mode::Circuit, duration_seconds: 20, min_width_cm: 0, gimmicks: 4, seed: 3 };
+    let result = suggest(&d, &r).unwrap();
+    assert!(result.applicable, "{:?}", result.diagnostics);
+    assert!(!result.attachments.is_empty(), "{:?}", result.diagnostics);
+    mapkit_core::road_course::apply_gimmicks(&d, &result.road_designs, &result.attachments).unwrap();
 }

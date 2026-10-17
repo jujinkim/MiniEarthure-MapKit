@@ -80,10 +80,12 @@ over the authored road graph without changing the document.
   course; roads outside the course stay drivable.
 - Optional `gimmicks` (0–16) with `seed` propose `attachments`: seeded kinds from
   acceleration panel, jump panel, boost chain, low ramp and grind rail, spread
-  evenly along the course on roads travelled in their own direction, at least 20 m
-  from leg ends; launching kinds keep 40 m before a turning junction. Each one must
-  pass full document validation with the map's existing attachments (≤ 24 tries
-  each; edge-of-map safety bounds reject). Unaligned host roads get the Editor's
+  evenly along the course on roads travelled in their own direction, sized for 1:8
+  city blocks: at least 3 m from leg ends, launching kinds keep 15 m before a turning
+  junction, panel height 100 cm. A seeded kind that does not fit (ramps and rails
+  need wider roads) yields to the next kind. Each one must pass the local resolver,
+  then full document validation with the map's existing attachments (≤ 12 tries per
+  kind; edge-of-map safety bounds reject). Unaligned host roads get the Editor's
   default alignment, returned as `road_designs`; shortfalls warn
   `W_ROAD_COURSE_GIMMICKS`.
 - `apply_gimmicks(document, road_designs, attachments)` (Godot
