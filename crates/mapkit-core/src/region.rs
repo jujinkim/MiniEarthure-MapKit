@@ -219,6 +219,7 @@ pub fn source_metadata(d: &MapDocument) -> MapDocument {
         pois: d.pois.clone(),
         surface_attachments:d.surface_attachments.clone(),
         free_roam: d.free_roam,
+        backdrop: d.backdrop.clone(),
         assembled_track: d.assembled_track.clone(),
         water_bodies: vec![],
         grind_lines: d.grind_lines.clone(), gimmicks: d.gimmicks.clone(),

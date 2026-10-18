@@ -803,3 +803,24 @@ fn jump_routes_reopen_and_recompile_without_regenerating_source() {
     assert_eq!(package::compile_source(&source).unwrap(),document);
     verify_document(&reopened.document).unwrap();
 }
+
+#[test]
+fn backdrop_is_display_only_outside_the_world_hash_and_survives_reload() {
+    let mut d = track::document(&Settings { seed: 23, ..Settings::default() }).unwrap();
+    let plain = read_bytes(&pack_bytes(d.clone(), BTreeMap::new()).unwrap()).unwrap();
+    d.backdrop = Some("snow_mountain".into());
+    d.validate().unwrap();
+    track::verify_document(&d).unwrap();
+    let bytes = pack_bytes(d.clone(), BTreeMap::new()).unwrap();
+    let themed = read_bytes(&bytes).unwrap();
+    // The budgeted reader re-derives the same hash through its streamed audit.
+    assert_eq!(read_bytes_with_budget(&bytes, 1 << 30).unwrap().inspection.world_content_hash, plain.inspection.world_content_hash);
+    assert_eq!(themed.document.backdrop.as_deref(), Some("snow_mountain"));
+    // Courses sealed on the RC arena stay valid under any backdrop.
+    assert_eq!(themed.inspection.world_content_hash, plain.inspection.world_content_hash);
+    d.backdrop = Some("moon_base".into());
+    assert_eq!(d.validate().unwrap_err().code, "E_DOCUMENT");
+    let mut ordinary: mapkit_core::MapDocument = serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+    ordinary.backdrop = Some("village".into());
+    assert_eq!(ordinary.validate().unwrap_err().code, "E_DOCUMENT");
+}

@@ -80,6 +80,19 @@ use these shared MapKit meshes, ports and clearance rules.
 - Up to 64 display-only direction chevrons per stage at 24 m intervals on flat road
   (no collision, occupancy, spawn role or shadow).
 
+## Venue and backdrops
+
+`godot/track_stage.gd` draws the display-only venue around a standalone track for
+the Client, network worlds and Editor previews (no collision, occupancy or spawn
+role); the collision floor `assembled-venue-floor` stays hidden. The map's optional
+`backdrop` picks the scenery: absent or `rc_arena` keeps the seeded RC venue (floor,
+walls, banners, pits and stands). The seven default-world themes use
+`backdrop_stage.gd`: a themed ground plane, then seeded scatter (4–16 m), buildings
+(20–48 m) and landmarks (58 m) outside the venue floor, at most 96 + 32 + 3 models
+from `godot/backdrops/<theme>/`, copies of the authored default-world models.
+The start gate and direction chevrons are shared. `track_json` reports the
+backdrop; `backdrop_stage_validator` covers every theme.
+
 ## Grounded supports
 
 - Seed assemblies ground the venue at the minimum of the actual slab, finish plaza,

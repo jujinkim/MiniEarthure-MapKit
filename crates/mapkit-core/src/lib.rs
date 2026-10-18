@@ -12,6 +12,7 @@ mod convex;
 pub mod course;
 pub mod road_course;
 pub mod environment;
+pub mod backdrop;
 pub use convex::{CollisionConvex, GeneratedConvex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -297,6 +298,11 @@ pub struct MapDocument {
     pub surface_attachments: Vec<assembled_track::surface::Attachment>,
     /// Post-finish presentation policy. Required in the current v1 source.
     pub free_roam: bool,
+    /// Display-only scenery around a standalone track map (`backdrop::IDS`); absent
+    /// means the RC arena. Never collision, never part of the world content hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(regex(pattern = "^(rc_arena|village|neon_harbor|deep_forest|red_canyon|snow_mountain|machine_factory|sky_park)$"))]
+    pub backdrop: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assembled_track: Option<assembled_track::Assembly>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -516,6 +522,12 @@ impl MapDocument {
             || !(self.theme == "default" || matches!(self.theme.as_str(), "urban" | "rural"))
         {
             return Err(error("E_DOCUMENT", "map ID or unsupported theme"));
+        }
+        if let Some(backdrop) = &self.backdrop {
+            if !backdrop::IDS.contains(&backdrop.as_str())
+                || self.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) {
+                return Err(error("E_DOCUMENT", "backdrop requires a standalone track map and a known preset"));
+            }
         }
         if !(200..=102_400).contains(&self.cell_size_cm) || !self.cell_size_cm.is_multiple_of(200) {
             return fail("cell size must be 2..1024 metres, multiple of 2 metres");

@@ -1780,6 +1780,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
     let mut d = MapDocument {
         pois: vec![],
         free_roam: false,
+        backdrop: None,
         surface_attachments: vec![],
         assembled_track: Some(a.clone()),
         water_bodies: vec![],
@@ -1858,6 +1859,7 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
     actual.surface_attachments.clear();
     actual.courses.clear();
     actual.free_roam = expected.free_roam;
+    actual.backdrop = expected.backdrop.clone();
     actual.provenance = expected.provenance.clone();
     actual.attributions = expected.attributions.clone();
     actual.normalize();

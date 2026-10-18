@@ -125,6 +125,11 @@ This page lists the domain invariants and links each feature's owner.
   true for external geographic imports. It enters both content hashes, regional
   metadata and inspection. `reseal_track_document` edits it for generated sources
   after verifying exact current geometry.
+- Optional `MapDocument.backdrop` names display-only scenery for a standalone track
+  map: `rc_arena` (also the meaning of absence) or one of the seven default-world
+  themes (`village`, `neon_harbor`, `deep_forest`, `red_canyon`, `snow_mountain`,
+  `machine_factory`, `sky_park`). Ordinary maps and terrain overlays reject it. It
+  joins package integrity but neither content hash, so sealed courses stay valid.
 
 ## Declarative driving structures
 

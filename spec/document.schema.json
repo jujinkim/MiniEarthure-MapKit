@@ -45,6 +45,14 @@
         "$ref": "#/definitions/Attribution"
       }
     },
+    "backdrop": {
+      "description": "Display-only scenery around a standalone track map (`backdrop::IDS`); absent means the RC arena. Never collision, never part of the world content hash.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(rc_arena|village|neon_harbor|deep_forest|red_canyon|snow_mountain|machine_factory|sky_park)$"
+    },
     "bounds": {
       "$ref": "#/definitions/Bounds"
     },

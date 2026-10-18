@@ -314,7 +314,8 @@ impl MapKitBridge {
         response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
             .map(|p|serde_json::json!({"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),
                 "grind_lines":p.document.grind_lines.iter().map(|l|l.resolved_json()).collect::<Vec<_>>(),
-                "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|if a.authoring.is_some(){10}else{a.settings.max_laps()})})))
+                "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|if a.authoring.is_some(){10}else{a.settings.max_laps()}),
+                "backdrop":p.document.backdrop})))
     }
     #[func]
     fn track_start_surface(&self, x_cm: i64, y_cm: i64) -> GString {

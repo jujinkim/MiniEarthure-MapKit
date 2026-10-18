@@ -197,6 +197,8 @@ fn content_hash(document: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Re
     value.as_object_mut().unwrap().remove("provenance");
     value.as_object_mut().unwrap().remove("attributions");
     value.as_object_mut().unwrap().remove("courses");
+    // Display-only scenery; the streamed audit serializer omits it as well.
+    value.as_object_mut().unwrap().remove("backdrop");
     let hashes: BTreeMap<_, _> = files
         .iter()
         .filter(|(p, _)| p.as_str() != "document.json" && p.as_str() != preview::PATH && !p.starts_with("course-validation/"))
