@@ -175,3 +175,67 @@ fn city_scale_corners_receive_shortcuts() {
     assert!(result.applicable && !result.shortcuts.is_empty(), "{:?}", result.diagnostics);
     apply_extras(&d, &extras(&result)).unwrap();
 }
+/// Buildings fill every block corner (from `setback` to `size` off both streets),
+/// so ground chords are blocked while long elevated chords find open ground for ramps.
+fn built_up(block: i64, width: u32, setback: i64, size: i64, height: u32) -> MapDocument {
+    let mut d = scaled_grid(6, block, width);
+    let mut blocks = vec![];
+    for x in 0..5 { for z in 0..5 { for (cx, cz) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        let span = |c: i64, base: i64| if c == 0 { (base + setback, base + size) } else { (base + block - size, base + block - setback) };
+        let ((x0, x1), (z0, z1)) = (span(cx, x * block), span(cz, z * block));
+        blocks.push(serde_json::json!({"id":format!("b{x}-{z}-{cx}{cz}"),"footprint":[[x0,z0],[x1,z0],[x1,z1],[x0,z1]],
+            "base_cm":0,"height_cm":height,"usage":"commercial","material":"concrete","roof":"flat"}));
+    }}}
+    d.buildings = serde_json::from_value(blocks.into()).unwrap();
+    d.normalize();
+    d
+}
+/// Steepest grade over horizontal spans of at least 2 m (centimetre rounding aside).
+fn steepest(points: &[[i64; 3]]) -> f64 {
+    let run = |a: [i64; 3], b: [i64; 3]| ((b[0] - a[0]) as f64).hypot((b[2] - a[2]) as f64);
+    (0..points.len()).filter_map(|i| (i + 1..points.len()).find(|&j| run(points[i], points[j]) >= 200.0)
+        .map(|j| ((points[j][1] - points[i][1]) as f64).abs() / run(points[i], points[j]))).fold(0.0, f64::max)
+}
+#[test]
+fn elevated_shortcuts_ramp_over_buildings_that_block_ground_chords() {
+    use mapkit_core::road_course::ShortcutForm;
+    let d = built_up(6_000, 150, 300, 2_000, 80);
+    let mut r = Request { start_cm: [3_000, 0], heading: [1, 0], mode: Mode::Circuit, duration_seconds: 60, min_width_cm: 0, gimmicks: 0, seed: 0, shortcuts: 4 };
+    let mut forms = std::collections::BTreeSet::new();
+    for seed in 0..8 {
+        r.seed = seed;
+        let result = suggest(&d, &r).unwrap();
+        assert!(result.applicable, "{:?}", result.diagnostics);
+        assert!(!result.shortcuts.is_empty(), "seed {seed}: {:?}", result.diagnostics);
+        assert_eq!(result, suggest(&d, &r).unwrap());
+        for s in &result.shortcuts {
+            let chord = s.roads.iter().find(|r| r.id == s.id).unwrap();
+            assert_ne!(s.form, ShortcutForm::Ground);
+            assert_eq!(chord.kind, mapkit_core::RoadKind::Elevated);
+            assert!(chord.points.iter().map(|p| p[1]).max().unwrap() >= 80 + 50, "{:?}", chord.points);
+            let limit = if s.form == ShortcutForm::Ramp { 0.12 } else { 0.30 };
+            assert!(steepest(&chord.points) <= limit, "{:?} {}", s.form, steepest(&chord.points));
+            forms.insert(format!("{:?}", s.form));
+        }
+        let applied = apply_extras(&d, &extras(&result)).unwrap();
+        assert_eq!(applied.buildings, d.buildings);
+        // Every junction, the deck and the buildings below generate together.
+        let mut cells = std::collections::BTreeSet::new();
+        for s in &result.shortcuts {
+            let chord = s.roads.iter().find(|r| r.id == s.id).unwrap();
+            let middle = chord.points[chord.points.len() / 2];
+            cells.extend(s.nodes.iter().map(|n| [n.position[0], n.position[2]]).chain([[middle[0], middle[2]]]).map(|p| applied.cell_at(p).unwrap()));
+        }
+        for cell in cells {
+            let chunk = mapkit_core::generate(mapkit_core::GenerationInput { document: &applied, cell, heightgrid: None, max_triangles: 400_000 }).unwrap();
+            assert!(chunk.triangles.iter().any(|t| t.object_id.starts_with("shortcut-")), "{cell:?}");
+            assert!(!chunk.building_prisms.is_empty(), "{cell:?}");
+        }
+    }
+    assert_eq!(forms.len(), 2, "{forms:?}");
+    // A deck too low for a taller roof is never proposed.
+    let mut tall = d.clone();
+    for b in &mut tall.buildings { b.height_cm = 2_000; }
+    r.seed = 0;
+    assert!(suggest(&tall, &r).unwrap().shortcuts.is_empty());
+}

@@ -365,6 +365,56 @@ fn below_deck(d: &MapDocument, p: &Placement, poly: &[Point], r: &Road, work: &m
     }))
 }
 
+/// Roof-to-deck gap for a building under an independently elevated deck.
+pub(crate) const BUILDING_DECK_CLEARANCE_CM: i64 = 50;
+/// Range along `a`→`e` (in segment lengths, 0..=1) of the part of `poly` inside
+/// the segment's corridor: lateral distance at most `radius`, reaching `radius`
+/// beyond both ends. `None` when the corridor misses the polygon.
+pub(crate) fn corridor_extent(poly: &[Point], a: Point, e: Point, radius: f64) -> Option<(f64, f64)> {
+    let (dx, dz) = ((e[0] - a[0]) as f64, (e[1] - a[1]) as f64);
+    let length = dx.hypot(dz);
+    if length <= 0.0 { return None; }
+    let (ux, uz) = (dx / length, dz / length);
+    let mut ring: Vec<[f64; 2]> = poly.iter().map(|v| {
+        let (px, pz) = ((v[0] - a[0]) as f64, (v[1] - a[1]) as f64);
+        [px * ux + pz * uz, pz * ux - px * uz]
+    }).collect();
+    // Sutherland–Hodgman against the convex corridor box; concave input keeps its extent.
+    for (axis, limit, below) in [(0, -radius, false), (0, length + radius, true), (1, -radius, false), (1, radius, true)] {
+        let inside = |p: &[f64; 2]| if below { p[axis] <= limit } else { p[axis] >= limit };
+        let mut next = Vec::with_capacity(ring.len() + 4);
+        for i in 0..ring.len() {
+            let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+            if inside(&p) { next.push(p); }
+            if inside(&p) != inside(&q) {
+                let t = (limit - p[axis]) / (q[axis] - p[axis]);
+                next.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+            }
+        }
+        ring = next;
+        if ring.is_empty() { return None; }
+    }
+    let (lo, hi) = ring.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[0]), hi.max(p[0])));
+    Some(((lo / length).clamp(0.0, 1.0), (hi / length).clamp(0.0, 1.0)))
+}
+/// A whole building may stand below a bridge/elevated deck. Wherever a deck
+/// segment's corridor and safety strip cover the footprint, the deck must stay at
+/// least the clearance above the roof (including a gable rise).
+fn building_below_deck(b: &Building, r: &Road, work: &mut usize) -> Result<bool> {
+    if !matches!(r.kind, RoadKind::Bridge | RoadKind::Elevated) { return Ok(false); }
+    let top = (b.base_cm + i64::from(b.height_cm) + roof_rise(b) + BUILDING_DECK_CLEARANCE_CM) as f64;
+    let mut near = false;
+    for (i, s) in r.points.windows(2).enumerate() {
+        tick(work, b.footprint.len())?;
+        let radius = (r.widths_cm[i.min(r.widths_cm.len() - 1)] as i64 + 1) / 2 + crate::road_safety::OUTSET_CM + 1;
+        let Some((t0, t1)) = corridor_extent(&b.footprint, xy(s[0]), xy(s[1]), radius as f64) else { continue; };
+        near = true;
+        // Deck height is linear along the segment, so its lowest point is at an end.
+        if [t0, t1].iter().any(|t| (s[0][1] as f64 + (s[1][1] - s[0][1]) as f64 * t) < top) { return Ok(false); }
+    }
+    Ok(near)
+}
+
 fn source_clear(
     d: &MapDocument,
     poly: &[Point],
@@ -555,7 +605,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
     return validate_indexed(d, &road_bounds, &mut work);
 }
 
-fn roof_rise(b: &Building) -> i64 {
+pub(crate) fn roof_rise(b: &Building) -> i64 {
     if b.roof != "gable" {
         return 0;
     }
@@ -1096,7 +1146,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
             // space. Testing it against the exact rings avoids triangulating
             // the same building again for every neighbouring road/triangle.
             let hit = measured!(2, planned_overlap(&plan, road, work, |poly, work| building_shapes[i].overlaps(poly, work)));
-            if hit {
+            if hit && !measured!(2, building_below_deck(b, road, work)) {
                 return Err(error(
                     "E_GEOMETRY",
                     format!(

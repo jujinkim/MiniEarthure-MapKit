@@ -93,7 +93,9 @@ This page lists the domain invariants and links each feature's owner.
 - Authored placement uses the convex hull of the complete transformed collision
   footprint. Placement contact is forbidden.
 - Bridge/elevated corridors admit a support only when its whole collision top is
-  at least 1 cm below every interpolated deck segment over the footprint.
+  at least 1 cm below every interpolated deck segment over the footprint, and a
+  building only when its roof (including a gable rise) is at least 50 cm below the
+  deck wherever a segment's corridor and safety strip cover the footprint.
   Ground/tunnel/underpass corridors stay excluded.
 - Surface-area overlap uses exact integer triangle separation: touching edges and
   disjoint concave polygons pass; any positive-area overlap fails.

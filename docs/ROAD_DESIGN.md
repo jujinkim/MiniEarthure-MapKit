@@ -96,8 +96,18 @@ over the authored road graph without changing the document.
   keeps half its width + 30 cm from buildings, water and other roads; the split
   map must validate. Gates inside the bypassed stretch are omitted so both paths
   count; gimmicks skip split roads. Shortfalls warn `W_ROAD_COURSE_SHORTCUTS`.
-  Each `Shortcut` carries the exact `replaces` records, the `[kept, new]` halves per
-  host (first keeps the road ID), the chord and two nodes.
+- Where buildings block every ground chord, the corner tries an elevated chord
+  (reaches 40, 30, 20, 15 or 10 m) on maps without heightmaps. The seed orders two
+  `form`s: `ramp` (at most 12% grade) and `crest` (at most 30%; fast cars may lift
+  off its crests). A ground stub (the width, at least 3 m) leaves each split
+  junction; the elevated chord then runs a level lead (1.5 widths + 2.5 m) at the
+  terrain base, ramps up to one flat deck 51 cm above the tallest roof its corridor
+  covers, and back down. Ramps may pass over lower buildings they already clear. The
+  chord, like a ground chord, keeps clear of water and other roads, so it never
+  needs a separated crossing.
+- Each `Shortcut` carries its `form`, the exact `replaces` records, the `[kept, new]`
+  halves per host (first keeps the road ID), then the ground chord, or the entry
+  stub, elevated chord and exit stub, and its nodes.
 - `apply_extras(document, extras)` (Godot `apply_road_course_extras`) applies
   `shortcuts` (stale hosts fail `E_ROAD_COURSE_STALE`), then `road_designs`, then
   appends `attachments`; it refuses alignments for already aligned roads.

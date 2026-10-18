@@ -324,6 +324,30 @@ fn elevated_pier_requires_vertical_separation_and_never_clears_ground() {
 }
 
 #[test]
+fn building_under_elevated_deck_needs_roof_clearance_and_never_clears_ground() {
+    let mut d = document();
+    d.buildings.clear(); d.zones.clear(); d.placements.clear(); d.repetitions.clear();
+    d.buildings = serde_json::from_value(serde_json::json!([{"id":"under","footprint":[[9800,5800],[10200,5800],[10200,6200],[9800,6200]],
+        "base_cm":0,"height_cm":550,"usage":"commercial","material":"concrete","roof":"flat"}])).unwrap();
+    d.roads[0].kind = RoadKind::Elevated;
+    for p in &mut d.roads[0].points { p[1] = 600; }
+    for n in &mut d.nodes { n.position[1] = 600; n.level = 1; }
+    d.validate().unwrap();
+    let c = generated(&d, Cell { x: 0, y: 0 });
+    assert!(c.chunk.building_prisms.iter().any(|p| p.object_id == "under"));
+    d.buildings[0].height_cm = 551;
+    assert_eq!(d.validate().unwrap_err().code, "E_GEOMETRY");
+    d.buildings[0].height_cm = 450;
+    d.buildings[0].roof = "gable".into(); // 100 cm rise on a 400 cm footprint
+    d.validate().unwrap();
+    d.buildings[0].height_cm = 451;
+    assert_eq!(d.validate().unwrap_err().code, "E_GEOMETRY");
+    d.buildings[0].height_cm = 100;
+    d.roads[0].kind = RoadKind::Ground;
+    assert_eq!(d.validate().unwrap_err().code, "E_GEOMETRY");
+}
+
+#[test]
 fn diagonal_proxy_hull_rejects_contact_without_empty_aabb_corners() {
     let mut d=document();
     d.buildings.clear();d.zones.clear();d.placements.clear();d.repetitions.clear();

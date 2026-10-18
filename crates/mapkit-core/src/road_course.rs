@@ -3,7 +3,7 @@
 use crate::course::{Checkpoint, CheckpointShape, Mode, PlacementMode};
 use crate::assembled_track::{authoring::PanelAlignment, surface::{self, Attachment, Reference}};
 mod shortcut;
-pub use shortcut::{Shortcut, MAX_SHORTCUTS};
+pub use shortcut::{Form as ShortcutForm, Shortcut, MAX_SHORTCUTS};
 use crate::road_design::Design;
 use crate::{cancellation, error, MapDocument, Point, Result, Road, Vertex};
 use serde::{Deserialize, Serialize};
