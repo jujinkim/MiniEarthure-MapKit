@@ -239,3 +239,30 @@ fn elevated_shortcuts_ramp_over_buildings_that_block_ground_chords() {
     r.seed = 0;
     assert!(suggest(&tall, &r).unwrap().shortcuts.is_empty());
 }
+#[test]
+fn seeded_races_pick_start_direction_extras_and_environment_from_one_seed() {
+    use mapkit_core::road_course::{seed, SeedRequest};
+    let d = grid(6);
+    let request = |seed: u64| SeedRequest { seed, mode: Mode::Circuit, duration_seconds: 60, min_width_cm: 0, gimmicks: 4, shortcuts: 2 };
+    let first = seed(&d, &request(7)).unwrap();
+    assert_eq!(first, seed(&d, &request(7)).unwrap());
+    assert!(first.suggestion.applicable, "{:?}", first.suggestion.diagnostics);
+    assert!(!first.suggestion.attachments.is_empty() && !first.suggestion.shortcuts.is_empty(), "{:?}", first.suggestion.diagnostics);
+    let environment = mapkit_core::assembled_track::track_seed_defaults(7).unwrap();
+    assert_eq!(u64::from(first.time_minutes), environment["time_minutes"].as_u64().unwrap());
+    assert_eq!(first.weather, environment["weather"].as_str().unwrap());
+    // The resolved start reproduces the same proposal through the ordinary request.
+    let direct = suggest(&d, &Request { start_cm: first.start_cm, heading: first.heading, mode: Mode::Circuit, duration_seconds: 60,
+        min_width_cm: 0, gimmicks: 4, seed: 7, shortcuts: 2 }).unwrap();
+    assert_eq!(direct, first.suggestion);
+    apply_extras(&d, &extras(&first.suggestion)).unwrap();
+    // Different seeds start in different places or directions.
+    let starts: std::collections::BTreeSet<_> = (0..8).map(|s| { let r = seed(&d, &request(s)).unwrap(); (r.start_cm, r.heading) }).collect();
+    assert!(starts.len() > 4, "{starts:?}");
+    // Gates only, and maps without roads are refused.
+    let gates_only = seed(&d, &SeedRequest { gimmicks: 0, shortcuts: 0, ..request(7) }).unwrap();
+    assert!(gates_only.suggestion.attachments.is_empty() && gates_only.suggestion.shortcuts.is_empty());
+    let mut empty = d.clone();
+    empty.roads.clear();
+    assert_eq!(seed(&empty, &request(7)).unwrap_err().code, "E_ROAD_COURSE_START");
+}

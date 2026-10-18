@@ -170,6 +170,25 @@ impl MapKitBridge {
         })())
     }
     #[func]
+    fn seed_road_course(&self, document: GString, request: GString) -> GString {
+        response((|| {
+            let d = engine_document(&document.to_string())?;
+            let request = serde_json::from_value(engine_value(&request.to_string())?)
+                .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::road_course::seed(&d, &request)?).unwrap())
+        })())
+    }
+    /// The same seeded race on the opened package's validated source document.
+    #[func]
+    fn seed_package_road_course(&self, request: GString) -> GString {
+        response((|| {
+            let package = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let request = serde_json::from_value(engine_value(&request.to_string())?)
+                .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
+            Ok(serde_json::to_value(mapkit_core::road_course::seed(&package.document, &request)?).unwrap())
+        })())
+    }
+    #[func]
     fn apply_road_course_extras(&self, document: GString, extras: GString) -> GString {
         response((|| {
             let d = engine_document(&document.to_string())?;

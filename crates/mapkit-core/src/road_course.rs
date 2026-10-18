@@ -2,7 +2,9 @@
 //! changed; consumers seal the returned gates as an ordinary v1 course.
 use crate::course::{Checkpoint, CheckpointShape, Mode, PlacementMode};
 use crate::assembled_track::{authoring::PanelAlignment, surface::{self, Attachment, Reference}};
+mod seeded;
 mod shortcut;
+pub use seeded::{seed, SeedRequest, SeededRace};
 pub use shortcut::{Form as ShortcutForm, Shortcut, MAX_SHORTCUTS};
 use crate::road_design::Design;
 use crate::{cancellation, error, MapDocument, Point, Result, Road, Vertex};

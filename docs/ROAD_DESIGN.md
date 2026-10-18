@@ -108,6 +108,16 @@ over the authored road graph without changing the document.
 - Each `Shortcut` carries its `form`, the exact `replaces` records, the `[kept, new]`
   halves per host (first keeps the road ID), then the ground chord, or the entry
   stub, elevated chord and exit stub, and its nodes.
+- Seeded races: `road_course::seed(document, request)` (Godot `seed_road_course`,
+  or `seed_package_road_course(request)` on the opened package's source) takes
+  `seed`, `mode`, `duration_seconds` and optional `min_width_cm`, `gimmicks` and
+  `shortcuts`. The seed orders the eligible roads; up to 12 start mid-road in a
+  seeded direction, and the first route within the length tolerance wins
+  (otherwise the first applicable one, otherwise the diagnostics). Gimmicks and
+  shortcuts are then proposed with the same seed for that start only. The result
+  carries the resolved `start_cm`/`heading`, the `suggestion` and the seed
+  `time_minutes`/`weather` from `track_seed_defaults`, which consumers apply to the
+  play or preview environment only, never to the map.
 - `apply_extras(document, extras)` (Godot `apply_road_course_extras`) applies
   `shortcuts` (stale hosts fail `E_ROAD_COURSE_STALE`), then `road_designs`, then
   appends `attachments`; it refuses alignments for already aligned roads.
