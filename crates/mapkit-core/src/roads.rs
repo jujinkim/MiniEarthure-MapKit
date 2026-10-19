@@ -327,11 +327,17 @@ fn ground_tile_part(
             lines.push((area.polygon[i], area.polygon[(i + 1) % area.polygon.len()]));
         }
     }
-    let shapes = match crate::road_arrangement::subdivide(&bounds, &lines, work) {
-        Ok(shapes) => shapes,
-        Err(e) if e.code == "E_BUDGET"
-            && matches!(e.message.as_str(), "ground tile arrangement edge limit" | "ground tile intersection limit")
-            && depth < 6 && (0..2).all(|i| bounds.max[i]-bounds.min[i]>=4) => {
+    let arranged = crate::road_arrangement::subdivide(&bounds, &lines, work);
+    // A face the triangulator cannot accept (many disjoint islands in one tile)
+    // splits exactly like an over-dense arrangement; other tiles are unchanged.
+    let dense = match &arranged {
+        Ok(shapes) => shapes.iter().any(|rings| !crate::road_arrangement::triangulable(rings)),
+        Err(e) => e.code == "E_BUDGET"
+            && matches!(e.message.as_str(), "ground tile arrangement edge limit" | "ground tile intersection limit"),
+    };
+    let shapes = match arranged {
+        Ok(shapes) if !dense => shapes,
+        _ if dense && depth < 6 && (0..2).all(|i| bounds.max[i]-bounds.min[i]>=4) => {
             let mid:Point=std::array::from_fn(|i|bounds.min[i]+(bounds.max[i]-bounds.min[i])/2);
             // No faces have been emitted yet. Children share exact integer cuts
             // and the same cumulative work/output limits as their parent cell.
@@ -344,6 +350,8 @@ fn ground_tile_part(
             }}
             return Ok(());
         }
+        // At the split limit, triangulation reports the oversized face.
+        Ok(shapes) => shapes,
         Err(e) => return Err(e),
     };
     // Centroid classification needs only patches whose integer bounds contain

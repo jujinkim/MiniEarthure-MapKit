@@ -51,8 +51,10 @@ safety furniture, placement intersection and regional influence margin.
   rings. The 8 million work limit (enough for about 11,000 dense 1:8 city
   buildings) and exact contact rules stay authoritative.
 - Terrain tiles, surface overlap and face classification query ordered spatial
-  indexes; dense arrangements split into quarters (depth ≤6) only at their local
-  limit. Exact predicates, surface order and cumulative budgets are unchanged.
+  indexes; dense arrangements, or faces beyond the 16-hole/512-vertex triangulation
+  limit (many disjoint islands in one tile), split into quarters (depth ≤6) only at
+  that local limit. Exact predicates, surface order and cumulative budgets are
+  unchanged.
 
 ## Validation
 

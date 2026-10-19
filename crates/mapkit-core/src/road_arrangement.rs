@@ -170,8 +170,13 @@ pub(crate) fn subdivide(
     Ok(shapes)
 }
 
+/// Whether `triangulate` accepts this face's ring count and size.
+pub(crate) fn triangulable(rings: &[Vec<Point>]) -> bool {
+    !(rings.is_empty() || rings.len() > 17 || rings.iter().map(Vec::len).sum::<usize>() > 512)
+}
+
 pub(crate) fn triangulate(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<[Point; 3]>> {
-    if rings.is_empty() || rings.len() > 17 || rings.iter().map(Vec::len).sum::<usize>() > 512 {
+    if !triangulable(rings) {
         return Err(error("E_BUDGET", "ground face triangulation limit"));
     }
     let mut triangles = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], work)
