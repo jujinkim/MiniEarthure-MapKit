@@ -115,6 +115,43 @@ impl<'a> PlanIndex<'a> {
         let roads: Vec<_> = selected.into_iter().map(|i| &self.document.roads[i]).collect();
         plan_selected(&roads, &self.nodes, bounds, self.margin, true)
     }
+
+    /// The plan of one graph node's junction from its incident roads alone.
+    fn junction(&self, node: &str, bounds: &Bounds, work: &mut usize) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+        let roads: Vec<_> = self.incident.get(node).into_iter().flatten().copied().collect::<BTreeSet<_>>()
+            .into_iter().map(|i| &self.document.roads[i]).collect();
+        crate::roads::tick(work, roads.len())?;
+        plan_selected(&roads, &self.nodes, bounds, self.margin, true)
+    }
+}
+
+/// Graph nodes joining two or more road ends whose junction the current rules
+/// cannot build (for example a source way that doubles back on itself, or
+/// approaches too close to form one passage). Each node is planned with only its
+/// own incident roads, so a failing neighbour never implicates it. Ordered by
+/// node position in the document.
+pub fn unbuildable_junctions(d: &MapDocument) -> Result<Vec<String>> {
+    let index = PlanIndex::new(d)?;
+    let mut ends = BTreeMap::<&str, usize>::new();
+    for road in &d.roads {
+        for id in [&road.from, &road.to] { *ends.entry(id.as_str()).or_default() += 1; }
+    }
+    let mut failing = Vec::new();
+    let mut work = 0;
+    for node in &d.nodes {
+        crate::cancellation::checkpoint()?;
+        if ends.get(node.id.as_str()).copied().unwrap_or(0) < 2 { continue; }
+        let p = node.position;
+        let area = Bounds { min: [p[0] - 1, p[2] - 1], max: [p[0] + 1, p[2] + 1] };
+        match index.junction(&node.id, &area, &mut work) {
+            Ok(_) => {}
+            Err(e) if e.code == "E_GEOMETRY" => failing.push(node.id.clone()),
+            Err(e) => return Err(e),
+        }
+        // Each node's plan is local; the shared work counter only reports cost.
+        work = 0;
+    }
+    Ok(failing)
 }
 
 #[cfg(test)]

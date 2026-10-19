@@ -169,6 +169,14 @@ impl MapKitBridge {
             Ok(serde_json::to_value(mapkit_core::road_course::suggest(&d, &request)?).unwrap())
         })())
     }
+    /// Graph nodes whose junctions the road planner cannot build (import admission).
+    #[func]
+    fn unbuildable_junctions(&self, document: GString) -> GString {
+        response((|| {
+            let d = engine_document(&document.to_string())?;
+            Ok(serde_json::json!({"nodes": mapkit_core::unbuildable_junctions(&d)?}))
+        })())
+    }
     #[func]
     fn seed_road_course(&self, document: GString, request: GString) -> GString {
         response((|| {

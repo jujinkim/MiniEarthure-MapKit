@@ -13,6 +13,8 @@ pub mod course;
 pub mod road_course;
 pub mod environment;
 pub mod backdrop;
+/// Junction admission for imports; geometry rules stay in the road planner.
+pub use road_plan::unbuildable_junctions;
 pub use convex::{CollisionConvex, GeneratedConvex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

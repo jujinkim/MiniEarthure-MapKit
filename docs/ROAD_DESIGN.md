@@ -140,6 +140,15 @@ environment profiles, with the current road partition and three-dimensional seam
 rules. Regional source derivation follows [REGIONAL_SOURCE](../spec/REGIONAL_SOURCE.md).
 Road rounding and safety furniture follow [ROAD_SAFETY](ROAD_SAFETY.md).
 
+## Junction admission for imports
+
+`unbuildable_junctions(document)` (Godot `unbuildable_junctions`) lists graph nodes
+joining two or more road ends whose junction the current road planner rejects, for
+example a source way that doubles back on itself at a node or approaches too close to
+form one passage. Each node is planned from its own incident roads only, so a failing
+neighbour never implicates it. Consumers may separate such nodes into independent road
+ends at the same position; the planner rules themselves are unchanged.
+
 ## CLI and audit
 
 - `mapkit design-roads INPUT.json NEW.json` authors a new document.
