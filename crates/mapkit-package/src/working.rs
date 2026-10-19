@@ -56,6 +56,8 @@ pub struct WorkingSnapshot {
     pub changed_indices: BTreeMap<Cell, BTreeSet<usize>>,
     pub modified: BTreeSet<Cell>,
     pub fitters: BTreeMap<Cell, Arc<mapkit_core::road_design::Fitter>>,
+    /// The last validated, prepared composition; reused while it is unchanged.
+    prepared: Option<Arc<PreparedMap>>,
 }
 impl WorkingSnapshot {
     pub fn new(mut document: MapDocument, resources: Resources) -> Result<Self> {
@@ -75,6 +77,7 @@ impl WorkingSnapshot {
             changed_indices: BTreeMap::new(),
             modified: BTreeSet::new(),
             fitters: BTreeMap::new(),
+            prepared: None,
         })
     }
     pub fn spacing(&self) -> i64 {
@@ -364,8 +367,21 @@ impl WorkingSnapshot {
         if unique.len() != cells.len() {
             return Err(error("E_CELL", "duplicate validation cell"));
         }
-        self.validate_memory()?;
-        let prepared = PreparedMap::new(self.composed_document())?;
+        // Batched callers check one unchanged composition many times. Its full
+        // validation and preparation happen once; resources are still verified.
+        let mut composed = self.composed_document();
+        composed.normalize();
+        let current = self.prepared.as_ref().filter(|p| std::ops::Deref::deref(p.as_ref()) == &composed).cloned();
+        let prepared = match current {
+            Some(prepared) => prepared,
+            None => {
+                self.prepared = None;
+                let prepared = Arc::new(PreparedMap::new(composed)?);
+                self.prepared = Some(prepared.clone());
+                prepared
+            }
+        };
+        self.verify_memory(&prepared)?;
         for &cell in cells { prepared.cell_bounds(cell)?; }
         for &cell in cells {
             cancellation::checkpoint()?;
@@ -438,6 +454,10 @@ impl WorkingSnapshot {
     pub fn validate_memory(&mut self) -> Result<()> {
         let d = self.composed_document();
         d.validate()?;
+        self.verify_memory(&d)
+    }
+    /// Resource, asset, course and terrain checks for an already valid document.
+    fn verify_memory(&mut self, d: &MapDocument) -> Result<()> {
         self.resources.verify()?;
         let mut files = BTreeMap::new();
         let mut total = 0;

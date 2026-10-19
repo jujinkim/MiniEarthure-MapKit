@@ -10,7 +10,9 @@ small 1:8 zone does not scan the empty remainder of a large cell. Global candida
 seeds, ordering, jitter, eligibility, thinning and all work/output limits remain.
 An anchor is included in placement bounds even when its collision proxy is offset.
 Asset and heightmap descriptor lookups have immutable indices. No complete map
-geometry or quality-reduced substitute is cached.
+geometry or quality-reduced substitute is cached. A working snapshot keeps its
+last validated `PreparedMap` while the composed document is unchanged, so batched
+cell validation validates and prepares it once.
 
 Prepared indices are charged by package read planning: an additional eight times
 structured source bytes and 32 MiB for bounded repetition/footprint/index storage.

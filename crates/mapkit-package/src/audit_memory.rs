@@ -205,6 +205,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     for item in surface_attachments {retained.string(&item.id)?;retained.string(&item.kind)?;retained.string(&item.surface.surface_id)?;}
     retained.string(map_id)?;
     retained.string(theme)?;
+    if let Some(backdrop) = &document.backdrop { retained.string(backdrop)?; }
     if let Some(environment) = &document.environment {
         retained.string(&environment.concept)?;
         retained.string(&environment.architecture)?;
@@ -503,6 +504,7 @@ mod tests {
         let mut d = empty();
         d.map_id = string(101);
         d.theme = string(103);
+        d.backdrop = Some(string(139));
         d.provenance = Provenance {
             tool_id: string(107),
             version: string(109),
@@ -588,6 +590,7 @@ mod tests {
         let strings = [
             &d.map_id,
             &d.theme,
+            d.backdrop.as_ref().unwrap(),
             &d.provenance.tool_id,
             &d.provenance.version,
             &d.provenance.build_id,
@@ -947,6 +950,7 @@ mod tests {
             "seed",
             "recipe_version",
             "theme",
+            "backdrop",
             "terrain_base_cm",
             "environment",
             "courses",
