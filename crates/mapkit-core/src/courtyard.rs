@@ -129,7 +129,11 @@ pub(crate) fn triangulate_rings(
             ring=merged;
             continue;
         }
-        let mut best = None;
+        // The bridge is the smallest (length, a, c, i, j) key that is locally
+        // inside, crosses no ring and has an interior midpoint. Test candidates
+        // in key order and stop at the first valid one: the same bridge, without
+        // checking every pair against every edge.
+        let mut candidates = Vec::new();
         for (i, &a) in ring.iter().enumerate() {
             for (j, &c) in hole.iter().enumerate() {
                 tick(work)?;
@@ -145,45 +149,49 @@ pub(crate) fn triangulate_rings(
                 if !local {
                     continue;
                 }
-                let mut clear = true;
-                for edge in std::iter::once(&ring).chain(holes.iter()) {
-                    for k in 0..edge.len() {
-                        tick(work)?;
-                        let (u, v) = (edge[k], edge[(k + 1) % edge.len()]);
-                        if !intersects(a, c, u, v) {
-                            continue;
-                        }
-                        if (u == a || u == c || v == a || v == c)
-                            && cross(a, c, if u == a || u == c { v } else { u }) != 0
-                        {
-                            continue;
-                        }
-                        clear = false;
-                        break;
-                    }
-                    if !clear {
-                        break;
-                    }
-                }
-                if !clear {
-                    continue;
-                }
-                // Exact half-centimetre midpoint classification, without truncation.
-                let p = [a[0] + c[0], a[1] + c[1]];
-                let doubled =
-                    |r: &[Point]| r.iter().map(|p| [p[0] * 2, p[1] * 2]).collect::<Vec<_>>();
-                if !point_in_polygon(p, &doubled(footprint))
-                    || holes.iter().any(|h| point_in_polygon(p, &doubled(h)))
-                {
-                    continue;
-                }
                 let length = (a[0] - c[0]) as i128 * (a[0] - c[0]) as i128
                     + (a[1] - c[1]) as i128 * (a[1] - c[1]) as i128;
-                let key = (length, a, c, i, j);
-                if best.is_none_or(|v| key < v) {
-                    best = Some(key);
+                candidates.push((length, a, c, i, j));
+            }
+        }
+        candidates.sort_unstable();
+        let mut best = None;
+        for key in candidates {
+            let (_, a, c, _, _) = key;
+            let mut clear = true;
+            for edge in std::iter::once(&ring).chain(holes.iter()) {
+                for k in 0..edge.len() {
+                    tick(work)?;
+                    let (u, v) = (edge[k], edge[(k + 1) % edge.len()]);
+                    if !intersects(a, c, u, v) {
+                        continue;
+                    }
+                    if (u == a || u == c || v == a || v == c)
+                        && cross(a, c, if u == a || u == c { v } else { u }) != 0
+                    {
+                        continue;
+                    }
+                    clear = false;
+                    break;
+                }
+                if !clear {
+                    break;
                 }
             }
+            if !clear {
+                continue;
+            }
+            // Exact half-centimetre midpoint classification, without truncation.
+            let p = [a[0] + c[0], a[1] + c[1]];
+            let doubled =
+                |r: &[Point]| r.iter().map(|p| [p[0] * 2, p[1] * 2]).collect::<Vec<_>>();
+            if !point_in_polygon(p, &doubled(footprint))
+                || holes.iter().any(|h| point_in_polygon(p, &doubled(h)))
+            {
+                continue;
+            }
+            best = Some(key);
+            break;
         }
         let Some((_, _, _, i, j)) = best else {
             return Err(error("E_GEOMETRY", "courtyard has no visible bridge"));

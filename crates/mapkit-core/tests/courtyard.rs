@@ -285,7 +285,9 @@ fn signed_coordinates_and_many_disjoint_courtyards_are_stable() {
 fn cumulative_courtyard_work_is_bounded_before_generation() {
     let mut d = doc();
     let b = d.buildings[0].clone();
-    d.buildings = (0..10000)
+    // 60,000 small courtyards stay below the vertex limit but exceed the
+    // shared courtyard work budget.
+    d.buildings = (0..60000)
         .map(|i| {
             let mut b = b.clone();
             b.id = format!("b{i}");

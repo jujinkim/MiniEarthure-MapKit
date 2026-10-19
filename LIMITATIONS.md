@@ -11,7 +11,8 @@ of game transport, physics, progress and release acceptance.
   extensions and external resources are unsupported. General intersecting shells,
   arbitrary roofs and inferred structure connectivity require explicit authoring.
 - Courtyards allow at most 16 disjoint interior rings and 512 total vertices with
-  a flat roof. Touching/nested holes and arbitrary sloped courtyard roofs reject.
+  a flat roof. Hole bridges are the shortest valid ones, tested shortest first.
+  Touching/nested holes and arbitrary sloped courtyard roofs reject.
 - Regional files retain one bounded original authoring document. Sharded authoring,
   arbitrary density, source LRU and network region requests are not provided here.
 - Logical estimates and decoder caps are not complete allocator/RSS/GPU accounting.
