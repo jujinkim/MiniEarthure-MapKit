@@ -27,7 +27,8 @@ trees. The full canopy stays inside its own zone and outside exclusion polygons.
 Density zero generates none; narrow or occupied zones can also generate none.
 
 Existing candidate hashing, forest jitter, source-global thinning, terrain
-anchoring and centre ownership are reused. Custom trees emit their shared asset
+anchoring and centre ownership are reused; thinning skips zones whose bounds
+cannot hold a competitor, so map-wide zone counts do not add per-tree work. Custom trees emit their shared asset
 ID and complete declared collision at one owner cell. Vegetation occupancy queries
 include a conservative 200cm owner halo, including metadata-only indexed queries;
 cell allowance checks still apply before allocation. Source-region derivation

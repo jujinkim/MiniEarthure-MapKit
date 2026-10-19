@@ -845,6 +845,11 @@ fn eligible(
 ) -> Result<bool> {
     let zone = &d.zones[c.zone];
     let poly = tree_footprint(c.p, zone_tree_radius(zone));
+    // A footprint outside the zone's bounds cannot be inside the zone.
+    let (tree_area, zone_area) = (aabb(&poly), aabb(&zone.polygon));
+    if (0..2).any(|a| tree_area.min[a] < zone_area.min[a] || tree_area.max[a] > zone_area.max[a]) {
+        return Ok(false);
+    }
     let clearance = zone
         .tree
         .as_ref()
@@ -938,6 +943,13 @@ fn vegetation(
                     } else {
                         0
                     };
+                    // Every competitor scanned below lies within this window and
+                    // must be inside its own zone to be eligible.
+                    let window = reach + 2 * jitter + other_s;
+                    let other_area = aabb(&other.polygon);
+                    if (0..2).any(|a| other_area.max[a] < c.p[a] - window || other_area.min[a] > c.p[a] + window) {
+                        continue;
+                    }
                     for oy in (c.p[1] - reach - jitter).div_euclid(other_s)
                         ..=(c.p[1] + reach + jitter).div_euclid(other_s)
                     {
