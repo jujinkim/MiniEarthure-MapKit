@@ -4,7 +4,7 @@ use crate::generation::Builder;
 use crate::*;
 
 pub const SCRATCH_BYTES: u64 = 16 * 1024 * 1024;
-pub const MAX_WORK: usize = 4_000_000;
+pub const MAX_WORK: usize = 8_000_000; // About 11,000 dense 1:8 city buildings.
 pub const MAX_REPEATED: usize = 20_000;
 const TREE_RADIUS: i64 = 200; // encloses the common renderer's 184 cm canopy
 
@@ -1110,7 +1110,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
     let building_shapes = d.buildings.iter().map(|b| BuildingIndex::new(b, work)).collect::<Result<Vec<_>>>()?;
     // Dense authored splines must not multiply every placement by every road
     // station. Index segment corridors; preserve the same exact plan predicates
-    // and unchanged 4M work ceiling after this broad phase.
+    // and the shared work ceiling after this broad phase.
     let segments:Vec<_>=d.roads.iter().enumerate().flat_map(|(id,r)|(0..r.points.len()-1).step_by(16).map(move |i|{
         let end=(i+16).min(r.points.len()-1);
         let mut area=aabb(&r.points[i..=end].iter().copied().map(xy).collect::<Vec<_>>());

@@ -48,7 +48,8 @@ safety furniture, placement intersection and regional influence margin.
   Cancellation and local plan/paint budgets reject excess work.
 - Placement validation builds one transient road bounds/endpoint index per
   document; courtyard checks compare corridor polygons directly with building
-  rings. The 4 million work limit and exact contact rules stay authoritative.
+  rings. The 8 million work limit (enough for about 11,000 dense 1:8 city
+  buildings) and exact contact rules stay authoritative.
 - Terrain tiles, surface overlap and face classification query ordered spatial
   indexes; dense arrangements split into quarters (depth ≤6) only at their local
   limit. Exact predicates, surface order and cumulative budgets are unchanged.
