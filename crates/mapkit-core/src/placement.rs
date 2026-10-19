@@ -135,6 +135,22 @@ impl<'a> BuildingIndex<'a> {
         Ok(Self { building, area: aabb(ring), edges: crate::bounds_index::BoundsIndex::new(&edge_bounds), edge_bounds })
     }
 
+    /// `point_in_polygon` for the footprint, reading only the edges that can meet
+    /// the +x ray from `p` (or contain `p`); other edges never change the result.
+    fn contains(&self, p: Point, work: &mut usize) -> Result<bool> {
+        let ring = &self.building.footprint;
+        let ray = Bounds { min: p, max: [self.area.max[0].max(p[0]), p[1]] };
+        let candidates = self.edges.query(&ray, work)?;
+        tick(work, candidates.len())?;
+        let mut inside = false;
+        for i in candidates {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            if on_segment(a, b, p) { return Ok(true); }
+            if (a[1] > p[1]) != (b[1] > p[1]) && (cross(a, b, p) > 0) == (b[1] > a[1]) { inside = !inside; }
+        }
+        Ok(inside)
+    }
+
     fn overlaps(&self, poly: &[Point], work: &mut usize) -> Result<bool> {
         tick(work, 1)?;
         let poly_area = aabb(poly);
@@ -142,21 +158,21 @@ impl<'a> BuildingIndex<'a> {
         let ring = &self.building.footprint;
         let mut hit = false;
         if self.area.contains(poly[0]) {
-            tick(work, ring.len())?;
-            hit = point_in_polygon(poly[0], ring);
+            hit = self.contains(poly[0], work)?;
         }
         if !hit && poly_area.contains(ring[0]) {
             tick(work, poly.len())?;
             hit = point_in_polygon(ring[0], poly);
         }
         if !hit {
-            'boundary: for i in 0..poly.len() {
-                let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-                let area = aabb(&[a, b]);
-                let candidates = self.edges.query(&area, work)?;
-                tick(work, candidates.len())?;
-                for j in candidates {
-                    if overlaps(&area, &self.edge_bounds[j])
+            // One index query for the whole polygon: footprint edges away from it
+            // cannot cross any of its sides.
+            let candidates = self.edges.query(&poly_area, work)?;
+            tick(work, candidates.len())?;
+            'boundary: for j in candidates {
+                for i in 0..poly.len() {
+                    let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+                    if overlaps(&aabb(&[a, b]), &self.edge_bounds[j])
                         && intersects(a, b, ring[j], ring[(j + 1) % ring.len()]) {
                         hit = true;
                         break 'boundary;
@@ -1243,6 +1259,7 @@ mod city_tests {
                     let expected = solid.iter().any(|triangle| polygons_overlap(triangle, &p, &mut 0).unwrap());
                     assert_eq!(building_overlap(&p, b, &mut 0).unwrap(), expected, "{p:?}");
                     assert_eq!(index.overlaps(&p, &mut 0).unwrap(), expected, "indexed {p:?}");
+                    assert_eq!(index.contains([x + size / 2, y + size / 3], &mut 0).unwrap(), point_in_polygon([x + size / 2, y + size / 3], &b.footprint), "contains {p:?}");
                 }
             }
         }

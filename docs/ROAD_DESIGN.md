@@ -149,6 +149,11 @@ form one passage. Each node is planned from its own incident roads only, so a fa
 neighbour never implicates it. Consumers may separate such nodes into independent road
 ends at the same position; the planner rules themselves are unchanged.
 
+A local road plan admits up to 24,576 faces and boundaries, enough for the densest
+1:8 city cells with kept source junctions; larger plans fail with `E_BUDGET`.
+Building/road clearance checks test footprint containment and crossings through
+the footprint's edge index.
+
 ## CLI and audit
 
 - `mapkit design-roads INPUT.json NEW.json` authors a new document.

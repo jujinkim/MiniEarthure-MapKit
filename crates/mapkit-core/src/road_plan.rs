@@ -1,7 +1,7 @@
 //! Shared, cell-independent junction geometry. Authoring IDs and coordinates are immutable.
 use crate::roads::hull;
 use crate::*;
-const MAX_LOCAL_PATCHES: usize = 16_384;
+const MAX_LOCAL_PATCHES: usize = 24_576;
 #[derive(Clone)]
 pub(crate) struct Patch<'a> {
     pub v: [Vertex; 3],
