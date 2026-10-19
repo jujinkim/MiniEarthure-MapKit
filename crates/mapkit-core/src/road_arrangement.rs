@@ -179,8 +179,11 @@ pub(crate) fn triangulate(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<
     if !triangulable(rings) {
         return Err(error("E_BUDGET", "ground face triangulation limit"));
     }
-    let mut triangles = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], work)
+    // The courtyard limit bounds this face; the cell's road budget bounds the sum.
+    let mut face_work = 0;
+    let mut triangles = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], &mut face_work)
         .map_err(|mut e|{e.message=format!("{}: {rings:?}",e.message);e})?;
+    crate::roads::tick(work, face_work)?;
     // Hole bridging may simplify exactly collinear vertices. Restore those exact
     // graph vertices on both adjacent triangles; never stitch near an edge.
     let points: BTreeSet<Point> = rings.iter().flatten().copied().collect();

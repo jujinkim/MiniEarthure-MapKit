@@ -202,6 +202,9 @@ pub(crate) fn triangulate_rings(
         ring = merged;
     }
     let mut out = vec![];
+    // Ring points by grid cell, so an ear test reads only points near its
+    // triangle. The first unblocked convex ear in ring order is unchanged.
+    let mut points = PointGrid::new(&ring);
     while ring.len() > 3 {
         let n = ring.len();
         let mut ear = None;
@@ -211,15 +214,7 @@ pub(crate) fn triangulate_rings(
             if cross(t[0], t[1], t[2]) <= 0 {
                 continue;
             }
-            let mut blocked = false;
-            for p in &ring {
-                tick(work)?;
-                if !t.contains(p) && point_in_polygon(*p, &t) {
-                    blocked = true;
-                    break;
-                }
-            }
-            if !blocked {
+            if !points.any_inside(&t, work)? {
                 ear = Some((i, t));
                 break;
             }
@@ -229,6 +224,7 @@ pub(crate) fn triangulate_rings(
             if let Some(i) =
                 (0..n).find(|&i| cross(ring[(i + n - 1) % n], ring[i], ring[(i + 1) % n]) == 0)
             {
+                points.remove(ring[i]);
                 ring.remove(i);
                 continue;
             }
@@ -238,6 +234,7 @@ pub(crate) fn triangulate_rings(
             ));
         };
         out.push(t);
+        points.remove(ring[i]);
         ring.remove(i);
     }
     if cross(ring[0], ring[1], ring[2]) != 0 {
@@ -249,4 +246,53 @@ pub(crate) fn triangulate_rings(
         return Err(error("E_GEOMETRY", "courtyard triangulation area mismatch"));
     }
     Ok(out)
+}
+
+/// Multiset of ring points in square buckets for ear blocking queries.
+struct PointGrid {
+    min: Point,
+    size: i64,
+    cells: BTreeMap<(i64, i64), Vec<Point>>,
+}
+impl PointGrid {
+    fn new(ring: &[Point]) -> Self {
+        let min = std::array::from_fn(|a| ring.iter().map(|p| p[a]).min().unwrap());
+        let max: Point = std::array::from_fn(|a| ring.iter().map(|p| p[a]).max().unwrap());
+        let extent = (max[0] - min[0]).max(max[1] - min[1]).max(1);
+        let side = (ring.len() as f64).sqrt().ceil().max(1.0) as i64;
+        let mut grid = Self { min, size: (extent / side).max(1), cells: BTreeMap::new() };
+        for &p in ring {
+            grid.cells.entry(grid.key(p)).or_default().push(p);
+        }
+        grid
+    }
+    fn key(&self, p: Point) -> (i64, i64) {
+        ((p[0] - self.min[0]).div_euclid(self.size), (p[1] - self.min[1]).div_euclid(self.size))
+    }
+    fn remove(&mut self, p: Point) {
+        let key = self.key(p);
+        if let Some(bucket) = self.cells.get_mut(&key) {
+            if let Some(at) = bucket.iter().position(|&q| q == p) {
+                bucket.swap_remove(at);
+            }
+        }
+    }
+    /// Whether a ring point other than a triangle vertex lies inside or on it,
+    /// the same predicate as testing every ring point.
+    fn any_inside(&self, t: &[Point; 3], work: &mut usize) -> Result<bool> {
+        let (lo, hi) = (self.key(std::array::from_fn(|a| t.iter().map(|p| p[a]).min().unwrap())),
+            self.key(std::array::from_fn(|a| t.iter().map(|p| p[a]).max().unwrap())));
+        for x in lo.0..=hi.0 {
+            for y in lo.1..=hi.1 {
+                tick(work)?;
+                for p in self.cells.get(&(x, y)).into_iter().flatten() {
+                    tick(work)?;
+                    if !t.contains(p) && point_in_polygon(*p, t) {
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
 }
