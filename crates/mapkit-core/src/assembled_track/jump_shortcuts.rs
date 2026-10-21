@@ -548,7 +548,7 @@ pub(super) fn install(
         document_from_assembly(a)?;
         Ok(candidate)
     };
-    match attempt() {
+    match crate::profile::runtime(attempt) {
         Ok(s) => Ok(Some(s)),
         Err(e) if e.code == "E_CANCELLED" => Err(e),
         Err(_) => Ok(None),

@@ -38,7 +38,7 @@ pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
             let n = degree.entry(id).or_insert(0usize);
             *n += 1;
             if *n > 32 {
-                return Err(error("E_LIMIT", "road junction exceeds 32 arms"));
+                JUNCTION_ARMS.check(*n as u64, || error("E_LIMIT", "road junction exceeds 32 arms"))?;
             }
         }
         let areas:Vec<_>=r.points.windows(2).map(|s|crate::bounds_index::bounds(&[xy(s[0]),xy(s[1])])).collect();
@@ -66,11 +66,15 @@ pub(crate) fn validate_graph(d: &MapDocument) -> Result<()> {
     }
     Ok(())
 }
+const JUNCTION_ARMS: crate::profile::Budget = crate::profile::Budget { code: "road_junction_arms", limit: 32, guard: 256,
+    message: "A road junction has more arms than the game allows", runtime_rejects: true };
+const WORK: crate::profile::Budget = crate::profile::Budget { code: "road_work", limit: MAX_WORK as u64,
+    guard: MAX_WORK as u64 * 8, message: "Road subdivision needs more work than the game allows", runtime_rejects: true };
 pub(crate) fn tick(work: &mut usize, n: usize) -> Result<()> {
     crate::cancellation::checkpoint()?;
     *work = work.saturating_add(n);
     if *work > MAX_WORK {
-        Err(error("E_BUDGET", "road subdivision work exceeded"))
+        WORK.check(*work as u64, || error("E_BUDGET", "road subdivision work exceeded"))
     } else {
         Ok(())
     }

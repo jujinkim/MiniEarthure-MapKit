@@ -89,6 +89,40 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
         }
         metadata += 1024 + name.len() as u64 * 8;
     }
+    Ok(planned(expanded, structured, long_strings, pngs, image_peak, metadata, bytes.len() as u64))
+}
+
+/// The same planning allowance for in-memory project files and their manifest
+/// size; no compressed container exists.
+pub(crate) fn files_cost(manifest_bytes: u64, files: &BTreeMap<String, Vec<u8>>) -> Result<ReadCost> {
+    let (mut expanded, mut structured, mut long_strings, mut pngs) = (manifest_bytes, manifest_bytes, 0u64, 0u64);
+    let mut image_peak = 8 * 1024 * 1024u64;
+    let mut metadata = 1024 * 1024u64 + 1024 + "manifest.json".len() as u64 * 8;
+    for (name, bytes) in files {
+        let size = bytes.len() as u64;
+        expanded += size;
+        if name.ends_with(".json") || name.ends_with(".glb") {
+            structured += size;
+        }
+        if name.ends_with(".json") {
+            long_strings += match long_string_bytes(&mut bytes.as_slice(), size) {
+                Ok(tail) => tail,
+                Err(e) if e.code == "E_CANCELLED" => return Err(e),
+                Err(_) => 0,
+            };
+        }
+        if name.ends_with(".glb") || name.ends_with(".png") || name.ends_with(".webp") {
+            image_peak = image_peak.max(decoder_peak(&mut bytes.as_slice(), name, size));
+        }
+        if name.ends_with(".png") {
+            pngs += 1;
+        }
+        metadata += 1024 + name.len() as u64 * 8;
+    }
+    Ok(planned(expanded, structured, long_strings, pngs, image_peak, metadata, 0))
+}
+
+fn planned(expanded: u64, structured: u64, long_strings: u64, pngs: u64, image_peak: u64, metadata: u64, compressed: u64) -> ReadCost {
     // Payload vectors, typed document/manifest and their strings. GLB JSON is
     // bounded conservatively by its complete entry size before decoding headers.
     // Immutable core estimate and bridge preparation caches: at most the shared bounded cache capacity,
@@ -106,11 +140,11 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     // overlap with retained data. Image decoder limits are sequential; heightmap
     // seams retain at most four edges of 513 i64 samples per PNG under v1 limits.
     let transient =
-        structure * 96 + long_strings * 8 + bytes.len() as u64 * 2 + image_peak.max(track_workspace(structured)) + pngs * (4 * 513 * 8 + 256);
-    Ok(ReadCost {
+        structure * 96 + long_strings * 8 + compressed * 2 + image_peak.max(track_workspace(structured)) + pngs * (4 * 513 * 8 + 256);
+    ReadCost {
         retained_memory_bytes: retained,
-        validation_peak_bytes: (retained + transient).max(bytes.len() as u64 * 4 + 8 * 1024 * 1024),
-    })
+        validation_peak_bytes: (retained + transient).max(compressed * 4 + 8 * 1024 * 1024),
+    }
 }
 
 /// Lexical accounting only: no values or keys are allocated and this does not

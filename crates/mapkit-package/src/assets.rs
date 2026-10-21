@@ -2,19 +2,41 @@
 use super::*;
 use gltf::accessor::{DataType, Dimensions};
 
-const IMAGE_BYTES: usize = 64 * 1024 * 1024;
-const ELEMENTS: usize = 1_000_000;
+use mapkit_core::profile::Budget;
+const MIB: u64 = 1024 * 1024;
+// Runtime values guard every received package. An Authoring scope (the user's
+// own project) warns above them up to the raised guards; header checks still
+// precede every allocation, so a corrupt header cannot allocate past a guard.
+const IMAGE_BYTES: Budget = Budget { code: "asset_image_bytes", limit: 64 * MIB, guard: 256 * MIB,
+    message: "An asset image decodes to more memory than the game allows", runtime_rejects: true };
+const IMAGE_SIDE: Budget = Budget { code: "asset_image_side", limit: 8192, guard: 16_384,
+    message: "An asset image is wider or taller than the game allows (px)", runtime_rejects: true };
+const ELEMENTS: Budget = Budget { code: "asset_glb_elements", limit: 1_000_000, guard: 8_000_000,
+    message: "A GLB asset has more accessor or draw elements than the game allows", runtime_rejects: true };
+const RECORDS: Budget = Budget { code: "asset_glb_records", limit: 8192, guard: 65_536,
+    message: "A GLB asset has more records or primitives than the game allows", runtime_rejects: true };
+const DECODE_TOTAL: Budget = Budget { code: "asset_decode_total", limit: 256 * MIB, guard: 2048 * MIB,
+    message: "Asset images decode to more total memory than the game allows", runtime_rejects: true };
 struct DecodeBudget {
     remaining: usize,
 }
 impl DecodeBudget {
+    fn new() -> Self {
+        Self { remaining: DECODE_TOTAL.active_limit() as usize }
+    }
     fn charge(&mut self, bytes: usize) -> Result<()> {
-        self.remaining = self
-            .remaining
-            .checked_sub(bytes)
-            .ok_or_else(|| limit("package decoded image work exceeds 256 MiB"))?;
+        let fail = || limit("package decoded image work exceeds 256 MiB");
+        self.remaining = self.remaining.checked_sub(bytes).ok_or_else(fail)?;
+        if mapkit_core::Profile::current() == mapkit_core::Profile::Authoring {
+            DECODE_TOTAL.check(DECODE_TOTAL.guard.saturating_sub(self.remaining as u64), fail)?;
+        }
         Ok(())
     }
+}
+fn image_limits(width: u64, height: u64, output: u64) -> Result<()> {
+    let fail = || limit("image dimensions/decoded bytes exceed profile");
+    IMAGE_SIDE.check(width.max(height), fail)?;
+    IMAGE_BYTES.check(output, fail)
 }
 fn bad(message: impl Into<String>) -> Error {
     error("E_ASSET", message)
@@ -74,14 +96,12 @@ pub(super) fn png_envelope(bytes: &[u8]) -> Result<()> {
 fn validate_png(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
     png_envelope(bytes)?;
     let mut decoder = png::Decoder::new(Cursor::new(bytes));
-    decoder.set_limits(png::Limits { bytes: IMAGE_BYTES });
+    decoder.set_limits(png::Limits { bytes: IMAGE_BYTES.active_limit() as usize });
     decoder.set_ignore_text_chunk(true);
     decoder.set_ignore_iccp_chunk(true);
     let mut reader = decoder.read_info().map_err(|e| bad(e.to_string()))?;
     let info = reader.info();
-    if info.width > 8192 || info.height > 8192 || reader.output_buffer_size() > IMAGE_BYTES {
-        return Err(limit("image dimensions/decoded bytes exceed profile"));
-    }
+    image_limits(u64::from(info.width), u64::from(info.height), reader.output_buffer_size() as u64)?;
     budget.charge(reader.output_buffer_size())?;
     let mut data = vec![0; reader.output_buffer_size()];
     reader
@@ -166,9 +186,10 @@ fn validate_webp(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
     let output = decoder
         .output_buffer_size()
         .ok_or_else(|| limit("WebP allocation overflow"))?;
-    if w == 0 || h == 0 || w > 8192 || h > 8192 || output > IMAGE_BYTES {
+    if w == 0 || h == 0 {
         return Err(limit("image dimensions/decoded bytes exceed profile"));
     }
+    image_limits(u64::from(w), u64::from(h), output as u64)?;
     if decoder.is_animated() {
         return Err(bad("animated WebP is unsupported"));
     }
@@ -176,7 +197,7 @@ fn validate_webp(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
         return Err(bad("WebP alpha flag mismatch"));
     }
     budget.charge(output)?;
-    decoder.set_memory_limit(IMAGE_BYTES);
+    decoder.set_memory_limit(IMAGE_BYTES.active_limit() as usize);
     decoder
         .read_image(&mut vec![0; output])
         .map_err(|e| bad(e.to_string()))
@@ -321,7 +342,8 @@ fn validate_glb(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
         doc.scenes().len(),
     ]
     .into_iter()
-    .any(|n| n > 8192)
+    .max()
+    .is_some_and(|n| RECORDS.check(n as u64, || limit("too many GLB records")).is_err())
     {
         return Err(limit("too many GLB records"));
     }
@@ -339,9 +361,7 @@ fn validate_glb(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
         elements = elements
             .checked_add(a.count())
             .ok_or_else(|| limit("GLB element overflow"))?;
-        if elements > ELEMENTS {
-            return Err(limit("too many GLB accessor elements"));
-        }
+        ELEMENTS.check(elements as u64, || limit("too many GLB accessor elements"))?;
         // Sparse/matrix accessors are outside the current static mesh profile.
         if a.sparse().is_some()
             || !matches!(
@@ -387,9 +407,7 @@ fn validate_glb(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
     for mesh in doc.meshes() {
         for primitive in mesh.primitives() {
             primitives += 1;
-            if primitives > 8192 {
-                return Err(limit("too many GLB primitives"));
-            }
+            RECORDS.check(primitives as u64, || limit("too many GLB primitives"))?;
             if primitive.mode() != gltf::mesh::Mode::Triangles {
                 return Err(bad("static mesh profile requires triangles"));
             }
@@ -433,9 +451,7 @@ fn validate_glb(bytes: &[u8], budget: &mut DecodeBudget) -> Result<()> {
             draw_elements = draw_elements
                 .checked_add(primitive.indices().map_or(position.count(), |a| a.count()))
                 .ok_or_else(|| limit("GLB draw count overflow"))?;
-            if draw_elements > ELEMENTS {
-                return Err(limit("too many GLB draw elements"));
-            }
+            ELEMENTS.check(draw_elements as u64, || limit("too many GLB draw elements"))?;
             let reader = primitive.reader(|_| Some(&bin[..buffer_len]));
             let count = if let Some(a) = primitive.indices() {
                 if a.dimensions() != Dimensions::Scalar
@@ -528,9 +544,7 @@ fn attribute_type(a: &gltf::Accessor<'_>) -> bool {
 }
 pub(super) fn validate_assets(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>) -> Result<()> {
     let mut seen = BTreeSet::new();
-    let mut budget = DecodeBudget {
-        remaining: 256 * 1024 * 1024,
-    };
+    let mut budget = DecodeBudget::new();
     for path in d.assets.iter().flat_map(|a| a.paths()) {
         if !seen.insert(path) {
             continue;
@@ -569,6 +583,23 @@ pub(super) fn validate_assets(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn image_side_guard_refuses_at_runtime_and_warns_when_authoring() {
+        let mut bytes = vec![];
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, 8193, 1);
+            encoder.set_color(png::ColorType::Grayscale);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.write_header().unwrap().write_image_data(&[0; 8193]).unwrap();
+        }
+        assert_eq!(validate_png(&bytes, &mut DecodeBudget::new()).unwrap_err(),
+            limit("image dimensions/decoded bytes exceed profile"));
+        let (result, warnings) = mapkit_core::Profile::Authoring.run(|| validate_png(&bytes, &mut DecodeBudget::new()));
+        result.unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!((&*warnings[0].code, warnings[0].actual, warnings[0].limit, warnings[0].runtime_rejects),
+            ("asset_image_side", 8193, 8192, true));
+    }
     #[test]
     fn cumulative_image_decode_allowance_is_inclusive_and_charged_before_pixels() {
         let mut bytes = vec![];

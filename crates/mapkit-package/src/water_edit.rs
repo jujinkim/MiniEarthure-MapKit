@@ -5,6 +5,9 @@ use mapkit_core::{water::WaterBody, *};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 type Triangle = [i32; 3]; // x,y,0=(a,b,c) or 1=(a,c,d)
 const FLOOD_TRIANGLES: usize = 1_000_000;
+// Editor-only search work; it never changes the found water, only pass/fail.
+const FLOOD: mapkit_core::profile::Budget = mapkit_core::profile::Budget { code: "water_search", limit: FLOOD_TRIANGLES as u64,
+    guard: 8 * FLOOD_TRIANGLES as u64, message: "Water fill searches very many terrain triangles", runtime_rejects: false };
 
 fn vertices(t: Triangle) -> [[i32; 2]; 3] {
     let [x, y, k] = t;
@@ -105,7 +108,7 @@ fn flood(
             continue;
         }
         if seen.len() > FLOOD_TRIANGLES {
-            return Err(error("E_BUDGET","water search exceeds one million triangles; reduce the edited area or grid density"));
+            FLOOD.check(seen.len() as u64, || error("E_BUDGET","water search exceeds one million triangles; reduce the edited area or grid density"))?;
         }
         if seen.len() % 256 == 0 {
             cancellation::checkpoint()?;
@@ -351,10 +354,10 @@ pub fn edit(s: &mut WorkingSnapshot, point: Option<Point>, remove: bool) -> Resu
                     for k in 0..2 {
                         inspected += 1;
                         if inspected > FLOOD_TRIANGLES {
-                            return Err(error(
+                            FLOOD.check(inspected as u64, || error(
                                 "E_BUDGET",
                                 "water refresh search allowance exceeded",
-                            ));
+                            ))?;
                         }
                         if inspected % 256 == 0 {
                             cancellation::checkpoint()?;

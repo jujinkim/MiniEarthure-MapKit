@@ -184,7 +184,7 @@ pub(super) fn install(source: &Source, fragment: &Source, ids: &[String], prefix
         document_from_assembly(a)?; // Existing document, structure and resource limits.
         Ok(candidate)
     };
-    match attempt() {
+    match crate::profile::runtime(attempt) {
         Ok(candidate) => Ok(Some(candidate)),
         Err(e) if e.code=="E_CANCELLED" => Err(e),
         Err(_) => Ok(None),

@@ -5,6 +5,7 @@ pub mod working;
 pub mod water_edit;
 pub mod road_audit;
 use mapkit_core::*;
+use mapkit_core::profile::Budget;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -21,6 +22,20 @@ pub const MAX_ENTRY_BYTES: u64 = 128 * 1024 * 1024;
 pub const MAX_MANIFEST_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_DOCUMENT_BYTES: u64 = 32 * 1024 * 1024;
 pub const MAX_FILES: usize = 8192;
+/// Editor project-directory budgets (Authoring profile): above the v1 package
+/// value a project still opens with a warning; the raised guard bounds memory.
+pub const PROJECT_DOCUMENT: Budget = Budget { code: "document_bytes", limit: MAX_DOCUMENT_BYTES, guard: 1024 * 1024 * 1024,
+    message: "Document is larger than the v1 package document limit", runtime_rejects: true };
+pub const PROJECT_ENTRY: Budget = Budget { code: "package_entry_bytes", limit: MAX_ENTRY_BYTES, guard: 1024 * 1024 * 1024,
+    message: "A project file is larger than the v1 package entry limit", runtime_rejects: true };
+pub const PROJECT_EXPANDED: Budget = Budget { code: "expanded_bytes", limit: MAX_EXPANDED_BYTES, guard: 4 * 1024 * 1024 * 1024,
+    message: "Project files are larger than the v1 expanded package limit", runtime_rejects: true };
+pub const PROJECT_FILES: Budget = Budget { code: "package_files", limit: MAX_FILES as u64, guard: 65_536,
+    message: "Project has more files than a v1 package allows", runtime_rejects: true };
+pub const PROJECT_MANIFEST: Budget = Budget { code: "manifest_bytes", limit: MAX_MANIFEST_BYTES, guard: 256 * 1024 * 1024,
+    message: "Package manifest is larger than the v1 manifest limit", runtime_rejects: true };
+const PREVIEW_DISPLAY: Budget = Budget { code: "preview_display", limit: 128 * 1024 * 1024, guard: 1024 * 1024 * 1024,
+    message: "Cell preview display resources are very large", runtime_rejects: false };
 mod assets;
 mod audit_hash;
 mod container;
@@ -37,7 +52,7 @@ pub fn preview_asset_cost(d:&MapDocument,files:&BTreeMap<String,Vec<u8>>,instanc
         largest=largest.max(assets::instance_cost(&a.path,payload));
     }
     bytes+=largest*instances as u64;
-    if bytes>128*1024*1024 {return Err(error("E_BUDGET","preview display resources exceed allowance"));}
+    PREVIEW_DISPLAY.check(bytes,||error("E_BUDGET","preview display resources exceed allowance"))?;
     Ok(bytes)
 }
 mod audit_json;
@@ -413,13 +428,18 @@ fn bounded_read(path: &Path, limit: u64) -> Result<Vec<u8>> {
     }
     Ok(bytes)
 }
+/// Budgets follow the active profile: Runtime (default) refuses the v1 package
+/// limits; inside an Authoring scope they warn up to the raised project guards.
 pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
     let root = path.canonicalize().map_err(io)?;
     let doc_path = root.join("document.json").canonicalize().map_err(io)?;
     if !doc_path.starts_with(&root) {
         return Err(error("E_PATH", "document symlink escapes project"));
     }
-    let mut d: MapDocument = json(&bounded_read(&doc_path, MAX_DOCUMENT_BYTES)?)?;
+    let document = bounded_read(&doc_path, PROJECT_DOCUMENT.active_limit())?;
+    PROJECT_DOCUMENT.check(document.len() as u64, || error("E_LIMIT", "file exceeds supported profile"))?;
+    let mut d: MapDocument = json(&document)?;
+    drop(document);
     d.normalize();
     d.validate()?;
     let mut files = BTreeMap::new();
@@ -433,13 +453,15 @@ pub fn read_project(path: &Path) -> Result<(MapDocument, BTreeMap<String, Vec<u8
         }
         let bytes = if p == "document.json" {
             canonical(&d)?
+        } else if p == preview::PATH {
+            bounded_read(&actual, preview::MAX_BYTES)?
         } else {
-            bounded_read(&actual, if p == preview::PATH { preview::MAX_BYTES } else { MAX_ENTRY_BYTES })?
+            let bytes = bounded_read(&actual, PROJECT_ENTRY.active_limit())?;
+            PROJECT_ENTRY.check(bytes.len() as u64, || error("E_LIMIT", "file exceeds supported profile"))?;
+            bytes
         };
         total += bytes.len() as u64;
-        if total > MAX_EXPANDED_BYTES {
-            return Err(error("E_LIMIT", "project exceeds expanded byte budget"));
-        }
+        PROJECT_EXPANDED.check(total, || error("E_LIMIT", "project exceeds expanded byte budget"))?;
         files.insert(p, bytes);
     }
     export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
@@ -492,32 +514,7 @@ fn pack_inner(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>, bind_ove
     validate_heightmaps(&d, &files)?;
     track_environment::validate(&d,&files)?;
     mapkit_core::cancellation::progress("package_validation", 4, Some(5), "checks");
-    let manifest = PackageManifest {
-        format: "memap".into(),
-        format_version: PACKAGE_VERSION,
-        recipe_version: d.recipe_version,
-        generated_version: GENERATED_VERSION,
-        map_id: d.map_id.clone(),
-        revision: d.revision,
-        bounds: d.bounds.clone(),
-        cell_size_cm: d.cell_size_cm,
-        seed: d.seed,
-        theme: d.theme.clone(),
-        document: "document.json".into(),
-        files: files
-            .iter()
-            .map(|(p, b)| FileRecord {
-                path: p.clone(),
-                size: b.len() as u64,
-                sha256: sha256(b),
-            })
-            .collect(),
-        assets: d.assets.clone(),
-        attributions: d.attributions.clone(),
-        provenance: d.provenance.clone(),
-        world_content_hash: content_hash(&d, &files)?,
-        preview,
-    };
+    let manifest = package_manifest(&d, &files, preview)?;
     let manifest_bytes = canonical(&manifest)?;
     export_limits::including_manifest(payload_size, manifest_bytes.len() as u64)?;
     mapkit_core::cancellation::progress("package_validation", 5, Some(5), "checks");
@@ -549,6 +546,79 @@ fn pack_inner(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>, bind_ove
         return Err(error("E_LIMIT", "compressed package exceeds profile"));
     }
     Ok(bytes)
+}
+fn package_manifest(d: &MapDocument, files: &BTreeMap<String, Vec<u8>>, preview: Option<preview::Preview>) -> Result<PackageManifest> {
+    Ok(PackageManifest {
+        format: "memap".into(),
+        format_version: PACKAGE_VERSION,
+        recipe_version: d.recipe_version,
+        generated_version: GENERATED_VERSION,
+        map_id: d.map_id.clone(),
+        revision: d.revision,
+        bounds: d.bounds.clone(),
+        cell_size_cm: d.cell_size_cm,
+        seed: d.seed,
+        theme: d.theme.clone(),
+        document: "document.json".into(),
+        files: files
+            .iter()
+            .map(|(p, b)| FileRecord {
+                path: p.clone(),
+                size: b.len() as u64,
+                sha256: sha256(b),
+            })
+            .collect(),
+        assets: d.assets.clone(),
+        attributions: d.attributions.clone(),
+        provenance: d.provenance.clone(),
+        world_content_hash: content_hash(d, files)?,
+        preview,
+    })
+}
+impl Package {
+    /// The user's own project, read by `read_project`, admitted in memory with
+    /// the checks of `pack_stored_preview` + `read_bytes` but no ZIP round trip.
+    /// Call inside an Authoring scope. No .memap exists, so `package_sha256` is
+    /// empty and `package_bytes` is 0; document, files, manifest and
+    /// `world_content_hash` equal the ZIP route's.
+    pub fn from_project(mut d: MapDocument, mut files: BTreeMap<String, Vec<u8>>) -> Result<Package> {
+        d.normalize();
+        files.insert("document.json".into(), canonical(&d)?);
+        let preview = preview::from_files(&files)?;
+        let mut paths = references(&d)?;
+        if preview.is_some() { paths.insert(preview::PATH.into()); }
+        if files.keys().cloned().collect::<BTreeSet<_>>() != paths {
+            return Err(error("E_REFERENCE", "unexpected or missing file"));
+        }
+        let payload_size =
+            export_limits::payload_size(files.iter().map(|(p, b)| (p.as_str(), b.len() as u64)))?;
+        // read_project already validated courses, assets, heightmaps and preview.
+        track_environment::validate(&d, &files)?;
+        let manifest = package_manifest(&d, &files, preview)?;
+        let manifest_bytes = canonical(&manifest)?.len() as u64;
+        export_limits::including_manifest(payload_size, manifest_bytes)?;
+        let cost = read_cost::files_cost(manifest_bytes, &files)?;
+        let asset_paths: BTreeSet<_> = d.assets.iter().flat_map(|a| a.paths().map(String::as_str)).collect();
+        let user_asset_bytes = files
+            .iter()
+            .filter(|(p, _)| asset_paths.contains(p.as_str()))
+            .map(|(_, b)| b.len() as u64)
+            .sum();
+        let expanded_bytes = manifest_bytes + payload_size;
+        let inspection = Inspection {
+            free_roam: d.free_roam,
+            package_sha256: String::new(),
+            world_content_hash: manifest.world_content_hash.clone(),
+            package_bytes: 0,
+            expanded_bytes,
+            base_data_bytes: expanded_bytes - user_asset_bytes,
+            user_asset_bytes,
+            cell_count: d.cells().len(),
+            retained_memory_bytes: cost.retained_memory_bytes,
+            validation_peak_bytes: cost.validation_peak_bytes,
+        };
+        Ok(Package { manifest, document: PreparedMap::new(d)?, files, inspection })
+    }
 }
 pub fn read(path: &Path) -> Result<Package> {
     read_bytes(&bounded_read(path, MAX_PACKAGE_BYTES)?)

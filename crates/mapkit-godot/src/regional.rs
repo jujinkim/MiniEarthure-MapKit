@@ -137,7 +137,17 @@ impl MapKitRegionReader {
     /// Full dependency audit is an admission boundary, not an index-only open.
     #[func]
     fn audit(&self, memory_limit: i64, generation: i64) -> GString {
-        response((|| {
+        response(self.audit_with(memory_limit, generation, mapkit_package::indexed::READER_OVERVIEW_BYTES))
+    }
+    /// Editor audit of its own export with a caller overview allowance
+    /// (Authoring profile). An overview above the reader's 4 MiB warns
+    /// `overview_bytes` (the game's audit refuses it).
+    #[func]
+    fn audit_authoring(&self, memory_limit: i64, generation: i64, overview_bytes: i64) -> GString {
+        response_warned(authoring(|| self.audit_with(memory_limit, generation, overview_bytes.max(0) as u64)))
+    }
+    fn audit_with(&self, memory_limit: i64, generation: i64, overview_bytes: u64) -> mapkit_core::Result<serde_json::Value> {
+        (|| {
             let ticket = self.epoch.ticket(generation as u64);
             ticket.check()?;
             let mut reader = self
@@ -148,9 +158,11 @@ impl MapKitRegionReader {
                 .map_err(|_| mapkit_core::error("E_STATE", "reader lock poisoned"))?;
             // Explicit allowance for immutable metadata duplicated outside the I/O lock.
             let metadata_bytes = reader.index_retained_bytes();
-            let mut result = reader.audit_summary(
+            let mut result = reader.audit_summary_overview(
                 (memory_limit.max(0) as u64).saturating_sub(metadata_bytes),
                 &ticket,
+                &mut Default::default(),
+                overview_bytes,
             )?;
             result["retained_memory_bytes"] = serde_json::json!(
                 result["retained_memory_bytes"].as_u64().unwrap() + metadata_bytes
@@ -168,7 +180,7 @@ impl MapKitRegionReader {
             // lock in cell_window while a region worker is reading.
             self.visual_margin_cm.store(result["visual_margin_cm"].as_i64().unwrap(), Ordering::Release);
             Ok(result)
-        })())
+        })()
     }
     // These immutable metadata queries never wait on an in-flight I/O lock.
     #[func]
@@ -305,6 +317,7 @@ impl MapKitRegionReader {
                 package: Some(snapshot.package),
                 prepared: Default::default(),
                 presentation: Default::default(),
+                authoring: false,
             });
             out.set("bridge", &bridge);
             ticket.check()?;

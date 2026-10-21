@@ -53,11 +53,17 @@ impl BuildingPrism {
             && self.object_id.len() <= 128
     }
 }
+pub(crate) const WORK: crate::profile::Budget = crate::profile::Budget { code: "placement_work", limit: MAX_WORK as u64,
+    guard: MAX_WORK as u64 * 8, message: "Building and placement checks need more work than the game allows", runtime_rejects: true };
+const REPEATED: crate::profile::Budget = crate::profile::Budget { code: "repetition_candidates", limit: MAX_REPEATED as u64,
+    guard: MAX_REPEATED as u64 * 8, message: "Repeated objects create more candidates than the game allows", runtime_rejects: true };
+const ZONE_CANDIDATES: crate::profile::Budget = crate::profile::Budget { code: "zone_candidates", limit: 300_000,
+    guard: 2_400_000, message: "A vegetation zone visits more candidates per cell than the game allows", runtime_rejects: true };
 pub(crate) fn tick(work: &mut usize, amount: usize) -> Result<()> {
     crate::cancellation::checkpoint()?;
     *work = work.saturating_add(amount);
     if *work > MAX_WORK {
-        Err(error("E_BUDGET", "current placement work limit"))
+        WORK.check(*work as u64, || error("E_BUDGET", "current placement work limit"))
     } else {
         Ok(())
     }
@@ -490,7 +496,7 @@ pub(crate) fn repeated(d: &MapDocument) -> Result<Vec<Placement>> {
             )) as i64;
             while distance < traversed + length {
                 if result.len() >= MAX_REPEATED {
-                    return Err(error("E_BUDGET", "repetition candidate limit"));
+                    REPEATED.check(result.len() as u64 + 1, || error("E_BUDGET", "repetition candidate limit"))?;
                 }
                 let part = distance - traversed;
                 let position = std::array::from_fn(|a| {
@@ -916,7 +922,7 @@ fn vegetation(
                 count += 1;
                 tick(work, 1)?;
                 if count > 300_000 {
-                    return Err(error("E_BUDGET", "zone candidate limit"));
+                    ZONE_CANDIDATES.check(count as u64, || error("E_BUDGET", "zone candidate limit"))?;
                 }
                 let Some(c) = candidate(d, zi, x, y)? else {
                     continue;

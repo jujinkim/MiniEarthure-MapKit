@@ -8,7 +8,7 @@ mod source_preview;
 mod work_token;
 mod working;
 use godot::prelude::*;
-use mapkit_core::{canonical, Cell, GenerationInput, SpawnRequest};
+use mapkit_core::{canonical, Cell, GenerationInput, Profile, SpawnRequest, Warning};
 use mapkit_package::{pack_bytes, read, read_bytes, read_project, write_new, Package};
 use std::path::Path;
 struct MapKitExtension;
@@ -23,7 +23,11 @@ struct MapKitBridge {
     draft: Option<mapkit_core::MapDocument>,
     visual_margin_cm: i64,
     presentation: std::cell::RefCell<presentation::Cache>,
-    prepared: std::cell::RefCell<std::collections::BTreeMap<Cell, serde_json::Value>>,
+    /// Cost descriptors keyed by cell, triangle cap and profile (Authoring = true).
+    prepared: std::cell::RefCell<std::collections::BTreeMap<(Cell, usize, bool), serde_json::Value>>,
+    /// Set only by `open_project` (the user's own project): package calls then
+    /// run under the Authoring profile and report `warnings`.
+    authoring: bool,
 }
 #[godot_api]
 impl IRefCounted for MapKitBridge {
@@ -35,6 +39,7 @@ impl IRefCounted for MapKitBridge {
             visual_margin_cm: 0,
             prepared: Default::default(),
             presentation: Default::default(),
+            authoring: false,
         }
     }
 }
@@ -44,6 +49,23 @@ fn response(result: mapkit_core::Result<serde_json::Value>) -> GString {
         Err(e) => serde_json::json!({"ok":false,"error":e}),
     };
     GString::from(serde_json::to_string(&value).unwrap().as_str())
+}
+/// `response` plus top-level `"warnings"` [{code, actual, limit, message,
+/// runtime_rejects}], omitted when empty, so Runtime-shaped output is unchanged.
+fn response_warned((result, warnings): (mapkit_core::Result<serde_json::Value>, Vec<Warning>)) -> GString {
+    if warnings.is_empty() {
+        return response(result);
+    }
+    let mut value = match result {
+        Ok(data) => serde_json::json!({"ok":true,"data":data}),
+        Err(e) => serde_json::json!({"ok":false,"error":e}),
+    };
+    value["warnings"] = serde_json::to_value(warnings).unwrap();
+    GString::from(serde_json::to_string(&value).unwrap().as_str())
+}
+/// Editor entry point on the user's own data.
+fn authoring<T>(work: impl FnOnce() -> mapkit_core::Result<T>) -> (mapkit_core::Result<T>, Vec<Warning>) {
+    Profile::Authoring.run(work)
 }
 fn engine_document(text: &str) -> mapkit_core::Result<mapkit_core::MapDocument> {
     serde_json::from_value(engine_value(text)?).map_err(|e|mapkit_core::error("E_JSON",e.to_string()))
@@ -104,24 +126,24 @@ impl MapKitBridge {
     }
     #[func]
     fn track_preview(&self, document:GString)->GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d=engine_document(&document.to_string())?;
             let chunk=mapkit_core::assembled_preview(&d)?;
             let mut meshes:std::collections::BTreeMap<String,Vec<mapkit_core::Vertex>>=std::collections::BTreeMap::new();
             for t in chunk.triangles {meshes.entry(t.object_id).or_default().extend(t.vertices);}
             Ok(serde_json::json!({"meshes":meshes,"gimmicks":chunk.gimmicks,"grind_lines":chunk.grind_lines.iter().map(|l|l.resolved_json()).collect::<Vec<_>>()}))
-        })())
+        }))
     }
     /// Draft-only bounded cell preview. It neither exports nor certifies the
     /// project, so an unfinished course can still be edited on actual terrain.
     #[func]
-    fn source_preview(&self, document:GString, project:GString, x:i32, y:i32)->GString {
-        response(source_preview::cell(&document.to_string(),Path::new(&project.to_string()),Cell{x,y}).map(|(_,chunk)|serde_json::to_value(chunk).unwrap()))
+    fn source_preview(&self, document:GString, project:GString, x:i32, y:i32, #[opt(default = 500_000)] max_triangles:i64)->GString {
+        response_warned(authoring(|| source_preview::cell(&document.to_string(),Path::new(&project.to_string()),Cell{x,y},max_triangles).map(|(_,chunk)|serde_json::to_value(chunk).unwrap())))
     }
     #[func]
-    fn source_preview_packed(&self,document:GString,project:GString,x:i32,y:i32)->VarDictionary {
-        packed::respond((|| {
-            let (d,mut c)=source_preview::cell(&document.to_string(),Path::new(&project.to_string()),Cell{x,y})?;
+    fn source_preview_packed(&self,document:GString,project:GString,x:i32,y:i32, #[opt(default = 500_000)] max_triangles:i64)->VarDictionary {
+        packed::respond_warned(authoring(|| {
+            let (d,mut c)=source_preview::cell(&document.to_string(),Path::new(&project.to_string()),Cell{x,y},max_triangles)?;
             // The reusable track preview owns its meshes and attached gizmos.
             c.triangles.retain(|t|!t.object_id.starts_with("assembled-"));c.gimmicks.clear();c.grind_lines.clear();
             let (files,cost)=source_preview::assets(&d,&c,Path::new(&project.to_string()))?;
@@ -130,7 +152,7 @@ impl MapKitBridge {
             data.set("preview_bytes",cost as i64);
             data.set("preview_signature",signature.as_str());
             Ok(data)
-        })())
+        }))
     }
     #[func]
     fn track_shortcut_source(&self)->GString {
@@ -145,11 +167,11 @@ impl MapKitBridge {
     }
     #[func]
     fn compile_track_source(&self, source:GString)->GString {
-        response((|| {
+        response_warned(authoring(|| {
             let source=serde_json::from_value(engine_value(&source.to_string())?).map_err(|e|mapkit_core::error("E_TRACK_SOURCE",e.to_string()))?;
             let d=mapkit_package::assembled_track::compile_source(&source)?;
             Ok(serde_json::json!({"document":d}))
-        })())
+        }))
     }
     /// Read-only candidates and located diagnostics; the consumer owns explicit adoption.
     #[func]
@@ -162,83 +184,83 @@ impl MapKitBridge {
     }
     #[func]
     fn suggest_road_course(&self, document: GString, request: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d = engine_document(&document.to_string())?;
             let request = serde_json::from_value(engine_value(&request.to_string())?)
                 .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
             Ok(serde_json::to_value(mapkit_core::road_course::suggest(&d, &request)?).unwrap())
-        })())
+        }))
     }
     /// Graph nodes whose junctions the road planner cannot build (import admission).
     #[func]
     fn unbuildable_junctions(&self, document: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d = engine_document(&document.to_string())?;
             Ok(serde_json::json!({"nodes": mapkit_core::unbuildable_junctions(&d)?}))
-        })())
+        }))
     }
     #[func]
     fn seed_road_course(&self, document: GString, request: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d = engine_document(&document.to_string())?;
             let request = serde_json::from_value(engine_value(&request.to_string())?)
                 .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
             Ok(serde_json::to_value(mapkit_core::road_course::seed(&d, &request)?).unwrap())
-        })())
+        }))
     }
     /// The same seeded race on the opened package's validated source document.
     #[func]
     fn seed_package_road_course(&self, request: GString) -> GString {
-        response((|| {
+        response_warned(self.scoped(|| (|| {
             let package = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
             let request = serde_json::from_value(engine_value(&request.to_string())?)
                 .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
             Ok(serde_json::to_value(mapkit_core::road_course::seed(&package.document, &request)?).unwrap())
-        })())
+        })()))
     }
     #[func]
     fn apply_road_course_extras(&self, document: GString, extras: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d = engine_document(&document.to_string())?;
             let extras: mapkit_core::road_course::Extras = serde_json::from_value(engine_value(&extras.to_string())?)
                 .map_err(|e| mapkit_core::error("E_ROAD_COURSE_REQUEST", e.to_string()))?;
             Ok(serde_json::json!({"document": mapkit_core::road_course::apply_extras(&d, &extras)?}))
-        })())
+        }))
     }
     #[func]
     fn apply_track_source(&self, document: GString, source: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let document = engine_document(&document.to_string())?;
             let source = serde_json::from_value(engine_value(&source.to_string())?)
                 .map_err(|e| mapkit_core::error("E_TRACK_SOURCE", e.to_string()))?;
             let d = mapkit_core::assembled_track::composite::apply_source(&document, &source)?;
             Ok(serde_json::json!({"document": d}))
-        })())
+        }))
     }
     #[func]
     fn apply_surface_attachments(&self, document:GString, attachments:GString)->GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d=engine_document(&document.to_string())?;
             let items=serde_json::from_value(engine_value(&attachments.to_string())?).map_err(|e|mapkit_core::error("E_SURFACE_ATTACHMENT",e.to_string()))?;
             let next=mapkit_core::assembled_track::surface::apply(&d,items)?;
             Ok(serde_json::json!({"document":next}))
-        })())
+        }))
     }
     #[func]
     fn preview_surface_attachment(&self, document:GString, attachment:GString)->GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d=engine_document(&document.to_string())?;
             let item=serde_json::from_value(engine_value(&attachment.to_string())?).map_err(|e|mapkit_core::error("E_SURFACE_ATTACHMENT",e.to_string()))?;
             Ok(serde_json::to_value(mapkit_core::assembled_track::surface::products(&d,&[item])?).unwrap())
-        })())
+        }))
     }
     #[func]
     fn surface_reference(&self, document:GString, reference:GString)->GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d=engine_document(&document.to_string())?;
             let r=serde_json::from_value(engine_value(&reference.to_string())?).map_err(|e|mapkit_core::error("E_SURFACE_REFERENCE",e.to_string()))?;
             Ok(serde_json::to_value(mapkit_core::assembled_track::surface::resolve(&d,&r)?).unwrap())
-        })())
+        }))
     }
     #[func]
     fn road_design(&self, road: GString) -> GString {
@@ -255,12 +277,12 @@ impl MapKitBridge {
     }
     #[func]
     fn edit_road_design(&self, document: GString, road_id: GString, design: GString, width_cm: i64) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d=engine_document(&document.to_string())?;
             let design=serde_json::from_value(engine_value(&design.to_string())?).map_err(|e|mapkit_core::error("E_ROAD_DESIGN",e.to_string()))?;
             let next=mapkit_core::road_design::edit(&d,&road_id.to_string(),design,u32::try_from(width_cm).map_err(|_|mapkit_core::error("E_ROAD_DESIGN","invalid width"))?)?;
             Ok(serde_json::json!({"document":next}))
-        })())
+        }))
     }
     #[func]
     fn road_surface_path(&self, road: GString) -> GString {
@@ -310,26 +332,28 @@ impl MapKitBridge {
     }
     #[func]
     fn verify_track(&self, course: GString) -> GString {
-        response((|| {
+        response_warned(self.scoped(|| (|| {
             let p=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
             let c=mapkit_core::course::decode(course.to_string().as_bytes())?;
             mapkit_package::assembled_track::verify_course(&p.document,&p.inspection.world_content_hash,&c)?;
             Ok(serde_json::json!({"seed_verified":p.document.assembled_track.as_ref().is_some_and(|a|a.authoring.is_none()),"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),"course":c}))
-        })())
+        })()))
     }
     #[func]
     fn track_json(&self) -> GString {
-        response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
+        response_warned(self.scoped(|| self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))
             .map(|p|serde_json::json!({"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),
                 "grind_lines":p.document.grind_lines.iter().map(|l|l.resolved_json()).collect::<Vec<_>>(),
                 "max_laps":p.document.assembled_track.as_ref().map_or(10,|a|if a.authoring.is_some(){10}else{a.settings.max_laps()}),
-                "backdrop":p.document.backdrop})))
+                "backdrop":p.document.backdrop}))))
     }
     #[func]
     fn track_start_surface(&self, x_cm: i64, y_cm: i64) -> GString {
+        self.quiet(|| {
         self.package.as_ref().and_then(|p| p.document.assembled_track.as_ref())
             .and_then(|a| mapkit_core::assembled_track::start_surface_at(a, [x_cm,y_cm]))
             .map(|id| GString::from(id.as_str())).unwrap_or_default()
+    })
     }
     #[func]
     fn special_track_bounds(&self, text: GString) -> GString {
@@ -363,6 +387,7 @@ impl MapKitBridge {
     fn open_package(&mut self, path: GString) -> GString {
         self.package = None;
         self.draft = None;
+        self.authoring = false;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         response(read(Path::new(&path.to_string())).map(|p| {
@@ -378,6 +403,7 @@ impl MapKitBridge {
     fn open_package_budgeted(&mut self, path: GString, memory_limit: i64) -> GString {
         self.package = None;
         self.draft = None;
+        self.authoring = false;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
@@ -407,6 +433,7 @@ impl MapKitBridge {
     ) -> GString {
         self.package = None;
         self.draft = None;
+        self.authoring = false;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         if memory_limit <= 0 {
@@ -433,6 +460,7 @@ impl MapKitBridge {
     fn open_package_bytes(&mut self, bytes: PackedByteArray) -> GString {
         self.package = None;
         self.draft = None;
+        self.authoring = false;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
         response(read_bytes(bytes.as_slice()).map(|p| {
@@ -447,13 +475,15 @@ impl MapKitBridge {
     /// Hot position lookup: no window expansion, geometry scan or JSON allocation.
     #[func]
     fn cell_at(&self, x_cm: i64, y_cm: i64) -> PackedInt32Array {
+        self.quiet(|| {
         self.package.as_ref().and_then(|p| p.document.cell_at([x_cm, y_cm]))
             .map(|c| PackedInt32Array::from(&[c.x, c.y][..])).unwrap_or_default()
+    })
     }
     /// Map topology is owned by MapKit; callers never reimplement cell-index constants.
     #[func]
     fn cell_window(&self, x_cm: i64, y_cm: i64) -> GString {
-        response(
+        response_warned(self.scoped(|| 
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
@@ -474,58 +504,78 @@ impl MapKitBridge {
                         "generated_format_version": mapkit_core::GENERATED_VERSION,
                     }))
                 }),
-        )
+        ))
     }
+    /// The user's own project directory, admitted in memory under the Authoring
+    /// profile (no .memap round trip). v1 package/document budgets the game would
+    /// refuse are returned as `warnings`; `package_sha256` is empty and
+    /// `package_bytes` 0 because no package exists until `export_project`.
     #[func]
     fn open_project(&mut self, path: GString) -> GString {
         self.package = None;
         self.draft = None;
+        self.authoring = false;
         self.prepared.get_mut().clear();
         *self.presentation.get_mut() = Default::default();
-        response((|| {
+        response_warned(authoring(|| {
             let (d,f)=read_project(Path::new(&path.to_string()))?;
+            self.authoring = true;
             if mapkit_core::assembled_track::composite::executable(&d).is_err() {
                 let info=serde_json::json!({"draft":true,"map_id":d.map_id,"bounds":d.bounds,"free_roam":d.free_roam});
                 self.draft=Some(d);
                 return Ok(info);
             }
-            let p=read_bytes(&mapkit_package::pack_stored_preview(d,f)?)?;
+            let p=Package::from_project(d,f)?;
             let info=serde_json::to_value(&p.inspection).unwrap();
             self.visual_margin_cm=p.visual_margin_cm().unwrap_or(i64::from(p.document.cell_size_cm));
             self.package=Some(p);
             Ok(info)
-        })())
+        }))
+    }
+    /// Editor-only `*_authoring` package calls need an `open_project` bridge.
+    fn require_project(&self) -> mapkit_core::Result<()> {
+        if self.authoring { Ok(()) } else { Err(mapkit_core::error("E_STATE", "open_project required for authoring calls")) }
+    }
+    /// Non-JSON package reads: same profile, warnings dropped.
+    fn quiet<T>(&self, work: impl FnOnce() -> T) -> T {
+        if self.authoring { Profile::Authoring.run(|| Ok(work())).0.unwrap() } else { work() }
+    }
+    /// Package calls on an `open_project` bridge use the Authoring profile.
+    fn scoped<T>(&self, work: impl FnOnce() -> mapkit_core::Result<T>) -> (mapkit_core::Result<T>, Vec<Warning>) {
+        if self.authoring { authoring(work) } else { (work(), vec![]) }
     }
 
     #[func]
     fn overview_cost(&self) -> GString {
-        response(
+        response_warned(self.scoped(|| {
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
                 .and_then(|p| mapkit_core::overview(&p.document)?.cost())
-                .map(|cost| serde_json::json!(cost)),
-        )
+                .map(|cost| serde_json::json!(cost))
+        }))
     }
     #[func]
     fn overview_json(&self, max_json_bytes: i64) -> GString {
-        let result = self
-            .package
-            .as_ref()
-            .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .and_then(|p| {
-                mapkit_core::overview(&p.document)?.to_json(max_json_bytes.max(0) as u64)
-            });
+        let (result, warnings) = self.scoped(|| {
+            self.package
+                .as_ref()
+                .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+                .and_then(|p| {
+                    mapkit_core::overview(&p.document)?.to_json(max_json_bytes.max(0) as u64)
+                })
+        });
         match result {
-            Ok(body) => GString::from(format!("{{\"ok\":true,\"data\":{body}}}").as_str()),
-            Err(error) => response(Err(error)),
+            Ok(body) if warnings.is_empty() => GString::from(format!("{{\"ok\":true,\"data\":{body}}}").as_str()),
+            Ok(body) => GString::from(format!("{{\"ok\":true,\"data\":{body},\"warnings\":{}}}", serde_json::to_string(&warnings).unwrap()).as_str()),
+            Err(error) => response_warned((Err(error), warnings)),
         }
     }
     #[func]
     fn environment_json(&self) -> GString {
-        response(self.package.as_ref()
+        response_warned(self.scoped(|| self.package.as_ref()
             .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .map(|p| serde_json::json!({"map_id":p.document.map_id,"profile":p.document.environment})))
+            .map(|p| serde_json::json!({"map_id":p.document.map_id,"profile":p.document.environment}))))
     }
     #[func]
     fn effective_course(&self, raw: GString) -> GString {
@@ -552,11 +602,12 @@ impl MapKitBridge {
     }
     #[func]
     fn courses_json(&self) -> GString {
-        response(self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-            .map(|p| serde_json::json!({"map_id":p.document.map_id,"courses":p.document.courses.iter().map(|c| c.effective()).collect::<Vec<_>>()})))
+        response_warned(self.scoped(|| self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
+            .map(|p| serde_json::json!({"map_id":p.document.map_id,"courses":p.document.courses.iter().map(|c| c.effective()).collect::<Vec<_>>()}))))
     }
     #[func]
     fn course_validation_json(&self, hash: GString) -> GString {
+        self.quiet(|| {
         let h = hash.to_string();
         if !mapkit_core::course::valid_hash(&h) {
             return GString::new();
@@ -568,11 +619,14 @@ impl MapKitBridge {
             .and_then(|b| std::str::from_utf8(b).ok())
             .map(GString::from)
             .unwrap_or_default()
+    })
     }
     #[func]
     fn package_preview_png(&self) -> PackedByteArray {
+        self.quiet(|| {
         self.package.as_ref().and_then(|p|p.files.get(mapkit_package::preview::PATH))
             .map(|bytes|PackedByteArray::from(bytes.as_slice())).unwrap_or_default()
+    })
     }
     #[func]
     fn inspect_package_preview(&self, bytes: PackedByteArray) -> GString {
@@ -580,12 +634,14 @@ impl MapKitBridge {
     }
     #[func]
     fn sharing_work_bytes(&self) -> i64 {
+        self.quiet(|| {
         self.package.as_ref().map(|p|mapkit_package::sharing::work_bytes(&p.inspection) as i64).unwrap_or(0)
+    })
     }
     /// Worker-only export. Reuses the opened immutable snapshot; never overwrites.
     #[func]
     fn export_course_package(&self, course: GString, evidence: PackedByteArray, destination: GString, allowance: i64) -> GString {
-        response((|| {
+        response_warned(self.scoped(|| (|| {
             let package=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
             if allowance < 0 || (allowance as u64) < mapkit_package::sharing::work_bytes(&package.inspection) {
                 return Err(mapkit_core::error("E_MEMORY_BUDGET","package export exceeds reserved allowance"));
@@ -596,11 +652,11 @@ impl MapKitBridge {
                 (!evidence.is_empty()).then(||evidence.as_slice().to_vec()),preview)?;
             mapkit_package::write_new(Path::new(&destination.to_string()),&bytes)?;
             Ok(serde_json::json!({"path":destination.to_string(),"package_sha256":mapkit_core::sha256(&bytes),"package_bytes":bytes.len(),"world_content_hash":package.inspection.world_content_hash}))
-        })())
+        })()))
     }
     #[func]
     fn document_json(&self) -> GString {
-        if let Some(d)=&self.draft {return response(Ok(serde_json::to_value(d).unwrap()));}
+        if let Some(d)=&self.draft {return response_warned(self.scoped(|| Ok(serde_json::to_value(d).unwrap())));}
         response(
             self.package
                 .as_ref()
@@ -610,16 +666,42 @@ impl MapKitBridge {
     }
     #[func]
     fn estimate_chunk(&self, x: i32, y: i32) -> GString {
-        response(
+        response_warned(self.scoped(|| self.estimate_cached(Cell { x, y }, 500_000)))
+    }
+    /// Editor density estimate of an `open_project` bridge with an explicit
+    /// triangle cap (the Editor passes 2,000,000). Estimates are upper bounds and
+    /// never warn about triangles; generation does.
+    #[func]
+    fn estimate_chunk_authoring(&self, x: i32, y: i32, max_triangles: i64) -> GString {
+        response_warned(authoring(|| {
+            self.require_project()?;
+            let max = mapkit_core::profile::authoring_triangles(max_triangles)?;
+            self.estimate_cached(Cell { x, y }, max)
+        }))
+    }
+    /// Editor full check of an `open_project` bridge: generation with an explicit
+    /// cap; a cell above the game's 500,000 triangles warns `cell_triangles`.
+    #[func]
+    fn generate_chunk_packed_authoring(&self, x: i32, y: i32, max_triangles: i64) -> VarDictionary {
+        packed::respond_warned(authoring(|| {
+            self.require_project()?;
+            let max = mapkit_core::profile::authoring_triangles(max_triangles)?;
+            let p = self.package.as_ref().ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))?;
+            let chunk = p.generate(Cell { x, y }, max)?;
+            mapkit_core::profile::note_triangles(chunk.triangles.len());
+            packed::pack(chunk)
+        }))
+    }
+    fn estimate_cached(&self, cell: Cell, max_triangles: usize) -> mapkit_core::Result<serde_json::Value> {
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
                 .and_then(|p| {
-                    let cell = Cell { x, y };
-                    if let Some(cost) = self.prepared.borrow().get(&cell) {
+                    let key = (cell, max_triangles, Profile::current() == Profile::Authoring);
+                    if let Some(cost) = self.prepared.borrow().get(&key) {
                         return Ok(cost.clone());
                     }
-                    let estimate = p.document.estimate(cell, 500_000)?;
+                    let estimate = p.document.estimate(cell, max_triangles)?;
                     let mut cost = serde_json::json!(estimate);
                     cost["presentation_bytes"] = serde_json::json!(presentation::cost(
                         p,
@@ -632,16 +714,15 @@ impl MapKitBridge {
                         "max_bytes": mapkit_core::archive_limit(&estimate)});
                     // A bounded cache belongs to this validated snapshot and is reset on open.
                     if self.prepared.borrow().len() < mapkit_core::PREPARATION_CACHE_ENTRIES {
-                        self.prepared.borrow_mut().insert(cell, cost.clone());
+                        self.prepared.borrow_mut().insert(key, cost.clone());
                     }
                     Ok(cost)
-                }),
-        )
+                })
     }
     /// Display-only product; callers reserve source, generation and display first.
     #[func]
     fn estimate_far_chunk(&self, x: i32, y: i32) -> GString {
-        response(
+        response_warned(self.scoped(|| 
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
@@ -659,17 +740,17 @@ impl MapKitBridge {
                     cost["visual_margin_cm"] = serde_json::json!(self.visual_margin_cm);
                     Ok(cost)
                 }),
-        )
+        ))
     }
     #[func]
     fn generate_far_chunk(&self, x: i32, y: i32) -> VarDictionary {
-        packed::respond(
+        packed::respond_warned(self.scoped(|| 
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
                 .and_then(|p| p.generate_distant(mapkit_core::Cell { x, y }))
                 .map(distant::pack),
-        )
+        ))
     }
     /// Bounded broad-phase plan; callers estimate and reserve each required cell.
     #[func]
@@ -681,7 +762,7 @@ impl MapKitBridge {
         max_y: i64,
         max_cells: i64,
     ) -> GString {
-        response(
+        response_warned(self.scoped(|| {
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
@@ -700,33 +781,34 @@ impl MapKitBridge {
                         max_cells as usize,
                     )
                 })
-                .map(|plan| serde_json::json!(plan)),
-        )
+                .map(|plan| serde_json::json!(plan))
+        }))
     }
     /// Exact integer centimetres and indexed triangle metadata; no JSON geometry copy.
     #[func]
     fn generate_chunk_packed(&self, x: i32, y: i32) -> VarDictionary {
-        packed::response(
+        packed::respond_warned(self.scoped(|| {
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-                .and_then(|p| p.generate(Cell { x, y }, 500_000)),
-        )
+                .and_then(|p| p.generate(Cell { x, y }, 500_000))
+                .and_then(packed::pack)
+        }))
     }
     /// Opt-in presentation bytes for a prepared/restored chunk. Caller reserves estimate first.
     #[func]
     fn with_presentation(&self, data: VarDictionary) -> VarDictionary {
-        packed::respond(
+        packed::respond_warned(self.scoped(|| {
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
-                .and_then(|p| presentation::decorate(p, data, &mut self.presentation.borrow_mut())),
-        )
+                .and_then(|p| presentation::decorate(p, data, &mut self.presentation.borrow_mut()))
+        }))
     }
     /// Archive identity and pre-allocation size bound; storage/leases belong to callers.
     #[func]
     fn chunk_archive_info(&self, x: i32, y: i32) -> GString {
-        response((|| {
+        response_warned(self.scoped(|| (|| {
             let p = self
                 .package
                 .as_ref()
@@ -737,11 +819,11 @@ impl MapKitBridge {
                 serde_json::json!({"key": mapkit_core::archive_key(&p.inspection.world_content_hash, cell),
                 "max_bytes": mapkit_core::archive_limit(&cost)}),
             )
-        })())
+        })()))
     }
     #[func]
     fn generate_chunk_archived(&self, x: i32, y: i32, max_bytes: i64) -> VarDictionary {
-        packed::respond((|| {
+        packed::respond_warned(self.scoped(|| (|| {
             let p = self
                 .package
                 .as_ref()
@@ -760,11 +842,11 @@ impl MapKitBridge {
                 data.set("archive", &PackedByteArray::from(bytes.as_slice()));
             }
             Ok(data)
-        })())
+        })()))
     }
     #[func]
     fn restore_chunk_archive(&self, x: i32, y: i32, bytes: PackedByteArray) -> VarDictionary {
-        packed::response((|| {
+        packed::respond_warned(self.scoped(|| ((|| {
             let p = self
                 .package
                 .as_ref()
@@ -777,11 +859,11 @@ impl MapKitBridge {
                 cell,
                 &cost,
             )
-        })())
+        })()).and_then(packed::pack)))
     }
     #[func]
     fn generate_chunk_occupied_packed(&self, x: i32, y: i32, max_solids: i64) -> VarDictionary {
-        occupied::response(
+        occupied::response_warned(self.scoped(|| 
             if !(0..=mapkit_core::MAX_OCCUPIED_SOLIDS as i64).contains(&max_solids) {
                 Err(mapkit_core::error(
                     "E_BUDGET",
@@ -795,11 +877,11 @@ impl MapKitBridge {
                         p.generate_with_occupancy(Cell { x, y }, 500_000, max_solids as usize)
                     })
             },
-        )
+        ))
     }
     #[func]
     fn generate_chunk(&self, x: i32, y: i32) -> GString {
-        response(
+        response_warned(self.scoped(|| 
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
@@ -808,11 +890,14 @@ impl MapKitBridge {
                     let hash = chunk.hash().unwrap();
                     serde_json::json!({"chunk":chunk,"generated_sha256":hash})
                 }),
-        )
+        ))
     }
+    /// Editor draft preview (Authoring profile). `max_triangles` defaults to the
+    /// game's 500,000; the Editor passes up to 2,000,000 and gets `cell_triangles`.
     #[func]
-    fn preview_document_packed(&self, document: GString, x: i32, y: i32) -> VarDictionary {
-        packed::respond((|| {
+    fn preview_document_packed(&self, document: GString, x: i32, y: i32, #[opt(default = 500_000)] max_triangles: i64) -> VarDictionary {
+        packed::respond_warned(authoring(|| {
+            let max_triangles = mapkit_core::profile::authoring_triangles(max_triangles)?;
             let d = engine_document(&document.to_string())?;
             if !d.assets.is_empty() || !d.heightmaps.is_empty() {
                 return Err(mapkit_core::error(
@@ -824,18 +909,25 @@ impl MapKitBridge {
                 document: &d,
                 cell: Cell { x, y },
                 heightgrid: None,
-                max_triangles: 500_000,
+                max_triangles,
             })?;
+            mapkit_core::profile::note_triangles(c.triangles.len());
             presentation::decorate_document(
                 &d,
                 &std::collections::BTreeMap::new(),
                 packed::pack(c)?,
             )
-        })())
+        }))
     }
     #[func]
-    fn preview_document(&self, document: GString, x: i32, y: i32) -> GString {
-        response(engine_document(&document.to_string()).map_err(|e|mapkit_core::error("E_JSON",e.to_string())).and_then(|d|mapkit_core::generate(GenerationInput{document:&d,cell:Cell{x,y},heightgrid:None,max_triangles:500_000})).map(|chunk|serde_json::json!({"generated_sha256":chunk.hash().unwrap(),"chunk":chunk})))
+    fn preview_document(&self, document: GString, x: i32, y: i32, #[opt(default = 500_000)] max_triangles: i64) -> GString {
+        response_warned(authoring(|| {
+            let max_triangles = mapkit_core::profile::authoring_triangles(max_triangles)?;
+            let d = engine_document(&document.to_string()).map_err(|e|mapkit_core::error("E_JSON",e.to_string()))?;
+            let chunk = mapkit_core::generate(GenerationInput{document:&d,cell:Cell{x,y},heightgrid:None,max_triangles})?;
+            mapkit_core::profile::note_triangles(chunk.triangles.len());
+            Ok(serde_json::json!({"generated_sha256":chunk.hash().unwrap(),"chunk":chunk}))
+        }))
     }
     #[func]
     fn seal_course(&self, definition: GString, extent: PackedInt64Array) -> GString {
@@ -870,13 +962,25 @@ impl MapKitBridge {
                 }),
         )
     }
+    /// `validate_document` for the user's own document (Authoring profile):
+    /// the same keys, plus `warnings` for budgets the game would refuse.
+    #[func]
+    fn validate_document_authoring(&self, document: GString) -> GString {
+        response_warned(authoring(|| {
+            let mut d = engine_document(&document.to_string())
+                .map_err(|e| mapkit_core::error("E_JSON", e.to_string()))?;
+            d.normalize();
+            d.validate()?;
+            Ok(serde_json::json!({"canonical": String::from_utf8(canonical(&d)?).unwrap(), "document":d}))
+        }))
+    }
     #[func]
     fn reseal_track_document(&self, document: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let mut d = engine_document(&document.to_string())?;
             mapkit_package::assembled_track::reseal(&mut d)?;
             Ok(serde_json::json!({"document":d}))
-        })())
+        }))
     }
     #[func]
     fn export_project(&self, path: GString, destination: GString) -> GString {
@@ -893,7 +997,7 @@ impl MapKitBridge {
     /// Restore only the already validated immutable package. Never replace a project.
     #[func]
     fn unpack_source(&self, destination: GString) -> GString {
-        response(
+        response_warned(self.scoped(|| 
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
@@ -901,7 +1005,7 @@ impl MapKitBridge {
                     mapkit_package::unpack(package, Path::new(&destination.to_string()))?;
                     Ok(serde_json::json!({"path": destination.to_string()}))
                 }),
-        )
+        ))
     }
     /// Reserve before native generation; retain output allowance through decode/use.
     #[func]
@@ -914,7 +1018,7 @@ impl MapKitBridge {
     }
     #[func]
     fn spawn_options(&self, x_cm: i64, y_cm: i64) -> GString {
-        response(
+        response_warned(self.scoped(|| 
             self.package
                 .as_ref()
                 .ok_or_else(|| mapkit_core::error("E_STATE", "open package first"))
@@ -928,27 +1032,30 @@ impl MapKitBridge {
                     let options = chunk.spawn_options([x_cm, y_cm])?;
                     Ok(serde_json::json!({"surfaces": options}))
                 }),
-        )
+        ))
     }
     #[func]
     fn spawn(&self, x_cm: i64, y_cm: i64, surface: GString) -> GString {
-        response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first")).and_then(|p| {
+        response_warned(self.scoped(|| self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first")).and_then(|p| {
             let cell=p.document.cell_at([x_cm,y_cm]).ok_or_else(||mapkit_core::error("E_SPAWN","outside map"))?;
             let position=p.generate(cell,500_000)?.spawn(&SpawnRequest{position_cm:[x_cm,y_cm],surface_id:surface.to_string()})?;
             Ok(serde_json::json!({"position_cm":position,"window":p.document.window([x_cm,y_cm])}))
-        }))
+        })))
     }
     /// Source identity only; no geometry generation, file access or retained cache.
     #[func]
     fn is_road_surface(&self, surface: GString) -> bool {
+        self.quiet(|| {
         let id = surface.to_string();
         self.package
             .as_ref()
             .is_some_and(|p| p.document.roads.iter().any(|road| road.id == id) || (p.document.assembled_track.is_some() && id.starts_with("assembled-road-")))
+    })
     }
     /// Exact local bounds without serializing the full editing document.
     #[func]
     fn map_bounds(&self) -> PackedInt64Array {
+        self.quiet(|| {
         self.package
             .as_ref()
             .map(|p| {
@@ -962,11 +1069,12 @@ impl MapKitBridge {
                 )
             })
             .unwrap_or_default()
+    })
     }
     /// Caller must reserve generation cost and invoke on its bounded worker.
     #[func]
     fn surface_probe(&self, x_cm: i64, y_cm: i64, surface: GString) -> GString {
-        response(self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first")).and_then(|p| {
+        response_warned(self.scoped(|| self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first")).and_then(|p| {
             let point = [x_cm, y_cm];
             let cell = p.document.cell_at(point).ok_or_else(||mapkit_core::error("E_SPAWN","outside map"))?;
             let sample = p.generate(cell, 500_000)?.surface_probe(&SpawnRequest { position_cm: point, surface_id: surface.to_string() })?;
@@ -976,14 +1084,16 @@ impl MapKitBridge {
                 && sample.position_cm[1] <= b.base_cm + b.height_cm as i64);
             Ok(serde_json::json!({"position_cm":sample.position_cm,"normal_q":sample.normal_q,
                 "surface_id":sample.surface_id,"is_road":is_road,"blocked_by_building":blocked_by_building}))
-        }))
+        })))
     }
     #[func]
     fn canonical_document(&self) -> GString {
+        self.quiet(|| {
         self.package
             .as_ref()
             .and_then(|p| canonical(&p.document).ok())
             .map(|b| GString::from(String::from_utf8(b).unwrap().as_str()))
             .unwrap_or_default()
+    })
     }
 }

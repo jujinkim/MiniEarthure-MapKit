@@ -41,17 +41,31 @@ This page lists the domain invariants and links each feature's owner.
   sparse delta history, water operations, memory validation and packed cell
   generation. None of these write PNGs or project/recovery files.
 - Explicit `materialize` validates and encodes only modified tiles as PNG16;
+  unmodified PNGs are never re-encoded. A modified cell whose relief fits
+  655.35 m uses `step_cm` 1 (byte-identical). Larger relief uses the smallest
+  power-of-two step ≤64, flooring heights onto a lattice through
+  `terrain_base_cm`. A sample shared with an unmodified cell or flat terrain keeps
+  that cell's stored (decoded) value exactly; a sample shared only by modified
+  cells takes their coarsest step. If a kept shared sample is off the required
+  lattice, Save is refused (`E_HEIGHTMAP`). Warning `heightmap_step` when a step
+  is above 1 cm. Working memory keeps exact heights;
   consumers own atomic publication and saved baselines. Disk-source hashes detect
   external changes; forks isolate concurrent preview/output workers. Source
   descriptors stay stable across publication, so earlier imports remain undoable
   after sculpting and saving. Save As carries referenced source payloads.
 - Cell admission prepares an immutable document once per batch of 1–256 unique
-  cells, using the normal 500,000-triangle and 256 MiB preview allowances, and
-  discards each generated chunk. Materialization uses successive batches for all
-  modified cells. Later edits need a new preparation.
+  cells and discards each generated chunk. Materialization uses successive batches
+  for all modified cells. Later edits need a new preparation.
 - Brushes (raise/lower, flatten, smooth) follow existing spacing (new terrain
-  200 cm), interpolate paths and update shared seam owners. Caps: one million
-  sparse changed samples; 64 MiB each for working heights and resources.
+  200 cm), interpolate paths and update shared seam owners.
+- Budget profiles ([ERRORS](ERRORS.md#budget-profiles)): every
+  `MapKitWorkingSnapshot` call runs under Authoring. Runtime values (Authoring
+  guard): changed samples 1M (8M); working heights, resources, saved payloads
+  64 MiB (1 GiB); one resource file 64 MiB (128 MiB); preview work 256 MiB
+  (2 GiB); preview payload 16 MiB (128 MiB); preview display 128 MiB (1 GiB).
+  `generate_packed`, `estimate` and `validate_cells` take an optional
+  `max_triangles` (default 500,000, ≤2,000,000); Save admission uses 2,000,000.
+  A generated cell above 500,000 triangles warns `cell_triangles`.
 - Raw height and road-fitted surface queries are separate; display, flood and
   physics share the fitting operation.
 - Water editing floods connected sub-level terrain at a fixed clicked height; flat
@@ -75,6 +89,19 @@ This page lists the domain invariants and links each feature's owner.
   allocation and checks the validation peak before retaining inflated payloads.
   Cost inspection streams JSON through a 64 KiB buffer; string tails beyond 256
   encoded bytes are charged at a reduced per-byte rate.
+- Godot `open_project(path)` opens the user's project directory in memory under
+  Authoring (`Package::from_project`, no ZIP round trip): the same document, files,
+  manifest and `world_content_hash` as a stored-preview package, with
+  `package_sha256` empty and `package_bytes` 0 (no package exists until
+  `export_project`, which stays Runtime/v1-hard). Package calls on that bridge run
+  under Authoring; `estimate_chunk_authoring` / `generate_chunk_packed_authoring`
+  take `max_triangles`. `validate_document_authoring`, `source_preview*` and
+  `preview_document*` (optional `max_triangles`), document-editing calls and
+  `MapKitRegionReader.audit_authoring(allowance, generation, overview_bytes)` are
+  Authoring too; seeded/suggested course and track candidates are always tested
+  under Runtime, so they match the game's. `*_authoring` bridge calls require an
+  `open_project` bridge. Reader calls (`open_package*`, `audit`, `load_region`, Runtime
+  generation at 500,000 triangles) are unchanged.
 - Godot `open_package_budgeted(path, allowance)` and `unpack_source(destination)`:
   restore uses the validated immutable package, keeps every original payload and
   requires a new directory. Failed opens clear prior native state.

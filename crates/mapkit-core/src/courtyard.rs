@@ -2,10 +2,12 @@
 //! rounded vertices: triangulation, solids and roofs share original centimetres.
 use crate::*;
 const MAX_WORK: usize = 4_000_000;
+const WORK: crate::profile::Budget = crate::profile::Budget { code: "courtyard_work", limit: MAX_WORK as u64,
+    guard: MAX_WORK as u64 * 8, message: "Building courtyards need more work than the game allows", runtime_rejects: true };
 fn tick(work: &mut usize) -> Result<()> {
     *work += 1;
     if *work > MAX_WORK {
-        Err(error(
+        WORK.check(*work as u64, || error(
             "E_BUDGET",
             "courtyard topology/triangulation work limit",
         ))

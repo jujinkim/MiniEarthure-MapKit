@@ -53,7 +53,9 @@ The package limit is 512 MiB, expanded inventory 1 GiB, entry 128 MiB,
 manifest 4 MiB, document 32 MiB and inventory 8,192 files. Decoder/workspace and
 caller memory reservations apply before retaining inflated payloads and typed
 allocation, independently of
-these disk limits. Static assets use the bounded GLB/PNG/WebP profiles; code,
+these disk limits. Every written and read .memap keeps these limits; an Editor
+project directory above them opens with warnings ([ERRORS](ERRORS.md#budget-profiles)).
+Static assets use the bounded GLB/PNG/WebP profiles; code,
 external URLs and executable dependencies are rejected. See [errors](ERRORS.md),
 [assets](WORLD_ASSETS.md) and [memory](../RENDER_MEMORY.md).
 

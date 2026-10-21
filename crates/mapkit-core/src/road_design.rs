@@ -1,6 +1,8 @@
 //! Independent ordinary-road alignment and reversible terrain fitting. All
 //! coordinates are source centimetres; heightmaps remain immutable inputs.
 use crate::*;
+const SAMPLES: profile::Budget = profile::Budget { code: "road_samples", limit: 16_384, guard: 131_072,
+    message: "A designed road needs more samples than the game allows", runtime_rejects: true };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -143,7 +145,7 @@ fn probes(design: &Design) -> Result<Vec<(Vertex,[f64;3])>> {
                 continue;
             }
             if out.last().map(|last|last.0)!=Some(p) { out.push((p,v)); }
-            if out.len()>16384 {return Err(error("E_BUDGET", "road sampling limit"));}
+            if out.len()>16384 {SAMPLES.check(out.len() as u64, ||error("E_BUDGET", "road sampling limit"))?;}
         }
     }
     if out.len()<2 || out.windows(2).any(|s|s[0].0[0]==s[1].0[0] && s[0].0[2]==s[1].0[2]) {

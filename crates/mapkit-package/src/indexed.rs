@@ -11,6 +11,8 @@ use std::sync::{
 const MAGIC: &[u8; 8] = b"MKREGN01";
 const HEADER: u64 = 48;
 pub const MAX_REGIONS: usize = 8192;
+/// Overview JSON allowance of every reader-side regional audit.
+pub const READER_OVERVIEW_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Opt-in wall-clock diagnostics. These are observations, never validation
 /// receipts, resource allowances or part of deterministic package identity.
@@ -695,17 +697,36 @@ impl<R: Read + Seek> IndexedReader<R> {
         ticket: &ReadTicket,
         profile: &mut ReadProfile,
     ) -> Result<serde_json::Value> {
-        const SUMMARY_BYTES: u64 = 16 * 1024 * 1024;
+        self.audit_summary_overview(memory_limit, ticket, profile, READER_OVERVIEW_BYTES)
+    }
+    /// Caller-chosen overview JSON allowance; reader callers use the 4 MiB
+    /// [`READER_OVERVIEW_BYTES`]. Above it, inside an Authoring scope, the
+    /// overview warns that the game's own audit refuses it.
+    pub fn audit_summary_overview(
+        &mut self,
+        memory_limit: u64,
+        ticket: &ReadTicket,
+        profile: &mut ReadProfile,
+        overview_bytes: u64,
+    ) -> Result<serde_json::Value> {
+        // 16 MiB at the reader's 4 MiB overview; a larger allowance is reserved too.
+        let summary_bytes: u64 = (16 * 1024 * 1024).max(overview_bytes.saturating_add(12 * 1024 * 1024));
         // Move the already checked original within this one audit lifetime.
         // Neither its mutable type nor indexed topology is a public validation
         // receipt; no authored source is retained after the summary returns.
         let (document, files, peak) =
-            self.audited_files(memory_limit.saturating_sub(SUMMARY_BYTES), ticket, profile)?;
+            self.audited_files(memory_limit.saturating_sub(summary_bytes), ticket, profile)?;
         let start = profile.start();
         let visual_margin_cm = crate::distant::visual_margin_cm(&document, &files)?;
         let overview = mapkit_core::source_overview(&document)?;
         let overview_cost = overview.cost()?;
-        let overview_json = overview.to_json(4 * 1024 * 1024)?;
+        if overview_cost.json_bytes > READER_OVERVIEW_BYTES {
+            mapkit_core::profile::note(mapkit_core::Warning {
+                code: "overview_bytes".into(), actual: overview_cost.json_bytes, limit: READER_OVERVIEW_BYTES,
+                message: "2D overview is larger than the game's regional package audit allows".into(), runtime_rejects: true,
+            });
+        }
+        let overview_json = overview.to_json(overview_bytes)?;
         let assets: BTreeSet<_> = document.assets.iter().flat_map(|a| a.paths().map(String::as_str)).collect();
         let user_asset_bytes: u64 = files
             .iter()
@@ -743,12 +764,12 @@ impl<R: Read + Seek> IndexedReader<R> {
             "expanded_bytes": expanded_bytes, "user_asset_bytes": user_asset_bytes,
             "base_data_bytes": expanded_bytes - user_asset_bytes,
             "user_asset_compressed_bytes": assets.iter().filter_map(|path| self.index.payloads.get(*path)).map(|id| self.index.records[*id].compressed_bytes).sum::<u64>(),
-            "validation_peak_bytes": peak + SUMMARY_BYTES,
+            "validation_peak_bytes": peak + summary_bytes,
             "audit_preflight_bytes": self.audit_preflight_bytes(),
             "audit_index_bound_bytes": self.audit_peak_bytes(),
             "audit_source_owned_bytes": audit_memory::document_retained_bytes(&document)?,
             "cell_count": self.index.world.cell_count()?,
-            "retained_memory_bytes": self.index_retained + SUMMARY_BYTES,
+            "retained_memory_bytes": self.index_retained + summary_bytes,
             "visual_margin_cm": visual_margin_cm,
             "overview_json": overview_json, "overview_cost": overview_cost
         }))

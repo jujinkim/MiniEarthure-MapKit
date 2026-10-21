@@ -2,36 +2,34 @@ use super::*;
 
 // Keep the export admission rules identical to the reader's inclusive limits.
 // Counts let boundary tests exercise the 1 GiB total without allocating it.
+// Under an Authoring scope (an Editor project directory, not a written .memap)
+// the same values warn up to the raised project guards.
 pub(super) fn payload_size<'a>(files: impl IntoIterator<Item = (&'a str, u64)>) -> Result<u64> {
+    let fail = || error("E_LIMIT", "package input exceeds limits");
     let mut total = 0u64;
     for (index, (path, size)) in files.into_iter().enumerate() {
         let limit = if path == "document.json" {
-            MAX_DOCUMENT_BYTES
+            PROJECT_DOCUMENT
         } else {
-            MAX_ENTRY_BYTES
+            PROJECT_ENTRY
         };
         total = total
             .checked_add(size)
             .ok_or_else(|| error("E_LIMIT", "expanded size overflow"))?;
-        if index >= MAX_FILES || size > limit || total > MAX_EXPANDED_BYTES {
-            return Err(error("E_LIMIT", "package input exceeds limits"));
-        }
+        PROJECT_FILES.check(index as u64 + 1, fail)?;
+        limit.check(size, fail)?;
+        PROJECT_EXPANDED.check(total, fail)?;
     }
     Ok(total)
 }
 
 pub(super) fn including_manifest(payload: u64, manifest: u64) -> Result<()> {
-    if manifest > MAX_MANIFEST_BYTES
-        || payload
-            .checked_add(manifest)
-            .is_none_or(|total| total > MAX_EXPANDED_BYTES)
-    {
-        return Err(error(
-            "E_LIMIT",
-            "manifest or expanded package exceeds limits",
-        ));
-    }
-    Ok(())
+    let fail = || error(
+        "E_LIMIT",
+        "manifest or expanded package exceeds limits",
+    );
+    PROJECT_MANIFEST.check(manifest, fail)?;
+    PROJECT_EXPANDED.check(payload.checked_add(manifest).ok_or_else(fail)?, fail)
 }
 
 #[cfg(test)]

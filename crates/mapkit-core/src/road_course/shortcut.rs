@@ -190,7 +190,7 @@ fn elevated(d: &MapDocument, chord: &Road, width: u32, hosts: &[&str], form: For
     control_points.extend(level(fall, length, b[1]));
     *control_points.last_mut().unwrap() = b;
     let mut road = chord.clone();
-    crate::road_design::compile(&mut road, Design { control_points, terrain_policy: TerrainPolicy::Elevated, shoulder_cm: 2400 }, width).ok()?;
+    crate::profile::runtime(|| crate::road_design::compile(&mut road, Design { control_points, terrain_policy: TerrainPolicy::Elevated, shoulder_cm: 2400 }, width)).ok()?;
     // Ramps rise and fall monotonically, so each building's lowest deck is at an end.
     covered.iter().all(|&(lo, hi, top)| [lo, hi].iter().all(|&s| height_at(&road.points, s.clamp(0.0, length)) >= top as f64))
         .then_some(road)

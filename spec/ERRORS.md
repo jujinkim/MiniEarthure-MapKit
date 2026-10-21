@@ -22,8 +22,8 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 | `E_HEIGHTMAP` | Invalid PNG terrain encoding, dimensions or height samples. |
 | `E_SEAM` | Restored terrain/road boundary contract mismatch. |
 | `E_ASSET` | Invalid/unsupported static asset, image decode, GLB graph/accessor/material or collision proxy. |
-| `E_LIMIT` | Hard package/document/file/count/expanded-data, image dimensions/decoded-work or GLB record/element profile exceeded. |
-| `E_BUDGET` | Requested generation, query, overview or occupied-solid allowance exhausted/invalid. |
+| `E_LIMIT` | Package/document/file/count/expanded-data, image dimensions/decoded-work or GLB record/element profile exceeded (Authoring: only above a raised guard). |
+| `E_BUDGET` | Requested generation, query, overview or occupied-solid allowance exhausted/invalid (Authoring: only above a raised guard). |
 | `E_MEMORY_BUDGET` | Package validation or overview working-set allowance exceeded before use. |
 | `E_CELL` | Requested cell or point is outside the available map. |
 | `E_QUERY` | Invalid bounded spatial query. |
@@ -34,6 +34,35 @@ Godot methods put the same object in `{ok:false,error:{code,message}}`.
 | `E_IO` | Filesystem failure, including an existing output destination; preserve source and select a new output. |
 | `E_STATE` | Native adapter called without the required open package/state. |
 | `E_USAGE` | Unknown CLI command, wrong arguments or invalid cell integer syntax. |
+
+## Budget profiles
+
+`E_LIMIT`/`E_BUDGET`/`E_MEMORY_BUDGET` follow `mapkit_core::Profile`. Runtime (the
+default; every reader of a received package, the Host's own load and export)
+refuses each budget. Authoring is entered only by Editor calls on the user's own
+data: a value above a Runtime budget returns a warning `{code, actual, limit,
+message, runtime_rejects}` (bridge responses add top-level `warnings`, omitted when
+empty) and only a raised guard still fails with the original code and message.
+`runtime_rejects` means the game refuses the exported map. Runtime value
+(Authoring guard), warning code:
+
+- Document: 16,384 non-indexed cells (131,072) `map_cells`; 200,000 objects
+  (1.6M) `objects`; 1M input vertices (8M) `input_vertices`; 32 junction arms
+  (256) `road_junction_arms`; road/placement work 8M (64M) `road_work` /
+  `placement_work`; courtyard work 4M (32M) `courtyard_work`; 20,000 repetition
+  candidates (160,000); 300,000 zone candidates (2.4M); 16,384 road samples
+  (131,072). Work counters never change outputs.
+- Project directory: document 32 MiB, entry 128 MiB (1 GiB each), expanded 1 GiB
+  (4 GiB), 8,192 files (65,536), manifest 4 MiB (256 MiB).
+- Asset decode: image 64 MiB (256 MiB), 8,192 px side (16,384), GLB elements 1M
+  (8M), GLB records/primitives 8,192 (65,536), cumulative decode 256 MiB (2 GiB).
+  Header checks still precede allocation.
+- Regional audit overview JSON 4 MiB `overview_bytes` (caller allowance).
+
+v1 invariants never warn: schema rules, seams, coordinate ranges, heightmap side
+and PNG16 encoding, ZIP/container integrity, a written .memap's 512 MiB / 128 MiB
+entry / 8,192 files / manifest, courses, POIs, water bodies, asset proxies,
+occupancy solids, gameplay object budgets and road arrangement subdivision.
 
 `scripts/check_contract.py` compares this catalog with all four public crates,
 executes failure cases through the CLI, and checks that invalid input does not

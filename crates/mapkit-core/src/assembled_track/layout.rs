@@ -367,7 +367,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             if closure(&mut connected, s, &required)? {
                 let a = finish(connected, s);
                 // Keep duration feasibility and the section-plan residual together.
-                if authoring::checkpoint_budget(&a).is_ok() && best.as_ref().is_none_or(|b| {
+                if crate::profile::runtime(|| authoring::checkpoint_budget(&a)).is_ok() && best.as_ref().is_none_or(|b| {
                     plan.rank(&a,&required) < plan.rank(&b.0,&required_ranges(&b.1))
                 }) {
                     best = Some((a,fragments.clone(),corners.clone()));
@@ -499,7 +499,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
         for (start,(id,width,selected)) in corners {
             let jump_count=jump_shortcuts::IDS.iter().position(|v|*v==id).map(|n|n+5);
             if !selected || (if jump_count.is_some() {jumps} else {installed})==2 {continue;}
-            let fragment = match (if let Some(count)=jump_count {jump_shortcuts::source(count,true)} else {corner_shortcuts::source(id,width,true)}).and_then(|mut s|{narrow::prepare_fragment(&mut s);templates::place(s,&a.pieces[start].path[0])}) {
+            let fragment = match crate::profile::runtime(|| (if let Some(count)=jump_count {jump_shortcuts::source(count,true)} else {corner_shortcuts::source(id,width,true)}).and_then(|mut s|{narrow::prepare_fragment(&mut s);templates::place(s,&a.pieces[start].path[0])})) {
                 Ok(fragment)=>fragment,
                 Err(e) if e.code=="E_CANCELLED"=>return Err(e),
                 Err(_)=>continue,
@@ -510,7 +510,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
             }
         }
         let mut out=authoring::compile(&source)?;
-        if authoring::executable(&out).is_err() {return Ok(None);}
+        if crate::profile::runtime(|| authoring::executable(&out)).is_err() {return Ok(None);}
         authoring::checkpoint_budget(&out)?;
         out=narrow::try_section(&source,&out,&required)?;
         source=out.seed_source.clone().unwrap_or(source);

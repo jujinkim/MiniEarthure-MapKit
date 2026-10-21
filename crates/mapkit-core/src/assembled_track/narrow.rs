@@ -115,12 +115,12 @@ pub(super) fn try_section(
         cancellation::checkpoint()?;
         let mut trial = source.clone();
         trial.instances[i].width_cm = 400;
-        let mut compiled = match authoring::compile(&trial) {
+        let mut compiled = match crate::profile::runtime(|| authoring::compile(&trial)) {
             Ok(a) => a,
             Err(e) if e.code == "E_CANCELLED" => return Err(e),
             Err(_) => continue,
         };
-        if valid(&compiled) && authoring::executable(&compiled).is_ok() {
+        if valid(&compiled) && crate::profile::runtime(|| authoring::executable(&compiled)).is_ok() {
             compiled.authoring = None;
             compiled.seed_source = Some(trial);
             return Ok(compiled);

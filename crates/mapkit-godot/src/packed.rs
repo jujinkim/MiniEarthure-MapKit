@@ -111,9 +111,6 @@ impl MapKitPackedGeometry {
     }
 }
 
-pub fn response(result: mapkit_core::Result<GeneratedChunk>) -> VarDictionary {
-    respond(result.and_then(pack))
-}
 pub(super) fn respond(result: mapkit_core::Result<VarDictionary>) -> VarDictionary {
     match result {
         Ok(data) => vdict! { "ok" => true, "data" => &data },
@@ -121,6 +118,24 @@ pub(super) fn respond(result: mapkit_core::Result<VarDictionary>) -> VarDictiona
             "code" => error.code.as_str(), "message" => error.message.as_str()
         } },
     }
+}
+/// `respond` plus top-level `warnings` (an Array of Dictionaries), omitted when empty.
+pub(super) fn respond_warned((result, warnings): (mapkit_core::Result<VarDictionary>, Vec<mapkit_core::Warning>)) -> VarDictionary {
+    let mut value = respond(result);
+    if !warnings.is_empty() {
+        value.set("warnings", &warnings_array(&warnings));
+    }
+    value
+}
+pub(super) fn warnings_array(warnings: &[mapkit_core::Warning]) -> VarArray {
+    let mut list = VarArray::new();
+    for w in warnings {
+        list.push(&vdict! {
+            "code" => &*w.code, "actual" => w.actual as i64, "limit" => w.limit as i64,
+            "message" => &*w.message, "runtime_rejects" => w.runtime_rejects
+        }.to_variant());
+    }
+    list
 }
 pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
     let hash = chunk.hash()?;

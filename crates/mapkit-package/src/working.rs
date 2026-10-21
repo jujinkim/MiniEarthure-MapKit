@@ -1,10 +1,32 @@
 //! In-memory authoring snapshot. Reading, brushing and generating never write files.
 //! The editor owns these arrays and sparse history; only explicit publication encodes PNGs.
 use crate::*;
+use mapkit_core::profile::{self, Budget, Profile};
 use std::sync::Arc;
 
 pub const WORK_BYTES: usize = 64 * 1024 * 1024;
 pub const CHANGED_SAMPLES: usize = 1_000_000;
+const MIB: u64 = 1024 * 1024;
+// Editor-only working budgets: Runtime values are the historic refusals; an
+// Authoring scope warns above them up to the raised memory guards.
+pub const RESOURCE_FILE: Budget = Budget { code: "working_resource_file", limit: WORK_BYTES as u64, guard: MAX_ENTRY_BYTES,
+    message: "A project resource file is very large and needs a lot of memory", runtime_rejects: false };
+pub const HEIGHT_ARRAYS: Budget = Budget { code: "working_heights", limit: WORK_BYTES as u64, guard: 1024 * MIB,
+    message: "Working terrain height arrays need a lot of memory", runtime_rejects: false };
+pub const SNAPSHOT_PAYLOADS: Budget = Budget { code: "snapshot_payloads", limit: WORK_BYTES as u64, guard: 1024 * MIB,
+    message: "Saved snapshot files need a lot of memory", runtime_rejects: false };
+pub const WORKING_RESOURCES: Budget = Budget { code: "working_resources", limit: WORK_BYTES as u64, guard: 1024 * MIB,
+    message: "Working asset and course files need a lot of memory", runtime_rejects: false };
+pub const CHANGED: Budget = Budget { code: "brush_samples", limit: CHANGED_SAMPLES as u64, guard: 8 * CHANGED_SAMPLES as u64,
+    message: "Terrain change touches very many height samples", runtime_rejects: false };
+pub const PREVIEW_WORK: Budget = Budget { code: "preview_work", limit: 256 * MIB, guard: 2048 * MIB,
+    message: "Cell preview needs more work memory than the preview allowance", runtime_rejects: false };
+pub const PREVIEW_PAYLOAD: Budget = Budget { code: "preview_payload", limit: 16 * MIB, guard: 128 * MIB,
+    message: "Cell preview asset files are very large", runtime_rejects: false };
+/// Generation cap for the active profile.
+pub fn cell_triangles() -> usize {
+    if Profile::current() == Profile::Authoring { profile::AUTHORING_TRIANGLES } else { profile::RUNTIME_TRIANGLES }
+}
 
 #[derive(Clone, Default)]
 pub struct Resources {
@@ -28,7 +50,9 @@ impl Resources {
         if !actual.starts_with(root) {
             return Err(error("E_PATH", "resource escapes project"));
         }
-        bounded_read(&actual, WORK_BYTES as u64)
+        let bytes = bounded_read(&actual, RESOURCE_FILE.active_limit())?;
+        RESOURCE_FILE.check(bytes.len() as u64, || error("E_LIMIT", "file exceeds supported profile"))?;
+        Ok(bytes)
     }
     pub fn verify(&self) -> Result<()> {
         for (path, expected) in &self.observed {
@@ -124,16 +148,13 @@ impl WorkingSnapshot {
                 heights_cm: vec![self.document.terrain_base_cm; side * side],
             }
         };
-        if self
+        let height_bytes = self
             .tiles
             .values()
             .map(|g| g.heights_cm.len() * 8)
             .sum::<usize>()
-            + grid.heights_cm.len() * 8
-            > WORK_BYTES
-        {
-            return Err(error("E_BUDGET", "working height arrays exceed 64 MiB"));
-        }
+            + grid.heights_cm.len() * 8;
+        HEIGHT_ARRAYS.check(height_bytes as u64, || error("E_BUDGET", "working height arrays exceed 64 MiB"))?;
         let grid = Arc::new(grid);
         self.tiles.insert(cell, grid.clone());
         if let Some(saved) = self.saved_tiles.get(&cell) {
@@ -321,6 +342,10 @@ impl WorkingSnapshot {
         d
     }
     pub fn generate(&mut self, cell: Cell, display: bool) -> Result<(MapDocument, GeneratedChunk)> {
+        self.generate_with(cell, display, profile::RUNTIME_TRIANGLES)
+    }
+    /// Editor preview with a caller cap (`profile::authoring_triangles`).
+    pub fn generate_with(&mut self, cell: Cell, display: bool, max_triangles: usize) -> Result<(MapDocument, GeneratedChunk)> {
         cancellation::checkpoint()?;
         let mut d = self.composed_document();
         let grid = if display {
@@ -351,15 +376,18 @@ impl WorkingSnapshot {
             None
         };
         let p = PreparedMap::new(d.clone())?;
-        let cost = p.estimate(cell, 500_000)?;
-        if cost.generation_scratch_bytes + cost.triangles * 256 > 256 * 1024 * 1024 {
-            return Err(error("E_BUDGET", "preview work allowance"));
-        }
-        Ok((d, p.generate(cell, grid.as_deref(), 500_000)?))
+        let cost = p.estimate(cell, max_triangles)?;
+        PREVIEW_WORK.check(cost.generation_scratch_bytes + cost.triangles * 256, || error("E_BUDGET", "preview work allowance"))?;
+        let chunk = p.generate(cell, grid.as_deref(), max_triangles)?;
+        profile::note_triangles(chunk.triangles.len());
+        Ok((d, chunk))
     }
     /// Admission generates every requested cell against one immutable prepared
     /// document. No presentation buffers or persistent validation cache are kept.
     pub fn validate_cells(&mut self, cells: &[Cell]) -> Result<()> {
+        self.validate_cells_with(cells, profile::RUNTIME_TRIANGLES)
+    }
+    pub fn validate_cells_with(&mut self, cells: &[Cell], max_triangles: usize) -> Result<()> {
         if cells.is_empty() || cells.len() > 256 {
             return Err(error("E_BUDGET", "cell validation requires 1..256 cells"));
         }
@@ -387,11 +415,10 @@ impl WorkingSnapshot {
             cancellation::checkpoint()?;
             let result = (|| {
                 let grid = if prepared.heightmap(cell).is_some() { Some(self.grid(cell)?) } else { None };
-                let cost = prepared.estimate(cell, 500_000)?;
-                if cost.generation_scratch_bytes + cost.triangles * 256 > 256 * 1024 * 1024 {
-                    return Err(error("E_BUDGET", "preview work allowance"));
-                }
-                prepared.generate(cell, grid.as_deref(), 500_000)?;
+                let cost = prepared.estimate(cell, max_triangles)?;
+                PREVIEW_WORK.check(cost.generation_scratch_bytes + cost.triangles * 256, || error("E_BUDGET", "preview work allowance"))?;
+                let chunk = prepared.generate(cell, grid.as_deref(), max_triangles)?;
+                profile::note_triangles(chunk.triangles.len());
                 Ok(())
             })();
             result.map_err(|mut e: Error| { e.message = format!("Cell ({}, {}): {}",cell.x,cell.y,e.message); e })?;
@@ -405,31 +432,28 @@ impl WorkingSnapshot {
         snapshot.validate_memory()?;
         snapshot.materialize_checked()
     }
-    fn materialize_checked(&self) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
+    fn materialize_checked(&mut self) -> Result<(MapDocument, BTreeMap<String, Vec<u8>>)> {
         self.resources.verify()?;
         self.clone().validate_changed_geometry()?;
         let mut d = self.composed_document();
+        let reused = |s: &Self, cell: Cell| !s.modified.contains(&cell) && s.saved_descriptors.contains_key(&cell);
+        let encoded: BTreeSet<Cell> = d.heightmaps.iter().map(|h| h.cell).filter(|&cell| !reused(self, cell)
+            && (self.authored_tiles.contains(&cell) || !self.document.heightmaps.iter().any(|source| source.cell == cell))).collect();
+        let steps = self.png16_steps(&d, encoded)?;
         let mut files = BTreeMap::new();
         for h in &mut d.heightmaps {
             cancellation::checkpoint()?;
-            if !self.modified.contains(&h.cell) && self.saved_descriptors.contains_key(&h.cell) {
+            if let Some((step, grid)) = steps.get(&h.cell) {
+                let (bytes, offset) = encode_heightmap_step(grid, *step)?;
+                h.offset_cm = offset;
+                h.step_cm = *step;
+                h.path = format!("editor/{}.png", sha256(&bytes));
+                files.insert(h.path.clone(), bytes);
+            } else if reused(self, h.cell) {
                 let saved = &self.saved_descriptors[&h.cell];
                 h.path = saved.path.clone();
                 h.offset_cm = saved.offset_cm;
                 h.step_cm = saved.step_cm;
-            } else if self.authored_tiles.contains(&h.cell)
-                || !self
-                    .document
-                    .heightmaps
-                    .iter()
-                    .any(|source| source.cell == h.cell)
-            {
-                let grid = &self.tiles[&h.cell];
-                let (bytes, offset) = encode_heightmap(grid)?;
-                h.offset_cm = offset;
-                h.step_cm = 1;
-                h.path = format!("editor/{}.png", sha256(&bytes));
-                files.insert(h.path.clone(), bytes);
             }
         }
         // Keep source identities needed by earlier file commands after Save As.
@@ -443,13 +467,107 @@ impl WorkingSnapshot {
             }
             files.insert(path.clone(), self.resources.read(&path)?);
         }
-        if files.values().map(Vec::len).sum::<usize>() > WORK_BYTES {
-            return Err(error("E_BUDGET", "snapshot payloads exceed 64 MiB"));
-        }
+        SNAPSHOT_PAYLOADS.check(files.values().map(Vec::len).sum::<usize>() as u64, || error("E_BUDGET", "snapshot payloads exceed 64 MiB"))?;
         validate_heightmaps(&d, &files)?;
         validate_assets(&d, &files)?;
         validate_course_files(&d, &files)?;
         Ok((d, files))
+    }
+    /// PNG16 step per encoded (modified or new) cell; kept PNGs are never
+    /// re-encoded. A cell that fits 655.35 m at 1 cm stays exact (byte-identical
+    /// when its stored neighbours agree with memory). Otherwise it uses the
+    /// smallest power-of-two step that fits, flooring heights onto a lattice
+    /// through `terrain_base_cm`. A sample shared with a kept cell (or flat
+    /// terrain) keeps that cell's stored value exactly; a sample shared only by
+    /// encoded cells takes the coarsest of their steps, so nested lattices agree.
+    /// When a stored shared sample is not on the required lattice, the save is
+    /// refused (`E_HEIGHTMAP`) instead of changing the kept cell.
+    fn png16_steps(&mut self, d: &MapDocument, encoded: BTreeSet<Cell>) -> Result<BTreeMap<Cell, (u32, HeightGrid)>> {
+        let base = d.terrain_base_cm;
+        let floor = |v: i64, step: u32| base + (v - base).div_euclid(i64::from(step)) * i64::from(step);
+        let around = |c: Cell| (-1..=1).flat_map(move |y| (-1..=1).map(move |x| Cell { x: c.x + x, y: c.y + y }));
+        // Stored grids of kept neighbours: their PNG, not working memory, is what
+        // a reader decodes (a stepped save leaves memory exact).
+        let mut kept: BTreeMap<Cell, HeightGrid> = BTreeMap::new();
+        for &cell in &encoded {
+            let pending: Vec<Cell> = around(cell).filter(|n| !encoded.contains(n) && !kept.contains_key(n)).collect();
+            for n in pending {
+                let Some(h) = d.heightmaps.iter().find(|h| h.cell == n) else { continue };
+                let stored = if !self.modified.contains(&n) { self.saved_descriptors.get(&n).unwrap_or(h) } else { h };
+                let bytes = self.resources.read(&stored.path)?;
+                kept.insert(n, decode_heightmap(stored, d.cell_size_cm, &bytes)?);
+            }
+        }
+        let mut grids = BTreeMap::new();
+        for &cell in &encoded {
+            grids.insert(cell, self.grid(cell)?);
+        }
+        let mut steps: BTreeMap<Cell, u32> = encoded.iter().map(|c| (*c, 1)).collect();
+        loop {
+            let mut changed = false;
+            let mut planned = BTreeMap::new();
+            for &cell in &encoded {
+                cancellation::checkpoint()?;
+                let grid = &grids[&cell];
+                let (side, step) = (grid.side, steps[&cell]);
+                let n = side as i32 - 1;
+                let mut values: Vec<i64> = grid.heights_cm.iter().map(|v| floor(*v, step)).collect();
+                let mut fixed = Vec::new();
+                for k in (0..side).chain((side - 1) * side..side * side)
+                    .chain((0..side).map(|j| j * side)).chain((0..side).map(|j| j * side + side - 1)) {
+                    let (i, j) = ((k % side) as i32, (k / side) as i32);
+                    let (mut shared, mut exact) = (step, None);
+                    for dy in [-1, 0, 1].into_iter().filter(|dy| (*dy < 0 && j == 0) || *dy == 0 || (*dy > 0 && j == n)) {
+                        for dx in [-1, 0, 1].into_iter().filter(|dx| (*dx < 0 && i == 0) || *dx == 0 || (*dx > 0 && i == n)) {
+                            let other = Cell { x: cell.x + dx, y: cell.y + dy };
+                            if (dx, dy) == (0, 0) || !d.has_cell(other) { continue; }
+                            if let Some(s) = steps.get(&other) {
+                                shared = shared.max(*s);
+                            } else if exact.is_none() {
+                                exact = Some(match kept.get(&other) {
+                                    Some(g) if g.side != side => return Err(error("E_SEAM", "adjacent heightmap spacing must match")),
+                                    Some(g) => g.heights_cm[(j - dy * n) as usize * side + (i - dx * n) as usize],
+                                    None => base,
+                                });
+                            }
+                        }
+                    }
+                    values[k] = match exact {
+                        Some(v) => { fixed.push(v); v }
+                        None => floor(grid.heights_cm[k], shared),
+                    };
+                }
+                let (lo, hi) = (values.iter().min().unwrap(), values.iter().max().unwrap());
+                if (hi - lo) / i64::from(step) > 65535 {
+                    if step >= 64 {
+                        return Err(error("E_HEIGHTMAP", "terrain relief exceeds the PNG16 step range"));
+                    }
+                    steps.insert(cell, step * 2);
+                    changed = true;
+                    continue;
+                }
+                if fixed.iter().any(|v| (v - base) % i64::from(step) != 0) {
+                    return Err(error("E_HEIGHTMAP", format!(
+                        "cell ({}, {}): relief above 655.35 m needs {step} cm steps, but its unchanged neighbour's shared edge is not on that step",
+                        cell.x, cell.y)));
+                }
+                if values.iter().any(|v| v.abs() > 1_000_000) {
+                    return Err(error("E_HEIGHTMAP", "stepped terrain height leaves the v1 range"));
+                }
+                planned.insert(cell, (step, HeightGrid { side, heights_cm: values }));
+            }
+            if !changed {
+                let coarsest = steps.values().copied().max().unwrap_or(1);
+                if coarsest > 1 {
+                    profile::note(mapkit_core::Warning {
+                        code: "heightmap_step".into(), actual: u64::from(coarsest), limit: 1,
+                        message: "Terrain relief above 655.35 m in one cell is saved in coarser height steps (cm)".into(),
+                        runtime_rejects: false,
+                    });
+                }
+                return Ok(planned);
+            }
+        }
     }
     pub fn validate_memory(&mut self) -> Result<()> {
         let d = self.composed_document();
@@ -471,9 +589,7 @@ impl WorkingSnapshot {
             }
             let bytes = self.resources.read(path)?;
             total += bytes.len();
-            if total > WORK_BYTES {
-                return Err(error("E_BUDGET", "working resources exceed 64 MiB"));
-            }
+            WORKING_RESOURCES.check(total as u64, || error("E_BUDGET", "working resources exceed 64 MiB"))?;
             files.insert(path.clone(), bytes);
         }
         validate_assets(&d, &files)?;
@@ -530,20 +646,31 @@ impl WorkingSnapshot {
         }
         let cells: Vec<_> = self.modified.iter().copied().collect();
         for batch in cells.chunks(256) {
-            self.validate_cells(batch)?;
+            self.validate_cells_with(batch, cell_triangles())?;
         }
         Ok(())
     }
 }
 
+/// Lossless PNG16 (`step_cm` 1). Returns the PNG and its `offset_cm`.
 pub fn encode_heightmap(grid: &HeightGrid) -> Result<(Vec<u8>, i64)> {
+    encode_heightmap_step(grid, 1)
+}
+/// PNG16 with `height = offset_cm + sample * step_cm`. Every height must lie
+/// on the step lattice through the minimum (always true for step 1).
+pub fn encode_heightmap_step(grid: &HeightGrid, step: u32) -> Result<(Vec<u8>, i64)> {
     let low = *grid
         .heights_cm
         .iter()
         .min()
         .ok_or_else(|| error("E_HEIGHTMAP", "empty grid"))?;
     let high = *grid.heights_cm.iter().max().unwrap();
-    if high - low > 65535 || low.abs() > 1_000_000 {
+    let step_cm = i64::from(step);
+    if !(1..=100).contains(&step_cm)
+        || (high - low) / step_cm > 65535
+        || low.abs() > 1_000_000
+        || grid.heights_cm.iter().any(|v| (v - low) % step_cm != 0)
+    {
         return Err(error(
             "E_HEIGHTMAP",
             "lossless PNG16 requires a height range within 655.35 m",
@@ -560,7 +687,7 @@ pub fn encode_heightmap(grid: &HeightGrid) -> Result<(Vec<u8>, i64)> {
         let raw: Vec<u8> = grid
             .heights_cm
             .iter()
-            .flat_map(|v| ((*v - low) as u16).to_be_bytes())
+            .flat_map(|v| (((*v - low) / step_cm) as u16).to_be_bytes())
             .collect();
         writer
             .write_image_data(&raw)
@@ -638,9 +765,7 @@ impl Brush {
         let steps = (distance / (spacing.min(self.options.radius_cm / 4.0)))
             .ceil()
             .max(1.0) as usize;
-        if steps > CHANGED_SAMPLES {
-            return Err(error("E_BUDGET", "brush path exceeds sample allowance"));
-        }
+        CHANGED.check(steps as u64, || error("E_BUDGET", "brush path exceeds sample allowance"))?;
         let dt = seconds / steps as f64;
         let mut cells = BTreeSet::new();
         for step in 1..=steps {
@@ -691,18 +816,15 @@ impl Brush {
                     }
                 }
             }
-            if self.changes.len()
+            let changed = self.changes.len()
                 + updates
                     .iter()
                     .filter(|(p, _, _)| !self.changes.contains_key(p))
-                    .count()
-                > CHANGED_SAMPLES
-            {
-                return Err(error(
-                    "E_BUDGET",
-                    "brush exceeds one million changed samples",
-                ));
-            }
+                    .count();
+            CHANGED.check(changed as u64, || error(
+                "E_BUDGET",
+                "brush exceeds one million changed samples",
+            ))?;
             for (sample, before, after) in updates {
                 self.changes.entry(sample).or_insert((before, after)).1 = after;
                 if after.round() as i64 != before {

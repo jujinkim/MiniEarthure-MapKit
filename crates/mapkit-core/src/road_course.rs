@@ -440,7 +440,7 @@ fn gimmicks(d: &MapDocument, original: &MapDocument, skip: &BTreeSet<usize>, req
                 if launching && turns.iter().any(|t| *t > at - 1_000.0 && *t < at + GIMMICK_RUNOUT_CM) { continue; }
                 if work.roads[road].design.is_none() {
                     let r = &work.roads[road];
-                    match default_design(r).and_then(|design| crate::road_design::edit(&work, id, design, design_width(r))) {
+                    match crate::profile::runtime(|| default_design(r).and_then(|design| crate::road_design::edit(&work, id, design, design_width(r)))) {
                         Ok(next) => { work = next; designed.insert(id.clone()); }
                         Err(_) => { rejected.insert(id.clone()); continue; }
                     }
@@ -455,9 +455,9 @@ fn gimmicks(d: &MapDocument, original: &MapDocument, skip: &BTreeSet<usize>, req
                 all.extend(chosen.iter().map(|c| c.2.clone()));
                 all.push(item.clone());
                 // The local resolver is cheap; full validation also checks swept and landing bounds.
-                if surface::derived(&work, &all).is_err() { unfit.insert((kind, design_width(&work.roads[road]))); continue; }
+                if crate::profile::runtime(|| surface::derived(&work, &all)).is_err() { unfit.insert((kind, design_width(&work.roads[road]))); continue; }
                 tries += 1;
-                if surface::apply(&work, all).is_err() { if tries >= GIMMICK_TRIES { break; } continue; }
+                if crate::profile::runtime(|| surface::apply(&work, all)).is_err() { if tries >= GIMMICK_TRIES { break; } continue; }
                 chosen.push((at, id.clone(), item));
                 break 'kinds;
             }

@@ -1,8 +1,10 @@
 //! Engine-owned handles to editor working arrays. Forks are immutable worker inputs.
-use super::{engine_document, packed, presentation, response};
+use super::{authoring, engine_document, packed, presentation, response_warned};
 use godot::prelude::*;
 use mapkit_core::*;
 use mapkit_package::working::{Brush, BrushOptions, Resources, WorkingSnapshot};
+// Editor-only class: every call runs under the Authoring profile and adds
+// top-level `warnings` (omitted when empty) to its response.
 
 #[derive(GodotClass)]
 #[class(base=RefCounted)]
@@ -23,7 +25,7 @@ impl IRefCounted for MapKitWorkingSnapshot {
 }
 impl MapKitWorkingSnapshot {
     fn retarget_document(&mut self, text: GString, root: GString, history: bool) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let mut d = engine_document(&text.to_string())?;
             d.normalize();
             d.validate()?;
@@ -74,7 +76,7 @@ impl MapKitWorkingSnapshot {
             s.resources.root = root.to_string().into();
             self.snapshot = Some(next);
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
 
     fn state(&mut self) -> Result<&mut WorkingSnapshot> {
@@ -87,7 +89,7 @@ impl MapKitWorkingSnapshot {
 impl MapKitWorkingSnapshot {
     #[func]
     fn configure(&mut self, text: GString, root: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             self.snapshot = Some(WorkingSnapshot::new(
                 engine_document(&text.to_string())?,
                 Resources {
@@ -97,7 +99,7 @@ impl MapKitWorkingSnapshot {
             )?);
             self.brush = None;
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
     #[func]
     fn set_document(&mut self, text: GString, root: GString) -> GString {
@@ -109,7 +111,7 @@ impl MapKitWorkingSnapshot {
     }
     #[func]
     fn accept_saved(&mut self, text: GString, root: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let d = engine_document(&text.to_string())?;
             let s = self.state()?;
             let mut observed = std::collections::BTreeMap::new();
@@ -133,7 +135,7 @@ impl MapKitWorkingSnapshot {
             s.saved_tiles = s.tiles.clone();
             s.changed_indices.clear();
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
     #[func]
     fn has_changes(&self) -> bool {
@@ -143,7 +145,7 @@ impl MapKitWorkingSnapshot {
     }
     #[func]
     fn provide_resources(&mut self, resources: VarDictionary) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let s = self.state()?;
             let mut next = s.resources.memory.clone();
             for (key, value) in resources.iter_shared() {
@@ -159,12 +161,11 @@ impl MapKitWorkingSnapshot {
                     .map_err(|_| error("E_RESOURCE", "resource must contain bytes"))?;
                 next.insert(path, std::sync::Arc::new(bytes.as_slice().to_vec()));
             }
-            if next.values().map(|b| b.len()).sum::<usize>() > mapkit_package::working::WORK_BYTES {
-                return Err(error("E_BUDGET", "working resources exceed 64 MiB"));
-            }
+            mapkit_package::working::WORKING_RESOURCES.check(next.values().map(|b| b.len() as u64).sum(),
+                || error("E_BUDGET", "working resources exceed 64 MiB"))?;
             s.resources.memory = next;
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
     #[func]
     fn fork(&self) -> Gd<Self> {
@@ -174,10 +175,10 @@ impl MapKitWorkingSnapshot {
     }
     #[func]
     fn document_json(&mut self) -> GString {
-        response(
+        response_warned(authoring(|| {
             self.state()
-                .and_then(|s| Ok(serde_json::to_value(s.composed_document()).unwrap())),
-        )
+                .and_then(|s| Ok(serde_json::to_value(s.composed_document()).unwrap()))
+        }))
     }
     #[func]
     fn spacing_cm(&mut self) -> i64 {
@@ -185,15 +186,15 @@ impl MapKitWorkingSnapshot {
     }
     #[func]
     fn height(&mut self, point: Vector2) -> GString {
-        response(
+        response_warned(authoring(|| {
             self.state()
                 .and_then(|s| s.surface_height([point.x.round() as i64, point.y.round() as i64]))
-                .map(|h| serde_json::json!({"height":h})),
-        )
+                .map(|h| serde_json::json!({"height":h}))
+        }))
     }
     #[func]
     fn raycast(&mut self, origin: Vector3, direction: Vector3) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let s = self.state()?;
             let o = [
                 origin.x as f64 * 100.0,
@@ -250,11 +251,11 @@ impl MapKitWorkingSnapshot {
                 t = (t + step).min(far);
             }
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
     #[func]
     fn begin_brush(&mut self, point: Vector2, options: GString) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             if self.brush.is_some() {
                 return Err(error("E_STATE", "brush already active"));
             }
@@ -266,11 +267,11 @@ impl MapKitWorkingSnapshot {
                 options,
             )?);
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
     #[func]
     fn step_brush(&mut self, point: Vector2, seconds: f64) -> VarDictionary {
-        packed::respond((|| {
+        packed::respond_warned(authoring(|| {
             let b = self
                 .brush
                 .as_mut()
@@ -286,7 +287,7 @@ impl MapKitWorkingSnapshot {
             data.set("cells", &cells);
             data.set("samples", b.changes.len() as i64);
             Ok(data)
-        })())
+        }))
     }
     #[func]
     fn finish_brush(&mut self) -> PackedInt32Array {
@@ -302,10 +303,11 @@ impl MapKitWorkingSnapshot {
     }
     #[func]
     fn apply_delta(&mut self, delta: PackedInt32Array, reverse: bool) -> GString {
-        response((|| {
-            if delta.len() % 4 != 0 || delta.len() / 4 > mapkit_package::working::CHANGED_SAMPLES {
+        response_warned(authoring(|| {
+            if delta.len() % 4 != 0 {
                 return Err(error("E_BUDGET", "invalid height history"));
             }
+            mapkit_package::working::CHANGED.check((delta.len() / 4) as u64, || error("E_BUDGET", "invalid height history"))?;
             let mut s = self.state()?.clone();
             for row in delta.as_slice().chunks_exact(4) {
                 let (before, after) = if reverse {
@@ -320,11 +322,11 @@ impl MapKitWorkingSnapshot {
             }
             self.snapshot = Some(s);
             Ok(serde_json::json!({}))
-        })())
+        }))
     }
     #[func]
     fn water_edit(&mut self, point: Vector2, remove: bool, refresh: bool) -> GString {
-        response(
+        response_warned(authoring(|| {
             self.state()
                 .and_then(|s| {
                     s.validate_memory()?;
@@ -335,8 +337,8 @@ impl MapKitWorkingSnapshot {
                         remove,
                     )
                 })
-                .map(|b| serde_json::json!(b)),
-        )
+                .map(|b| serde_json::json!(b))
+        }))
     }
     #[func]
     fn tile_cells(&mut self) -> Array<Vector2i> {
@@ -350,7 +352,7 @@ impl MapKitWorkingSnapshot {
     }
     #[func]
     fn tile(&mut self, cell: Vector2i) -> VarDictionary {
-        packed::respond((|| {
+        packed::respond_warned(authoring(|| {
             let g = self.state()?.grid(Cell {
                 x: cell.x,
                 y: cell.y,
@@ -359,13 +361,14 @@ impl MapKitWorkingSnapshot {
             data.set("heights", &PackedInt64Array::from(g.heights_cm.as_slice()));
             data.set("side", g.side as i64);
             Ok(data)
-        })())
+        }))
     }
     #[func]
-    fn generate_packed(&mut self, x: i32, y: i32, display: bool) -> VarDictionary {
-        packed::respond((|| {
+    fn generate_packed(&mut self, x: i32, y: i32, display: bool, #[opt(default = 500_000)] max_triangles: i64) -> VarDictionary {
+        packed::respond_warned(authoring(|| {
+            let max_triangles = profile::authoring_triangles(max_triangles)?;
             let s = self.state()?;
-            let (d, mut c) = s.generate(Cell { x, y }, display)?;
+            let (d, mut c) = s.generate_with(Cell { x, y }, display, max_triangles)?;
             if display {
                 c.triangles
                     .retain(|t| !t.object_id.starts_with("assembled-"));
@@ -385,23 +388,24 @@ impl MapKitWorkingSnapshot {
             data.set("preview_bytes", cost as i64);
             data.set("preview_signature", hash.as_str());
             Ok(data)
-        })())
+        }))
     }
     /// Full generation admission without packing render arrays for discarded cells.
     #[func]
-    fn validate_cells(&mut self, cells: Array<Vector2i>) -> GString {
-        response((|| {
+    fn validate_cells(&mut self, cells: Array<Vector2i>, #[opt(default = 500_000)] max_triangles: i64) -> GString {
+        response_warned(authoring(|| {
+            let max_triangles = profile::authoring_triangles(max_triangles)?;
             if cells.is_empty() || cells.len() > 256 {
                 return Err(error("E_BUDGET", "cell validation requires 1..256 cells"));
             }
             let selected: Vec<_> = cells.iter_shared().map(|c| Cell { x:c.x, y:c.y }).collect();
-            self.state()?.validate_cells(&selected)?;
+            self.state()?.validate_cells_with(&selected, max_triangles)?;
             Ok(serde_json::json!({"cells": selected.len()}))
-        })())
+        }))
     }
     #[func]
     fn materialize(&mut self) -> VarDictionary {
-        packed::respond((|| {
+        packed::respond_warned(authoring(|| {
             let (d, files) = self.state()?.materialize()?;
             let mut data = VarDictionary::new();
             let mut blobs = VarDictionary::new();
@@ -414,16 +418,17 @@ impl MapKitWorkingSnapshot {
             );
             data.set("blobs", &blobs);
             Ok(data)
-        })())
+        }))
     }
     #[func]
-    fn estimate(&mut self, x: i32, y: i32) -> GString {
-        response((|| {
+    fn estimate(&mut self, x: i32, y: i32, #[opt(default = 500_000)] max_triangles: i64) -> GString {
+        response_warned(authoring(|| {
+            let max_triangles = profile::authoring_triangles(max_triangles)?;
             let s = self.state()?;
             let d = s.composed_document();
             let cell = Cell { x, y };
             let prepared = PreparedMap::new(d.clone())?;
-            let estimate = prepared.estimate(cell, 500_000)?;
+            let estimate = prepared.estimate(cell, max_triangles)?;
             let placements = prepared.authored_placement_candidates(cell)?;
             let mut needed: std::collections::BTreeSet<_> =
                 placements.iter().map(|p| p.asset_id.clone()).collect();
@@ -442,9 +447,7 @@ impl MapKitWorkingSnapshot {
                 a.distant_path = None;
                 let data = s.resources.read(&a.path)?;
                 bytes += data.len();
-                if bytes > 16 * 1024 * 1024 {
-                    return Err(error("E_BUDGET", "preview payload allowance"));
-                }
+                mapkit_package::working::PREVIEW_PAYLOAD.check(bytes as u64, || error("E_BUDGET", "preview payload allowance"))?;
                 files.insert(a.path.clone(), data);
             }
             let assets = mapkit_package::preview_asset_cost(&subset, &files, placements.len())?;
@@ -453,17 +456,17 @@ impl MapKitWorkingSnapshot {
             let mut value = serde_json::to_value(estimate).unwrap();
             value["presentation_bytes"] = serde_json::json!(presentation_bytes);
             Ok(value)
-        })())
+        }))
     }
     #[func]
     fn validate_memory(&mut self) -> GString {
-        response((|| {
+        response_warned(authoring(|| {
             let s = self.state()?;
             s.validate_memory()?;
             let d = s.composed_document();
             Ok(
                 serde_json::json!({"cell_count":d.cells().len(),"free_roam":d.free_roam,"memory_snapshot":true}),
             )
-        })())
+        }))
     }
 }

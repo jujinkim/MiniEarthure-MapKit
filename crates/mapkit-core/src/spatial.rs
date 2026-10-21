@@ -4,7 +4,7 @@ use super::*;
 impl MapDocument {
     pub(crate) fn cell_dimensions(&self) -> Result<[i64; 2]> {
         let dimensions = self.source_dimensions()?;
-        if !self.indexed_topology && dimensions[0] * dimensions[1] > 16_384 {
+        if !self.indexed_topology && dimensions[0] * dimensions[1] > crate::MAP_CELLS.active_limit() as i64 {
             return Err(error("E_LIMIT", "too many map cells"));
         }
         Ok(dimensions)
@@ -35,7 +35,9 @@ impl MapDocument {
         let Ok([nx, ny]) = self.cell_dimensions() else {
             return vec![];
         };
-        if nx * ny > 16_384 {
+        // Indexed sources never list a resident cell array here.
+        let limit = if self.indexed_topology { 16_384 } else { crate::MAP_CELLS.active_limit() as i64 };
+        if nx * ny > limit {
             return vec![];
         }
         (0..ny as i32)

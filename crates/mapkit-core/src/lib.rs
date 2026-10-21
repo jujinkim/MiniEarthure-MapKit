@@ -8,6 +8,8 @@ pub mod gimmick;
 pub mod grind;
 pub mod special_track;
 pub mod cancellation;
+pub mod profile;
+pub use profile::{Profile, Warning};
 mod convex;
 pub mod course;
 pub mod road_course;
@@ -454,6 +456,14 @@ fn polygon_valid(poly: &[Point], bounds: &Bounds) -> bool {
 }
 mod courtyard;
 
+/// Runtime document budgets; Authoring warns above them up to 8x.
+pub const MAP_CELLS: profile::Budget = profile::Budget { code: "map_cells", limit: 16_384, guard: 131_072,
+    message: "Map has more cells than a single .memap package allows; use a regional package", runtime_rejects: true };
+pub const OBJECTS: profile::Budget = profile::Budget { code: "objects", limit: 200_000, guard: 1_600_000,
+    message: "Map has more objects than the game's limit", runtime_rejects: true };
+pub const INPUT_VERTICES: profile::Budget = profile::Budget { code: "input_vertices", limit: 1_000_000, guard: 8_000_000,
+    message: "Map has more input vertices than the game's limit", runtime_rejects: true };
+
 impl MapDocument {
     pub fn normalize(&mut self) {
         self.pois.sort_by(|a, b| a.id.cmp(&b.id));
@@ -474,8 +484,15 @@ impl MapDocument {
             (&a.source, &a.license, &a.notice).cmp(&(&b.source, &b.license, &b.notice))
         });
     }
+    /// Budgets follow the active [`Profile`]; Runtime when no Authoring scope is entered.
     pub fn validate(&self) -> Result<()> {
         self.validate_inner(false)
+    }
+    /// Editor validation of the user's own document: budgets above the Runtime
+    /// values are returned as warnings; v1 invariants and raised guards still fail.
+    pub fn validate_authoring(&self) -> Result<Vec<Warning>> {
+        let (result, warnings) = Profile::Authoring.run(|| self.validate());
+        result.map(|_| warnings)
     }
     /// Indexed authoring source: bounds describe a world, not a resident cell array.
     /// All original geometry, object, vertex and work limits still apply.
@@ -543,8 +560,8 @@ impl MapDocument {
             return fail("bounds or height out of range");
         }
         self.cell_dimensions()?;
-        if !source_topology && self.cell_count()? > 16_384 {
-            return Err(error("E_LIMIT", "too many map cells"));
+        if !source_topology {
+            MAP_CELLS.check(self.cell_count()?, || error("E_LIMIT", "too many map cells"))?;
         }
         let count = self.pois.len() + self.water_bodies.len() + self.surface_areas.len()
             + self.nodes.len()
@@ -554,9 +571,7 @@ impl MapDocument {
             + self.assets.len()
             + self.placements.len()
             + self.repetitions.len();
-        if count > 200_000 {
-            return Err(error("E_LIMIT", "too many objects"));
-        }
+        OBJECTS.check(count as u64, || error("E_LIMIT", "too many objects"))?;
         let vertices = self.water_bodies.iter().map(|b| b.vertices()).sum::<usize>() + self
             .surface_areas
             .iter()
@@ -584,9 +599,7 @@ impl MapDocument {
                 .flat_map(|b| &b.entrances)
                 .map(Vec::len)
                 .sum::<usize>();
-        if vertices > 1_000_000 {
-            return Err(error("E_LIMIT", "too many input vertices"));
-        }
+        INPUT_VERTICES.check(vertices as u64, || error("E_LIMIT", "too many input vertices"))?;
         let mut ids = BTreeSet::new();
         for id in self
             .nodes

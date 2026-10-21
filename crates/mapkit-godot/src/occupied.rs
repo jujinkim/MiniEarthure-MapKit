@@ -32,6 +32,13 @@ impl MapKitPackedOccupancy {
     }
 }
 
+pub fn response_warned((result, warnings): (mapkit_core::Result<GeneratedOccupancy>, Vec<mapkit_core::Warning>)) -> VarDictionary {
+    let mut value = response(result);
+    if !warnings.is_empty() {
+        value.set("warnings", &super::packed::warnings_array(&warnings));
+    }
+    value
+}
 pub fn response(result: mapkit_core::Result<GeneratedOccupancy>) -> VarDictionary {
     super::packed::respond(result.and_then(|result| {
         let mut kinds = Vec::with_capacity(result.solids.len());
