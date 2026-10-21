@@ -657,8 +657,8 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
 /// exact integer separation of their triangulations, indexed by bounds.
 fn parts_disjoint(b: &Building, work: &mut usize) -> Result<()> {
     let mut triangles = Vec::new();
-    for (index, solid) in b.solids().enumerate() {
-        for t in crate::courtyard::triangulate(&solid, &mut 0)? {
+    for (index, (footprint, holes)) in b.rings().enumerate() {
+        for t in crate::courtyard::triangulate_rings(footprint, holes, &mut 0)? {
             triangles.push((index, t));
         }
     }
@@ -668,8 +668,12 @@ fn parts_disjoint(b: &Building, work: &mut usize) -> Result<()> {
     let lift = |t: &[Point; 3]| t.map(|p| [p[0], 0, p[1]]);
     for (i, (solid, t)) in triangles.iter().enumerate() {
         for j in index.query(&bounds[i], work)?.into_iter().filter(|&j| j < i) {
+            // Triangles of one solid never conflict, and triangles whose boxes
+            // only touch (parts sharing a wall) cannot share interior: neither
+            // pair is tested or charged.
+            if triangles[j].0 == *solid || !crate::urban::open_boxes_meet(&bounds[i], &bounds[j]) { continue; }
             tick(work, 1)?;
-            if triangles[j].0 != *solid && crate::urban::interiors_overlap(&lift(t), &lift(&triangles[j].1)) {
+            if crate::urban::interiors_overlap(&lift(t), &lift(&triangles[j].1)) {
                 return Err(error("E_GEOMETRY", format!("building {} parts overlap", b.id)));
             }
         }
@@ -1234,7 +1238,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
         }
         let nearby = measured!(1, nearby_roads(&area, work));
         if nearby.is_empty() { continue; }
-        let plan = measured!(1, plans.plan(&area, work));
+        let plan = measured!(1, plans.plan(&area, crate::road_plan::Walls::Decks, work));
         for index in nearby {
             let road = &d.roads[index];
             // A corridor triangle fully inside an open courtyard is empty
@@ -1296,7 +1300,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
             }
         }
         let nearby = nearby_roads(area, work)?;
-        let plan = if nearby.is_empty() { (vec![], vec![]) } else { plans.plan(area, work)? };
+        let plan = if nearby.is_empty() { (vec![], vec![]) } else { plans.plan(area, crate::road_plan::Walls::Decks, work)? };
         for j in nearby {
             if planned_overlap(&plan, &d.roads[j], work, |road_poly, work| polygons_overlap(poly, road_poly, work))? && !below_deck(d, p, poly, &d.roads[j], work)? {
                 return Err(error(
@@ -1324,6 +1328,26 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
 #[cfg(test)]
 mod city_tests {
     use super::*;
+
+    /// Parts in a row share walls: no triangle pair is charged, only the index.
+    /// An overlapping part is still found.
+    #[test]
+    fn parts_sharing_walls_charge_only_the_index() {
+        let rect = |x: i64, w: i64| vec![[x, 0], [x + w, 0], [x + w, 1000], [x, 1000]];
+        let mut b = Building { id: "row".into(), footprint: rect(0, 1000), holes: vec![], base_cm: 0, height_cm: 900,
+            usage: "residential".into(), material: "brick".into(), roof: "flat".into(), entrances: vec![],
+            parts: (1..40).map(|i| BuildingPart { footprint: rect(i * 1000, 1000), holes: vec![], base_cm: None, height_cm: Some(300 + i as u32) }).collect() };
+        let triangles: Vec<_> = b.rings().flat_map(|(f, h)| crate::courtyard::triangulate_rings(f, h, &mut 0).unwrap()).collect();
+        let bounds: Vec<_> = triangles.iter().map(|t| aabb(t)).collect();
+        let mut expected = triangles.len() * (triangles.len().ilog2() as usize + 1);
+        let index = crate::bounds_index::BoundsIndex::new(&bounds);
+        for area in &bounds { index.query(area, &mut expected).unwrap(); }
+        let mut work = 0;
+        parts_disjoint(&b, &mut work).unwrap();
+        assert_eq!(work, expected);
+        b.parts[7].footprint = rect(7500, 1000);
+        assert!(parts_disjoint(&b, &mut 0).unwrap_err().message.contains("parts overlap"));
+    }
 
     #[test]
     fn direct_courtyard_overlap_matches_triangulated_solid_including_wall_contacts() {

@@ -680,11 +680,13 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
             .map(|p| crate::bounds_index::bounds(p))
             .collect::<Vec<_>>(),
     );
+    // One ID set per cell, not a scan of every paint record per triangle.
+    let paint: BTreeSet<&str> = d.surface_areas.iter().map(|a| a.id.as_str()).collect();
     let ground: Vec<_> = b
         .chunk
         .triangles
         .iter()
-        .filter(|t| t.object_id == "terrain" || d.surface_areas.iter().any(|a| a.id == t.object_id))
+        .filter(|t| t.object_id == "terrain" || paint.contains(t.object_id.as_str()))
         .cloned()
         .collect();
     let mut work = 0;

@@ -125,7 +125,9 @@ This page lists the domain invariants and links each feature's owner.
   deck wherever a segment's corridor and safety strip cover the footprint.
   Ground/tunnel/underpass corridors stay excluded.
 - Surface-area overlap uses exact integer triangle separation: touching edges and
-  disjoint concave polygons pass; any positive-area overlap fails.
+  disjoint concave polygons pass; any positive-area overlap fails. Pieces and
+  triangles whose bounds only touch (zero-area contact) cannot overlap and are
+  neither tested nor charged.
 - These checks charge the existing placement work allowance.
 
 ## City ground, barriers and building parts
@@ -175,7 +177,7 @@ earlier documents keep their bytes, world hashes and generated geometry.
   footprint is the first solid. Each solid follows the building rules (ring,
   courtyard, gable rectangle, height, base) and its vertices count. Footprint and
   part interiors (outside courtyards) are pairwise disjoint; touching is allowed
-  and no stacking. Every consumer treats each solid as a building: prisms/roofs/
+  (shared walls and pairs within one solid are neither tested nor charged) and no stacking. Every consumer treats each solid as a building: prisms/roofs/
   `building_prisms`/occupancy, road corridor and deck checks, building/placement/
   vegetation/repetition clearance (indexed per solid), sidewalk exclusion,
   implicit sidewalk widths, regional retention, overview (one entry per solid

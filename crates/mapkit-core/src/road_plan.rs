@@ -9,6 +9,7 @@ pub(crate) struct Patch<'a> {
     pub surface: Surface,
     pub terrain_join: bool,
 }
+#[derive(Clone)]
 pub(crate) struct Edge<'a> {
     pub a: Vertex,
     pub b: Vertex,
@@ -24,7 +25,10 @@ struct Arm<'a> {
     point: Vertex,
     other: Vertex,
 }
-type Key = (bool, String, usize);
+type Key<'a> = (bool, &'a str, usize);
+/// [`Key`] with each ID replaced by its dense rank among the sorted IDs of its
+/// kind (node or road): identical order and equality, integer comparisons.
+type RankKey = (bool, u32, usize);
 /// A junction mouth moves at most half the widest road along its arm, then
 /// half a width sideways. Two rounded coordinates add at most two centimetres.
 pub(crate) fn influence_margin(d: &MapDocument) -> i64 {
@@ -40,13 +44,13 @@ pub(crate) fn influence_margin(d: &MapDocument) -> i64 {
 pub(crate) fn width_influence_margin(maximum_width: u32) -> i64 {
     i64::from(maximum_width) + 224
 }
-fn key(r: &Road, i: usize) -> Key {
+fn key(r: &Road, i: usize) -> Key<'_> {
     if i == 0 {
-        (false, r.from.clone(), 0)
+        (false, &r.from, 0)
     } else if i + 1 == r.points.len() {
-        (false, r.to.clone(), 0)
+        (false, &r.to, 0)
     } else {
-        (true, r.id.clone(), i)
+        (true, &r.id, i)
     }
 }
 pub(crate) fn xy(p: Vertex) -> Point {
@@ -80,48 +84,100 @@ fn node_widths(d: &MapDocument) -> BTreeMap<&str, (usize, u32)> {
 pub(crate) struct PlanIndex<'a> {
     document: &'a MapDocument,
     bounds: crate::bounds_index::BoundsIndex,
-    incident: BTreeMap<&'a str, Vec<usize>>,
-    nodes: BTreeMap<&'a str, (usize, u32)>,
+    /// Node ID to its index in `incident`.
+    node_index: BTreeMap<&'a str, usize>,
+    /// Roads ending at each node, by node index.
+    incident: Vec<Vec<usize>>,
+    /// Node indices of every road's `from` and `to`, by document index.
+    ends: Vec<[usize; 2]>,
     margin: i64,
+    /// [`chain`] of every road, by document index.
+    chains: Vec<Vec<usize>>,
+    /// Dense ranks of node IDs (by node index) and road IDs (by document index).
+    node_rank: Vec<u32>,
+    road_rank: Vec<u32>,
+    /// Junction plans shared by every query of this immutable source.
+    junctions: std::cell::RefCell<JunctionCache<'a, RankKey>>,
 }
 
 impl<'a> PlanIndex<'a> {
     pub fn new(document: &'a MapDocument) -> Result<Self> {
         let margin = influence_margin(document);
-        let mut incident = BTreeMap::<&str, Vec<usize>>::new();
+        let mut node_index = BTreeMap::<&str, usize>::new();
+        let mut incident = Vec::<Vec<usize>>::new();
+        let mut ends = Vec::with_capacity(document.roads.len());
         let mut areas = Vec::with_capacity(document.roads.len());
         for (i, road) in document.roads.iter().enumerate() {
             crate::cancellation::checkpoint()?;
-            for id in [&road.from, &road.to] { incident.entry(id).or_default().push(i); }
+            ends.push([&road.from, &road.to].map(|id| {
+                let next = node_index.len();
+                let node = *node_index.entry(id).or_insert(next);
+                if node == incident.len() { incident.push(Vec::new()); }
+                incident[node].push(i);
+                node
+            }));
             areas.push(Bounds {
                 min: std::array::from_fn(|a| road.points.iter().map(|p| p[a*2]).min().unwrap()-margin),
                 max: std::array::from_fn(|a| road.points.iter().map(|p| p[a*2]).max().unwrap()+margin),
             });
         }
+        let nodes = node_widths(document);
+        let chains = document.roads.iter().map(|r| chain(r, &nodes)).collect();
+        let mut node_rank = vec![0; node_index.len()];
+        for (rank, &node) in node_index.values().enumerate() { node_rank[node] = rank as u32; }
+        let mut order: Vec<usize> = (0..document.roads.len()).collect();
+        order.sort_by_key(|&i| &document.roads[i].id);
+        let mut road_rank = vec![0; order.len()];
+        let mut rank = 0;
+        for (k, &i) in order.iter().enumerate() {
+            if k > 0 && document.roads[i].id != document.roads[order[k - 1]].id { rank += 1; }
+            road_rank[i] = rank;
+        }
         Ok(Self { document, bounds: crate::bounds_index::BoundsIndex::new(&areas),
-            incident, nodes: node_widths(document), margin })
+            node_index, incident, ends, margin, chains, node_rank, road_rank, junctions: Default::default() })
     }
 
-    pub fn plan(&self, bounds: &Bounds, work: &mut usize) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+    /// Edges are those `walls` keeps; one index always passes the same rule.
+    pub fn plan(&self, bounds: &Bounds, walls: Walls, work: &mut usize) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
         let mut selected = BTreeSet::new();
         for index in self.bounds.query(bounds, work)? {
             let road = &self.document.roads[index];
             if !hit(&road.points, bounds, self.margin) { continue; }
             selected.insert(index);
-            for id in [&road.from, &road.to] {
-                selected.extend(self.incident[id.as_str()].iter().copied());
+            for node in self.ends[index] {
+                selected.extend(self.incident[node].iter().copied());
             }
         }
-        let roads: Vec<_> = selected.into_iter().map(|i| &self.document.roads[i]).collect();
-        plan_selected(&roads, &self.nodes, bounds, self.margin, true)
+        // Cached junctions hold the edges of the first rule used on this index.
+        let rule = *self.junctions.borrow_mut().walls.get_or_insert(walls);
+        self.plan_indices(selected, bounds, walls, (rule == walls).then_some(&self.junctions))
+    }
+
+    fn plan_indices(&self, selected: BTreeSet<usize>, bounds: &Bounds, walls: Walls,
+        cache: Option<&std::cell::RefCell<JunctionCache<'a, RankKey>>>) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+        let selected: Vec<_> = selected.into_iter().collect();
+        let roads: Vec<_> = selected.iter().map(|&i| &self.document.roads[i]).collect();
+        let chains: Vec<_> = selected.iter().map(|&i| self.chains[i].as_slice()).collect();
+        let key = |i: usize, point: usize| -> RankKey {
+            let (road, r) = (selected[i], roads[i]);
+            if point == 0 {
+                (false, self.node_rank[self.ends[road][0]], 0)
+            } else if point + 1 == r.points.len() {
+                (false, self.node_rank[self.ends[road][1]], 0)
+            } else {
+                (true, self.road_rank[road], point)
+            }
+        };
+        plan_selected(&roads, &chains, &key, bounds, self.margin, true, walls, cache)
     }
 
     /// The plan of one graph node's junction from its incident roads alone.
     fn junction(&self, node: &str, bounds: &Bounds, work: &mut usize) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-        let roads: Vec<_> = self.incident.get(node).into_iter().flatten().copied().collect::<BTreeSet<_>>()
-            .into_iter().map(|i| &self.document.roads[i]).collect();
+        let roads: BTreeSet<_> = self.node_index.get(node).into_iter()
+            .flat_map(|&n| self.incident[n].iter().copied()).collect();
         crate::roads::tick(work, roads.len())?;
-        plan_selected(&roads, &self.nodes, bounds, self.margin, true)
+        // Only this node's star is complete here; never share these plans.
+        self.plan_indices(roads, bounds, Walls::All, None)
     }
 }
 
@@ -188,7 +244,7 @@ mod index_tests {
     fn assert_same(d: &MapDocument, area: Bounds) {
         let index = PlanIndex::new(d).unwrap();
         let (full_patches, full_edges) = plan(d, &area).unwrap();
-        let (local_patches, local_edges) = index.plan(&area, &mut 0).unwrap();
+        let (local_patches, local_edges) = index.plan(&area, Walls::All, &mut 0).unwrap();
         let patches = |v: Vec<Patch>| v.into_iter().map(|p|
             (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
         let edges = |v: Vec<Edge>| v.into_iter().map(|e|
@@ -210,6 +266,49 @@ mod index_tests {
         }
     }
 
+    /// One index answers many queries from shared junction plans (evicted
+    /// often under the test cap): every answer equals the cold whole-map plan,
+    /// and the deck rule keeps exactly the bridge/elevated edges.
+    #[test]
+    fn shared_junction_plans_match_cold_plans_and_deck_edges() {
+        let faces = |v: &[Patch]| v.iter().map(|p| (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
+        let edges = |v: &[Edge]| v.iter().map(|e| (e.a, e.b, e.station_cm.to_bits(), e.road.id.clone())).collect::<Vec<_>>();
+        for designed in [false, true] {
+            let mut d = fixture(designed);
+            if !designed {
+                d.roads[1].kind = RoadKind::Bridge;
+                d.roads[2].kind = RoadKind::Elevated;
+                for road in &mut d.roads[1..3] {
+                    road.from = format!("deck-{}", road.from);
+                    road.to = format!("deck-{}", road.to);
+                    for p in &mut road.points { p[1] = 600; }
+                }
+            }
+            let (all, decks) = (PlanIndex::new(&d).unwrap(), PlanIndex::new(&d).unwrap());
+            for pass in 0..2 {
+                for x in (-3000..9000).step_by(250) {
+                    for y in [-2600, -700, -120, 300, 2400] {
+                        let area = Bounds { min: [x, y], max: [x + 400, y + 300] };
+                        let (p0, e0) = plan(&d, &area).unwrap();
+                        let (p1, e1) = all.plan(&area, Walls::All, &mut 0).unwrap();
+                        let (p2, e2) = decks.plan(&area, Walls::Decks, &mut 0).unwrap();
+                        assert_eq!(faces(&p0), faces(&p1));
+                        assert_eq!(faces(&p0), faces(&p2));
+                        assert_eq!(edges(&e0), edges(&e1));
+                        let deck: Vec<_> = e0.into_iter().filter(|e| matches!(e.road.kind, RoadKind::Bridge | RoadKind::Elevated)).collect();
+                        assert_eq!(edges(&deck), edges(&e2));
+                        if pass == 1 {
+                            // Another rule on the same index bypasses its cache.
+                            let (p3, e3) = decks.plan(&area, Walls::All, &mut 0).unwrap();
+                            assert_eq!((faces(&p0), edges(&e1)), (faces(&p3), edges(&e3)));
+                        }
+                    }
+                }
+            }
+            assert!(!all.junctions.borrow().plans.is_empty());
+        }
+    }
+
     #[test]
     fn sparse_city_index_keeps_exact_geometry_and_bounded_query_work() {
         let mut d = fixture(false);
@@ -225,7 +324,7 @@ mod index_tests {
         assert_same(&d, area.clone());
         let index = PlanIndex::new(&d).unwrap();
         let mut work = 0;
-        index.plan(&area, &mut work).unwrap();
+        index.plan(&area, Walls::All, &mut work).unwrap();
         assert!(work < 100, "spatial traversal should skip distant roads: {work}");
         assert_same(&d, Bounds { min: [-100000; 2], max: [-90000; 2] });
     }
@@ -303,52 +402,71 @@ pub(crate) fn plan<'a>(
     d: &'a MapDocument,
     bounds: &Bounds,
 ) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    let roads: Vec<_> = d.roads.iter().collect();
-    plan_selected(&roads, &node_widths(d), bounds, influence_margin(d), true)
+    plan_all(d, bounds, true)
 }
 
 /// Ground surface generation consumes no ground boundary walls. Sidewalks have
 /// their own expanded plan; structural walls and fixed safety stationing remain.
 pub(crate) fn surface_plan<'a>(d: &'a MapDocument, bounds: &Bounds)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    let roads: Vec<_> = d.roads.iter().collect();
-    plan_selected(&roads, &node_widths(d), bounds, influence_margin(d), false)
+    plan_all(d, bounds, false)
 }
 
-fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bounds: &Bounds, margin: i64, ground_edges: bool)
+/// Point indices of `r` that bound its planned segments: every point, except
+/// that a designed road's junction approaches skip interior samples.
+fn chain(r: &Road, nodes: &BTreeMap<&str,(usize,u32)>) -> Vec<usize> {
+    if r.design.is_none() {
+        // No approach: running lengths never decrease, so every point is kept.
+        return (0..r.points.len()).collect();
+    }
+    let mut distances=vec![0.0];
+    for pair in r.points.windows(2){distances.push(distances.last().unwrap()+length(pair[0],pair[1]));}
+    let total=*distances.last().unwrap();
+    let approach=|id:&str|if r.design.is_some() && nodes[id].0>1 {(nodes[id].1 as f64*1.5+200.0).min(total/4.0)} else {0.0};
+    let (start,end)=(approach(&r.from),approach(&r.to));
+    (0..r.points.len()).filter(|&i|i==0 || i+1==r.points.len() || distances[i]>=start && total-distances[i]>=end).collect()
+}
+/// Plan of every road of `d`. Undesigned roads share one identity [`chain`];
+/// node widths are only gathered when a designed road needs its approaches.
+fn plan_all<'a>(d: &'a MapDocument, bounds: &Bounds, ground_edges: bool) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+    let roads: Vec<_> = d.roads.iter().collect();
+    let nodes = if roads.iter().any(|r| r.design.is_some()) { node_widths(d) } else { BTreeMap::new() };
+    let identity: Vec<usize> = (0..roads.iter().map(|r| r.points.len()).max().unwrap_or(0)).collect();
+    let designed: Vec<_> = roads.iter().map(|r| r.design.as_ref().map(|_| chain(r, &nodes))).collect();
+    let chains: Vec<_> = roads.iter().zip(&designed)
+        .map(|(r, chain)| chain.as_deref().unwrap_or(&identity[..r.points.len()])).collect();
+    plan_selected(&roads, &chains, &|i, p| key(roads[i], p), bounds, influence_margin(d), ground_edges, Walls::All, None)
+}
+
+/// `chains[i]` is [`chain`] of `roads[i]`; `key(i, point)` orders like [`key`]
+/// of `roads[i]` and `point`.
+#[allow(clippy::too_many_arguments)]
+fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key: &dyn Fn(usize, usize) -> K, bounds: &Bounds,
+    margin: i64, ground_edges: bool, keep: Walls, cache: Option<&std::cell::RefCell<JunctionCache<'a, K>>>)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    let mut groups: BTreeMap<Key, Vec<Arm>> = BTreeMap::new();
-    let chains:BTreeMap<_,Vec<_>>=roads.iter().map(|r| {
-        let mut distances=vec![0.0];
-        for pair in r.points.windows(2){distances.push(distances.last().unwrap()+length(pair[0],pair[1]));}
-        let total=*distances.last().unwrap();
-        let approach=|id:&str|if r.design.is_some() && nodes[id].0>1 {(nodes[id].1 as f64*1.5+200.0).min(total/4.0)} else {0.0};
-        let (start,end)=(approach(&r.from),approach(&r.to));
-        (r.id.as_str(),(0..r.points.len()).filter(|&i|i==0 || i+1==r.points.len() || distances[i]>=start && total-distances[i]>=end).collect())
-    }).collect();
+    let mut groups: BTreeMap<K, Vec<Arm>> = BTreeMap::new();
     // Include complete endpoint junctions when a corridor touches this cell.
     let mut relevant = BTreeSet::new();
     let mut local_segments = 0;
-    let width = |r: &Road, i: usize| r.widths_cm[i] as f64;
-    for r in roads {
-        for indices in chains[r.id.as_str()].windows(2) {
+    for (index, &r) in roads.iter().enumerate() {
+        for indices in chains[index].windows(2) {
             let s=[r.points[indices[0]],r.points[indices[1]]];
             if hit(&s, bounds, margin) {
                 local_segments += 1;
                 if local_segments > MAX_LOCAL_PATCHES / 8 {
                     return Err(error("E_BUDGET", "road local segment limit"));
                 }
-                relevant.insert(key(r, indices[0]));
-                relevant.insert(key(r, indices[1]));
+                relevant.insert(key(index, indices[0]));
+                relevant.insert(key(index, indices[1]));
             }
         }
     }
     let mut arm_count = 0;
-    for r in roads {
-        for indices in chains[r.id.as_str()].windows(2) {
+    for (index, &r) in roads.iter().enumerate() {
+        for indices in chains[index].windows(2) {
             let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
             for end in 0..2 {
-                let k = key(r, indices[end]);
+                let k = key(index, indices[end]);
                 if relevant.contains(&k) {
                     arm_count += 1;
                     if arm_count > MAX_LOCAL_PATCHES {
@@ -366,327 +484,32 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
             }
         }
     }
-    let mut mouths: BTreeMap<(&str, usize, usize), [Vertex; 2]> = BTreeMap::new();
+    let mut mouths: BTreeMap<MouthKey, [Vertex; 2]> = BTreeMap::new();
     let mut patches = vec![];
     let mut walls = vec![];
+    let mut wall_count = 0;
     let mut sections=BTreeMap::new();
-    for arms in groups.values_mut() {
+    for (key, arms) in groups.iter_mut() {
         crate::cancellation::checkpoint()?;
-        if arms.len()==2 && arms[0].road.id==arms[1].road.id && arms[0].road.design.is_some() && arms[0].point_index==arms[1].point_index {
-            for arm in arms.iter() {
-                let at=arm.point_index;
-                if !sections.contains_key(arm.road.id.as_str()) {sections.insert(arm.road.id.as_str(),crate::road_design::cross_sections(arm.road)?);}
-                let mut section=sections[arm.road.id.as_str()][at];
-                if arm.end==1 {section.swap(0,1);}
-                mouths.insert((&arm.road.id,arm.segment,arm.end),section);
+        let cached = cache.and_then(|c| c.borrow().get(key));
+        let planned = match cached {
+            Some(planned) => planned,
+            None => {
+                let planned = std::rc::Rc::new(plan_junction(arms, &mut sections, margin, ground_edges, keep)?);
+                if let Some(c) = cache { c.borrow_mut().insert(*key, planned.clone()); }
+                planned
             }
-            continue;
-        }
-        arms.sort_by_key(|a| (&a.road.id, a.segment, a.end));
-        let radius = arms
-            .iter()
-            .map(|a| width(a.road, a.segment) / 2.0)
-            .fold(0.0, f64::max);
-        let mut ring = vec![];
-        for arm in arms.iter() {
-            if arms.len()==1 && arm.road.design.is_some() {
-                if !sections.contains_key(arm.road.id.as_str()) {sections.insert(arm.road.id.as_str(),crate::road_design::cross_sections(arm.road)?);}
-                let mut mouth=sections[arm.road.id.as_str()][arm.point_index];
-                if arm.end==1 {mouth.swap(0,1);}
-                mouths.insert((&arm.road.id,arm.segment,arm.end),mouth);ring.extend(mouth);
-                continue;
-            }
-            let dx = (arm.other[0] - arm.point[0]) as f64;
-            let dy = (arm.other[2] - arm.point[2]) as f64;
-            let len = libm::sqrt(dx * dx + dy * dy);
-            let t = if arms.len() > 1 {
-                radius.min(len * 0.40) / len
-            } else {
-                0.0
-            };
-            let center: Vertex = std::array::from_fn(|i| {
-                arm.point[i] + libm::round((arm.other[i] - arm.point[i]) as f64 * t) as i64
-            });
-            let half = width(arm.road, arm.segment) / 2.0;
-            let offset = [
-                libm::round(-dy / len * half) as i64,
-                libm::round(dx / len * half) as i64,
-            ];
-            let mouth = [
-                [center[0] + offset[0], center[1], center[2] + offset[1]],
-                [center[0] - offset[0], center[1], center[2] - offset[1]],
-            ];
-            mouths.insert((&arm.road.id, arm.segment, arm.end), mouth);
-            ring.extend(mouth);
-        }
-        if arms.len() > 1 {
-            // Nearly retraced ground approaches can have identical rounded
-            // mouths. Their hull has no depth, although the physical corridor
-            // has a real terminal cap at the shared node. Include that cap
-            // before the ordinary union/fillet path, preserving both arms.
-            if arms.iter().all(|a| a.road.kind == RoadKind::Ground) {
-                let first = &arms[0];
-                let len = length(first.point, first.other);
-                let direction = [
-                    (first.other[0] - first.point[0]) as f64 / len,
-                    (first.other[2] - first.point[2]) as f64 / len,
-                ];
-                let retraced = arms.iter().all(|a| {
-                    let length = length(a.point, a.other);
-                    let dot = ((a.other[0] - a.point[0]) as f64 * direction[0]
-                        + (a.other[2] - a.point[2]) as f64 * direction[1]) / length;
-                    dot > 0.9999
-                });
-                if retraced {
-                    for side in [-1.0, 1.0] {
-                        ring.push([
-                            first.point[0] + libm::round(-direction[0] * radius - direction[1] * radius * side) as i64,
-                            first.point[1],
-                            first.point[2] + libm::round(-direction[1] * radius + direction[0] * radius * side) as i64,
-                        ]);
-                    }
-                }
-            }
-            let ring = hull(ring);
-            // Coincident horizontal mouth corners have one shared height even
-            // when the incoming grades differ. Preserve the authored node and
-            // interpolate each outgoing corridor from this canonical corner.
-            for arm in arms.iter() {
-                let m = mouths
-                    .get_mut(&(arm.road.id.as_str(), arm.segment, arm.end))
-                    .unwrap();
-                for p in m {
-                    if let Some(q) = ring.iter().find(|q| xy(**q) == xy(*p)) {
-                        *p = *q;
-                    }
-                }
-            }
-            let structural = arms.iter().any(|a| a.road.kind != RoadKind::Ground);
-            let terrain_join = structural && arms.iter().any(|a| a.road.kind == RoadKind::Ground);
-            if structural {
-                for arm in arms.iter() {
-                    let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
-                    if !ring
-                        .iter()
-                        .enumerate()
-                        .any(|(i, a)| m.contains(a) && m.contains(&ring[(i + 1) % ring.len()]))
-                    {
-                        return Err(error(
-                            "E_GEOMETRY",
-                            format!("overlapping structural junction mouths at {} segment {} {:?}; author separated approaches", arm.road.id, arm.segment, arm.point),
-                        ));
-                    }
-                }
-                let ceilings: BTreeSet<_> = arms
-                    .iter()
-                    .filter(|a| a.road.kind == RoadKind::Tunnel)
-                    .map(|a| a.road.clearance_cm)
-                    .collect();
-                if ceilings.len() > 1 {
-                    return Err(error("E_GEOMETRY", "joined tunnel clearances must agree"));
-                }
-            }
-            // Extend each internal mouth before rounding. Its straight cross-section
-            // remains a shared edge with the corridor; fillets never cap an entrance.
-            let original: BTreeMap<_, _> = arms
-                .iter()
-                .map(|arm| {
-                    let k = (arm.road.id.as_str(), arm.segment, arm.end);
-                    (k, mouths[&k])
-                })
-                .collect();
-            let mut corners = Vec::new();
-            for i in 0..ring.len() {
-                let a = ring[i];
-                let c = ring[(i + 1) % ring.len()];
-                let owner = arms
-                    .iter()
-                    .position(|arm| {
-                        original[&(arm.road.id.as_str(), arm.segment, arm.end)].contains(&a)
-                    })
-                    .unwrap_or(0); // A retraced cap belongs to the first source arm.
-                corners.push(Corner {
-                    p: a,
-                    owner,
-                    round: true,
-                    seam: false,
-                });
-                if let Some((index, arm)) = arms.iter().enumerate().find(|(_, arm)| {
-                    let m = original[&(arm.road.id.as_str(), arm.segment, arm.end)];
-                    m.contains(&a) && m.contains(&c)
-                }) {
-                    let len = length(arm.point, arm.other);
-                    let old = radius.min(len * 0.40);
-                    let extra = (radius + 200.0).min(len * 0.45) - old;
-                    let shift = |p: Vertex| {
-                        std::array::from_fn(|j| {
-                            p[j] + libm::round((arm.other[j] - arm.point[j]) as f64 * extra / len)
-                                as i64
-                        })
-                    };
-                    let m = original[&(arm.road.id.as_str(), arm.segment, arm.end)].map(shift);
-                    mouths.insert((&arm.road.id, arm.segment, arm.end), m);
-                    corners.last_mut().unwrap().owner = index;
-                    corners.push(Corner {
-                        p: shift(a),
-                        owner: index,
-                        round: false,
-                        seam: true,
-                    });
-                    corners.push(Corner {
-                        p: shift(c),
-                        owner: index,
-                        round: false,
-                        seam: false,
-                    });
-                } else {
-                    // Intersect the actual offset boundaries. A convex hull of
-                    // mouth cross-sections alone cuts off the outside of bends
-                    // and removes support from the outer lane.
-                    let exposed = |arm: &Arm| {
-                        let m = original[&(arm.road.id.as_str(), arm.segment, arm.end)];
-                        (0..ring.len()).any(|j| {
-                            m.contains(&ring[j]) && m.contains(&ring[(j + 1) % ring.len()])
-                        })
-                    };
-                    'pairs: for (ai, aa) in arms.iter().enumerate() {
-                        // A mouth hidden inside another ground approach is not
-                        // an exterior branch; extending its line makes false lobes.
-                        if !exposed(aa) {
-                            continue;
-                        }
-                        if !original[&(aa.road.id.as_str(), aa.segment, aa.end)].contains(&a) {
-                            continue;
-                        }
-                        for bb in arms.iter() {
-                            if !exposed(bb) {
-                                continue;
-                            }
-                            if !original[&(bb.road.id.as_str(), bb.segment, bb.end)].contains(&c) {
-                                continue;
-                            }
-                            let u = [
-                                (aa.point[0] - aa.other[0]) as f64,
-                                (aa.point[2] - aa.other[2]) as f64,
-                            ];
-                            let v = [
-                                (bb.point[0] - bb.other[0]) as f64,
-                                (bb.point[2] - bb.other[2]) as f64,
-                            ];
-                            let cross = |p: [f64; 2], q: [f64; 2]| p[0] * q[1] - p[1] * q[0];
-                            let determinant = cross(u, v);
-                            if determinant.abs() < 1.0 {
-                                continue;
-                            }
-                            let delta = [(c[0] - a[0]) as f64, (c[2] - a[2]) as f64];
-                            let t = cross(delta, v) / determinant;
-                            let s = cross(delta, u) / determinant;
-                            if t < -1e-9 || s < -1e-9 {
-                                continue;
-                            }
-                            let p = [
-                                libm::round(a[0] as f64 + u[0] * t) as i64,
-                                libm::round(
-                                    (a[1] as f64
-                                        + (aa.point[1] - aa.other[1]) as f64 * t
-                                        + c[1] as f64
-                                        + (bb.point[1] - bb.other[1]) as f64 * s)
-                                        * 0.5,
-                                ) as i64,
-                                libm::round(a[2] as f64 + u[1] * t) as i64,
-                            ];
-                            if length(p, aa.point) > margin as f64 {
-                                return Err(geometry_error(aa,p,"offset boundaries exceed junction influence; separate the approaches"));
-                            }
-                            if xy(p) != xy(a) && xy(p) != xy(c) {
-                                corners.push(Corner {
-                                    p,
-                                    owner: ai,
-                                    round: true,
-                                    seam: false,
-                                });
-                            }
-                            break 'pairs;
-                        }
-                    }
-                }
-            }
-            let corners = resolve_ground_overlaps(corners, &arms)?;
-            let rounded = rounded_ring(&corners, &arms)?;
-            // Quantized tangencies can make the node fall outside a tiny fan
-            // sector. Triangulate the actual simple polygon, retaining the
-            // authored node as an interior height constraint when necessary.
-            let center = arms[0].point;
-            let mut faces = Vec::new();
-            if (0..rounded.len())
-                .all(|i| orient(center, rounded[i].p, rounded[(i + 1) % rounded.len()].p) >= 0)
-            {
-                for i in 0..rounded.len() {
-                    faces.push((
-                        [center, rounded[i].p, rounded[(i + 1) % rounded.len()].p],
-                        rounded[i].owner,
-                    ));
-                }
-            } else {
-                let poly: Vec<_> = rounded.iter().map(|c| xy(c.p)).collect();
-                for indices in crate::generation::polygon_triangles(&poly)? {
-                    let v = indices.map(|i| rounded[i].p);
-                    let owner = rounded[indices[1]].owner;
-                    if point_in_polygon(xy(center), &v.map(xy)) && !v.contains(&center) {
-                        for i in 0..3 {
-                            faces.push(([center, v[i], v[(i + 1) % 3]], owner));
-                        }
-                    } else {
-                        faces.push((v, owner));
-                    }
-                }
-            }
-            for (v, owner) in faces {
-                if orient(v[0], v[1], v[2]) != 0 && hit(&v, bounds, 0) {
-                    let owner = &arms[owner];
-                    patches.push(Patch {
-                        v,
-                        road: owner.road,
-                        surface: owner.road.surfaces[owner.segment],
-                        terrain_join,
-                    });
-                }
-            }
-            let mut station = 0.0;
-            for i in 0..rounded.len() {
-                let a = &rounded[i];
-                let c = &rounded[(i + 1) % rounded.len()];
-                let owner = &arms[a.owner];
-                if !a.seam && (ground_edges || owner.road.kind != RoadKind::Ground) {
-                    walls.push(Edge {
-                        a: a.p,
-                        b: c.p,
-                        station_cm: station,
-                        road: owner.road,
-                    });
-                }
-                station += length(a.p, c.p);
-            }
-        } else {
-            let arm = &arms[0];
-            let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
-            // The unconnected end is a real exterior, including the deck cap.
-            if !matches!(arm.road.kind, RoadKind::Tunnel | RoadKind::Underpass)
-                && (ground_edges || arm.road.kind != RoadKind::Ground) {
-                walls.push(Edge {
-                    a: m[0],
-                    b: m[1],
-                    station_cm: 0.0,
-                    road: arm.road,
-                });
-            }
-        }
-        if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
-            return Err(error("E_BUDGET", format!("road local junction limit ({} faces, {} boundaries)", patches.len(), walls.len())));
+        };
+        mouths.extend(planned.mouths.iter().copied());
+        patches.extend(planned.faces.iter().filter(|p| hit(&p.v, bounds, 0)).cloned());
+        walls.extend(planned.walls.iter().cloned());
+        wall_count += planned.wall_count;
+        if patches.len() + wall_count > MAX_LOCAL_PATCHES {
+            return Err(error("E_BUDGET", format!("road local junction limit ({} faces, {} boundaries)", patches.len(), wall_count)));
         }
     }
-    for r in roads {
-        for indices in chains[r.id.as_str()].windows(2) {
+    for (index, &r) in roads.iter().enumerate() {
+        for indices in chains[index].windows(2) {
             let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
             if !hit(&s, bounds, margin) {
                 continue;
@@ -709,6 +532,8 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
             // Keep the road on the left of every exterior edge.
             for (a, b) in [(v[1], v[0]), (v[3], v[2])] {
                 if !ground_edges && r.kind == RoadKind::Ground { continue; }
+                wall_count += 1;
+                if !keep.keep(r) { continue; }
                 walls.push(Edge {
                     a,
                     b,
@@ -716,7 +541,7 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
                     road: r,
                 });
             }
-            if patches.len() + walls.len() > MAX_LOCAL_PATCHES {
+            if patches.len() + wall_count > MAX_LOCAL_PATCHES {
                 return Err(error("E_BUDGET", "road local corridor limit"));
             }
         }
@@ -733,6 +558,388 @@ fn plan_selected<'a>(roads: &[&'a Road], nodes: &BTreeMap<&str,(usize,u32)>, bou
     Ok((patches, walls))
 }
 
+/// Bounded memo of [`Junction`] plans for one road set, node table, margin and
+/// edge rule (one [`PlanIndex`]). Queries near the same junction (every solid
+/// of a city block) otherwise rebuild identical fillets and unions. Clearing
+/// when full only costs recomputation; results never depend on the cache.
+pub(crate) struct JunctionCache<'a, K> {
+    walls: Option<Walls>,
+    plans: BTreeMap<K, std::rc::Rc<Junction<'a>>>,
+    bytes: usize,
+}
+impl<K> Default for JunctionCache<'_, K> {
+    fn default() -> Self { Self { walls: None, plans: BTreeMap::new(), bytes: 0 } }
+}
+impl<'a, K: Ord> JunctionCache<'a, K> {
+    // Tests evict constantly; eviction never changes a plan.
+    const MAX_BYTES: usize = if cfg!(test) { 4 * 1024 } else { 16 * 1024 * 1024 };
+    fn get(&self, key: &K) -> Option<std::rc::Rc<Junction<'a>>> {
+        self.plans.get(key).cloned()
+    }
+    fn insert(&mut self, key: K, plan: std::rc::Rc<Junction<'a>>) {
+        use std::mem::size_of;
+        let bytes = 128
+            + plan.mouths.len() * size_of::<(MouthKey, [Vertex; 2])>()
+            + plan.faces.len() * size_of::<Patch>()
+            + plan.walls.len() * size_of::<Edge>();
+        if self.bytes + bytes > Self::MAX_BYTES {
+            self.plans.clear();
+            self.bytes = 0;
+        }
+        self.bytes += bytes;
+        self.plans.insert(key, plan);
+    }
+}
+/// A segment end: road ID, segment, end.
+type MouthKey<'a> = (&'a str, usize, usize);
+/// Bounds-independent plan of one junction group: the arm mouths, every
+/// non-degenerate face and every boundary edge, in planning order. A relevant
+/// group always holds the complete endpoint star, so its plan never depends on
+/// the query bounds; callers filter faces by bounds afterwards.
+struct Junction<'a> {
+    mouths: Vec<(MouthKey<'a>, [Vertex; 2])>,
+    faces: Vec<Patch<'a>>,
+    /// Retained boundary edges ([`Walls`]); `wall_count` counts all of them.
+    walls: Vec<Edge<'a>>,
+    wall_count: usize,
+}
+/// Boundary edges a plan returns. Every edge still counts toward the local
+/// junction/corridor limits, so the rule never changes a plan's success.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Walls {
+    All,
+    /// Only bridge and elevated deck edges (the placement overlap rule).
+    Decks,
+}
+impl Walls {
+    fn keep(self, road: &Road) -> bool {
+        self == Walls::All || matches!(road.kind, RoadKind::Bridge | RoadKind::Elevated)
+    }
+}
+fn plan_junction<'a>(arms: &mut [Arm<'a>], sections: &mut BTreeMap<&'a str, Vec<[Vertex; 2]>>, margin: i64, ground_edges: bool,
+    keep: Walls) -> Result<Junction<'a>> {
+    let width = |r: &Road, i: usize| r.widths_cm[i] as f64;
+    let mut mouths: BTreeMap<MouthKey<'a>, [Vertex; 2]> = BTreeMap::new();
+    let mut out_faces = vec![];
+    let mut out_walls = vec![];
+    let mut wall_count = 0;
+    if arms.len()==2 && arms[0].road.id==arms[1].road.id && arms[0].road.design.is_some() && arms[0].point_index==arms[1].point_index {
+        for arm in arms.iter() {
+            let at=arm.point_index;
+            if !sections.contains_key(arm.road.id.as_str()) {sections.insert(arm.road.id.as_str(),crate::road_design::cross_sections(arm.road)?);}
+            let mut section=sections[arm.road.id.as_str()][at];
+            if arm.end==1 {section.swap(0,1);}
+            mouths.insert((&arm.road.id,arm.segment,arm.end),section);
+        }
+        return Ok(Junction { mouths: mouths.into_iter().collect(), faces: vec![], walls: vec![], wall_count: 0 });
+    }
+    arms.sort_by_key(|a| (&a.road.id, a.segment, a.end));
+    let radius = arms
+        .iter()
+        .map(|a| width(a.road, a.segment) / 2.0)
+        .fold(0.0, f64::max);
+    let mut ring = vec![];
+    for arm in arms.iter() {
+        if arms.len()==1 && arm.road.design.is_some() {
+            if !sections.contains_key(arm.road.id.as_str()) {sections.insert(arm.road.id.as_str(),crate::road_design::cross_sections(arm.road)?);}
+            let mut mouth=sections[arm.road.id.as_str()][arm.point_index];
+            if arm.end==1 {mouth.swap(0,1);}
+            mouths.insert((&arm.road.id,arm.segment,arm.end),mouth);ring.extend(mouth);
+            continue;
+        }
+        let dx = (arm.other[0] - arm.point[0]) as f64;
+        let dy = (arm.other[2] - arm.point[2]) as f64;
+        let len = libm::sqrt(dx * dx + dy * dy);
+        let t = if arms.len() > 1 {
+            radius.min(len * 0.40) / len
+        } else {
+            0.0
+        };
+        let center: Vertex = std::array::from_fn(|i| {
+            arm.point[i] + libm::round((arm.other[i] - arm.point[i]) as f64 * t) as i64
+        });
+        let half = width(arm.road, arm.segment) / 2.0;
+        let offset = [
+            libm::round(-dy / len * half) as i64,
+            libm::round(dx / len * half) as i64,
+        ];
+        let mouth = [
+            [center[0] + offset[0], center[1], center[2] + offset[1]],
+            [center[0] - offset[0], center[1], center[2] - offset[1]],
+        ];
+        mouths.insert((&arm.road.id, arm.segment, arm.end), mouth);
+        ring.extend(mouth);
+    }
+    if arms.len() > 1 {
+        // Nearly retraced ground approaches can have identical rounded
+        // mouths. Their hull has no depth, although the physical corridor
+        // has a real terminal cap at the shared node. Include that cap
+        // before the ordinary union/fillet path, preserving both arms.
+        if arms.iter().all(|a| a.road.kind == RoadKind::Ground) {
+            let first = &arms[0];
+            let len = length(first.point, first.other);
+            let direction = [
+                (first.other[0] - first.point[0]) as f64 / len,
+                (first.other[2] - first.point[2]) as f64 / len,
+            ];
+            let retraced = arms.iter().all(|a| {
+                let length = length(a.point, a.other);
+                let dot = ((a.other[0] - a.point[0]) as f64 * direction[0]
+                    + (a.other[2] - a.point[2]) as f64 * direction[1]) / length;
+                dot > 0.9999
+            });
+            if retraced {
+                for side in [-1.0, 1.0] {
+                    ring.push([
+                        first.point[0] + libm::round(-direction[0] * radius - direction[1] * radius * side) as i64,
+                        first.point[1],
+                        first.point[2] + libm::round(-direction[1] * radius + direction[0] * radius * side) as i64,
+                    ]);
+                }
+            }
+        }
+        let ring = hull(ring);
+        // Coincident horizontal mouth corners have one shared height even
+        // when the incoming grades differ. Preserve the authored node and
+        // interpolate each outgoing corridor from this canonical corner.
+        for arm in arms.iter() {
+            let m = mouths
+                .get_mut(&(arm.road.id.as_str(), arm.segment, arm.end))
+                .unwrap();
+            for p in m {
+                if let Some(q) = ring.iter().find(|q| xy(**q) == xy(*p)) {
+                    *p = *q;
+                }
+            }
+        }
+        let structural = arms.iter().any(|a| a.road.kind != RoadKind::Ground);
+        let terrain_join = structural && arms.iter().any(|a| a.road.kind == RoadKind::Ground);
+        if structural {
+            for arm in arms.iter() {
+                let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
+                if !ring
+                    .iter()
+                    .enumerate()
+                    .any(|(i, a)| m.contains(a) && m.contains(&ring[(i + 1) % ring.len()]))
+                {
+                    return Err(error(
+                        "E_GEOMETRY",
+                        format!("overlapping structural junction mouths at {} segment {} {:?}; author separated approaches", arm.road.id, arm.segment, arm.point),
+                    ));
+                }
+            }
+            let ceilings: BTreeSet<_> = arms
+                .iter()
+                .filter(|a| a.road.kind == RoadKind::Tunnel)
+                .map(|a| a.road.clearance_cm)
+                .collect();
+            if ceilings.len() > 1 {
+                return Err(error("E_GEOMETRY", "joined tunnel clearances must agree"));
+            }
+        }
+        // Extend each internal mouth before rounding. Its straight cross-section
+        // remains a shared edge with the corridor; fillets never cap an entrance.
+        let original: BTreeMap<_, _> = arms
+            .iter()
+            .map(|arm| {
+                let k = (arm.road.id.as_str(), arm.segment, arm.end);
+                (k, mouths[&k])
+            })
+            .collect();
+        let mut corners = Vec::new();
+        for i in 0..ring.len() {
+            let a = ring[i];
+            let c = ring[(i + 1) % ring.len()];
+            let owner = arms
+                .iter()
+                .position(|arm| {
+                    original[&(arm.road.id.as_str(), arm.segment, arm.end)].contains(&a)
+                })
+                .unwrap_or(0); // A retraced cap belongs to the first source arm.
+            corners.push(Corner {
+                p: a,
+                owner,
+                round: true,
+                seam: false,
+            });
+            if let Some((index, arm)) = arms.iter().enumerate().find(|(_, arm)| {
+                let m = original[&(arm.road.id.as_str(), arm.segment, arm.end)];
+                m.contains(&a) && m.contains(&c)
+            }) {
+                let len = length(arm.point, arm.other);
+                let old = radius.min(len * 0.40);
+                let extra = (radius + 200.0).min(len * 0.45) - old;
+                let shift = |p: Vertex| {
+                    std::array::from_fn(|j| {
+                        p[j] + libm::round((arm.other[j] - arm.point[j]) as f64 * extra / len)
+                            as i64
+                    })
+                };
+                let m = original[&(arm.road.id.as_str(), arm.segment, arm.end)].map(shift);
+                mouths.insert((&arm.road.id, arm.segment, arm.end), m);
+                corners.last_mut().unwrap().owner = index;
+                corners.push(Corner {
+                    p: shift(a),
+                    owner: index,
+                    round: false,
+                    seam: true,
+                });
+                corners.push(Corner {
+                    p: shift(c),
+                    owner: index,
+                    round: false,
+                    seam: false,
+                });
+            } else {
+                // Intersect the actual offset boundaries. A convex hull of
+                // mouth cross-sections alone cuts off the outside of bends
+                // and removes support from the outer lane.
+                let exposed = |arm: &Arm| {
+                    let m = original[&(arm.road.id.as_str(), arm.segment, arm.end)];
+                    (0..ring.len()).any(|j| {
+                        m.contains(&ring[j]) && m.contains(&ring[(j + 1) % ring.len()])
+                    })
+                };
+                'pairs: for (ai, aa) in arms.iter().enumerate() {
+                    // A mouth hidden inside another ground approach is not
+                    // an exterior branch; extending its line makes false lobes.
+                    if !exposed(aa) {
+                        continue;
+                    }
+                    if !original[&(aa.road.id.as_str(), aa.segment, aa.end)].contains(&a) {
+                        continue;
+                    }
+                    for bb in arms.iter() {
+                        if !exposed(bb) {
+                            continue;
+                        }
+                        if !original[&(bb.road.id.as_str(), bb.segment, bb.end)].contains(&c) {
+                            continue;
+                        }
+                        let u = [
+                            (aa.point[0] - aa.other[0]) as f64,
+                            (aa.point[2] - aa.other[2]) as f64,
+                        ];
+                        let v = [
+                            (bb.point[0] - bb.other[0]) as f64,
+                            (bb.point[2] - bb.other[2]) as f64,
+                        ];
+                        let cross = |p: [f64; 2], q: [f64; 2]| p[0] * q[1] - p[1] * q[0];
+                        let determinant = cross(u, v);
+                        if determinant.abs() < 1.0 {
+                            continue;
+                        }
+                        let delta = [(c[0] - a[0]) as f64, (c[2] - a[2]) as f64];
+                        let t = cross(delta, v) / determinant;
+                        let s = cross(delta, u) / determinant;
+                        if t < -1e-9 || s < -1e-9 {
+                            continue;
+                        }
+                        let p = [
+                            libm::round(a[0] as f64 + u[0] * t) as i64,
+                            libm::round(
+                                (a[1] as f64
+                                    + (aa.point[1] - aa.other[1]) as f64 * t
+                                    + c[1] as f64
+                                    + (bb.point[1] - bb.other[1]) as f64 * s)
+                                    * 0.5,
+                            ) as i64,
+                            libm::round(a[2] as f64 + u[1] * t) as i64,
+                        ];
+                        if length(p, aa.point) > margin as f64 {
+                            return Err(geometry_error(aa,p,"offset boundaries exceed junction influence; separate the approaches"));
+                        }
+                        if xy(p) != xy(a) && xy(p) != xy(c) {
+                            corners.push(Corner {
+                                p,
+                                owner: ai,
+                                round: true,
+                                seam: false,
+                            });
+                        }
+                        break 'pairs;
+                    }
+                }
+            }
+        }
+        let corners = resolve_ground_overlaps(corners, arms)?;
+        let rounded = rounded_ring(&corners, arms)?;
+        // Quantized tangencies can make the node fall outside a tiny fan
+        // sector. Triangulate the actual simple polygon, retaining the
+        // authored node as an interior height constraint when necessary.
+        let center = arms[0].point;
+        let mut faces = Vec::new();
+        if (0..rounded.len())
+            .all(|i| orient(center, rounded[i].p, rounded[(i + 1) % rounded.len()].p) >= 0)
+        {
+            for i in 0..rounded.len() {
+                faces.push((
+                    [center, rounded[i].p, rounded[(i + 1) % rounded.len()].p],
+                    rounded[i].owner,
+                ));
+            }
+        } else {
+            let poly: Vec<_> = rounded.iter().map(|c| xy(c.p)).collect();
+            for indices in crate::generation::polygon_triangles(&poly)? {
+                let v = indices.map(|i| rounded[i].p);
+                let owner = rounded[indices[1]].owner;
+                if point_in_polygon(xy(center), &v.map(xy)) && !v.contains(&center) {
+                    for i in 0..3 {
+                        faces.push(([center, v[i], v[(i + 1) % 3]], owner));
+                    }
+                } else {
+                    faces.push((v, owner));
+                }
+            }
+        }
+        for (v, owner) in faces {
+            if orient(v[0], v[1], v[2]) != 0 {
+                let owner = &arms[owner];
+                out_faces.push(Patch {
+                    v,
+                    road: owner.road,
+                    surface: owner.road.surfaces[owner.segment],
+                    terrain_join,
+                });
+            }
+        }
+        let mut station = 0.0;
+        for i in 0..rounded.len() {
+            let a = &rounded[i];
+            let c = &rounded[(i + 1) % rounded.len()];
+            let owner = &arms[a.owner];
+            if !a.seam && (ground_edges || owner.road.kind != RoadKind::Ground) {
+                wall_count += 1;
+                if keep.keep(owner.road) {
+                    out_walls.push(Edge {
+                        a: a.p,
+                        b: c.p,
+                        station_cm: station,
+                        road: owner.road,
+                    });
+                }
+            }
+            station += length(a.p, c.p);
+        }
+    } else {
+        let arm = &arms[0];
+        let m = mouths[&(arm.road.id.as_str(), arm.segment, arm.end)];
+        // The unconnected end is a real exterior, including the deck cap.
+        if !matches!(arm.road.kind, RoadKind::Tunnel | RoadKind::Underpass)
+            && (ground_edges || arm.road.kind != RoadKind::Ground) {
+            wall_count += 1;
+            if keep.keep(arm.road) {
+                out_walls.push(Edge {
+                    a: m[0],
+                    b: m[1],
+                    station_cm: 0.0,
+                    road: arm.road,
+                });
+            }
+        }
+    }
+    Ok(Junction { mouths: mouths.into_iter().collect(), faces: out_faces, walls: out_walls, wall_count })
+}
 #[derive(Clone)]
 struct Corner {
     p: Vertex,
