@@ -269,7 +269,7 @@ fn bounded_cell_admission_reuses_snapshot_without_mutating_or_caching_old_geomet
     s.document.buildings.push(Building { id:"invalid-after-validation".into(),
         footprint:vec![[100,100],[200,200],[100,200],[200,100]], holes:vec![],
         base_cm:0,height_cm:300,usage:"residential".into(),material:"concrete".into(),
-        roof:"flat".into(),entrances:vec![] });
+        roof:"flat".into(),entrances:vec![],parts:vec![] });
     assert!(s.validate_cells(&cells).is_err(), "later edits must be validated again");
 }
 

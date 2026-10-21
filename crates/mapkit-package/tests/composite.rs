@@ -92,7 +92,7 @@ fn every_current_palette_piece_compiles_alongside_terrain() {
 #[test]
 fn derived_supports_must_not_block_independent_solids() {
     let mut b=base();
-    b.buildings.push(Building{id:"keep-under-track".into(),footprint:vec![[-300,-100],[300,-100],[300,900],[-300,900]],holes:vec![],base_cm:0,height_cm:300,usage:"commercial".into(),material:"concrete".into(),roof:"flat".into(),entrances:vec![]});
+    b.buildings.push(Building{id:"keep-under-track".into(),footprint:vec![[-300,-100],[300,-100],[300,900],[-300,900]],holes:vec![],base_cm:0,height_cm:300,usage:"commercial".into(),material:"concrete".into(),roof:"flat".into(),entrances:vec![],parts:vec![] });
     let mut source=Source::empty();let mut p=instance("raised","straight",400);p.position_cm[1]=1000;source.instances.push(p);
     source.terrain_policies.insert("raised".into(),road_design::TerrainPolicy::Elevated);
     let d=track::composite::apply_source(&b,&source).unwrap();
@@ -103,7 +103,7 @@ fn derived_supports_must_not_block_independent_solids() {
 #[test]
 fn environment_interference_blocks_export_without_removing_user_objects() {
     let mut base=base();
-    base.buildings.push(Building{id:"keep-building".into(),footprint:vec![[-300,300],[300,300],[300,600],[-300,600]],holes:vec![],base_cm:0,height_cm:500,usage:"commercial".into(),material:"concrete".into(),roof:"flat".into(),entrances:vec![]});
+    base.buildings.push(Building{id:"keep-building".into(),footprint:vec![[-300,300],[300,300],[300,600],[-300,600]],holes:vec![],base_cm:0,height_cm:500,usage:"commercial".into(),material:"concrete".into(),roof:"flat".into(),entrances:vec![],parts:vec![] });
     let mut source=Source::empty();source.instances.push(instance("one","straight",400));
     let d=track::composite::apply_source(&base,&source).unwrap();
     let failure=pack_bytes(d.clone(),BTreeMap::new()).err().expect("occupied driving space must fail");
@@ -132,4 +132,28 @@ fn ordinary_preserved_terrain_must_clear_the_authored_surface() {
     for p in &mut d.roads[0].design.as_mut().unwrap().control_points {p[1]+=600;}
     let design=d.roads[0].design.clone().unwrap();d=road_design::edit(&d,"authored",design,600).unwrap();
     assert!(pack_bytes(d,BTreeMap::new()).is_ok());
+}
+
+#[test]
+fn oblique_barriers_gated_around_a_track_do_not_block_export() {
+    let mut b=base();
+    b.barriers.push(barrier::Barrier{id:"fence-1".into(),kind:barrier::BarrierKind::Fence,line:vec![[-1500,-300],[1500,700]],height_cm:120,thickness_cm:20});
+    let mut source=Source::empty();source.instances.push(instance("one","straight",400));
+    let d=track::composite::apply_source(&b,&source).unwrap();
+    let bytes=pack_bytes(d.clone(),BTreeMap::new()).unwrap_or_else(|e|panic!("{e}"));
+    let package=read_bytes(&bytes).unwrap();
+    let pieces:usize=d.cells().into_iter().map(|cell|package.generate(cell,500_000).unwrap().asset_convexes.iter().filter(|c|c.object_id=="fence-1").count()).sum();
+    assert!(pieces>=2,"both sides of the track keep the fence");
+}
+
+#[test]
+fn supports_are_tested_against_the_gated_barrier_pieces() {
+    let mut b=base();
+    // A tall wall along the raised track's centreline: the composed map cuts it
+    // entirely under the deck, so it never meets a support there.
+    b.barriers.push(barrier::Barrier{id:"wall-1".into(),kind:barrier::BarrierKind::Wall,line:vec![[0,-600],[0,1400]],height_cm:1000,thickness_cm:40});
+    let mut source=Source::empty();let mut p=instance("raised","straight",400);p.position_cm[1]=1000;source.instances.push(p);
+    source.terrain_policies.insert("raised".into(),road_design::TerrainPolicy::Elevated);
+    let d=track::composite::apply_source(&b,&source).unwrap();
+    pack_bytes(d,BTreeMap::new()).unwrap_or_else(|e|panic!("{e}"));
 }

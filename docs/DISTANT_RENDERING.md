@@ -18,7 +18,8 @@ GLB/texture instance is produced. The traversal is iterative. Building material 
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.
 
-Native buildings emit closed triangular prisms. The distant conversion removes
+Native buildings (every part) emit closed triangular prisms; barrier faces use a
+per-kind colour. The distant conversion removes
 exactly paired, opposite internal vertical quads, even when their two triangles
 use different diagonals. It keeps source order and coordinates for every surviving
 face. Roofs, exterior walls, courtyard openings and cell-cut faces remain intact;

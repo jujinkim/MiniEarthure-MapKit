@@ -26,6 +26,7 @@ pub(crate) fn scratch_bound(document: &MapDocument) -> u64 {
         document.assets.len(),
         document.placements.len(),
         document.repetitions.len(),
+        document.barriers.len(),
         document.water_bodies.len(),document.gimmicks.len(),document.grind_lines.len(),
     ]
     .into_iter()
@@ -131,7 +132,7 @@ by_id!(
     Zone,
     Asset,
     Placement,
-    Repetition, mapkit_core::water::WaterBody, mapkit_core::gimmick::Gimmick, mapkit_core::grind::GrindLine
+    Repetition, mapkit_core::barrier::Barrier, mapkit_core::water::WaterBody, mapkit_core::gimmick::Gimmick, mapkit_core::grind::GrindLine
 );
 impl NormalizeOrder for Heightmap {
     fn compare(&self, other: &Self) -> Ordering {
@@ -209,6 +210,9 @@ impl Serialize for Document<'_> {
             m.serialize_entry("assembled_track", &serde_json::to_value(assembly).map_err(serde::ser::Error::custom)?)?;
         }
         m.serialize_entry("assets", &Normalized(&d.assets, self.1))?;
+        if !d.barriers.is_empty() {
+            m.serialize_entry("barriers", &Normalized(&d.barriers, self.1))?;
+        }
         m.serialize_entry("bounds", &Canonical(&d.bounds))?;
         m.serialize_entry("buildings", &Normalized(&d.buildings, self.1))?;
         fields!(m, d, cell_size_cm);
@@ -218,6 +222,8 @@ impl Serialize for Document<'_> {
         fields!(m, d, free_roam);
         if !d.gimmicks.is_empty() {m.serialize_entry("gimmicks", &Normalized(&d.gimmicks,self.1))?;}
         if !d.grind_lines.is_empty() {m.serialize_entry("grind_lines", &Normalized(&d.grind_lines,self.1))?;}
+        // Normalization spells the grass default as an absent field.
+        if d.ground_surface.is_some_and(|g| g != Surface::Grass) { fields!(m, d, ground_surface); }
         m.serialize_entry("heightmaps", &Normalized(&d.heightmaps, self.1))?;
         fields!(m, d, map_id);
         m.serialize_entry("nodes", &Normalized(&d.nodes, self.1))?;
@@ -286,7 +292,39 @@ record!(Building, d, m, {
     if !d.holes.is_empty() {
         fields!(m, d, holes);
     }
-    fields!(m, d, id, material, roof, usage);
+    fields!(m, d, id, material);
+    if !d.parts.is_empty() {
+        m.serialize_entry("parts", &Parts(d))?;
+    }
+    fields!(m, d, roof, usage);
+});
+/// Parts with normalization's inherited-value omission (a value equal to the
+/// record's is the absent default).
+struct Parts<'a>(&'a Building);
+impl Serialize for Parts<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        let b = self.0;
+        let mut seq = serializer.serialize_seq(Some(b.parts.len()))?;
+        for part in &b.parts {
+            struct Part<'a>(&'a BuildingPart, &'a Building);
+            impl Serialize for Part<'_> {
+                fn serialize<S: serde::Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+                    let (d, b) = (self.0, self.1);
+                    let mut m = serializer.serialize_map(None)?;
+                    if d.base_cm.is_some_and(|v| v != b.base_cm) { fields!(m, d, base_cm); }
+                    fields!(m, d, footprint);
+                    if d.height_cm.is_some_and(|v| v != b.height_cm) { fields!(m, d, height_cm); }
+                    if !d.holes.is_empty() { fields!(m, d, holes); }
+                    m.end()
+                }
+            }
+            seq.serialize_element(&Part(part, b))?;
+        }
+        seq.end()
+    }
+}
+record!(mapkit_core::barrier::Barrier, d, m, {
+    fields!(m, d, height_cm, id, kind, line, thickness_cm);
 });
 record!(Zone, d, m, {
     fields!(
@@ -429,6 +467,43 @@ mod tests {
             reverse_collections(&mut d);
             compare(&d, &files);
         }
+    }
+
+    #[test]
+    fn borrowed_stream_matches_city_ground_barriers_and_building_parts() {
+        let files = payloads();
+        let mut d = minimal();
+        let before = crate::content_hash(&d, &files).unwrap();
+        d.ground_surface = Some(Surface::Concrete);
+        d.barriers = vec![
+            mapkit_core::barrier::Barrier { id: "z-wall".into(), kind: mapkit_core::barrier::BarrierKind::Wall,
+                line: vec![[10, 10], [500, 900], [10, 10]], height_cm: 300, thickness_cm: 40 },
+            mapkit_core::barrier::Barrier { id: "a-hedge".into(), kind: mapkit_core::barrier::BarrierKind::Hedge,
+                line: vec![[5, 5], [9, 9]], height_cm: 80, thickness_cm: 60 },
+        ];
+        d.buildings[0].parts = vec![
+            BuildingPart { footprint: vec![[3, 5], [7, 1], [0, 2]], holes: vec![], base_cm: Some(-4), height_cm: None },
+            BuildingPart { footprint: vec![[9, 3], [6, 1], [2, 8]], holes: vec![vec![[1, 1], [2, 2], [1, 3]]], base_cm: None, height_cm: Some(70) },
+        ];
+        compare(&d, &files);
+        reverse_collections(&mut d);
+        d.barriers.reverse();
+        compare(&d, &files);
+        let changed = crate::content_hash(&d, &files).unwrap();
+        assert_ne!(changed, before);
+        // Spelled-out defaults hash exactly like their absence.
+        let mut spelled = d.clone();
+        spelled.buildings[0].parts[0].height_cm = Some(spelled.buildings[0].height_cm);
+        spelled.buildings[0].parts[1].base_cm = Some(spelled.buildings[0].base_cm);
+        compare(&spelled, &files);
+        let mut inherited = d.clone();
+        inherited.buildings[0].parts[0].height_cm = None;
+        inherited.buildings[0].parts[1].base_cm = None;
+        assert_eq!(crate::content_hash(&spelled, &files).unwrap(), crate::content_hash(&inherited, &files).unwrap());
+        let mut grass = minimal();
+        grass.ground_surface = Some(Surface::Grass);
+        compare(&grass, &files);
+        assert_eq!(crate::content_hash(&grass, &files).unwrap(), before);
     }
 
     #[test]

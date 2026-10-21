@@ -89,6 +89,19 @@ impl CollisionConvex {
         }
         true
     }
+    /// Exact strict interior test against every face plane.
+    pub fn contains(&self, p: Vertex) -> bool {
+        self.planes().all(|(n, a)| (0..3).map(|i| n[i] * (i128::from(p[i]) - i128::from(a[i]))).sum::<i128>() < 0)
+    }
+    /// Exact separation from an open axis-aligned box: false when a box axis or a
+    /// face plane separates them (conservative otherwise, never a missed overlap).
+    pub fn may_overlap_box(&self, min: Vertex, max: Vertex) -> bool {
+        if (0..3).any(|j| self.vertices.iter().all(|v| v[j] <= min[j]) || self.vertices.iter().all(|v| v[j] >= max[j])) {
+            return false;
+        }
+        let corners: Vec<Vertex> = (0..8).map(|i| std::array::from_fn(|j| if i & (1 << j) != 0 { max[j] } else { min[j] })).collect();
+        !self.planes().any(|(n, a)| corners.iter().all(|c| (0..3).map(|i| n[i] * (i128::from(c[i]) - i128::from(a[i]))).sum::<i128>() >= 0))
+    }
     pub fn placed(&self, p: &Placement) -> Self {
         let mut shape = self.clone();
         for v in &mut shape.vertices {

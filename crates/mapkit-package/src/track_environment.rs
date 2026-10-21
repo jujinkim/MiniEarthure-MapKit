@@ -16,15 +16,27 @@ fn solid_bounds(shape:&SolidShape)->([i64;3],[i64;3]) {
     }
 }
 
+/// Barrier pieces: exact convex solids (other solids keep their bounds tests).
+fn barrier_convex<'a>(barriers:&BTreeSet<&str>,solid:&'a mapkit_core::OccupiedSolid)->Option<&'a mapkit_core::CollisionConvex> {
+    match &solid.shape {
+        SolidShape::Convex(c) if barriers.contains(solid.object_id.as_str())=>Some(c),
+        _=>None,
+    }
+}
+
 pub fn validate(document:&MapDocument,files:&BTreeMap<String,Vec<u8>>)->Result<()> {
     validate_road_terrain(document,files)?;
     let Some(a)=document.assembled_track.as_ref().filter(|a|a.terrain_integration()) else {return Ok(());};
+    let barriers:BTreeSet<&str>=document.barriers.iter().map(|b|b.id.as_str()).collect();
     let base=track::composite::environment_base(document)?;
     let prepared=mapkit_core::PreparedMap::new(base)?;
+    let composed=mapkit_core::PreparedMap::new(document.clone())?;
     // One immutable generated cell at a time; no world-sized geometry cache.
     let mut current=None;
     let mut grid=None;
     let mut chunk=None;
+    // Barrier pieces exist only as the composed map gates them around the track.
+    let mut gated:Option<mapkit_core::GeneratedOccupancy>=None;
     let mut work=0usize;
     let mut visited=BTreeSet::new();
     for (index,piece) in a.pieces.iter().enumerate() {
@@ -46,6 +58,7 @@ pub fn validate(document:&MapDocument,files:&BTreeMap<String,Vec<u8>>)->Result<(
                     if current!=Some(cell) {
                         grid=prepared.heightmap(cell).map(|h|decode_heightmap(h,prepared.cell_size_cm,files.get(&h.path).ok_or_else(||error("E_REFERENCE","terrain payload missing"))?)).transpose()?;
                         chunk=Some(prepared.generate_with_occupancy(cell,grid.as_ref(),2_000_000,Some(mapkit_core::MAX_OCCUPIED_SOLIDS))?);
+                        gated=if barriers.is_empty() {None} else {Some(composed.generate_with_occupancy(cell,grid.as_ref(),2_000_000,Some(mapkit_core::MAX_OCCUPIED_SOLIDS))?)};
                         current=Some(cell);
                     }
                     let bounds=prepared.cell_bounds(cell)?;
@@ -67,6 +80,8 @@ pub fn validate(document:&MapDocument,files:&BTreeMap<String,Vec<u8>>)->Result<(
                     for solid in &chunk.as_ref().unwrap().solids {
                         work+=1;
                         if work>8_000_000 {return Err(error("E_BUDGET","track environment clearance work limit"));}
+                        // Barriers are tested below as the composed map cuts them.
+                        if barrier_convex(&barriers,solid).is_some() {continue;}
                         let (lo,hi)=solid_bounds(&solid.shape);
                         for height in [20.0,100.0,200.0] {
                             let point:[i64;3]=std::array::from_fn(|j|pos[j]+libm::round(n[j]*height) as i64);
@@ -75,11 +90,22 @@ pub fn validate(document:&MapDocument,files:&BTreeMap<String,Vec<u8>>)->Result<(
                             }
                         }
                     }
+                    // Exact convex test: an oblique piece's bounds overstate it.
+                    for solid in gated.iter().flat_map(|g|&g.solids) {
+                        let Some(convex)=barrier_convex(&barriers,solid) else {continue;};
+                        work+=1;
+                        if work>8_000_000 {return Err(error("E_BUDGET","track environment clearance work limit"));}
+                        for height in [20.0,100.0,200.0] {
+                            let point:[i64;3]=std::array::from_fn(|j|pos[j]+libm::round(n[j]*height) as i64);
+                            if convex.contains(point) {
+                                return Err(error("E_TRACK_ENVIRONMENT",format!("piece {index} at {pos:?}: driving space intersects {}",solid.object_id)));
+                            }
+                        }
+                    }
                 }
             }
         }}
     }
-    let composed=mapkit_core::PreparedMap::new(document.clone())?;
     for cell in visited {
         cancellation::checkpoint()?;
         let grid=prepared.heightmap(cell).map(|h|decode_heightmap(h,prepared.cell_size_cm,files.get(&h.path).ok_or_else(||error("E_REFERENCE","terrain payload missing"))?)).transpose()?;
@@ -90,10 +116,14 @@ pub fn validate(document:&MapDocument,files:&BTreeMap<String,Vec<u8>>)->Result<(
         for support in supports {
             let (lo,hi)=solid_bounds(&support.shape);
             let position=std::array::from_fn::<_,3,_>(|j|(lo[j]+hi[j])/2);
-            for solid in &base.solids {
+            // Independent solids from the track-free base; barriers as the
+            // composed map cuts them, tested exactly.
+            let independent=base.solids.iter().filter(|s|barrier_convex(&barriers,s).is_none())
+                .chain(built.solids.iter().filter(|s|barrier_convex(&barriers,s).is_some()));
+            for solid in independent {
                 let (a,b)=solid_bounds(&solid.shape);
                 work+=1;
-                if (0..3).all(|j|lo[j]<b[j] && a[j]<hi[j]) {
+                if (0..3).all(|j|lo[j]<b[j] && a[j]<hi[j]) && barrier_convex(&barriers,solid).is_none_or(|c|c.may_overlap_box(lo,hi)) {
                     return Err(error("E_TRACK_ENVIRONMENT",format!("{} at {position:?}: support intersects {}",support.object_id,solid.object_id)));
                 }
             }

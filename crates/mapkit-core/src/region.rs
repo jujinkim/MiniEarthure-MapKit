@@ -244,6 +244,8 @@ pub fn source_metadata(d: &MapDocument) -> MapDocument {
         nodes: vec![],
         roads: vec![],
         surface_areas: vec![],
+        ground_surface: d.ground_surface,
+        barriers: vec![],
         buildings: vec![],
         zones: vec![],
         assets: vec![],
@@ -284,7 +286,7 @@ fn derive_source(
     out.buildings = d
         .buildings
         .iter()
-        .filter(|b| !prune || hit(&b.footprint) || b.entrances.iter().any(|p| hit(p)))
+        .filter(|b| !prune || b.rings().any(|(p, _)| hit(p)) || b.entrances.iter().any(|p| hit(p)))
         .cloned()
         .collect();
     out.placements = d
@@ -320,6 +322,9 @@ fn derive_source(
         .cloned()
         .collect();
     out.repetitions = d.repetitions.clone();
+    // Barrier geometry depends only on its own line and nearby corridors, which
+    // the road margin below retains; never a reason to keep the whole world.
+    out.barriers = d.barriers.iter().filter(|b| hit(&b.line)).cloned().collect();
     if prune {
         let road_margin = plan.map_or_else(
             || crate::roads::influence_margin(d) + 1000 + d.roads.iter().filter_map(|r|r.design.as_ref()).map(|d|i64::from(d.shoulder_cm)).max().unwrap_or(0),

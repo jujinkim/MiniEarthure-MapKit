@@ -228,6 +228,8 @@ fn decorate_inner(
             }
         }
     }
+    let barriers: std::collections::BTreeMap<&str, mapkit_core::barrier::BarrierKind> =
+        document.barriers.iter().map(|b| (b.id.as_str(), b.kind)).collect();
     for id in &ids {
         if let Some(asset) = objects
             .iter_shared()
@@ -237,6 +239,9 @@ fn decorate_inner(
             if asset.starts_with("builtin:") {
                 materials.set(id.as_str(), asset.as_str());
             }
+        } else if let Some(kind) = barriers.get(id.as_str()) {
+            // Barrier faces share one display material per kind.
+            materials.set(id.as_str(), kind.material_key());
         } else if let Some(repetition) = document
             .repetitions
             .iter()

@@ -1077,13 +1077,33 @@ impl MapKitBridge {
         response_warned(self.scoped(|| self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first")).and_then(|p| {
             let point = [x_cm, y_cm];
             let cell = p.document.cell_at(point).ok_or_else(||mapkit_core::error("E_SPAWN","outside map"))?;
-            let sample = p.generate(cell, 500_000)?.surface_probe(&SpawnRequest { position_cm: point, surface_id: surface.to_string() })?;
+            let chunk = p.generate(cell, 500_000)?;
+            let sample = chunk.surface_probe(&SpawnRequest { position_cm: point, surface_id: surface.to_string() })?;
+            // Owner cells emit whole pieces; a neighbour's may protrude by half
+            // a thickness (at most 52 cm with rounding), so near a seam also
+            // read the adjacent owners.
+            let above = [sample.position_cm[0], sample.position_cm[1] + 1, sample.position_cm[2]];
+            let hit = |chunk: &mapkit_core::GeneratedChunk| chunk.asset_convexes.iter().any(|c|
+                p.document.barriers.binary_search_by(|b| b.id.cmp(&c.object_id)).is_ok() && c.shape.contains(above));
+            let blocked_by_barrier = !p.document.barriers.is_empty() && (hit(&chunk) || {
+                let mut owners = std::collections::BTreeSet::new();
+                for dx in [-52, 0, 52] { for dy in [-52, 0, 52] {
+                    if let Some(owner) = p.document.cell_at([point[0] + dx, point[1] + dy]) { owners.insert(owner); }
+                }}
+                owners.remove(&cell);
+                let mut blocked = false;
+                for owner in owners {
+                    if hit(&p.generate(owner, 500_000)?) { blocked = true; break; }
+                }
+                blocked
+            });
             let is_road = p.document.roads.iter().any(|r| r.id == sample.surface_id);
-            let blocked_by_building = p.document.buildings.iter().any(|b|
+            let blocked_by_building = p.document.buildings.iter().flat_map(|b| b.solids()).any(|b|
                 b.contains(point) && sample.position_cm[1] >= b.base_cm
                 && sample.position_cm[1] <= b.base_cm + b.height_cm as i64);
             Ok(serde_json::json!({"position_cm":sample.position_cm,"normal_q":sample.normal_q,
-                "surface_id":sample.surface_id,"is_road":is_road,"blocked_by_building":blocked_by_building}))
+                "surface_id":sample.surface_id,"is_road":is_road,"blocked_by_building":blocked_by_building,
+                "blocked_by_barrier":blocked_by_barrier}))
         })))
     }
     #[func]

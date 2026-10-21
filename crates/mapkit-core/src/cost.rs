@@ -51,13 +51,14 @@ pub fn estimate_generation(
     max_triangles: usize,
 ) -> Result<GenerationCost> {
     d.validate()?;
-    estimate_validated(d, cell, max_triangles)
+    estimate_validated(d, cell, max_triangles, None)
 }
 
 pub(crate) fn estimate_validated(
     d: &MapDocument,
     cell: Cell,
     max_triangles: usize,
+    barriers: Option<&crate::barrier::Spans>,
 ) -> Result<GenerationCost> {
     let area = d.cell_bounds(cell)?;
     let descriptor = d.heightmaps.iter().find(|h| h.cell == cell);
@@ -168,10 +169,11 @@ pub(crate) fn estimate_validated(
         }
     }
     for building in &d.buildings {
-        let shape = bounds(building.footprint.iter().copied(), 0);
-        let n = (building.footprint.len()
-            + building.holes.iter().map(Vec::len).sum::<usize>()
-            + 2 * building.holes.len()) as u64;
+        for (footprint, holes) in building.rings() {
+        let shape = bounds(footprint.iter().copied(), 0);
+        let n = (footprint.len()
+            + holes.iter().map(Vec::len).sum::<usize>()
+            + 2 * holes.len()) as u64;
 
         let parts = if building.roof == "gable" { 4 } else { n - 2 };
         let clipped = parts * clip_factor(&shape, &area);
@@ -180,7 +182,22 @@ pub(crate) fn estimate_validated(
             cost.occupied_solids = cost.occupied_solids.saturating_add(parts);
         }
         add(clipped * 8, building.id.len());
-        continue;
+        }
+    }
+    if !d.barriers.is_empty() {
+        let owned;
+        let spans = match barriers {
+            Some(spans) => spans,
+            None => { owned = crate::barrier::Spans::new(d)?; &owned }
+        };
+        // Owned pieces: twelve faces each (sixty when map-edge clipped).
+        // Counting stops past what the cell's triangle/solid limits admit.
+        let cap = (max_triangles.min(2_000_000) as u64 / 12 + 1).min(crate::MAX_OCCUPIED_SOLIDS as u64 + 1);
+        let (triangles, pieces, id_bytes) = spans.cost(d, cell, cap)?;
+        add(triangles, id_bytes as usize);
+        cost.asset_convexes = cost.asset_convexes.saturating_add(pieces);
+        cost.occupied_solids = cost.occupied_solids.saturating_add(pieces);
+        cost.generation_scratch_bytes = cost.generation_scratch_bytes.saturating_add(pieces.saturating_mul(256));
     }
     for zone in &d.zones {
         if zone.density_per_mille == 0 {

@@ -57,7 +57,9 @@ not serialized, and never bypasses ordinary `validate` or `cells` bounds.
 ## Dependency closure and limits
 
 Region source derives the complete local dependency closure, keeping full context
-only where implicit widths or repetition rules need it. Terrain neighbor edges,
+only where implicit widths or repetition rules need it. Barriers and building
+parts keep pruning: a record is kept when any line point, solid or entrance
+reaches the expanded region. Terrain neighbor edges,
 connected road arms, vegetation competitors and material/texture dependencies
 remain available. Decoder peak declarations are checked against payload bytes.
 Opening does not enumerate/inflate unrelated regions; source snapshots are

@@ -135,7 +135,8 @@ over the authored road graph without changing the document.
 ## Ordinary generation
 
 Ordinary map generation uses integer road arrangement, connected sidewalks,
-courtyard buildings, indexed placement validation, authored tree assets and
+courtyard and multi-part buildings, road-gated barriers, an optional default
+ground surface, indexed placement validation, authored tree assets and
 environment profiles, with the current road partition and three-dimensional seam
 rules. Regional source derivation follows [REGIONAL_SOURCE](../spec/REGIONAL_SOURCE.md).
 Road rounding and safety furniture follow [ROAD_SAFETY](ROAD_SAFETY.md).

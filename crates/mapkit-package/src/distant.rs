@@ -326,6 +326,12 @@ impl Package {
                     "wood" => [153, 115, 71, 255],
                     _ => [183, 184, 176, 255],
                 }
+            } else if let Ok(i) = self.document.barriers.binary_search_by(|b| b.id.cmp(&triangle.object_id)) {
+                match self.document.barriers[i].kind {
+                    mapkit_core::barrier::BarrierKind::Hedge => [72, 100, 71, 255],
+                    mapkit_core::barrier::BarrierKind::Fence => [155, 118, 79, 255],
+                    mapkit_core::barrier::BarrierKind::Wall => [183, 184, 176, 255],
+                }
             } else {
                 match triangle.surface {
                     Surface::Asphalt => [48, 52, 59, 255],

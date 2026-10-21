@@ -128,6 +128,59 @@ This page lists the domain invariants and links each feature's owner.
   disjoint concave polygons pass; any positive-area overlap fails.
 - These checks charge the existing placement work allowance.
 
+## City ground, barriers and building parts
+
+All three are optional; absent/empty values are omitted from canonical JSON, so
+earlier documents keep their bytes, world hashes and generated geometry.
+
+- `MapDocument.ground_surface` (`asphalt|concrete|dirt|gravel|grass`, absent =
+  grass; normalization drops an explicit `grass`) labels unpainted terrain faces
+  (`terrain`, contact class 1): render material, contact surface and distant
+  colour. Roads and `surface_areas` keep precedence; the environment
+  `ground_color` tint applies to grass only.
+- `MapDocument.barriers`: `{id, kind: hedge|fence|wall, line: [[x,y],...],
+  height_cm 10..1000, thickness_cm 5..100}`; 2..4096 in-bounds points, consecutive
+  points distinct, a repeated first point closes a perimeter. IDs share the object
+  namespace; each barrier counts as one object and its points as input vertices.
+  - Gates: a road segment cuts a capsule of half width + sidewalk (explicit or
+    implicit) + 50 cm, a road end a disc of its full end width + 50 cm, and
+    assembled-track paths their lateral half width + 50 cm, each widened by the
+    barrier's half thickness. Ground/underpass corridors always cut. Bridge,
+    elevated, tunnel and track corridors cut only where their band (surface
+    −100 cm to +250 cm, tunnels + clearance; tracks span both banked ribbon edges
+    and, inverted, also below) meets the barrier's base-to-top span at the crossing. Kept spans at polyline joints extend half a thickness so
+    corners close. Buildings, placements and vegetation ignore barriers.
+  - Geometry: each span is cut at cell seams, every 8 m along its source segment
+    and, in a heightmap cell, at grid lines and tile diagonals; each piece is a
+    convex parallelepiped up to `height_cm` above the source terrain at its
+    centreline ends, with a base 25 cm below the lowest terrain under each end's
+    corners and lowered below every source grid vertex under the footprint and
+    every grid line/diagonal crease its long edges cross. Faces
+    are obstacles (hedge `grass`, fence/wall `concrete`, never spawnable), also
+    `asset_convexes` and occupancy solids under the barrier ID. The cell holding a
+    piece's centre point owns it unclipped (within the 2 m query halo). Godot
+    `surface_probe` reports `blocked_by_barrier` from the owner cells within 52 cm.
+  - Only corridors near a barrier are built; pieces are visited, never collected,
+    and a cell estimate stops counting past its triangle/solid limit. Budgets
+    `barrier_pieces` (an upper bound of all cut pieces) and `barrier_work`
+    (corridor gating plus structure tests per bounded piece)
+    ([ERRORS](ERRORS.md#budget-profiles)). Barriers never disable regional
+    pruning; a region keeps the barriers its line bounds reach. Track environment
+    export checks test driving space and supports exactly against the composed
+    (track-gated) barrier pieces.
+  - Display key `barrier:<kind>` (hedge leaf, fence wood, wall stone colours).
+- `Building.parts` (≤255): `{footprint, holes?, base_cm?, height_cm?}`; absent values
+  inherit the record's and normalization drops values equal to them. The record
+  stays one object (ID, material, usage, roof, entrances, object count); the
+  footprint is the first solid. Each solid follows the building rules (ring,
+  courtyard, gable rectangle, height, base) and its vertices count. Footprint and
+  part interiors (outside courtyards) are pairwise disjoint; touching is allowed
+  and no stacking. Every consumer treats each solid as a building: prisms/roofs/
+  `building_prisms`/occupancy, road corridor and deck checks, building/placement/
+  vegetation/repetition clearance (indexed per solid), sidewalk exclusion,
+  implicit sidewalk widths, regional retention, overview (one entry per solid
+  under the record ID), distant faces, shortcut clearance and surface probes.
+
 ## Courses and completion references
 
 - `MapDocument.courses`: up to 64 course documents with map ID, name,

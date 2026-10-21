@@ -135,7 +135,7 @@ fn clear_of_roads(d: &MapDocument, a: Vertex, b: Vertex, width: u32, hosts: &[&s
 fn clear(d: &MapDocument, a: Vertex, b: Vertex, width: u32, hosts: &[&str]) -> bool {
     let (p, q) = ([a[0] as f64, a[2] as f64], [b[0] as f64, b[2] as f64]);
     let half = f64::from(width) / 2.0 + CLEAR_CM;
-    !d.buildings.iter().any(|building| blocks(&building.footprint, p, q, half)) && clear_of_roads(d, a, b, width, hosts)
+    !d.buildings.iter().flat_map(|building| building.footprints()).any(|footprint| blocks(footprint, p, q, half)) && clear_of_roads(d, a, b, width, hosts)
 }
 /// Ground point `distance` from `a` horizontally toward `b`, at `a`'s height.
 fn toward(a: Vertex, b: Vertex, distance: f64) -> Vertex {
@@ -165,9 +165,9 @@ fn elevated(d: &MapDocument, chord: &Road, width: u32, hosts: &[&str], form: For
     let axis = [(q[0] - p[0]) / length, (q[1] - p[1]) / length];
     let half = f64::from(width) / 2.0 + CLEAR_CM;
     // (first and last covered distance along the chord, required deck height)
-    let covered: Vec<(f64, f64, i64)> = d.buildings.iter().filter_map(|building| {
+    let covered: Vec<(f64, f64, i64)> = d.buildings.iter().flat_map(|b| b.solids()).filter_map(|building| {
         let (t0, t1) = crate::placement::corridor_extent(&building.footprint, [a[0], a[2]], [b[0], b[2]], half)?;
-        let top = building.base_cm + i64::from(building.height_cm) + crate::placement::roof_rise(building)
+        let top = building.base_cm + i64::from(building.height_cm) + crate::placement::roof_rise(&building)
             + crate::placement::BUILDING_DECK_CLEARANCE_CM + 1;
         Some((t0 * length - DECK_MARGIN_CM, t1 * length + DECK_MARGIN_CM, top))
     }).collect();

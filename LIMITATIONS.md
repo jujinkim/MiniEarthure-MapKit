@@ -13,6 +13,11 @@ of game transport, physics, progress and release acceptance.
 - Courtyards allow at most 16 disjoint interior rings and 512 total vertices with
   a flat roof. Hole bridges are the shortest valid ones, tested shortest first.
   Touching/nested holes and arbitrary sloped courtyard roofs reject.
+- Barriers are straight prisms of at most 8 m: joints overlap by half a
+  thickness, the base follows source terrain (not road-fitted terrain or
+  sidewalks), and gates use conservative corridor capsules (structures by a
+  height band), not exact road aprons.
+  Building parts cannot stack; they share one roof kind.
 - Regional files retain one bounded original authoring document. Sharded authoring,
   arbitrary density, source LRU and network region requests are not provided here.
 - Logical estimates and decoder caps are not complete allocator/RSS/GPU accounting.

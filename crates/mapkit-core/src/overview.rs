@@ -124,14 +124,12 @@ fn overview_validated(d: &MapDocument) -> Result<MapOverview<'_>> {
             points: std::borrow::Cow::Borrowed(&r.points),
         })
         .collect();
+    // One entry per solid (record first, then its parts) under the record ID.
     let mut buildings: Vec<_> = d
         .buildings
         .iter()
-        .map(|b| OverviewBuilding {
-            id: &b.id,
-            footprint: &b.footprint,
-            holes: &b.holes,
-        })
+        .flat_map(|b| std::iter::once(OverviewBuilding { id: &b.id, footprint: &b.footprint, holes: &b.holes })
+            .chain(b.parts.iter().map(|p| OverviewBuilding { id: &b.id, footprint: &p.footprint, holes: &p.holes })))
         .collect();
     let mut attributions: Vec<_> = d
         .attributions

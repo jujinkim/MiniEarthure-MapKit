@@ -69,7 +69,7 @@ impl PreparedMap {
         if let Some(cost) = self.costs.read().unwrap().get(&(cell, limit)) {
             return Ok(cost.clone());
         }
-        let cost = crate::cost::estimate_validated(&self.document, cell, limit)?;
+        let cost = crate::cost::estimate_validated(&self.document, cell, limit, Some(&self.placements.barriers))?;
         // Bound metadata independently of caller-selected limits. No generated geometry retained.
         let mut costs = self.costs.write().unwrap();
         if costs.len() < PREPARATION_CACHE_ENTRIES {

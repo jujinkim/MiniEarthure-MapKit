@@ -36,7 +36,9 @@ Current source/dependency fingerprints invalidate disposable generated caches.
 
 Source vectors are `[x_cm,height_cm,y_cm]`; Godot uses `(x,height,-y)*0.01` at
 actual metre scale 1.0. Objects are global, geometry is clipped to cells and
-instances belong to their anchor cell. The maximum map edge belongs to the last
+instances belong to their anchor cell; barrier pieces belong unclipped to the cell
+holding their centre point. Optional city fields (`ground_surface`, `barriers`,
+`Building.parts`) follow [CURRENT_V1](CURRENT_V1.md#city-ground-barriers-and-building-parts). The maximum map edge belongs to the last
 cell. Explicit graph node identity defines road connectivity; coincident points
 and crossing roads do not. Surface queries distinguish stacked roads and exclude
 non-spawnable roofs, walls, supports, water and venue floors.

@@ -95,11 +95,33 @@ fn polygons_overlap(a: &[Point], b: &[Point], work: &mut usize) -> Result<bool> 
             (0..b.len()).any(|j| intersects(a[i], a[(i + 1) % a.len()], b[j], b[(j + 1) % b.len()]))
         }))
 }
+/// Any solid of the record (footprint or part) overlaps `poly`.
 fn building_overlap(poly: &[Point], b: &Building, work: &mut usize) -> Result<bool> {
-    if !polygons_overlap(poly, &b.footprint, work)? {
+    for (footprint, holes) in b.rings() {
+        if solid_overlap(poly, footprint, holes, work)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+/// Bounds of solid `k`; solid 0 also covers the record's entrances.
+fn solid_area(b: &Building, k: usize) -> Bounds {
+    let ring = if k == 0 { &b.footprint } else { &b.parts[k - 1].footprint };
+    let mut area = aabb(ring);
+    for ring in b.entrances.iter().filter(|_| k == 0) {
+        let other = aabb(ring);
+        for a in 0..2 {
+            area.min[a] = area.min[a].min(other.min[a]);
+            area.max[a] = area.max[a].max(other.max[a]);
+        }
+    }
+    area
+}
+fn solid_overlap(poly: &[Point], footprint: &[Point], holes: &[Vec<Point>], work: &mut usize) -> Result<bool> {
+    if !polygons_overlap(poly, footprint, work)? {
         return Ok(false);
     }
-    for hole in &b.holes {
+    for hole in holes {
         if inside(poly, hole, work)? {
             let mut touching = false;
             tick(work, poly.len() * hole.len())?;
@@ -537,7 +559,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
                 "unsupported building material/use/roof or invalid entrance",
             ));
         }
-        if b.roof == "gable" {
+        for b in b.solids().filter(|_| b.roof == "gable") {
             let area = aabb(&b.footprint);
             if b.footprint.len() != 4
                 || (0..2).any(|a| area.max[a] - area.min[a] < 2)
@@ -569,6 +591,7 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         .chain(d.assets.iter().map(|v| v.id.as_str()))
         .chain(d.placements.iter().map(|v| v.id.as_str()))
         .chain(d.repetitions.iter().map(|v| v.id.as_str()))
+        .chain(d.barriers.iter().map(|v| v.id.as_str()))
         .collect();
     let road_ids: BTreeSet<_> = d.roads.iter().map(|r| r.id.as_str()).collect();
     let repetition_ids: BTreeSet<_> = d.repetitions.iter().map(|r| r.id.as_str()).collect();
@@ -610,6 +633,9 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         }
     }
     let mut work = 0;
+    for b in d.buildings.iter().filter(|b| !b.parts.is_empty()) {
+        parts_disjoint(b, &mut work)?;
+    }
     // Validate authored objects against coarse road bounds once, then inspect
     // segments only for nearby roads. Exact predicates and the work cap remain.
     let mut road_bounds = Vec::with_capacity(d.roads.len());
@@ -627,6 +653,29 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
     return validate_indexed(d, &road_bounds, &mut work);
 }
 
+/// Footprint and part interiors (courtyards excluded) may touch, never overlap:
+/// exact integer separation of their triangulations, indexed by bounds.
+fn parts_disjoint(b: &Building, work: &mut usize) -> Result<()> {
+    let mut triangles = Vec::new();
+    for (index, solid) in b.solids().enumerate() {
+        for t in crate::courtyard::triangulate(&solid, &mut 0)? {
+            triangles.push((index, t));
+        }
+    }
+    tick(work, triangles.len().saturating_mul(triangles.len().max(1).ilog2() as usize + 1))?;
+    let bounds: Vec<_> = triangles.iter().map(|(_, t)| aabb(t)).collect();
+    let index = crate::bounds_index::BoundsIndex::new(&bounds);
+    let lift = |t: &[Point; 3]| t.map(|p| [p[0], 0, p[1]]);
+    for (i, (solid, t)) in triangles.iter().enumerate() {
+        for j in index.query(&bounds[i], work)?.into_iter().filter(|&j| j < i) {
+            tick(work, 1)?;
+            if triangles[j].0 != *solid && crate::urban::interiors_overlap(&lift(t), &lift(&triangles[j].1)) {
+                return Err(error("E_GEOMETRY", format!("building {} parts overlap", b.id)));
+            }
+        }
+    }
+    Ok(())
+}
 pub(crate) fn roof_rise(b: &Building) -> i64 {
     if b.roof != "gable" {
         return 0;
@@ -666,10 +715,13 @@ fn roof_triangles(b: &Building) -> Result<Vec<[Vertex; 3]>> {
     Ok(out)
 }
 fn buildings(d: &MapDocument, b: &mut Builder) -> Result<()> {
-    for building in &d.buildings {
-        if !overlaps(&aabb(&building.footprint), &b.bounds) {
+    for record in &d.buildings {
+    for (k, (footprint, _)) in record.rings().enumerate() {
+        if !overlaps(&aabb(footprint), &b.bounds) {
             continue;
         }
+        let building = record.solid(k);
+        let building = &*building;
         for roof in roof_triangles(building)? {
             let original = (!b.distant).then(|| BuildingPrism {
                 object_id: building.id.clone(),
@@ -728,6 +780,7 @@ fn buildings(d: &MapDocument, b: &mut Builder) -> Result<()> {
             }
         }
     }
+    }
     Ok(())
 }
 pub(crate) fn sidewalk_width(d: &MapDocument, r: &Road) -> u32 {
@@ -746,7 +799,7 @@ pub(crate) fn sidewalk_width(d: &MapDocument, r: &Road) -> u32 {
         .iter()
         .filter(|b| {
             let mut ignored = 0;
-            road_overlap(&b.footprint, r, 3000, &mut ignored).unwrap_or(false)
+            b.footprints().any(|f| road_overlap(f, r, 3000, &mut ignored).unwrap_or(false))
         })
         .count();
     match d.theme.as_str() {
@@ -1024,7 +1077,10 @@ pub(crate) struct PreparedPlacements {
     index: crate::bounds_index::BoundsIndex,
     occupied_index: crate::bounds_index::BoundsIndex,
     roads: crate::bounds_index::BoundsIndex,
+    /// One building index entry per solid: (record, solid).
     buildings: crate::bounds_index::BoundsIndex,
+    solids: Vec<(usize, usize)>,
+    pub(crate) barriers: crate::barrier::Spans,
 }
 impl PreparedPlacements {
     pub(crate) fn new(d: &MapDocument) -> Result<Self> {
@@ -1059,17 +1115,15 @@ impl PreparedPlacements {
             let radius=crate::road_plan::width_influence_margin(r.widths_cm.iter().copied().max().unwrap_or(0));
             for a in 0..2 { b.min[a]-=radius; b.max[a]+=radius; } b
         }).collect();
-        let building_bounds: Vec<_> = d.buildings.iter().map(|b| {
-            let mut area=aabb(&b.footprint);
-            for ring in &b.entrances { let other=aabb(ring); for a in 0..2 {
-                area.min[a]=area.min[a].min(other.min[a]); area.max[a]=area.max[a].max(other.max[a]);
-            }} area
-        }).collect();
+        let solids: Vec<(usize, usize)> = d.buildings.iter().enumerate()
+            .flat_map(|(i, b)| (0..=b.parts.len()).map(move |k| (i, k))).collect();
+        let building_bounds: Vec<_> = solids.iter().map(|&(i, k)| solid_area(&d.buildings[i], k)).collect();
         Ok(Self { repeated: accepted,
             occupied_index: crate::bounds_index::BoundsIndex::new(&occupied.iter().map(|p|aabb(p)).collect::<Vec<_>>()),
             occupied, index: crate::bounds_index::BoundsIndex::new(&bounds),
             roads: crate::bounds_index::BoundsIndex::new(&road_bounds),
-            buildings: crate::bounds_index::BoundsIndex::new(&building_bounds) })
+            buildings: crate::bounds_index::BoundsIndex::new(&building_bounds), solids,
+            barriers: crate::barrier::Spans::new(d)? })
     }
 }
 impl PreparedPlacements {
@@ -1082,9 +1136,11 @@ impl PreparedPlacements {
         if !poly.iter().all(|p| d.bounds.contains(*p)) { return Ok(false); }
         let mut area=aabb(poly);
         for i in self.buildings.query(&area,work)? {
-            let b=&d.buildings[i];
-            if building_overlap(poly,b,work)? { return Ok(false); }
-            for entrance in &b.entrances { if polygons_overlap(poly,entrance,work)? { return Ok(false); } }
+            let (record, k) = self.solids[i];
+            let b=&d.buildings[record];
+            let (footprint, holes) = if k == 0 { (&b.footprint, &b.holes) } else { (&b.parts[k-1].footprint, &b.parts[k-1].holes) };
+            if solid_overlap(poly,footprint,holes,work)? { return Ok(false); }
+            for entrance in b.entrances.iter().filter(|_| k == 0) { if polygons_overlap(poly,entrance,work)? { return Ok(false); } }
         }
         for a in 0..2 { area.min[a]-=margin; area.max[a]+=margin; }
         for i in self.roads.query(&area,work)? {
@@ -1109,10 +1165,13 @@ pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder, prepared: O
 fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -> Result<()> {
     use crate::bounds_index::BoundsIndex;
     let plans = crate::road_plan::PlanIndex::new(d)?;
-    let building_bounds: Vec<_> = d
-        .buildings
+    // Every solid of every record; a record's own solids never collide with
+    // each other here (see parts_disjoint) and only its first carries entrances.
+    let solids: Vec<(usize, std::borrow::Cow<'_, Building>)> = d.buildings.iter().enumerate()
+        .flat_map(|(i, b)| b.solids().map(move |s| (i, s))).collect();
+    let building_bounds: Vec<_> = solids
         .iter()
-        .map(|b| {
+        .map(|(_, b)| {
             let mut area = aabb(&b.footprint);
             for ring in &b.entrances {
                 let other = aabb(ring);
@@ -1125,7 +1184,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
         })
         .collect();
     let buildings = BoundsIndex::new(&building_bounds);
-    let building_shapes = d.buildings.iter().map(|b| BuildingIndex::new(b, work)).collect::<Result<Vec<_>>>()?;
+    let building_shapes = solids.iter().map(|(_, b)| BuildingIndex::new(b, work)).collect::<Result<Vec<_>>>()?;
     // Dense authored splines must not multiply every placement by every road
     // station. Index segment corridors; preserve the same exact plan predicates
     // and the shared work ceiling after this broad phase.
@@ -1143,7 +1202,8 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
     };
     let _=road_bounds;
     let mut effort = [0usize; 3];
-    for (i, b) in d.buildings.iter().enumerate() {
+    for (i, (record, b)) in solids.iter().enumerate() {
+        let b: &Building = b;
         macro_rules! measured {
             ($phase:expr, $operation:expr) => {{
                 let before = *work;
@@ -1151,7 +1211,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
                 effort[$phase] += *work - before;
                 result.map_err(|mut e: Error| {
                     if e.code == "E_BUDGET" {
-                        e.message = format!("{} at building {} ({}/{}); neighbour/plan/footprint work {:?}", e.message, b.id, i + 1, d.buildings.len(), effort);
+                        e.message = format!("{} at building {} ({}/{}); neighbour/plan/footprint work {:?}", e.message, b.id, i + 1, solids.len(), effort);
                     }
                     e
                 })?
@@ -1159,7 +1219,8 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
         }
         let area = aabb(&b.footprint);
         for index in measured!(0, buildings.query(&area, work)).into_iter().filter(|&j| j < i) {
-            let other = &d.buildings[index];
+            let (other_record, other) = &solids[index];
+            if other_record == record { continue; }
             if b.base_cm < other.base_cm + other.height_cm as i64 + roof_rise(other)
                 && other.base_cm < b.base_cm + b.height_cm as i64 + roof_rise(b)
                 && measured!(0, building_shapes[index].overlaps(&b.footprint, work))
@@ -1218,7 +1279,7 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
             ));
         }
         for j in buildings.query(area, work)? {
-            let b = &d.buildings[j];
+            let b = &solids[j].1;
             if building_shapes[j].overlaps(poly, work)? {
                 return Err(error(
                     "E_GEOMETRY",

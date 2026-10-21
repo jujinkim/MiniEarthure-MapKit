@@ -47,6 +47,22 @@ impl BoundsIndex {
         }
         index
     }
+    /// Conservative: true when a leaf's union bounds meet `area` (never misses a
+    /// meeting item). Stops at the first such leaf.
+    pub fn hits(&self, area: &Bounds) -> bool {
+        let mut pending = if self.nodes.is_empty() { vec![] } else { vec![0] };
+        while let Some(i) = pending.pop() {
+            let node = &self.nodes[i];
+            if (0..2).any(|a| area.max[a] < node.bounds.min[a] || area.min[a] > node.bounds.max[a]) {
+                continue;
+            }
+            match node.children {
+                Some((a, b)) => pending.extend([a, b]),
+                None => return true,
+            }
+        }
+        false
+    }
     pub fn query(&self, area: &Bounds, work: &mut usize) -> Result<Vec<usize>> {
         if self.nodes.is_empty() {
             return Ok(vec![]);

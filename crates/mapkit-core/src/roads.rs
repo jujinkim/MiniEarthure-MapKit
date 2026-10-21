@@ -207,6 +207,7 @@ fn ground_tile(
     track: &[[Vertex;3]],
     b: &mut Builder,
     work: &mut usize,
+    ground: Surface,
 ) -> Result<()> {
     let bounds = Bounds {
         min: xy(v[0]),
@@ -215,7 +216,7 @@ fn ground_tile(
     if (0..2).any(|i| bounds.min[i] >= bounds.max[i]) {
         return Ok(());
     }
-    ground_tile_part(v, bounds, patches, paint, track, b, work, 0)
+    ground_tile_part(v, bounds, patches, paint, track, b, work, 0, ground)
 }
 
 // Dense city terrain is divided spatially before an arrangement can exceed its
@@ -224,7 +225,7 @@ fn ground_tile(
 #[allow(clippy::too_many_arguments)]
 fn ground_tile_part(
     v: [Vertex;4], bounds: Bounds, patches: &[&Patch], paint: &[&SurfaceArea],
-    track: &[[Vertex;3]], b: &mut Builder, work: &mut usize, depth: u8,
+    track: &[[Vertex;3]], b: &mut Builder, work: &mut usize, depth: u8, ground: Surface,
 ) -> Result<()> {
     tick(
         work,
@@ -350,7 +351,7 @@ fn ground_tile_part(
                     min:[if x==0 {bounds.min[0]} else {mid[0]},if y==0 {bounds.min[1]} else {mid[1]}],
                     max:[if x==0 {mid[0]} else {bounds.max[0]},if y==0 {mid[1]} else {bounds.max[1]}],
                 };
-                ground_tile_part(v,part,&nearby,&paint,track,b,work,depth+1)?;
+                ground_tile_part(v,part,&nearby,&paint,track,b,work,depth+1,ground)?;
             }}
             return Ok(());
         }
@@ -399,7 +400,7 @@ fn ground_tile_part(
             } else {
                 terrain[1]
             };
-            let mut selected = Some((Surface::Grass, "terrain"));
+            let mut selected = Some((ground, "terrain"));
             let mut road = false;
             let mut designed = None;
             for index in patch_index.query(&Bounds { min: center, max: center }, work)? {
@@ -519,7 +520,7 @@ pub(crate) fn generate(
                 .map(|i| &patches[i]).collect();
             let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
                 .map(|i| &d.surface_areas[i]).collect();
-            ground_tile(v, &local_patches, &local_paint, &track, b, &mut work)?;
+            ground_tile(v, &local_patches, &local_paint, &track, b, &mut work, d.ground_surface.unwrap_or(Surface::Grass))?;
         }
     }
     for patch in &patches {
@@ -671,7 +672,7 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
     let exclusions: Vec<_> = d
         .buildings
         .iter()
-        .flat_map(|b| std::iter::once(&b.footprint).chain(&b.entrances))
+        .flat_map(|b| b.footprints().chain(&b.entrances))
         .collect();
     let exclusion_index = crate::bounds_index::BoundsIndex::new(
         &exclusions

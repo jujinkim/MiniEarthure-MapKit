@@ -386,6 +386,8 @@ static func fail(job: Dictionary, code: String, message: String) -> bool:
 static func material_color(key: String) -> Color:
 	if key.begins_with("builtin:"):
 		return {"builtin:tree": Color("745138"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63")}.get(key, Color.GRAY)
+	if key.begins_with("barrier:"):
+		return {"barrier:hedge": Color("486447"), "barrier:fence": Color("9b764f"), "barrier:wall": Color("b7b8b0")}.get(key, Color.GRAY)
 	if not key.contains(":"):
 		return COLORS.get(key, Color.GRAY)
 	var fields := key.split(":")
@@ -545,7 +547,7 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
-	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","safety:metal":"metal"}.get(key,key.get_slice(":",0))
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,key.get_slice(":",0))
 
 static func occluding_surface(key: String) -> bool:
 	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])

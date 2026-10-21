@@ -112,6 +112,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         gimmicks,
         placements,
         repetitions,
+        ground_surface: _,
+        barriers,
         attributions,
         provenance,
         ..
@@ -311,6 +313,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         material,
         roof,
         entrances,
+        parts,
     } in buildings
     {
         retained.string(id)?;
@@ -320,6 +323,16 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         retained.string(material)?;
         retained.string(roof)?;
         retained.polygons(entrances)?;
+        retained.vector(parts)?;
+        for BuildingPart { footprint, holes, base_cm: _, height_cm: _ } in parts {
+            retained.vector(footprint)?;
+            retained.polygons(holes)?;
+        }
+    }
+    retained.vector(barriers)?;
+    for mapkit_core::barrier::Barrier { id, kind: _, line, height_cm: _, thickness_cm: _ } in barriers {
+        retained.string(id)?;
+        retained.vector(line)?;
     }
     retained.vector(zones)?;
     for Zone {
@@ -533,6 +546,7 @@ mod tests {
                 material: string(163),
                 roof: string(167),
                 entrances: vector(7, vector(17, [i64::MAX, i64::MIN])),
+                parts: Vec::new(),
             },
         );
         d.zones = vector(
@@ -797,6 +811,7 @@ mod tests {
                 material: String::new(),
                 roof: String::new(),
                 entrances: Vec::new(),
+                parts: Vec::new(),
             },
         );
         let expected = size_of::<MapDocument>() as u64
@@ -969,6 +984,8 @@ mod tests {
             "water_bodies",
             "placements",
             "repetitions",
+            "ground_surface",
+            "barriers",
             "attributions",
             "provenance",
         ]

@@ -14,7 +14,7 @@ fn scenarios() -> Vec<(&'static str, MapDocument, BTreeMap<String, Vec<u8>>)> {
             footprint:vec![[x,y],[x+1200,y],[x+1200,y+1200],[x,y+1200]], holes:vec![],
             base_cm:0,height_cm:1500,usage:"public".into(),
             material:if x%2==0 {"wood"} else {"brick"}.into(),
-            roof:if y%2==0 {"gable"} else {"flat"}.into(),entrances:vec![] });
+            roof:if y%2==0 {"gable"} else {"flat"}.into(),entrances:vec![],parts:vec![] });
     }}
     let (mut repeated, files) = support::fixture();
     repeated.bounds.max=[25600,25600]; repeated.cell_size_cm=12800;

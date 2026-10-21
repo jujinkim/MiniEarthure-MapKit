@@ -13,7 +13,7 @@ fn overlaps(a: &[Vertex], b: &[Vertex]) -> bool {
 /// Positive-area triangle intersection without creating rounded clip vertices.
 /// Quantized clipping is appropriate for emitted geometry, but a sequence of
 /// truncations can invent a thin intersection between disjoint concave paints.
-fn interiors_overlap(a: &[Vertex; 3], b: &[Vertex; 3]) -> bool {
+pub(crate) fn interiors_overlap(a: &[Vertex; 3], b: &[Vertex; 3]) -> bool {
     let area = |t: &[Vertex; 3]| {
         (t[1][0] - t[0][0]) as i128 * (t[2][2] - t[0][2]) as i128
             - (t[1][2] - t[0][2]) as i128 * (t[2][0] - t[0][0]) as i128

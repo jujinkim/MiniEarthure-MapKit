@@ -51,7 +51,8 @@ empty) and only a raised guard still fails with the original code and message.
   (256) `road_junction_arms`; road/placement work 8M (64M) `road_work` /
   `placement_work`; courtyard work 4M (32M) `courtyard_work`; 20,000 repetition
   candidates (160,000); 300,000 zone candidates (2.4M); 16,384 road samples
-  (131,072). Work counters never change outputs.
+  (131,072); 1M bounded barrier pieces (8M) `barrier_pieces` (`E_LIMIT`); barrier
+  corridor gate work 8M (64M) `barrier_work` (`E_BUDGET`). Work counters never change outputs.
 - Project directory: document 32 MiB, entry 128 MiB (1 GiB each), expanded 1 GiB
   (4 GiB), 8,192 files (65,536), manifest 4 MiB (256 MiB).
 - Asset decode: image 64 MiB (256 MiB), 8,192 px side (16,384), GLB elements 1M
@@ -62,7 +63,8 @@ empty) and only a raised guard still fails with the original code and message.
 v1 invariants never warn: schema rules, seams, coordinate ranges, heightmap side
 and PNG16 encoding, ZIP/container integrity, a written .memap's 512 MiB / 128 MiB
 entry / 8,192 files / manifest, courses, POIs, water bodies, asset proxies,
-occupancy solids, gameplay object budgets and road arrangement subdivision.
+occupancy solids, gameplay object budgets, barrier/building-part geometry and
+road arrangement subdivision.
 
 `scripts/check_contract.py` compares this catalog with all four public crates,
 executes failure cases through the CLI, and checks that invalid input does not

@@ -60,7 +60,7 @@ fn native_building_reduction_preserves_roofs_courtyards_and_cell_cuts() {
             let moved = |ring: &Vec<[i64;2]>| ring.iter().map(|p| [p[0]+shift,p[1]+shift]).collect();
             let building = Building { id:"native".into(), footprint:moved(&footprint),
                 holes:holes.iter().map(moved).collect(), base_cm:100, height_cm:1500,
-                usage:"public".into(), material:"brick".into(), roof:roof.into(), entrances:vec![] };
+                usage:"public".into(), material:"brick".into(), roof:roof.into(), entrances:vec![],parts:vec![] };
             d.buildings.push(building.clone());
             let p = read_bytes(&pack_bytes(d, Default::default()).unwrap()).unwrap();
             let mut removed = 0;

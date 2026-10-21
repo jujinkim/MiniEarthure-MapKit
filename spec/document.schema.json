@@ -53,6 +53,13 @@
       ],
       "pattern": "^(rc_arena|village|neon_harbor|deep_forest|red_canyon|snow_mountain|machine_factory|sky_park)$"
     },
+    "barriers": {
+      "description": "Hedges, fences and walls; cut automatically at road corridors.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Barrier"
+      }
+    },
     "bounds": {
       "$ref": "#/definitions/Bounds"
     },
@@ -99,6 +106,17 @@
       "items": {
         "$ref": "#/definitions/GrindLine"
       }
+    },
+    "ground_surface": {
+      "description": "Surface of unpainted terrain; absent means grass.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Surface"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "heightmaps": {
       "type": "array",
@@ -577,6 +595,61 @@
       },
       "additionalProperties": false
     },
+    "Barrier": {
+      "type": "object",
+      "required": [
+        "height_cm",
+        "id",
+        "kind",
+        "line",
+        "thickness_cm"
+      ],
+      "properties": {
+        "height_cm": {
+          "description": "Visible height above the terrain at the centreline.",
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 1000.0,
+          "minimum": 10.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/BarrierKind"
+        },
+        "line": {
+          "description": "Centreline `[x, y]` in local centimetres; consecutive points differ. A closed perimeter repeats its first point.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          },
+          "maxItems": 4096,
+          "minItems": 2
+        },
+        "thickness_cm": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 100.0,
+          "minimum": 5.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "BarrierKind": {
+      "type": "string",
+      "enum": [
+        "hedge",
+        "fence",
+        "wall"
+      ]
+    },
     "Bounds": {
       "type": "object",
       "required": [
@@ -676,11 +749,73 @@
         "material": {
           "type": "string"
         },
+        "parts": {
+          "description": "Further solids of this one object: same ID, material, usage, roof and entrances. Footprint and part interiors are pairwise disjoint.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/BuildingPart"
+          },
+          "maxItems": 255
+        },
         "roof": {
           "type": "string"
         },
         "usage": {
           "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BuildingPart": {
+      "description": "One separately extruded solid of a building record.",
+      "type": "object",
+      "required": [
+        "footprint"
+      ],
+      "properties": {
+        "base_cm": {
+          "description": "Absent: the record's `base_cm`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "footprint": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "height_cm": {
+          "description": "Absent: the record's `height_cm`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "holes": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "maxItems": 2,
+              "minItems": 2
+            }
+          }
         }
       },
       "additionalProperties": false

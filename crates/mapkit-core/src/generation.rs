@@ -242,7 +242,14 @@ fn generate_internal(
     let mut document = input.document.clone();
     document.normalize();
     document.validate()?;
-    let cost = crate::cost::estimate_validated(&document, input.cell, input.max_triangles)?;
+    // Barrier documents prepare once for estimate and generation; others keep
+    // the original placement preparation order and error wrapping.
+    let prepared = if document.barriers.is_empty() { None } else {
+        Some(crate::placement::PreparedPlacements::new(&document).map_err(|mut e| {
+            e.message = format!("placements: {}", e.message); e
+        })?)
+    };
+    let cost = crate::cost::estimate_validated(&document, input.cell, input.max_triangles, prepared.as_ref().map(|p| &p.barriers))?;
     generate_validated(
         GenerationInput {
             document: &document,
@@ -250,7 +257,7 @@ fn generate_internal(
         },
         occupancy,
         &cost,
-        None,
+        prepared.as_ref(),
         false,
     )
 }
@@ -373,6 +380,16 @@ fn generate_validated(
     crate::placement::generate(d, input.cell, &mut b, placements).map_err(|mut e| {
         e.message = format!("placements: {}", e.message); e
     })?;
+    if !d.barriers.is_empty() {
+        let owned;
+        let spans = match placements {
+            Some(prepared) => &prepared.barriers,
+            None => { owned = crate::barrier::Spans::new(d)?; &owned }
+        };
+        crate::barrier::generate(d, input.cell, input.heightgrid, spans, &mut b).map_err(|mut e| {
+            e.message = format!("barriers: {}", e.message); e
+        })?;
+    }
     if let Some(occupied) = &mut b.occupancy {
         for g in &b.chunk.gimmicks {
             for (min,max) in g.occupancy_bounds() {

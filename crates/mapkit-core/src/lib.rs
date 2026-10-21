@@ -15,6 +15,7 @@ pub mod course;
 pub mod road_course;
 pub mod environment;
 pub mod backdrop;
+pub mod barrier;
 /// Junction admission for imports; geometry rules stay in the road planner.
 pub use road_plan::unbuildable_junctions;
 pub use convex::{CollisionConvex, GeneratedConvex};
@@ -188,6 +189,60 @@ pub struct Building {
     /// Author-declared access corridors, excluded from automatic placement/sidewalks.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entrances: Vec<Vec<Point>>,
+    /// Further solids of this one object: same ID, material, usage, roof and
+    /// entrances. Footprint and part interiors are pairwise disjoint.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(length(max = 255))]
+    pub parts: Vec<BuildingPart>,
+}
+/// One separately extruded solid of a building record.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BuildingPart {
+    pub footprint: Vec<Point>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holes: Vec<Vec<Point>>,
+    /// Absent: the record's `base_cm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_cm: Option<i64>,
+    /// Absent: the record's `height_cm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height_cm: Option<u32>,
+}
+pub const MAX_BUILDING_PARTS: usize = 255;
+impl Building {
+    /// Solid `k`: 0 is the record itself, `k > 0` is part `k - 1` as a complete
+    /// building sharing the record's identity, material, usage and roof. Only
+    /// solid 0 carries the record's entrances (and its `parts`; never recurse).
+    pub fn solid(&self, k: usize) -> std::borrow::Cow<'_, Building> {
+        let Some(p) = k.checked_sub(1).map(|i| &self.parts[i]) else {
+            return std::borrow::Cow::Borrowed(self);
+        };
+        std::borrow::Cow::Owned(Building {
+            id: self.id.clone(),
+            footprint: p.footprint.clone(),
+            holes: p.holes.clone(),
+            base_cm: p.base_cm.unwrap_or(self.base_cm),
+            height_cm: p.height_cm.unwrap_or(self.height_cm),
+            usage: self.usage.clone(),
+            material: self.material.clone(),
+            roof: self.roof.clone(),
+            entrances: vec![],
+            parts: vec![],
+        })
+    }
+    /// Every solid, record first. Prefer [`Building::rings`] when only rings are read.
+    pub fn solids(&self) -> impl Iterator<Item = std::borrow::Cow<'_, Building>> + '_ {
+        (0..=self.parts.len()).map(move |k| self.solid(k))
+    }
+    /// Borrowed `(footprint, holes)` of every solid, record first.
+    pub fn rings(&self) -> impl Iterator<Item = (&Vec<Point>, &Vec<Vec<Point>>)> + '_ {
+        std::iter::once((&self.footprint, &self.holes)).chain(self.parts.iter().map(|p| (&p.footprint, &p.holes)))
+    }
+    /// Every solid footprint, record first.
+    pub fn footprints(&self) -> impl Iterator<Item = &Vec<Point>> + '_ {
+        std::iter::once(&self.footprint).chain(self.parts.iter().map(|p| &p.footprint))
+    }
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -341,6 +396,12 @@ pub struct MapDocument {
     pub roads: Vec<Road>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub surface_areas: Vec<SurfaceArea>,
+    /// Surface of unpainted terrain; absent means grass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ground_surface: Option<Surface>,
+    /// Hedges, fences and walls; cut automatically at road corridors.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub barriers: Vec<barrier::Barrier>,
     pub buildings: Vec<Building>,
     pub zones: Vec<Zone>,
     pub assets: Vec<Asset>,
@@ -466,6 +527,16 @@ pub const INPUT_VERTICES: profile::Budget = profile::Budget { code: "input_verti
 
 impl MapDocument {
     pub fn normalize(&mut self) {
+        // One canonical spelling of the defaults: grass ground, inherited part values.
+        if self.ground_surface == Some(Surface::Grass) {
+            self.ground_surface = None;
+        }
+        for b in &mut self.buildings {
+            for p in &mut b.parts {
+                if p.base_cm == Some(b.base_cm) { p.base_cm = None; }
+                if p.height_cm == Some(b.height_cm) { p.height_cm = None; }
+            }
+        }
         self.pois.sort_by(|a, b| a.id.cmp(&b.id));
         self.water_bodies.sort_by(|a,b| a.id.cmp(&b.id));
         self.grind_lines.sort_by(|a,b|a.id.cmp(&b.id));
@@ -479,6 +550,7 @@ impl MapDocument {
         self.assets.sort_by(|a, b| a.id.cmp(&b.id));
         self.placements.sort_by(|a, b| a.id.cmp(&b.id));
         self.repetitions.sort_by(|a, b| a.id.cmp(&b.id));
+        self.barriers.sort_by(|a, b| a.id.cmp(&b.id));
         self.heightmaps.sort_by_key(|h| h.cell);
         self.attributions.sort_by(|a, b| {
             (&a.source, &a.license, &a.notice).cmp(&(&b.source, &b.license, &b.notice))
@@ -570,7 +642,8 @@ impl MapDocument {
             + self.zones.len()
             + self.assets.len()
             + self.placements.len()
-            + self.repetitions.len();
+            + self.repetitions.len()
+            + self.barriers.len();
         OBJECTS.check(count as u64, || error("E_LIMIT", "too many objects"))?;
         let vertices = self.water_bodies.iter().map(|b| b.vertices()).sum::<usize>() + self
             .surface_areas
@@ -581,7 +654,8 @@ impl MapDocument {
             + self
                 .buildings
                 .iter()
-                .map(|b| b.footprint.len() + b.holes.iter().map(Vec::len).sum::<usize>())
+                .map(|b| b.footprint.len() + b.holes.iter().map(Vec::len).sum::<usize>()
+                    + b.parts.iter().map(|p| p.footprint.len() + p.holes.iter().map(Vec::len).sum::<usize>()).sum::<usize>())
                 .sum::<usize>()
             + self
                 .zones
@@ -598,7 +672,8 @@ impl MapDocument {
                 .iter()
                 .flat_map(|b| &b.entrances)
                 .map(Vec::len)
-                .sum::<usize>();
+                .sum::<usize>()
+            + self.barriers.iter().map(|b| b.line.len()).sum::<usize>();
         INPUT_VERTICES.check(vertices as u64, || error("E_LIMIT", "too many input vertices"))?;
         let mut ids = BTreeSet::new();
         for id in self
@@ -614,6 +689,7 @@ impl MapDocument {
             .chain(self.assets.iter().map(|x| &x.id))
             .chain(self.placements.iter().map(|x| &x.id))
             .chain(self.repetitions.iter().map(|x| &x.id))
+            .chain(self.barriers.iter().map(|x| &x.id))
         {
             if id.is_empty() || id.len() > 128 || !ids.insert(id) {
                 return Err(error("E_ID", "invalid or duplicate object ID"));
@@ -687,14 +763,19 @@ impl MapDocument {
         roads::validate_graph(self)?;
 
         let mut courtyard_work = 0;
-        for b in &self.buildings {
-            courtyard::validate(b, &self.bounds, &mut courtyard_work)?;
-            if !polygon_valid(&b.footprint, &self.bounds)
-                || b.height_cm == 0
-                || b.height_cm > 100_000
-                || b.base_cm.unsigned_abs() > 1_000_000
-            {
-                return fail("invalid building");
+        for record in &self.buildings {
+            if record.parts.len() > MAX_BUILDING_PARTS {
+                return fail("building has more than 255 parts");
+            }
+            for b in record.solids() {
+                courtyard::validate(&b, &self.bounds, &mut courtyard_work)?;
+                if !polygon_valid(&b.footprint, &self.bounds)
+                    || b.height_cm == 0
+                    || b.height_cm > 100_000
+                    || b.base_cm.unsigned_abs() > 1_000_000
+                {
+                    return fail("invalid building");
+                }
             }
         }
         for z in &self.zones {
@@ -810,6 +891,7 @@ impl MapDocument {
             return Err(error("E_GRIND_SOURCE","grind path leaves document bounds"));
         }
         if let Some(track) = &self.assembled_track { track.validate_stored()?; }
+        barrier::validate(self)?;
         placement::validate(self)?;
         Ok(())
     }
