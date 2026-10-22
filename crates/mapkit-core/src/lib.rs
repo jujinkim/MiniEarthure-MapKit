@@ -1158,7 +1158,7 @@ mod query;
 pub use occupancy::{GeneratedOccupancy, OccupiedSolid, SolidShape, MAX_OCCUPIED_SOLIDS};
 pub use query::QueryCells;
 mod overview;
-pub use cost::{estimate_generation, GenerationCost};
+pub use cost::{estimate_generation, road_style_bound, GenerationCost};
 pub use generation::{generate, generate_with_occupancy};
 pub use overview::{
     overview, source_overview, MapOverview, OverviewBuilding, OverviewCost, OverviewRoad,

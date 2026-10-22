@@ -1,4 +1,9 @@
 //! Allocation planning for successful generation; never materializes geometry.
+//! Every count is an upper bound of what generation emits, because generation
+//! fails closed above `triangles`. Cells without a heightmap or assembled track
+//! pre-run the ground arrangement (no triangulation) and bound sidewalks from
+//! that ground count and the nearby sidewalk segments; other cells keep the
+//! sampled-terrain allowances.
 use super::*;
 
 /// Conservative counts, not process/GPU byte measurements. Runtime adapters own
@@ -113,31 +118,62 @@ pub(crate) fn estimate_validated(
     let ny = ((area.max[1] - area.min[1]) / spacing + 1).min(side as i64 - 1) as u64;
     let partial = (area.max[0] - area.min[0]) < d.cell_size_cm as i64
         || (area.max[1] - area.min[1]) < d.cell_size_cm as i64;
-    if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) { add(nx * ny * 2 * if partial { 5 } else { 1 }, 7); }
+    // Flat cells (one terrain tile, no decoded heights) count the real ground
+    // arrangement; sampled or track-integrated terrain keeps the tile allowances.
+    let flat = descriptor.is_none() && d.assembled_track.is_none();
+    let plan = if flat || d.roads.iter().any(|r| matches!(r.kind, RoadKind::Elevated | RoadKind::Bridge)) {
+        Some(crate::road_plan::surface_plan(d, &area)?)
+    } else { None };
+    let mut ground = 0u64;
+    if flat {
+        let (patches, walls) = plan.as_ref().unwrap();
+        ground = crate::roads::estimate_ground(d, &area, patches)?;
+        add(ground, 7);
+        // Structural decks (plus a tunnel ceiling) and portal walls are emitted
+        // whole and clipped to the cell afterwards.
+        for patch in patches {
+            if patch.road.kind == RoadKind::Ground { continue; }
+            let f = clip_factor(&bounds(patch.v.iter().map(|p| [p[0], p[2]]), 0), &area);
+            add(f * if patch.road.kind == RoadKind::Tunnel { 2 } else { 1 }, patch.road.id.len());
+        }
+        // A tunnel wall is one quad; an underpass wall is cut by the tile's two
+        // terrain triangles and the roof plane: up to four quads.
+        for wall in walls {
+            let quads = match wall.road.kind { RoadKind::Tunnel => 1, RoadKind::Underpass => 4, _ => continue };
+            if crate::road_plan::hit(&[wall.a, wall.b], &area, 0) {
+                add(2 * quads * clip_factor(&bounds([wall.a, wall.b].iter().map(|p| [p[0], p[2]]), 0), &area), wall.road.id.len());
+            }
+        }
+    } else if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) { add(nx * ny * 2 * if partial { 5 } else { 1 }, 7); }
     for paint in &d.surface_areas {
         let shape = bounds(paint.polygon.iter().copied(), 0);
         if clip_factor(&shape, &area) != 0 {
-            add(nx * ny * (paint.polygon.len() as u64) * 24, paint.id.len());
+            add(if flat { 0 } else { nx * ny * (paint.polygon.len() as u64) * 24 }, paint.id.len());
         }
     }
     let road_margin = crate::roads::influence_margin(d);
+    // Sidewalk hulls come from the plan of the cell widened by 1,000 cm.
+    let mut sidewalk_segments = 0u64;
     for r in &d.roads {
+        let width = crate::placement::sidewalk_width(d, r) as i64;
         for points in r.points.windows(2) {
             // Corridors plus their two aprons. This is a source-derived
             // output allowance, also enforced by road generation.
             let local = bounds(points.iter().map(|p| [p[0], p[2]]), road_margin);
             if clip_factor(&local, &area) != 0 {
-                let span = |axis: usize| {
-                    ((local.max[axis].min(area.max[axis]) - local.min[axis].max(area.min[axis]))
-                        .max(0)
-                        / spacing
-                        + 2) as u64
-                };
-                let touched = span(0).saturating_mul(span(1));
-                add(touched.saturating_mul(192).saturating_add(512), r.id.len());
-
-                let width = crate::placement::sidewalk_width(d, r) as i64;
-                if width > 0 {
+                if flat {
+                    add(0, r.id.len());
+                } else {
+                    let span = |axis: usize| {
+                        ((local.max[axis].min(area.max[axis]) - local.min[axis].max(area.min[axis]))
+                            .max(0)
+                            / spacing
+                            + 2) as u64
+                    };
+                    let touched = span(0).saturating_mul(span(1));
+                    add(touched.saturating_mul(192).saturating_add(512), r.id.len());
+                }
+                if width > 0 && !flat {
                     let local_span = ((local.max[0].min(area.max[0])
                         - local.min[0].max(area.min[0]))
                     .max(0)
@@ -150,17 +186,34 @@ pub(crate) fn estimate_validated(
                     );
                 }
             }
+            if flat && width > 0
+                && clip_factor(&bounds(points.iter().map(|p| [p[0], p[2]]), road_margin + 1000), &area) != 0 {
+                sidewalk_segments += 1;
+                add(0, r.id.len() + 9);
+            }
         }
+    }
+    if flat {
+        // Sidewalk tops re-cut the ground faces inside the unioned hulls (16 ring
+        // points per boundary edge) minus the building footprints and entrances
+        // near the cell (their vertices become hole vertices), then add one wall
+        // quad per exposed ring edge. Measured city cells stay below 2.1 times
+        // this base; the factor 4 is the allowance, and generation fails closed
+        // above it.
+        let exclusion_vertices: u64 = d.buildings.iter()
+            .flat_map(|b| b.footprints().chain(&b.entrances))
+            .filter(|poly| clip_factor(&bounds(poly.iter().copied(), 0), &area) != 0)
+            .map(|poly| poly.len() as u64)
+            .sum();
+        add(4 * (16 * sidewalk_segments + ground + exclusion_vertices), 7);
     }
     // The shared exterior plan gives bounded safety counts, including arcs and
     // posts whose centers lie outside this cell. No memory/cell caps change.
-    let edges = if d.roads.iter().any(|r| matches!(r.kind, RoadKind::Elevated | RoadKind::Bridge)) {
-        crate::road_plan::surface_plan(d, &area)?.1
-    } else { Vec::new() };
+    let edges: &[crate::road_plan::Edge] = plan.as_ref().map_or(&[], |p| p.1.as_slice());
     for edge in edges {
         if matches!(edge.road.kind, RoadKind::Elevated | RoadKind::Bridge)
             && crate::road_plan::hit(&[edge.a, edge.b], &area, crate::road_safety::OUTSET_CM) {
-            let posts=crate::road_safety::post_range(&edge,&area).map_or(0,|(a,b)|
+            let posts=crate::road_safety::post_range(edge,&area).map_or(0,|(a,b)|
                 if a>b {0} else {libm::floor((b-a)/200.0) as u64+1});
             let n = 3 + posts;
             cost.asset_convexes = cost.asset_convexes.saturating_add(n);
@@ -221,7 +274,10 @@ pub(crate) fn estimate_validated(
                 .saturating_mul((max.div_euclid(spacing) - min.div_euclid(spacing) + 2) as u64);
         }
         // Same generator per-zone candidate ceiling; successful output cannot
-        // exceed this even when the domain bounds span many cells.
+        // exceed this even when the domain bounds span many cells. Trees are
+        // emitted whole by their owner cell, never clipped into pieces; the one
+        // extra lattice index per axis above keeps the bound when an odd-sized
+        // rotated proxy box straddles the map edge by a centimetre.
         candidates = candidates.min(300_000);
         cost.objects = cost.objects.saturating_add(candidates);
         if let Some(tree) = &zone.tree {
@@ -240,12 +296,12 @@ pub(crate) fn estimate_validated(
                     .map(|c| c.faces.len() as u64)
                     .sum::<u64>();
             add(
-                candidates.saturating_mul(triangles).saturating_mul(5),
+                candidates.saturating_mul(triangles),
                 (zone.id.len() + 42).max(tree.asset_id.len()),
             );
         } else {
             cost.occupied_solids = cost.occupied_solids.saturating_add(candidates);
-            add(candidates.saturating_mul(12 * 5), zone.id.len() + 42);
+            add(candidates.saturating_mul(12), zone.id.len() + 42);
         }
     }
     let repeated = { crate::placement::repeated(d)? };
@@ -298,4 +354,28 @@ pub(crate) fn estimate_validated(
     // larger chunk. The reservation bounds successful output, not failed work.
     cost.triangles = cost.triangles.min(max_triangles.min(2_000_000) as u64);
     Ok(cost)
+}
+
+/// Upper bound of the road display styles a cell can create: one per road and
+/// surface with a spawnable face in the cell, so every road with a corridor or
+/// junction face near the cell (within the plan's influence margin) counts its
+/// distinct surfaces, plus one shared safety style. A road sharing an assembled
+/// track face ID is styled wherever that face is. A display-byte allowance
+/// input, not a hash input.
+pub fn road_style_bound(d: &MapDocument, cell: Cell) -> Result<u64> {
+    let area = d.cell_bounds(cell)?;
+    let margin = crate::roads::influence_margin(d);
+    let mut styles = 0u64;
+    let mut safety = false;
+    for r in &d.roads {
+        let near = r.points.windows(2).any(|p| clip_factor(&bounds(p.iter().map(|v| [v[0], v[2]]), margin), &area) != 0)
+            || (d.assembled_track.is_some() && r.id.starts_with("assembled-road-"));
+        if !near { continue; }
+        let mut surfaces: Vec<Surface> = r.surfaces.clone();
+        surfaces.sort_by_key(|s| *s as u8);
+        surfaces.dedup();
+        styles += surfaces.len() as u64;
+        safety |= matches!(r.kind, RoadKind::Elevated | RoadKind::Bridge);
+    }
+    Ok(styles + u64::from(safety))
 }

@@ -64,16 +64,13 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
     {
         *instances.entry(&asset.id).or_default() += 1;
     }
+    // Road styles exist per road and surface with faces in this cell, never for
+    // the whole document.
     let styles = {
         p.document
             .estimate(cell, 500_000)
             .map_or(0, |c| c.triangles * 256)
-            + p.document
-                .roads
-                .iter()
-                .filter(|r| r.markings.is_some())
-                .map(|r| (r.points.len() - 1) as u64 * 16384)
-                .sum::<u64>()
+            + mapkit_core::road_style_bound(&p.document, cell)? * 16384
     };
     Ok(environment_cost(&p.document)
         + styles

@@ -65,7 +65,13 @@ This page lists the domain invariants and links each feature's owner.
   (2 GiB); preview payload 16 MiB (128 MiB); preview display 128 MiB (1 GiB).
   `generate_packed`, `estimate` and `validate_cells` take an optional
   `max_triangles` (default 500,000, ≤2,000,000); Save admission uses 2,000,000.
-  A generated cell above 500,000 triangles warns `cell_triangles`.
+  A generated cell above 500,000 triangles warns `cell_triangles`. A cell
+  estimate is an upper bound of the generated output (generation fails closed
+  above it): cells without a heightmap or assembled track pre-run their ground
+  arrangement without triangulating and bound sidewalks from that ground count
+  and the nearby sidewalk segments; trees count unclipped; display bytes for
+  road markings cover the roads with faces near the cell and their two-arm
+  chain continuations, not the whole document.
 - Raw height and road-fitted surface queries are separate; display, flood and
   physics share the fitting operation.
 - Water editing floods connected sub-level terrain at a fixed clicked height; flat

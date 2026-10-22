@@ -199,24 +199,72 @@ pub(crate) fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
     out.pop();
     out
 }
+/// Where a tile's arrangement faces go: emitted as geometry, or only counted
+/// (the cell estimate's pre-run of the same arrangement, without triangulation).
+pub(crate) enum TileSink<'b> {
+    Emit { b: &'b mut Builder, ground: Surface },
+    Count(&'b mut u64),
+}
 // The current arrangement cuts each terrain tile once, before assigning surface identities.
 fn ground_tile(
     v: [Vertex; 4],
     patches: &[&Patch],
     paint: &[&SurfaceArea],
     track: &[[Vertex;3]],
-    b: &mut Builder,
+    cell_bounds: &Bounds,
+    sink: &mut TileSink,
     work: &mut usize,
-    ground: Surface,
 ) -> Result<()> {
     let bounds = Bounds {
         min: xy(v[0]),
-        max: [v[2][0].min(b.bounds.max[0]), v[2][2].min(b.bounds.max[1])],
+        max: [v[2][0].min(cell_bounds.max[0]), v[2][2].min(cell_bounds.max[1])],
     };
     if (0..2).any(|i| bounds.min[i] >= bounds.max[i]) {
         return Ok(());
     }
-    ground_tile_part(v, bounds, patches, paint, track, b, work, 0, ground)
+    ground_tile_part(v, bounds, patches, paint, track, sink, work, 0)
+}
+
+/// Upper bound of the ground triangles of a cell without a heightmap or assembled
+/// track: the same patch/paint inputs, tile arrangement and dense-split recursion
+/// as [`generate`], stopping before triangulation. A face of `k` ring vertices
+/// and `h` holes triangulates to exactly `k - 2 + 2h` faces; only holed faces can
+/// restore collinear vertices dropped by hole bridging (at most two faces each).
+pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch]) -> Result<u64> {
+    let spacing = d.cell_size_cm as i64;
+    let side = 2usize;
+    let fitter = crate::road_design::Fitter::new(d, bounds);
+    let height = |x: usize, y: usize| fitter.height(
+        [bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing],
+        crate::terrain_height(bounds,spacing,side,None,d.terrain_base_cm,[bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing]));
+    let mut work = 0;
+    let index_items = patches.len() + d.surface_areas.len();
+    tick(&mut work, index_items.saturating_mul(index_items.max(1).ilog2() as usize + 1)
+        + d.surface_areas.iter().map(|a| a.polygon.len()).sum::<usize>())?;
+    let patch_index = crate::bounds_index::BoundsIndex::new(&patches.iter()
+        .map(|p| crate::bounds_index::bounds(&p.v.map(xy))).collect::<Vec<_>>());
+    let paint_index = crate::bounds_index::BoundsIndex::new(&d.surface_areas.iter()
+        .map(|a| crate::bounds_index::bounds(&a.polygon)).collect::<Vec<_>>());
+    let mut count = 0u64;
+    for y in 0..side - 1 {
+        for x in 0..side - 1 {
+            let px = bounds.min[0] + x as i64 * spacing;
+            let py = bounds.min[1] + y as i64 * spacing;
+            let v = [
+                [px, height(x, y), py],
+                [px + spacing, height(x + 1, y), py],
+                [px + spacing, height(x + 1, y + 1), py + spacing],
+                [px, height(x, y + 1), py + spacing],
+            ];
+            let tile_bounds = Bounds { min: [px - 2, py - 2], max: [px + spacing + 2, py + spacing + 2] };
+            let local_patches: Vec<_> = patch_index.query(&tile_bounds, &mut work)?.into_iter()
+                .map(|i| &patches[i]).collect();
+            let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
+                .map(|i| &d.surface_areas[i]).collect();
+            ground_tile(v, &local_patches, &local_paint, &[], bounds, &mut TileSink::Count(&mut count), &mut work)?;
+        }
+    }
+    Ok(count)
 }
 
 // Dense city terrain is divided spatially before an arrangement can exceed its
@@ -225,7 +273,7 @@ fn ground_tile(
 #[allow(clippy::too_many_arguments)]
 fn ground_tile_part(
     v: [Vertex;4], bounds: Bounds, patches: &[&Patch], paint: &[&SurfaceArea],
-    track: &[[Vertex;3]], b: &mut Builder, work: &mut usize, depth: u8, ground: Surface,
+    track: &[[Vertex;3]], sink: &mut TileSink, work: &mut usize, depth: u8,
 ) -> Result<()> {
     tick(
         work,
@@ -267,7 +315,7 @@ fn ground_tile_part(
     }
     for patch in &nearby {
         for t in terrain {
-            if patch.terrain_join && patch.road.design.is_none() {
+            if matches!(sink, TileSink::Emit { .. }) && patch.terrain_join && patch.road.design.is_none() {
                 let (inside, _) = partition(&t, &patch.v, work)?;
                 if let Some(point) = inside
                     .iter()
@@ -351,13 +399,27 @@ fn ground_tile_part(
                     min:[if x==0 {bounds.min[0]} else {mid[0]},if y==0 {bounds.min[1]} else {mid[1]}],
                     max:[if x==0 {mid[0]} else {bounds.max[0]},if y==0 {mid[1]} else {bounds.max[1]}],
                 };
-                ground_tile_part(v,part,&nearby,&paint,track,b,work,depth+1,ground)?;
+                ground_tile_part(v,part,&nearby,&paint,track,sink,work,depth+1)?;
             }}
             return Ok(());
         }
         // At the split limit, triangulation reports the oversized face.
         Ok(shapes) => shapes,
         Err(e) => return Err(e),
+    };
+    let (b, ground) = match sink {
+        TileSink::Count(count) => {
+            for rings in &shapes {
+                let k = rings.iter().map(Vec::len).sum::<usize>() as u64;
+                let h = rings.len().saturating_sub(1) as u64;
+                // Bridging may drop collinear ring vertices; each restored vertex
+                // lies on one boundary edge of the simplified face, so restoration
+                // adds at most one triangle per ring vertex.
+                **count += if h == 0 { k.saturating_sub(2) } else { 2 * k + 2 * h - 2 };
+            }
+            return Ok(());
+        }
+        TileSink::Emit { b, ground } => (&mut **b, *ground),
     };
     // Centroid classification needs only patches whose integer bounds contain
     // the centroid. Preserve source priority by the index's ordered results.
@@ -504,6 +566,8 @@ pub(crate) fn generate(
         .map(|p| crate::bounds_index::bounds(&p.v.map(xy))).collect::<Vec<_>>());
     let paint_index = crate::bounds_index::BoundsIndex::new(&d.surface_areas.iter()
         .map(|a| crate::bounds_index::bounds(&a.polygon)).collect::<Vec<_>>());
+    let cell_bounds = b.bounds.clone();
+    let ground_surface = d.ground_surface.unwrap_or(Surface::Grass);
     for y in 0..side - 1 {
         for x in 0..side - 1 {
             let px = bounds.min[0] + x as i64 * spacing;
@@ -520,7 +584,7 @@ pub(crate) fn generate(
                 .map(|i| &patches[i]).collect();
             let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
                 .map(|i| &d.surface_areas[i]).collect();
-            ground_tile(v, &local_patches, &local_paint, &track, b, &mut work, d.ground_surface.unwrap_or(Surface::Grass))?;
+            ground_tile(v, &local_patches, &local_paint, &track, &cell_bounds, &mut TileSink::Emit { b, ground: ground_surface }, &mut work)?;
         }
     }
     for patch in &patches {
