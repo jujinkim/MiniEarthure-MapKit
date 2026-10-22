@@ -62,6 +62,20 @@ before assigning the complete source once, with identical final shader code.
 Canopy leaves create independent bindings with leaf colour, roughness 1.0, detail
 and wind. The shared shader retains double-sided rendering; borrowed shaders/textures
 keep the context charged.
+Generated building walls (material keys `brick|wood|concrete:usage`) take one of twelve
+colours: the material base blended towards the use tint (concrete 0.6, brick and wood 0.3),
+shared byte-for-byte with the distant mesh. `bind_facade` gives those bindings a facade
+kind (concrete residential = apartment bands and balcony slabs, brick/wood residential =
+house, commercial = shopfront glass on the lowest storey and a curtain-wall grid above,
+industrial = panel ribs with sparse high windows, public = tall windows with stone
+courses), the night-window role and a floor pitch of 3 m ÷ the map scale 1:D that
+presentation publishes as `facade_floor_cm` (300 when no OSM layer records a scale).
+Panes and bands are drawn procedurally from world position on vertical faces within the
+quality effect distance; storeys align to scene height, not to each building's base.
+Every planar face takes a stable seed from its plane, which varies wall brightness by
+±3 % and the night switch-off minute per face. Roofs, bottoms, imported assets and
+distant meshes are unchanged. No external image is used.
+
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC
 bindings likewise defer detail quality at `_environment_surface`. This applies the

@@ -18,7 +18,9 @@ GLB/texture instance is produced. The traversal is iterative. Building material 
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.
 
-Native buildings (every part) emit closed triangular prisms; barrier faces use a
+Native buildings (every part) emit closed triangular prisms in the near renderer's
+twelve material/use wall colours and carry light role 3 (night-lit walls at average
+window emission, dark roofs) with the map/object seed; barrier faces use a
 per-kind colour. The distant conversion removes
 exactly paired, opposite internal vertical quads, even when their two triangles
 use different diagonals. It keeps source order and coordinates for every surviving

@@ -4,6 +4,8 @@ const ASSETS := preload("./asset_library.gd")
 const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
+const BUILDING_BASE := {"brick": Color("b46c50"), "wood": Color("997347"), "concrete": Color("b7b8b0")}
+const BUILDING_TINT := {"residential": Color("e8d6bd"), "commercial": Color("9fb4c4"), "industrial": Color("8b8f93"), "public": Color("d9c89a")}
 const URBAN_SURFACE := preload("./urban_surface.gdshader")
 const PLAN := preload("./render_memory.gd")
 const QUALITY := preload("./display_quality.gd")
@@ -391,9 +393,29 @@ static func material_color(key: String) -> Color:
 	if not key.contains(":"):
 		return COLORS.get(key, Color.GRAY)
 	var fields := key.split(":")
-	var base: Color = {"brick": Color("b46c50"), "wood": Color("997347"), "concrete": Color("b7b8b0")}.get(fields[0], Color.GRAY)
-	var tint: Color = {"residential": Color("f4dfc3"), "commercial": Color("c6dfec"), "industrial": Color("bbbec6"), "public": Color("eee3b2")}.get(fields[1], Color.WHITE)
-	return base.lerp(tint, 0.2)
+	var base: Color = BUILDING_BASE.get(fields[0], Color.GRAY)
+	var tint: Color = BUILDING_TINT.get(fields[1], Color.WHITE)
+	# Same twelve colours as the distant mesh (mapkit-package distant.rs).
+	return base.lerp(tint, 0.6 if fields[0] == "concrete" else 0.3)
+
+## Generated building walls: 1 apartment, 2 house, 3 commercial, 4 industrial, 5 public; 0 none.
+static func facade_kind(key: String) -> int:
+	var fields := key.split(":")
+	if fields.size() != 2 or not BUILDING_BASE.has(fields[0]): return 0
+	match fields[1]:
+		"residential": return 1 if fields[0] == "concrete" else 2
+		"commercial": return 3
+		"industrial": return 4
+		"public": return 5
+	return 0
+
+## Floor pitch follows the authored map scale (3 m ÷ D) published by presentation.
+static func bind_facade(material: Material, key: String, presentation: Dictionary) -> void:
+	var kind := facade_kind(key)
+	if kind == 0 or material is not ShaderMaterial: return
+	material.set_shader_parameter("facade_kind", kind)
+	material.set_shader_parameter("floor_pitch", float(presentation.get("facade_floor_cm", 300)) / 100.0)
+	material.set_shader_parameter("lighting_role", 1)
 
 ## Authored climate changes static ground colour only, never surface traction.
 static func ground_color(key: String, presentation: Dictionary) -> Color:
@@ -443,14 +465,18 @@ static func _leaf_material(job: Dictionary, defer_quality := false) -> Material:
 static func _generated_material(job: Dictionary, key: String, presentation: Dictionary, defer_quality := false) -> Material:
 	var context: RefCounted = job.resources.environment_context() if job.get("resources") != null else null
 	if context != null and not key.begins_with("rc:") and not _urban_surface(key,presentation):
-		return context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0,0.9,defer_quality)
+		var generated: ShaderMaterial = context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0,0.9,defer_quality)
+		bind_facade(generated,key,presentation)
+		return generated
 	var material := surface_material(key,presentation,job.get("urban_shader"))
 	if material is StandardMaterial3D:
 		material.albedo_color = ground_color(key,presentation)
 		material.roughness = 0.9
 		material.cull_mode = BaseMaterial3D.CULL_DISABLED
 		material.resource_name = "mk_"+detail_kind(key)
-	return _environment_surface(job,material,defer_quality)
+	var bound := _environment_surface(job,material,defer_quality)
+	bind_facade(bound,key,presentation)
+	return bound
 
 static func _urban_surface(key: String, presentation: Dictionary) -> bool:
 	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete"])

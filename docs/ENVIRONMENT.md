@@ -14,7 +14,8 @@ standalone Editor previews use their own state.
   first match wins, and weather remains map-wide.
 - GLB light bindings refer to material indices rather than mesh surface order.
   Empty window/bulb lists are valid. No objects are added implicitly. Map ID,
-  object ID and night index seed both near and distant windows. Their stable
+  object ID and night index seed both near and distant windows; generated building
+  walls use a per-face seed near and the object seed far. Their stable
   switch-off minute lies between midnight and 04:00, or sunrise if earlier.
 - Simple solar cycles use authored rise/set times. Astronomical mode uses J2000
   approximations, lunar phase and polar day/night for a game sky. Polar-night

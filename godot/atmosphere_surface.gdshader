@@ -28,16 +28,21 @@ uniform bool terrain_surface = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform float roughness = 0.85;
 uniform float metallic = 0.0;
-uniform int lighting_role = 0; // 1 windows, 2 street lamps
+uniform int lighting_role = 0; // 1 windows, 2 street lamps (distant UV.y also carries 3 native building walls)
 uniform bool instanced = false;
 uniform bool distant = false;
 uniform bool vertex_tinted = false;
 // Opaque instances carry this identity in INSTANCE_CUSTOM. A material uniform
 // supports the exceptional non-instanced path without a global instance block.
 uniform float building_seed = 0.5;
+// Procedural facades on generated building walls: 1 apartment, 2 house,
+// 3 commercial, 4 industrial, 5 public. Floor pitch is in scene metres (3 m ÷ D).
+uniform int facade_kind = 0;
+uniform float floor_pitch = 3.0;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float seed;
+float facade_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
 void vertex() {
     UV=UV*uv_scale.xy+uv_offset.xy;
     world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz;
@@ -82,6 +87,38 @@ void fragment() {
         float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
         color *= 1.0 + (0.016*grain-0.008)*effect_weight;
     }
+    // Generated walls: floor bands, window panes and a per-face seed. Roofs,
+    // bottoms, distant meshes and imported assets keep their own appearance.
+    float facade_wall = 0.0;
+    float facade_window = 0.0;
+    float facade_lit = 0.0;
+    float facade_seed = seed;
+    if(facade_kind>0 && !distant && abs(world_normal.y)<0.5) {
+        facade_wall = 1.0;
+        vec3 n = normalize(world_normal);
+        facade_seed = facade_hash(vec2(round(dot(n,world_position)*4.0),round(n.x*8.0)+round(n.z*8.0)*17.0));
+        if(effect_weight>0.0) {
+            float u = dot(world_position,normalize(vec3(-n.z,0.0,n.x)));
+            float v = world_position.y;
+            float bay = facade_kind==1 ? 1.3 : (facade_kind==2 ? 1.8 : (facade_kind==3 ? 0.8 : (facade_kind==4 ? 1.0 : 1.5)));
+            vec2 cell = vec2(u/(floor_pitch*bay),v/floor_pitch);
+            vec2 f = fract(cell);
+            vec4 pane = facade_kind==1 ? vec4(0.2,0.75,0.3,0.75) : (facade_kind==2 ? vec4(0.3,0.7,0.3,0.7) : (facade_kind==3 ? vec4(0.1,0.9,0.15,0.85) : (facade_kind==4 ? vec4(0.15,0.85,0.6,0.85) : vec4(0.3,0.7,0.2,0.85))));
+            float window = step(pane.x,f.x)*step(f.x,pane.y)*step(pane.z,f.y)*step(f.y,pane.w);
+            if(facade_kind==3 && v<floor_pitch) window = step(0.12,f.y)*step(f.y,0.9);
+            if(facade_kind==4) {
+                color *= 1.0-0.08*step(0.85,fract(u/(0.6*floor_pitch)));
+                window *= step(0.5,facade_hash(vec2(floor(cell.x),floor(cell.y)*3.0)));
+            }
+            if(facade_kind==1) color *= 1.0-0.14*step(0.94,f.y);
+            if(facade_kind==5) color *= 1.0+0.05*step(f.y,0.08);
+            facade_window = window*effect_weight;
+            facade_lit = step(0.35,facade_hash(floor(cell)+facade_seed*7.0));
+            color = mix(color,vec3(0.21,0.25,0.29),facade_window*0.85);
+            surface_roughness = mix(surface_roughness,0.32,facade_window);
+        }
+        color *= 0.97+0.06*facade_seed;
+    }
     if(terrain_surface || (distant && UV.y < -0.5)) {
         float broad=sin(world_position.x*0.055+sin(world_position.z*0.037))*cos(world_position.z*0.063);
         color*=0.96+0.06*broad;
@@ -118,13 +155,16 @@ void fragment() {
     }
     bool enabled = clock.z < 0.0;
     int role = distant ? int(round(UV.y)) : lighting_role;
-    if(role == 1 && enabled) {
-        uint identity = uint(round(seed*16777215.0));
+    if((role == 1 || role == 3) && enabled) {
+        // Role 3: distant native building prisms (walls only, averaged windows).
+        uint identity = uint(round((facade_kind>0 ? facade_seed : seed)*16777215.0));
         uint night = uint(max(0.0,clock.y+100000.0));
         float cutoff = float((identity ^ (night*31337u)) % 241u)*60.0;
         enabled = enabled && (clock.x < cutoff || clock.x >= clock.w);
         float windows = 0.8;
-        if(effect_weight>0.0) windows=mix(0.8,step(0.2,fract(floor(world_position.x*0.7)+floor(world_position.y*0.6)*0.618+seed)),effect_weight);
+        if(role == 3) windows = world_normal.y > 0.5 ? 0.0 : 0.15;
+        else if(facade_kind>0) windows = facade_wall*mix(0.15,facade_window*facade_lit,effect_weight);
+        else if(effect_weight>0.0) windows=mix(0.8,step(0.2,fract(floor(world_position.x*0.7)+floor(world_position.y*0.6)*0.618+seed)),effect_weight);
         EMISSION = enabled ? vec3(1.0,0.63,0.28)*windows*1.2 : vec3(0.0);
     } else if(role == 2 && enabled) {
         // Authored bulbs/signs retain their material colour in both LODs.

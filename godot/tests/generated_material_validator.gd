@@ -26,7 +26,9 @@ func reference(job: Dictionary, key: String, presentation: Dictionary) -> Materi
 		source.roughness = 0.9
 		source.cull_mode = BaseMaterial3D.CULL_DISABLED
 		source.resource_name = "mk_"+RENDER.detail_kind(key)
-	return RENDER._environment_surface(job,source)
+	var bound := RENDER._environment_surface(job,source)
+	RENDER.bind_facade(bound,key,presentation)
+	return bound
 
 func compare(actual: ShaderMaterial, expected: ShaderMaterial, label: String) -> void:
 	check(actual.shader == expected.shader,label+" shared shader identity")
@@ -50,7 +52,7 @@ func run() -> void:
 	cache.environment_profile = {"lights":[]}
 	var context: RefCounted = cache.environment_context()
 	var job := {"resources":cache,"urban_shader":cache.urban_shader()}
-	var keys := ["grass","dirt","gravel","asphalt","concrete","brick:home","wood:home","builtin:tree","builtin:fence","builtin:streetlight","safety:metal"]
+	var keys := ["grass","dirt","gravel","asphalt","concrete","brick:home","wood:home","concrete:residential","brick:residential","concrete:commercial","wood:industrial","concrete:public","builtin:tree","builtin:fence","builtin:streetlight","safety:metal"]
 	var urban := {"urban_surfaces":true,"road_styles":{"road:test":{"surface":1,"marked":true,"path_count":1,"road_paths":PackedVector4Array([Vector4(0,0,4,0)])}}}
 	var rc := {"track_seed":42}
 	for level in 3:

@@ -318,14 +318,10 @@ impl Package {
             if internal.get(index).copied().unwrap_or(false) || omitted.contains(triangle.object_id.as_str()) {
                 continue;
             }
-            let color = if let Some(building) = self.document.buildings.binary_search_by(|b| b.id.cmp(&triangle.object_id))
-                .ok().map(|i| &self.document.buildings[i])
-            {
-                match building.material.as_str() {
-                    "brick" => [180, 108, 80, 255],
-                    "wood" => [153, 115, 71, 255],
-                    _ => [183, 184, 176, 255],
-                }
+            let building = self.document.buildings.binary_search_by(|b| b.id.cmp(&triangle.object_id))
+                .ok().map(|i| &self.document.buildings[i]);
+            let color = if let Some(building) = building {
+                building_color(&building.material, &building.usage)
             } else if let Ok(i) = self.document.barriers.binary_search_by(|b| b.id.cmp(&triangle.object_id)) {
                 match self.document.barriers[i].kind {
                     mapkit_core::barrier::BarrierKind::Hedge => [72, 100, 71, 255],
@@ -349,8 +345,13 @@ impl Package {
                     .push([p[0] as f32 * 0.01, p[1] as f32 * 0.01, -p[2] as f32 * 0.01]);
                 result.colors.push(color);
                 // Terrain keeps the same large-scale shading in both paths.
-                // Negative roles are display tags, never emissive bindings.
-                result.light_data.push([0., if matches!(triangle.surface, Surface::Grass | Surface::Dirt) { -1. } else { 0. }]);
+                // Negative roles are display tags, never emissive bindings; role 3
+                // lights native building walls at night with a per-object seed.
+                result.light_data.push(if building.is_some() {
+                    [object_seed(&self.document.map_id, &triangle.object_id), 3.]
+                } else {
+                    [0., if matches!(triangle.surface, Surface::Grass | Surface::Dirt) { -1. } else { 0. }]
+                });
                 result.decoration.push(0);
             }
         }
@@ -391,8 +392,7 @@ impl Package {
             else {
                 continue;
             };
-            let hash = mapkit_core::sha256(format!("{}/{}",self.document.map_id,object.id).as_bytes());
-            let seed = u32::from_str_radix(&hash[..6],16).unwrap() as f32 / 16777215.;
+            let seed = object_seed(&self.document.map_id, &object.id);
             if let Some(path) = &asset.distant_path {
                 if !silhouettes.contains_key(&asset.id) {
                     let mesh = silhouette(&self.files[path],
@@ -485,4 +485,29 @@ mod tests {
             && (-32. ..=-31.).contains(&p[2])));
         assert!(mesh.colors.iter().all(|c| *c == [1, 2, 3, 255]));
     }
+}
+
+/// Stable night-window seed shared by near instances and distant proxies.
+fn object_seed(map_id: &str, object_id: &str) -> f32 {
+    let hash = mapkit_core::sha256(format!("{}/{}", map_id, object_id).as_bytes());
+    u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16777215.
+}
+
+/// The twelve generated wall colours of `chunk_renderer.material_color`:
+/// material base blended towards the use tint (concrete 0.6, brick/wood 0.3).
+pub fn building_color(material: &str, usage: &str) -> [u8; 4] {
+    let base: [f32; 3] = match material {
+        "brick" => [180., 108., 80.],
+        "wood" => [153., 115., 71.],
+        _ => [183., 184., 176.],
+    };
+    let tint: [f32; 3] = match usage {
+        "commercial" => [159., 180., 196.],
+        "industrial" => [139., 143., 147.],
+        "public" => [217., 200., 154.],
+        _ => [232., 214., 189.],
+    };
+    let weight = if material == "concrete" { 0.6 } else { 0.3 };
+    let mix = |i: usize| ((base[i] / 255. + (tint[i] / 255. - base[i] / 255.) * weight) * 255. + 0.5).floor() as u8;
+    [mix(0), mix(1), mix(2), 255]
 }

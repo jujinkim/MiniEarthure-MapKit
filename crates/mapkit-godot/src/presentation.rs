@@ -308,6 +308,7 @@ fn decorate_inner(
         presentation.set("track_seed", track.settings.seed as i64);
     }
     presentation.set("map_id", document.map_id.as_str());
+    presentation.set("facade_floor_cm", facade_floor_cm(document));
     let cell=chunk.get("cell").unwrap().to::<VarDictionary>();
     let bounds=document.cell_bounds(mapkit_core::Cell{x:cell.get("x").unwrap().to::<i32>(),y:cell.get("y").unwrap().to::<i32>()})?;
     presentation.set("cell_bounds_json",serde_json::to_string(&bounds).unwrap().as_str());
@@ -322,4 +323,42 @@ pub(crate) fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
         serde_json::to_string(e).unwrap().len() as u64 * 8 + 4096
     }) + d.map_id.len() as u64 * 8
         + 128
+}
+
+/// Generated wall floor pitch: 3 m source storeys ÷ the authored map scale 1:D
+/// that an OSM layer records in its attribution notice (`authored_units.source_denominator`);
+/// 300 cm when no layer states a scale. Display only; the document is unchanged.
+pub(crate) fn facade_floor_cm(document: &mapkit_core::MapDocument) -> i64 {
+    document
+        .attributions
+        .iter()
+        .filter_map(|a| serde_json::from_str::<serde_json::Value>(&a.notice).ok())
+        .filter(|meta| meta.get("adapter").and_then(|v| v.as_str()) == Some("osm-extract-v1"))
+        .filter_map(|meta| meta.get("authored_units")?.get("source_denominator")?.as_u64())
+        .find(|d| (1..=8).contains(d))
+        .map_or(300, |d| (300.0 / d as f64).round() as i64)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn facade_floor_follows_the_recorded_map_scale() {
+        let mut d: mapkit_core::MapDocument =
+            serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+        d.attributions.clear();
+        assert_eq!(super::facade_floor_cm(&d), 300);
+        let notice = |units: &str| mapkit_core::Attribution {
+            source: "osm#layer".into(),
+            license: "ODbL-1.0".into(),
+            notice: format!(r#"{{"adapter":"osm-extract-v1","authored_units":{{"metres_per_unit":1,"source_denominator":{units}}}}}"#),
+        };
+        d.attributions.push(notice("3"));
+        assert_eq!(super::facade_floor_cm(&d), 100);
+        d.attributions[0] = notice("8");
+        assert_eq!(super::facade_floor_cm(&d), 38);
+        d.attributions[0] = notice("\"3\"");
+        assert_eq!(super::facade_floor_cm(&d), 300, "a non-numeric scale is not guessed");
+        d.attributions[0].notice = "not json".into();
+        assert_eq!(super::facade_floor_cm(&d), 300);
+    }
 }

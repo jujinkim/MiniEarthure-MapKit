@@ -101,3 +101,41 @@ fn native_building_reduction_preserves_roofs_courtyards_and_cell_cuts() {
         }
     }
 }
+
+#[test]
+fn native_building_walls_carry_use_colours_and_a_seeded_window_role() {
+    use mapkit_core::{Building, MapDocument};
+    let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+    d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear();
+    d.bounds.max = [25600,25600]; d.cell_size_cm = 12800;
+    let kinds = [("concrete","residential"),("brick","residential"),("wood","industrial"),("concrete","commercial"),("concrete","public")];
+    for (index, (material, usage)) in kinds.iter().enumerate() {
+        let x = 1000 + index as i64 * 2000;
+        d.buildings.push(Building { id: format!("b{index}"), footprint: vec![[x,1000],[x+1000,1000],[x+1000,2000],[x,2000]],
+            holes: vec![], base_cm: 0, height_cm: 900, usage: usage.to_string(), material: material.to_string(),
+            roof: "flat".into(), entrances: vec![], parts: vec![] });
+    }
+    let p = read_bytes(&pack_bytes(d, Default::default()).unwrap()).unwrap();
+    let cell = p.document.cells()[0];
+    let chunk = p.generate(cell, 500_000).unwrap();
+    let far = p.generate_distant(cell).unwrap();
+    let mut seen = std::collections::BTreeMap::new();
+    for (index, triangle) in chunk.triangles.iter().enumerate() {
+        let Some(building) = p.document.buildings.iter().find(|b| b.id == triangle.object_id) else { continue };
+        let vertex = [0,2,1].map(|i| { let v = triangle.vertices[i]; [v[0] as f32*0.01, v[1] as f32*0.01, -v[2] as f32*0.01] });
+        let Some(position) = far.vertices.chunks_exact(3).position(|v| v == vertex) else { continue };
+        let expected = distant::building_color(&building.material, &building.usage);
+        assert_eq!(far.colors[position*3], expected, "{} {} triangle {index}", building.material, building.usage);
+        let light = far.light_data[position*3];
+        assert_eq!(light[1], 3., "native walls use the distant building role");
+        assert!((0.0..=1.0).contains(&light[0]));
+        seen.entry(building.id.clone()).or_insert(light[0]);
+    }
+    assert_eq!(seen.len(), kinds.len(), "every building survives in the far mesh");
+    let seeds: std::collections::BTreeSet<_> = seen.values().map(|s| s.to_bits()).collect();
+    assert_eq!(seeds.len(), kinds.len(), "object seeds differ per building");
+    let colours: std::collections::BTreeSet<_> = kinds.iter().map(|(m,u)| distant::building_color(m,u)).collect();
+    assert_eq!(colours.len(), kinds.len(), "material/use pairs are distinct colours");
+    assert_eq!(distant::building_color("concrete","residential"), [212,202,184,255]);
+    assert_eq!(distant::building_color("brick","commercial"), [174,130,115,255]);
+}
