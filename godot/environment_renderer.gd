@@ -31,8 +31,18 @@ var quality := preload("./display_quality.gd").active()
 var _precipitation_strength := 0.0
 var _night_lights := false
 var display_distance := 0.0 # Opt-in scene metres; zero preserves Editor/default weather fog.
+var ground_tint := Color(0.08, 0.10, 0.08) # Sky colour well below the horizon.
+var ground_tint_weight := 0.0
 var _weather_fog_density := 0.0008
 var _weather_fog_energy := 0.6
+
+## Far ground seen below the horizon follows the map's ground colour (edge stage skirt).
+func set_ground_tint(color: Color, weight := 1.0) -> void:
+	ground_tint = color
+	ground_tint_weight = clampf(weight, 0.0, 1.0)
+	if sky_material != null:
+		sky_material.set_shader_parameter("ground_tint", Vector3(color.r, color.g, color.b))
+		sky_material.set_shader_parameter("ground_tint_weight", ground_tint_weight)
 
 func set_display_distance(distance: float) -> void:
 	if not is_finite(distance) or distance < 0.0: return
@@ -174,6 +184,8 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	sky_material.set_shader_parameter("moon_phase",celestial.moon_phase)
 	sky_material.set_shader_parameter("cloud_cover",_clouds)
 	sky_material.set_shader_parameter("cloud_motion",float(state.elapsed)*0.012)
+	sky_material.set_shader_parameter("ground_tint",Vector3(ground_tint.r,ground_tint.g,ground_tint.b))
+	sky_material.set_shader_parameter("ground_tint_weight",ground_tint_weight)
 	var concept := str(design.get("climate",design.get("concept","metropolis")))
 	var night: int = PROFILE.night_index(state.seconds)
 	var aurora_event := PROFILE.stable_unit("aurora/%s/%d" % [state.seed,night]) < float(state.config.aurora_probability)

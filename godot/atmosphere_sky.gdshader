@@ -7,6 +7,9 @@ uniform float cloud_cover = 0.15;
 uniform float cloud_motion = 0.0;
 uniform int quality_level = 1;
 uniform float aurora = 0.0;
+// Far ground below the horizon: the map's ground colour, blended in by weight.
+uniform vec3 ground_tint = vec3(0.08,0.10,0.08);
+uniform float ground_tint_weight = 0.0;
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float noise(vec2 p) {
     vec2 f=fract(p); f=f*f*(3.0-2.0*f); vec2 i=floor(p);
@@ -62,7 +65,7 @@ void sky() {
     // A hard lower-hemisphere colour creates a black band behind bounded terrain
     // when looking across a gorge. Preserve horizon haze and blend toward the
     // ground only well below the horizon; the display radius stays unchanged.
-    vec3 ground=mix(vec3(0.002),vec3(0.08,0.10,0.08),daylight);
+    vec3 ground=mix(vec3(0.002),mix(vec3(0.08,0.10,0.08),ground_tint,ground_tint_weight),daylight);
     color=mix(color,ground,smoothstep(0.0,0.65,-EYEDIR.y));
     COLOR=color;
 }

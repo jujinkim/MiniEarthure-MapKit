@@ -87,7 +87,10 @@ or fluid simulation. Shader includes expand before context-owned duplication for
 compatibility rendering. Rain contrasts with cloud/direct/ambient lighting;
 a curved noise dome handles clouds. The sky shader owns horizon haze and cloud
 occlusion, preserving sun and moon visibility; the horizon haze blends
-continuously into the lower hemisphere (`sky_horizon_validator`).
+continuously into the lower hemisphere (`sky_horizon_validator`). Well below the
+horizon the sky blends toward `ground_tint` by `ground_tint_weight`
+(`set_ground_tint(color, weight)`), so the far ground matches the map's ground
+colour and edge-stage skirt; the default keeps the dark green-grey.
 
 `set_display_distance(metres)` opts into depth fog. Zero restores weather fog;
 negative/nonfinite values are ignored. Fog starts at 60% of range and reaches full

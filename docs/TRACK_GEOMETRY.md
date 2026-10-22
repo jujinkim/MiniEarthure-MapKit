@@ -93,6 +93,14 @@ from `godot/backdrops/<theme>/`, copies of the authored default-world models.
 The start gate and direction chevrons are shared. `track_json` reports the
 backdrop; `backdrop_stage_validator` covers every theme.
 
+Bounded (non-standalone) maps get `godot/edge_stage.gd` instead: translucent
+unshaded panels standing on the document rectangle (`map_bounds()`, 12 m, alpha
+fading to the top, two-sided, no shadows) and four ground slabs in the map's
+ground colour outside the rectangle, 2,048 m wide, just below `terrain_base_cm`.
+It is display-only and deterministic; the Runtime footprint guard still holds
+vehicles at the rectangle. Consumers lease `RESERVATION_BYTES` (256 KiB) and set
+the sky ground tint to the same colour; `edge_stage_validator` covers it.
+
 ## Grounded supports
 
 - Seed assemblies ground the venue at the minimum of the actual slab, finish plaza,
