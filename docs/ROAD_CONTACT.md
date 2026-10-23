@@ -33,6 +33,11 @@ excluding internal fragments and cell seams. Source edges retain bottom heights
 and road identity. A 1cm support check removes false boundaries from rounded
 intersections. Top faces remain spawnable; sides do not.
 
+Each cell clips with one reused integer clipper. An apron that shares no point
+with the remaining ground piece skips its intersection and difference but is
+charged the same work, so output and budgets match clipping every bounds-overlap
+pair. Building exclusions are indexed once per prepared map.
+
 Convex gimmick faces point outward in map coordinates. Z reflection produces
 Godot clockwise front faces, so their order is retained with flat outward normals.
 Sidewalk boundary winding keeps the interior on the left. Prepared and direct

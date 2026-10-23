@@ -8,6 +8,10 @@ const MAX_FRAGMENTS: usize = 16_384;
 const MAX_WORK: usize = 8_000_000;
 type Poly = Vec<Vertex>;
 use crate::road_plan::{plan, hit, xy, orient, Patch};
+use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType},overlay_rule::OverlayRule},i_float::int::point::IntPoint};
+/// Sidewalk clipping rings (integer XY) and overlay results (outer ring first).
+type Ring = Vec<IntPoint<i64>>;
+type Shapes = Vec<Vec<Ring>>;
 pub(crate) use crate::road_plan::{influence_margin, width_influence_margin};
 /// Adjacency uses authored endpoint IDs (and consequently their exact level).
 /// A geometric crossing never creates an edge or joins distinct graph nodes.
@@ -689,7 +693,9 @@ pub(crate) fn generate(
 
 /// Widened graph aprons cover corners; only restored ground receives
 /// sidewalk tops. Road carriageways, independent decks and portals are untouched.
-pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
+/// `exclusion_index` holds the bounds of [`sidewalk_exclusions`] of `d` in that
+/// order (built once per document by the placement preparation).
+pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crate::bounds_index::BoundsIndex) -> Result<()> {
     // Width rules can exclude all sidewalks (notably small-scale imports).
     // Such maps need no second expanded road plan or footprint subdivision.
     if !d.roads.iter().any(|r| crate::placement::sidewalk_width(d,r)>0) {
@@ -701,7 +707,7 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
     };
     let (_, boundary) = plan(d, &expanded)?;
     let mut patches = vec![];
-    let mut buffers = BTreeMap::<&str, (&Road, Vec<Vec<Point>>)>::new();
+    let mut buffers = BTreeMap::<&str, (&Road, Vec<Ring>)>::new();
     for edge in boundary {
         let width = crate::placement::sidewalk_width(d, edge.road) as i64;
         if width == 0 || !hit(&[edge.a,edge.b],&expanded,width) { continue; }
@@ -710,40 +716,32 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
             [-width,0],[-diagonal,-diagonal],[0,-width],[diagonal,-diagonal]];
         let ring=hull([edge.a,edge.b].iter().flat_map(|p|
             offsets.map(|o|[p[0]+o[0],0,p[2]+o[1]])).collect());
-        buffers.entry(&edge.road.id).or_insert((edge.road,Vec::new())).1.push(ring.into_iter().map(xy).collect());
+        buffers.entry(&edge.road.id).or_insert((edge.road,Vec::new())).1.push(ring.into_iter().map(|p|IntPoint::new(p[0],p[2])).collect());
     }
     // Dilate the shared exterior, then union before subdividing terrain. An
     // internal triangle fan must not multiply identical sidewalk work.
-    use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType},overlay_rule::OverlayRule},i_float::int::point::IntPoint};
+    // One clipper serves the whole cell: clearing keeps its segment, split and
+    // graph buffers, and every operation returns what a fresh instance would.
+    let mut clipper = Overlay::<i64>::new(64);
     let mut buffer_work=0;
     for (_, (road,rings)) in buffers {
-        let mut overlay=Overlay::<i64>::new(rings.iter().map(Vec::len).sum());
-        for ring in rings {
+        clipper.clear();
+        for ring in &rings {
             tick(&mut buffer_work,ring.len())?;
-            overlay.add_contour(&ring.into_iter().map(|p|IntPoint::new(p[0],p[1])).collect::<Vec<_>>(),ShapeType::Subject);
+            clipper.add_contour(ring,ShapeType::Subject);
         }
-        for shape in overlay.overlay(OverlayRule::Subject,FillRule::NonZero) {
-            let rings:Vec<Vec<Point>>=shape.into_iter().map(|r|r.into_iter().map(|p|[p.x,p.y]).collect()).collect();
-            patches.push((road,rings));
+        for shape in clipper.overlay(OverlayRule::Subject,FillRule::NonZero) {
+            patches.push((road,shape));
         }
     }
     if patches.is_empty() {
         return Ok(());
     }
     let patch_index = crate::bounds_index::BoundsIndex::new(
-        &patches.iter().map(|(_,rings)| crate::bounds_index::bounds(&rings[0])).collect::<Vec<_>>(),
+        &patches.iter().map(|(_,rings)| int_bounds(&rings[0])).collect::<Vec<_>>(),
     );
-    let exclusions: Vec<_> = d
-        .buildings
-        .iter()
-        .flat_map(|b| b.footprints().chain(&b.entrances))
-        .collect();
-    let exclusion_index = crate::bounds_index::BoundsIndex::new(
-        &exclusions
-            .iter()
-            .map(|p| crate::bounds_index::bounds(p))
-            .collect::<Vec<_>>(),
-    );
+    let exclusions: Vec<&Vec<Point>> = sidewalk_exclusions(d).collect();
+    let mut clip_ring = Vec::new();
     // One ID set per cell, not a scan of every paint record per triangle.
     let paint: BTreeSet<&str> = d.surface_areas.iter().map(|a| a.id.as_str()).collect();
     let ground: Vec<_> = b
@@ -759,20 +757,35 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
     for t in ground {
         let area = crate::bounds_index::bounds(&t.vertices.map(xy));
         let nearby = exclusion_index.query(&area, &mut work)?;
-        let mut remaining = vec![vec![t.vertices.map(xy).to_vec()]];
+        let mut remaining = vec![vec![t.vertices.iter().map(|p| IntPoint::new(p[0], p[2])).collect()]];
         for i in patch_index.query(&area, &mut work)? {
             let (road,rings) = &patches[i];
+            // Bounds overlap admits many aprons that never meet the remaining
+            // ground. Their intersection is empty and their difference only
+            // re-extracts the same rings, which no later overlay depends on, so
+            // the two overlays are skipped; their work is still charged in full.
+            if disjoint(&remaining, rings) {
+                overlay_charge(&remaining, rings, &mut work)?;
+                overlay_charge(&remaining, rings, &mut work)?;
+                continue;
+            }
             // Clip the complete apron before triangulating. Triangulating the
             // entire curved buffer first creates long fan diagonals through
             // every terrain fragment and needlessly multiplies solid faces.
-            let mut fitted = sidewalk_overlay(&remaining,rings,OverlayRule::Intersect,&mut work)?;
-            remaining = sidewalk_overlay(&remaining,rings,OverlayRule::Difference,&mut work)?;
+            let (mut fitted, rest) = sidewalk_split(&mut clipper,&remaining,rings,&mut work)?;
+            remaining = rest;
+            // Footprints that miss the fitted top still re-extract its rings,
+            // which decides the triangulation below; every one is applied.
             for &i in &nearby {
-                fitted = sidewalk_overlay(&fitted,&[exclusions[i].clone()],OverlayRule::Difference,&mut work)?;
+                if fitted.is_empty() { break; }
+                clip_ring.clear();
+                clip_ring.extend(exclusions[i].iter().map(|q| IntPoint::new(q[0], q[1])));
+                fitted = sidewalk_overlay(&mut clipper,&fitted,std::slice::from_ref(&clip_ring),OverlayRule::Difference,&mut work)?;
             }
             let id = format!("{}:sidewalk", road.id);
             let bottom=|p:Point| on_plane(&t.vertices,[p[0],0,p[1]]);
-            for rings in fitted {
+            for shape in fitted {
+                let rings: Vec<Vec<Point>> = shape.iter().map(|r| r.iter().map(|p| [p.x, p.y]).collect()).collect();
                 for triangle in crate::road_arrangement::triangulate(&rings,&mut work)? {
                     let top=triangle.map(|p| {let p=bottom(p);[p[0],p[1]+12,p[2]]});
                     emit(b,&top,Surface::Concrete,&id,true)?;
@@ -793,18 +806,87 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder) -> Result<()> {
     Ok(())
 }
 
-fn sidewalk_overlay(subjects:&[Vec<Vec<Point>>],clip:&[Vec<Point>],rule:i_overlay::core::overlay_rule::OverlayRule,work:&mut usize)->Result<Vec<Vec<Vec<Point>>>> {
-    use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType}},i_float::int::point::IntPoint};
-    if subjects.is_empty(){return Ok(vec![]);}
-    let count=subjects.iter().flat_map(|s|s.iter()).chain(clip).map(Vec::len).sum();
-    tick(work,count)?;
-    let mut overlay=Overlay::<i64>::new(count);
-    for (rings,kind) in subjects.iter().map(|s|(s.as_slice(),ShapeType::Subject)).chain(std::iter::once((clip,ShapeType::Clip))) {
-        for ring in rings {overlay.add_contour(&ring.iter().map(|p|IntPoint::new(p[0],p[1])).collect::<Vec<_>>(),kind);}
+/// Building footprints, parts and entrances in document order: the polygons
+/// sidewalk tops are cut by, and the items of the prepared exclusion index.
+pub(crate) fn sidewalk_exclusions(d: &MapDocument) -> impl Iterator<Item = &Vec<Point>> + '_ {
+    d.buildings.iter().flat_map(|b| b.footprints().chain(&b.entrances))
+}
+/// Conservative: true only when no ring of `subjects` shares a point with any
+/// ring of `clip` (no touching boundaries, neither ring inside the other). A
+/// clip inside a subject hole also reports false; running its overlays is exact.
+fn disjoint(subjects: &[Vec<Ring>], clip: &[Ring]) -> bool {
+    let point = |p: &IntPoint<i64>| [p.x, p.y];
+    // Unclipped ground is one triangle: an edge line with every clip vertex
+    // strictly beyond it separates the two.
+    if let [shape] = subjects {
+        if let [tri] = shape.as_slice() {
+            if let [a, b, c] = tri.as_slice() {
+                let (a, b, c) = (point(a), point(b), point(c));
+                let o = cross(a, b, c).signum();
+                if o != 0 && [(a, b), (b, c), (c, a)].iter().any(|&(a, b)|
+                    clip.iter().flatten().all(|q| cross(a, b, point(q)).signum() == -o)) {
+                    return true;
+                }
+            }
+        }
     }
-    let out:Vec<Vec<Vec<Point>>>=overlay.overlay(rule,FillRule::NonZero).into_iter().map(|s|s.into_iter().map(|r|r.into_iter().map(|p|[p.x,p.y]).collect()).collect()).collect();
+    for ring in subjects.iter().flatten() {
+        for other in clip {
+            for i in 0..ring.len() {
+                let (a, b) = (point(&ring[i]), point(&ring[(i + 1) % ring.len()]));
+                for j in 0..other.len() {
+                    if intersects(a, b, point(&other[j]), point(&other[(j + 1) % other.len()])) {
+                        return false;
+                    }
+                }
+            }
+            let (ring, other): (Vec<Point>, Vec<Point>) = (ring.iter().map(point).collect(), other.iter().map(point).collect());
+            if point_in_polygon(ring[0], &other) || point_in_polygon(other[0], &ring) {
+                return false;
+            }
+        }
+    }
+    true
+}
+/// The work [`sidewalk_overlay`] charges for this pair, without running it.
+fn overlay_charge(subjects:&[Vec<Ring>],clip:&[Ring],work:&mut usize)->Result<()> {
+    if subjects.is_empty(){return Ok(());}
+    tick(work,subjects.iter().flatten().chain(clip).map(Vec::len).sum())
+}
+fn int_bounds(ring: &[IntPoint<i64>]) -> Bounds {
+    Bounds {
+        min: [ring.iter().map(|p| p.x).min().unwrap(), ring.iter().map(|p| p.y).min().unwrap()],
+        max: [ring.iter().map(|p| p.x).max().unwrap(), ring.iter().map(|p| p.y).max().unwrap()],
+    }
+}
+/// Loads one subject/clip pair into the cleared clipper; returns its vertex count.
+fn load(clipper:&mut Overlay<i64>,subjects:&[Vec<Ring>],clip:&[Ring])->usize {
+    clipper.clear();
+    let mut count=0;
+    for ring in subjects.iter().flatten() {count+=ring.len();clipper.add_contour(ring,ShapeType::Subject);}
+    for ring in clip {count+=ring.len();clipper.add_contour(ring,ShapeType::Clip);}
+    count
+}
+fn fragments(out:Shapes)->Result<Shapes> {
     if out.len()>MAX_FRAGMENTS{return Err(error("E_BUDGET","sidewalk fragments exceeded"));}
     Ok(out)
+}
+fn sidewalk_overlay(clipper:&mut Overlay<i64>,subjects:&[Vec<Ring>],clip:&[Ring],rule:OverlayRule,work:&mut usize)->Result<Shapes> {
+    if subjects.is_empty(){return Ok(vec![]);}
+    let count=load(clipper,subjects,clip);
+    tick(work,count)?;
+    fragments(clipper.overlay(rule,FillRule::NonZero))
+}
+/// The intersection and the difference of one pair from one segment split,
+/// each charged and bounded like a separate overlay.
+fn sidewalk_split(clipper:&mut Overlay<i64>,subjects:&[Vec<Ring>],clip:&[Ring],work:&mut usize)->Result<(Shapes,Shapes)> {
+    if subjects.is_empty(){return Ok((vec![],vec![]));}
+    let count=load(clipper,subjects,clip);
+    tick(work,count)?;
+    let inside=fragments(clipper.overlay(OverlayRule::Intersect,FillRule::NonZero))?;
+    tick(work,count)?;
+    let outside=fragments(clipper.overlay(OverlayRule::Difference,FillRule::NonZero))?;
+    Ok((inside,outside))
 }
 
 /// Clip fragment edges against one another before making the visible step.
@@ -816,14 +898,6 @@ fn sidewalk_boundary_walls(
     tops: &[Vec<Point>],
     work: &mut usize,
 ) -> Result<()> {
-    use i_overlay::{
-        core::{
-            fill_rule::FillRule,
-            overlay::{Overlay, ShapeType},
-            overlay_rule::OverlayRule,
-        },
-        i_float::int::point::IntPoint,
-    };
     let mut overlay = Overlay::<i64>::new(edges.len());
     for top in tops {
         tick(work, top.len())?;
@@ -1049,6 +1123,75 @@ fn sidewalk_contains(
         }
     }
     Ok(false)
+}
+
+#[cfg(test)]
+mod sidewalk_clip {
+    use super::*;
+    fn ring(points: &[Point]) -> Ring {
+        points.iter().map(|p| IntPoint::new(p[0], p[1])).collect()
+    }
+    fn fresh(subjects: &[Vec<Ring>], clip: &[Ring], rule: OverlayRule) -> Shapes {
+        let mut overlay = Overlay::<i64>::new(16);
+        load(&mut overlay, subjects, clip);
+        overlay.overlay(rule, FillRule::NonZero)
+    }
+    #[test]
+    fn disjoint_reports_only_pairs_that_share_no_point() {
+        let ccw = [[0, 0], [100, 0], [0, 100]];
+        let cw = [[0, 0], [0, 100], [100, 0]];
+        let square = |x: i64, y: i64, s: i64| ring(&[[x, y], [x + s, y], [x + s, y + s], [x, y + s]]);
+        for tri in [ccw, cw] {
+            let subject = vec![vec![ring(&tri)]];
+            // Separated beyond the hypotenuse (separating edge), or only by bounds.
+            assert!(disjoint(&subject, &[square(80, 80, 30)]));
+            assert!(disjoint(&subject, &[ring(&[[60, 60], [200, 50], [50, 200]])]));
+            // A shared vertex, a shared edge piece, a vertex on an edge.
+            assert!(!disjoint(&subject, &[square(100, 0, 20)]));
+            assert!(!disjoint(&subject, &[square(20, -20, 20)]));
+            assert!(!disjoint(&subject, &[ring(&[[50, 50], [90, 90], [60, 95]])]));
+            // Containment either way.
+            assert!(!disjoint(&subject, &[square(-10, -10, 300)]));
+            assert!(!disjoint(&subject, &[square(10, 10, 10)]));
+        }
+        // Clipped ground: several shapes, a hole; a clip inside the hole is
+        // reported as touching (conservative), a far clip as disjoint.
+        let holed = vec![
+            vec![square(0, 0, 100), ring(&[[20, 20], [20, 80], [80, 80], [80, 20]])],
+            vec![square(200, 0, 50)],
+        ];
+        assert!(!disjoint(&holed, &[square(40, 40, 10)]));
+        assert!(!disjoint(&holed, &[square(240, 40, 30)]));
+        assert!(disjoint(&holed, &[square(120, 0, 50)]));
+        // A skipped pair would have intersected to nothing and left the same region.
+        let subject = vec![vec![ring(&cw)]];
+        let clip = [square(80, 80, 30)];
+        assert!(fresh(&subject, &clip, OverlayRule::Intersect).is_empty());
+        assert_eq!(fresh(&subject, &clip, OverlayRule::Difference), fresh(&subject, &[], OverlayRule::Subject));
+    }
+    #[test]
+    fn shared_clipper_matches_fresh_overlays_and_charges_both() {
+        let mut clipper = Overlay::<i64>::new(4);
+        let subject = vec![vec![ring(&[[0, 0], [300, 0], [0, 300]])]];
+        for (k, clip) in [
+            ring(&[[50, -50], [250, 100], [100, 250], [-50, 50]]),
+            ring(&[[100, 100], [400, 100], [400, 400]]),
+            ring(&[[10, 10], [40, 10], [40, 40], [10, 40]]),
+        ].into_iter().enumerate() {
+            let clip = [clip];
+            let mut work = 0;
+            let (inside, outside) = sidewalk_split(&mut clipper, &subject, &clip, &mut work).unwrap();
+            assert_eq!(inside, fresh(&subject, &clip, OverlayRule::Intersect), "case {k}");
+            assert_eq!(outside, fresh(&subject, &clip, OverlayRule::Difference), "case {k}");
+            let mut charged = 0;
+            overlay_charge(&subject, &clip, &mut charged).unwrap();
+            overlay_charge(&subject, &clip, &mut charged).unwrap();
+            assert_eq!(work, charged, "case {k}");
+            let union = sidewalk_overlay(&mut clipper, &[], &clip, OverlayRule::Difference, &mut work).unwrap();
+            assert!(union.is_empty());
+            assert_eq!(work, charged, "empty subjects charge nothing");
+        }
+    }
 }
 
 #[cfg(test)]

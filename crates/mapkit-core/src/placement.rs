@@ -1084,10 +1084,20 @@ pub(crate) struct PreparedPlacements {
     /// One building index entry per solid: (record, solid).
     buildings: crate::bounds_index::BoundsIndex,
     solids: Vec<(usize, usize)>,
+    /// Bounds of [`crate::roads::sidewalk_exclusions`], in that order.
+    exclusions: crate::bounds_index::BoundsIndex,
     pub(crate) barriers: crate::barrier::Spans,
+}
+fn exclusion_index(d: &MapDocument) -> crate::bounds_index::BoundsIndex {
+    crate::bounds_index::BoundsIndex::new(&crate::roads::sidewalk_exclusions(d).map(|p| aabb(p)).collect::<Vec<_>>())
 }
 impl PreparedPlacements {
     pub(crate) fn new(d: &MapDocument) -> Result<Self> {
+        Self::with_exclusions(d, exclusion_index(d))
+    }
+    /// `exclusions` is [`exclusion_index`] of `d`, built by a caller that
+    /// already needed it.
+    fn with_exclusions(d: &MapDocument, exclusions: crate::bounds_index::BoundsIndex) -> Result<Self> {
         let mut work = 0;
         let mut occupied: Vec<_> = d.placements.iter().map(|p| footprint(d, p)).collect();
         let mut accepted = vec![];
@@ -1126,7 +1136,7 @@ impl PreparedPlacements {
             occupied_index: crate::bounds_index::BoundsIndex::new(&occupied.iter().map(|p|aabb(p)).collect::<Vec<_>>()),
             occupied, index: crate::bounds_index::BoundsIndex::new(&bounds),
             roads: crate::bounds_index::BoundsIndex::new(&road_bounds),
-            buildings: crate::bounds_index::BoundsIndex::new(&building_bounds), solids,
+            buildings: crate::bounds_index::BoundsIndex::new(&building_bounds), solids, exclusions,
             barriers: crate::barrier::Spans::new(d)? })
     }
 }
@@ -1155,10 +1165,14 @@ impl PreparedPlacements {
 }
 pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder, prepared: Option<&PreparedPlacements>) -> Result<()> {
     let mut work=0;
-    crate::roads::sidewalks(d,b).map_err(|mut e| {e.message=format!("sidewalk: {}",e.message);e})?;
+    // Unprepared generation builds the exclusion index first and hands it to
+    // its own preparation below, keeping that preparation's place and errors.
+    let mut own_exclusions = None;
+    let exclusions = match prepared { Some(value) => &value.exclusions, None => own_exclusions.insert(exclusion_index(d)) };
+    crate::roads::sidewalks(d,b,exclusions).map_err(|mut e| {e.message=format!("sidewalk: {}",e.message);e})?;
     buildings(d,b)?;
     let owned;
-    let prepared = if let Some(value)=prepared { value } else { owned=PreparedPlacements::new(d)?; &owned };
+    let prepared = if let Some(value)=prepared { value } else { owned=PreparedPlacements::with_exclusions(d, own_exclusions.take().unwrap())?; &owned };
     for i in prepared.index.query(&b.bounds, &mut work)? {
         let p=if i < d.placements.len() { &d.placements[i] } else { &prepared.repeated[i-d.placements.len()] };
         emit_placement(d,cell,p,b,false,i < d.placements.len())?;
