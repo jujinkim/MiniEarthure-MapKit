@@ -215,7 +215,7 @@ fn chord_distance(point: Vertex, a: Vertex, b: Vertex) -> (f64,f64) {
     let d=std::array::from_fn::<_,3,_>(|j|point[j] as f64-a[j] as f64-delta[j]*t);
     (libm::sqrt(d[0]*d[0]+d[2]*d[2]),d[1].abs())
 }
-fn rail_chord(path: &[Sample], station: u64) -> Option<(Sample,i64)> {
+pub(super) fn rail_chord(path: &[Sample], station: u64) -> Option<(Sample,i64)> {
     let span=station.saturating_sub(150).min(length(path).saturating_sub(station+150)).min(800);
     for half in (150..=span).rev().step_by(100) {
         let a=sample(path,station-half);
@@ -821,6 +821,9 @@ mod tests {
             assert!((len as u64)<2*station);
             assert!(line.control_points.iter().all(|v|v[1]==41));
         }
+        let mut a=fixture("sprint_lane",400);
+        a.obstacles=vec![Obstacle {station_cm:800,..rail_site(&fixture("gentle90",600),&Site{piece:3,branch:false,station:800}).unwrap()}];
+        assert!(a.validate_stored().unwrap_err().to_string().contains("grind rail"));
     }
     #[test]
     fn actual_slopes_curves_helices_and_branch_are_candidates_but_structures_and_grid_are_not() {

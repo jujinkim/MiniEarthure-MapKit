@@ -78,6 +78,7 @@ impl Assembly {
             let path=if o.path=="alternate" {&p.alternate_path} else {&p.path};
             let len=path.windows(2).map(|w|distance(w[0].position_cm,w[1].position_cm)).sum::<u64>();
             if path.len()<2 || o.station_cm>len {return Err(fail("obstacle station"));}
+            if o.kind=="grind_rail" && obstacles::rail_chord(path,o.station_cm).is_none() {return Err(fail("grind rail"));}
         }
         if let Some(f)=&self.finish_plaza {
             if f.piece_index>=self.pieces.len() || !frame(f.normal,f.forward)
