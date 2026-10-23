@@ -19,6 +19,8 @@ pub(crate) struct Edge<'a> {
 #[derive(Clone)]
 struct Arm<'a> {
     pub road: &'a Road,
+    /// Position of `road` in the planned road slice.
+    index: usize,
     segment: usize,
     end: usize,
     point_index: usize,
@@ -150,11 +152,11 @@ impl<'a> PlanIndex<'a> {
         }
         // Cached junctions hold the edges of the first rule used on this index.
         let rule = *self.junctions.borrow_mut().walls.get_or_insert(walls);
-        self.plan_indices(selected, bounds, walls, (rule == walls).then_some(&self.junctions))
+        self.plan_indices(selected, bounds, walls, (rule == walls).then_some(Memo::Local(&self.junctions)))
     }
 
     fn plan_indices(&self, selected: BTreeSet<usize>, bounds: &Bounds, walls: Walls,
-        cache: Option<&std::cell::RefCell<JunctionCache<'a, RankKey>>>) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+        cache: Option<Memo<'_, 'a, RankKey>>) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
         let selected: Vec<_> = selected.into_iter().collect();
         let roads: Vec<_> = selected.iter().map(|&i| &self.document.roads[i]).collect();
         let chains: Vec<_> = selected.iter().map(|&i| self.chains[i].as_slice()).collect();
@@ -338,13 +340,165 @@ mod index_tests {
                     for y in [-2600, -120, 2400, 30000, 99000] {
                         let area = Bounds { min: [x, y], max: [x + 1500, y + 900] };
                         for ground_edges in [false, true] {
-                            let (p0, e0) = plan_all(&d, &area, ground_edges, false).unwrap();
-                            let (p1, e1) = plan_all(&d, &area, ground_edges, true).unwrap();
+                            let (p0, e0) = plan_all(&d, &area, ground_edges, false, None).unwrap();
+                            let (p1, e1) = plan_all(&d, &area, ground_edges, true, None).unwrap();
                             assert_eq!((faces(&p0), edges(&e0)), (faces(&p1), edges(&e1)), "{area:?}");
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// A validated document with ground roads, a designed variant, decks and a
+    /// long multi-point road whose far points leave most queries.
+    fn shared_fixture(designed: bool, decks: bool) -> MapDocument {
+        let mut d = fixture(designed);
+        let mut r = d.roads[0].clone();
+        r.id = "long".into(); r.from = "c".into(); r.to = "far-a".into();
+        r.points = vec![[7000, 0, 2500], [9000, 0, 30000], [60000, 0, 70000], [100000, 0, 100000]];
+        r.widths_cm = vec![500; 3]; r.surfaces = vec![Surface::Asphalt; 3]; r.design = None;
+        d.roads.push(r);
+        if decks {
+            d.roads[1].kind = RoadKind::Bridge;
+            d.roads[2].kind = RoadKind::Elevated;
+            for road in &mut d.roads[1..3] {
+                road.from = format!("deck-{}", road.from);
+                road.to = format!("deck-{}", road.to);
+                for p in &mut road.points { p[1] = 600; }
+            }
+        }
+        let mut nodes = BTreeMap::new();
+        for r in &d.roads {
+            nodes.insert(r.from.clone(), r.points[0]);
+            nodes.insert(r.to.clone(), *r.points.last().unwrap());
+        }
+        d.nodes = nodes.into_iter().map(|(id, position)| RoadNode { id, position, level: 0 }).collect();
+        let cell = d.cell_size_cm as i64;
+        d.bounds = Bounds { min: [-cell * (12_000 / cell + 1); 2], max: [cell * (110_000 / cell + 1); 2] };
+        d.normalize();
+        d.validate().unwrap();
+        d
+    }
+
+    fn plan_areas() -> Vec<Bounds> {
+        let mut areas = Vec::new();
+        for x in (-3000..105000).step_by(1700) {
+            for y in [-2600, -120, 2400, 30000, 99000] {
+                areas.push(Bounds { min: [x, y], max: [x + 1500, y + 900] });
+            }
+        }
+        areas
+    }
+
+    fn shared_bytes(shared: &SharedJunctions) -> usize {
+        let state = shared.0.lock().unwrap();
+        assert_eq!(state.plans.len(), state.uses.len());
+        assert!(state.plans.iter().all(|(key, (_, used))| state.uses[used] == *key));
+        assert_eq!(state.bytes, state.plans.values().map(|(p, _)| p.bytes()).sum::<usize>());
+        assert!(state.bytes <= SharedJunctions::MAX_BYTES);
+        state.plans.len()
+    }
+
+    /// Plans from one shared store (evicted constantly under the test cap,
+    /// alternating edge rules) equal the unshared plans: faces, surfaces,
+    /// terrain joins, ground and structural edges and their stationing.
+    #[test]
+    fn shared_store_plans_match_unshared_plans() {
+        let faces = |v: &[Patch]| v.iter().map(|p| (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
+        let edges = |v: &[Edge]| v.iter().map(|e| (e.a, e.b, e.station_cm.to_bits(), e.road.id.clone())).collect::<Vec<_>>();
+        for (designed, decks) in [(false, false), (true, false), (false, true)] {
+            let d = shared_fixture(designed, decks);
+            let shared = SharedJunctions::default();
+            let mut kept = 0;
+            for pass in 0..2 {
+                for (i, area) in plan_areas().iter().enumerate() {
+                    for ground_edges in [(i + pass) % 2 == 0, (i + pass) % 2 == 1] {
+                        let (p0, e0) = plan_all(&d, area, ground_edges, true, None).unwrap();
+                        let (p1, e1) = plan_all(&d, area, ground_edges, true, Some(&shared)).unwrap();
+                        assert_eq!((faces(&p0), edges(&e0)), (faces(&p1), edges(&e1)), "{area:?} {ground_edges}");
+                    }
+                    kept = kept.max(shared_bytes(&shared));
+                }
+            }
+            assert!(kept > 0);
+        }
+    }
+
+    /// Threads planning different cells through one store get the unshared plans.
+    #[test]
+    fn shared_store_is_consistent_across_threads() {
+        let faces = |v: &[Patch]| v.iter().map(|p| (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
+        let edges = |v: &[Edge]| v.iter().map(|e| (e.a, e.b, e.station_cm.to_bits(), e.road.id.clone())).collect::<Vec<_>>();
+        let d = shared_fixture(false, true);
+        let shared = SharedJunctions::default();
+        let areas = plan_areas();
+        std::thread::scope(|scope| {
+            for t in 0..4 {
+                let (d, shared, areas) = (&d, &shared, &areas);
+                scope.spawn(move || {
+                    for round in 0..3 {
+                        for area in areas.iter().skip((t + round) % 3) {
+                            for ground_edges in [false, true] {
+                                let expected = plan_all(d, area, ground_edges, true, None).unwrap();
+                                let actual = plan_all(d, area, ground_edges, true, Some(shared)).unwrap();
+                                assert_eq!((faces(&expected.0), edges(&expected.1)), (faces(&actual.0), edges(&actual.1)));
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        shared_bytes(&shared);
+    }
+
+    /// A failing junction is never cached: every plan through the store reports
+    /// the unshared error, while the other junctions stay shared.
+    #[test]
+    fn shared_store_never_caches_planning_errors() {
+        let mut d = shared_fixture(false, false);
+        for (road, clearance) in [(1, 450), (2, 520)] {
+            d.roads[road].kind = RoadKind::Tunnel;
+            d.roads[road].clearance_cm = Some(clearance);
+        }
+        d.validate().unwrap();
+        let area = Bounds { min: [-500, -500], max: [5500, 500] };
+        let unshared = plan_all(&d, &area, false, true, None).err().unwrap();
+        assert_eq!(unshared.message, "joined tunnel clearances must agree");
+        let shared = SharedJunctions::default();
+        for ground_edges in [false, true, false] {
+            let error = plan_all(&d, &area, ground_edges, true, Some(&shared)).err().unwrap();
+            assert_eq!((error.code, error.message), (unshared.code.clone(), unshared.message.clone()));
+        }
+        let failing = d.roads.iter().position(|r| r.from == "b" || r.to == "b").unwrap();
+        let point = if d.roads[failing].from == "b" { 0 } else { d.roads[failing].points.len() - 1 };
+        let state = shared.0.lock().unwrap();
+        assert!(!state.plans.is_empty() && !state.plans.contains_key(&(failing, point)));
+    }
+
+    /// Designed arms sample their roads under the caller's profile, so their
+    /// junctions bypass the store: Authoring warns on every plan and Runtime
+    /// still fails after an Authoring plan of the same junction.
+    #[test]
+    fn shared_store_keeps_profile_dependent_road_sampling() {
+        use crate::profile::Profile;
+        let mut d = fixture(false);
+        d.roads.truncate(1);
+        let r = &mut d.roads[0];
+        r.points = vec![[0, 0, 0], [7_000_000, 0, 0]];
+        let design = crate::road_design::from_points(&r.points).unwrap();
+        Profile::Authoring.run(|| crate::road_design::compile(r, design, 600)).0.unwrap();
+        assert!(r.points.len() > 16_384);
+        let area = Bounds { min: [-1000; 2], max: [1000; 2] };
+        let shared = SharedJunctions::default();
+        for _ in 0..2 {
+            let (result, warnings) = Profile::Authoring.run(|| plan_all(&d, &area, false, true, Some(&shared)).map(|_| ()));
+            assert!(result.is_ok());
+            assert_eq!(warnings.iter().map(|w| w.code.to_string()).collect::<Vec<_>>(), ["road_samples"]);
+        }
+        for cache in [Some(&shared), None] {
+            let error = crate::profile::runtime(|| plan_all(&d, &area, false, true, cache)).err().unwrap();
+            assert_eq!((error.code.as_str(), error.message.as_str()), ("E_BUDGET", "road sampling limit"));
         }
     }
 
@@ -396,7 +550,7 @@ mod index_tests {
         }
         let bounds = Bounds { min: [-3000; 2], max: [10000; 2] };
         let (all, edges) = plan(&d, &bounds).unwrap();
-        let (surface, structural) = surface_plan(&d, &bounds).unwrap();
+        let (surface, structural) = surface_plan(&d, &bounds, None).unwrap();
         let faces = |v: Vec<Patch>| v.into_iter().map(|p|
             (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
         assert_eq!(faces(all), faces(surface));
@@ -419,7 +573,7 @@ mod index_tests {
             d.roads.push(r);
         }
         let bounds = Bounds { min: [-100; 2], max: [7000; 2] };
-        let (patches, edges) = surface_plan(&d, &bounds).unwrap();
+        let (patches, edges) = surface_plan(&d, &bounds, None).unwrap();
         assert!(!patches.is_empty() && edges.is_empty());
         assert!(patches.len() <= MAX_LOCAL_PATCHES);
         assert_eq!(patches.iter().map(|p| &p.road.id).collect::<BTreeSet<_>>().len(), 60);
@@ -441,21 +595,23 @@ pub(crate) fn plan<'a>(
     d: &'a MapDocument,
     bounds: &Bounds,
 ) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    plan_all(d, bounds, true, false)
+    plan_all(d, bounds, true, false, None)
 }
 
-/// [`plan`] of a validated `d` (generation only).
-pub(crate) fn validated_plan<'a>(d: &'a MapDocument, bounds: &Bounds)
+/// [`plan`] of a validated `d` (generation only). `shared` holds the junction
+/// plans of `d` when prepared.
+pub(crate) fn validated_plan<'a>(d: &'a MapDocument, bounds: &Bounds, shared: Option<&SharedJunctions>)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    plan_all(d, bounds, true, true)
+    plan_all(d, bounds, true, true, shared)
 }
 
 /// Ground surface generation consumes no ground boundary walls. Sidewalks have
 /// their own expanded plan; structural walls and fixed safety stationing remain.
-/// `d` must be validated (generation and its estimate only).
-pub(crate) fn surface_plan<'a>(d: &'a MapDocument, bounds: &Bounds)
+/// `d` must be validated (generation and its estimate only); `shared` as in
+/// [`validated_plan`].
+pub(crate) fn surface_plan<'a>(d: &'a MapDocument, bounds: &Bounds, shared: Option<&SharedJunctions>)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    plan_all(d, bounds, false, true)
+    plan_all(d, bounds, false, true, shared)
 }
 
 /// Point indices of `r` that bound its planned segments: every point, except
@@ -475,15 +631,18 @@ fn chain(r: &Road, nodes: &BTreeMap<&str,(usize,u32)>) -> Vec<usize> {
 /// Plan of every road of `d`. Undesigned roads share one identity [`chain`];
 /// node widths are only gathered when a designed road needs its approaches.
 /// `validated`: road ends lie on their nodes and road IDs are unique, so every
-/// [`key`] names one point (see [`plan_selected`]).
-fn plan_all<'a>(d: &'a MapDocument, bounds: &Bounds, ground_edges: bool, validated: bool) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+/// [`key`] names one point (see [`plan_selected`]). `shared` holds the junction
+/// plans of `d`.
+fn plan_all<'a>(d: &'a MapDocument, bounds: &Bounds, ground_edges: bool, validated: bool, shared: Option<&SharedJunctions>)
+    -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let roads: Vec<_> = d.roads.iter().collect();
     let nodes = if roads.iter().any(|r| r.design.is_some()) { node_widths(d) } else { BTreeMap::new() };
     let identity: Vec<usize> = (0..roads.iter().map(|r| r.points.len()).max().unwrap_or(0)).collect();
     let designed: Vec<_> = roads.iter().map(|r| r.design.as_ref().map(|_| chain(r, &nodes))).collect();
     let chains: Vec<_> = roads.iter().zip(&designed)
         .map(|(r, chain)| chain.as_deref().unwrap_or(&identity[..r.points.len()])).collect();
-    plan_selected(&roads, &chains, &|i, p| key(roads[i], p), bounds, influence_margin(d), ground_edges, Walls::All, None, validated)
+    plan_selected(&roads, &chains, &|i, p| key(roads[i], p), bounds, influence_margin(d), ground_edges, Walls::All,
+        shared.map(Memo::Shared), validated)
 }
 
 /// `chains[i]` is [`chain`] of `roads[i]`; `key(i, point)` orders like [`key`]
@@ -493,7 +652,7 @@ fn plan_all<'a>(d: &'a MapDocument, bounds: &Bounds, ground_edges: bool, validat
 /// without the key lookup.
 #[allow(clippy::too_many_arguments)]
 fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key: &dyn Fn(usize, usize) -> K, bounds: &Bounds,
-    margin: i64, ground_edges: bool, keep: Walls, cache: Option<&std::cell::RefCell<JunctionCache<'a, K>>>, keyed_points: bool)
+    margin: i64, ground_edges: bool, keep: Walls, cache: Option<Memo<'_, 'a, K>>, keyed_points: bool)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let mut groups: BTreeMap<K, Vec<Arm>> = BTreeMap::new();
     // Include complete endpoint junctions when a corridor touches this cell.
@@ -534,6 +693,7 @@ fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key
                     }
                     groups.entry(k).or_default().push(Arm {
                         road: r,
+                        index,
                         segment: i,
                         end,
                         point_index:indices[end],
@@ -551,19 +711,35 @@ fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key
     let mut sections=BTreeMap::new();
     for (key, arms) in groups.iter_mut() {
         crate::cancellation::checkpoint()?;
-        let cached = cache.and_then(|c| c.borrow().get(key));
-        let planned = match cached {
-            Some(planned) => planned,
-            None => {
-                let planned = std::rc::Rc::new(plan_junction(arms, &mut sections, margin, ground_edges, keep)?);
-                if let Some(c) = cache { c.borrow_mut().insert(*key, planned.clone()); }
-                planned
+        // Designed arms sample their roads under the caller's profile (warnings
+        // or `E_BUDGET`); they are planned per call as before.
+        if let Some(Memo::Shared(shared)) = cache.filter(|_| arms.iter().all(|a| a.road.design.is_none())) {
+            let planned = shared.plan(arms, margin)?;
+            mouths.extend(planned.mouths.iter().map(|&((road, segment, end), m)| ((roads[road].id.as_str(), segment, end), m)));
+            patches.extend(planned.faces.iter().filter(|f| hit(&f.0, bounds, 0))
+                .map(|&(v, road, surface, terrain_join)| Patch { v, road: roads[road], surface, terrain_join }));
+            // The plan of every boundary edge, filtered as `plan_junction` does.
+            for &(a, b, station_cm, road) in &planned.walls {
+                let road = roads[road];
+                if !ground_edges && road.kind == RoadKind::Ground { continue; }
+                wall_count += 1;
+                if keep.keep(road) { walls.push(Edge { a, b, station_cm, road }); }
             }
-        };
-        mouths.extend(planned.mouths.iter().copied());
-        patches.extend(planned.faces.iter().filter(|p| hit(&p.v, bounds, 0)).cloned());
-        walls.extend(planned.walls.iter().cloned());
-        wall_count += planned.wall_count;
+        } else {
+            let local = match cache { Some(Memo::Local(c)) => Some(c), _ => None };
+            let planned = match local.and_then(|c| c.borrow().get(key)) {
+                Some(planned) => planned,
+                None => {
+                    let planned = std::rc::Rc::new(plan_junction(arms, &mut sections, margin, ground_edges, keep)?);
+                    if let Some(c) = local { c.borrow_mut().insert(*key, planned.clone()); }
+                    planned
+                }
+            };
+            mouths.extend(planned.mouths.iter().copied());
+            patches.extend(planned.faces.iter().filter(|p| hit(&p.v, bounds, 0)).cloned());
+            walls.extend(planned.walls.iter().cloned());
+            wall_count += planned.wall_count;
+        }
         if patches.len() + wall_count > MAX_LOCAL_PATCHES {
             return Err(error("E_BUDGET", format!("road local junction limit ({} faces, {} boundaries)", patches.len(), wall_count)));
         }
@@ -648,6 +824,104 @@ impl<'a, K: Ord> JunctionCache<'a, K> {
         }
         self.bytes += bytes;
         self.plans.insert(key, plan);
+    }
+}
+/// Where [`plan_selected`] keeps junction plans.
+#[derive(Clone, Copy)]
+enum Memo<'c, 'a, K> {
+    Local(&'c std::cell::RefCell<JunctionCache<'a, K>>),
+    /// The planned roads are the whole document the plans belong to.
+    Shared(&'c SharedJunctions),
+}
+/// Capacity of [`SharedJunctions`], charged by package admission with the other
+/// preparation caches ([`crate::PREPARATION_CACHE_BYTES`]).
+pub(crate) const JUNCTION_CACHE_BYTES: usize = 2 * 1024 * 1024;
+/// Junction plans of one validated document, shared by the estimate, ground and
+/// sidewalk plans of every cell on every thread. A junction group is a complete
+/// endpoint star whose first arm (document order) names it, and the plan of an
+/// undesigned group does not depend on the query bounds, edge rule, profile or
+/// thread, so results never depend on the cache. The least recently used plans
+/// leave first.
+#[derive(Debug, Default)]
+pub(crate) struct SharedJunctions(std::sync::Mutex<SharedPlans>);
+#[derive(Debug, Default)]
+struct SharedPlans {
+    /// Plan and last use by first arm (road index, point index).
+    plans: BTreeMap<(usize, usize), (std::sync::Arc<StoredJunction>, u64)>,
+    /// First arms by last use.
+    uses: BTreeMap<u64, (usize, usize)>,
+    clock: u64,
+    bytes: usize,
+}
+/// [`Junction`] with roads as indices of the document's roads, planned with
+/// every boundary edge (ground edges, [`Walls::All`]): mouths, faces
+/// (vertices, road, surface, terrain join) and edges (ends, station, road).
+#[derive(Debug)]
+struct StoredJunction {
+    mouths: Vec<((usize, usize, usize), [Vertex; 2])>,
+    faces: Vec<([Vertex; 3], usize, Surface, bool)>,
+    walls: Vec<(Vertex, Vertex, f64, usize)>,
+}
+impl StoredJunction {
+    fn new(planned: &Junction, arms: &[Arm]) -> Self {
+        let index = |road: &Road| arms.iter().find(|a| std::ptr::eq(a.road, road)).unwrap().index;
+        Self {
+            mouths: planned.mouths.iter().map(|&((id, segment, end), m)|
+                ((arms.iter().find(|a| std::ptr::eq(a.road.id.as_str(), id)).unwrap().index, segment, end), m)).collect(),
+            faces: planned.faces.iter().map(|p| (p.v, index(p.road), p.surface, p.terrain_join)).collect(),
+            walls: planned.walls.iter().map(|e| (e.a, e.b, e.station_cm, index(e.road))).collect(),
+        }
+    }
+    /// Heap held while cached: the shared allocation and both map entries
+    /// (B-tree leaves at least half full), plus each vector rounded up to an
+    /// allocator size class (at most the next power of two over its header).
+    fn bytes(&self) -> usize {
+        use std::mem::size_of;
+        let allocation = |bytes: usize| if bytes == 0 { 0 } else { (bytes + 16).next_power_of_two() };
+        384 + allocation(self.mouths.capacity() * size_of::<((usize, usize, usize), [Vertex; 2])>())
+            + allocation(self.faces.capacity() * size_of::<([Vertex; 3], usize, Surface, bool)>())
+            + allocation(self.walls.capacity() * size_of::<(Vertex, Vertex, f64, usize)>())
+    }
+}
+impl SharedJunctions {
+    // Tests evict constantly; eviction never changes a plan.
+    const MAX_BYTES: usize = if cfg!(test) { 4 * 1024 } else { JUNCTION_CACHE_BYTES };
+    /// The plan of the complete undesigned group `arms`, from the cache or
+    /// planned now. Planning errors are never cached; every caller recomputes them.
+    fn plan(&self, arms: &mut [Arm], margin: i64) -> Result<std::sync::Arc<StoredJunction>> {
+        let key = (arms[0].index, arms[0].point_index);
+        if let Some(plan) = self.get(key) { return Ok(plan); }
+        // Undesigned arms never read cross sections.
+        let plan = std::sync::Arc::new(StoredJunction::new(&plan_junction(arms, &mut BTreeMap::new(), margin, true, Walls::All)?, arms));
+        self.insert(key, plan.clone());
+        Ok(plan)
+    }
+    fn get(&self, key: (usize, usize)) -> Option<std::sync::Arc<StoredJunction>> {
+        let mut state = self.0.lock().unwrap();
+        state.clock += 1;
+        let clock = state.clock;
+        let (plan, used) = state.plans.get_mut(&key)?;
+        let (plan, last) = (plan.clone(), std::mem::replace(used, clock));
+        state.uses.remove(&last);
+        state.uses.insert(clock, key);
+        Some(plan)
+    }
+    fn insert(&self, key: (usize, usize), plan: std::sync::Arc<StoredJunction>) {
+        let bytes = plan.bytes();
+        if bytes > Self::MAX_BYTES { return; }
+        let mut state = self.0.lock().unwrap();
+        // Another thread planned it meanwhile.
+        if state.plans.contains_key(&key) { return; }
+        while state.bytes + bytes > Self::MAX_BYTES {
+            let (_, oldest) = state.uses.pop_first().unwrap();
+            let (evicted, _) = state.plans.remove(&oldest).unwrap();
+            state.bytes -= evicted.bytes();
+        }
+        state.clock += 1;
+        let clock = state.clock;
+        state.uses.insert(clock, key);
+        state.plans.insert(key, (plan, clock));
+        state.bytes += bytes;
     }
 }
 /// A segment end: road ID, segment, end.

@@ -126,7 +126,7 @@ fn planned(expanded: u64, structured: u64, long_strings: u64, pngs: u64, image_p
     // Payload vectors, typed document/manifest and their strings. GLB JSON is
     // bounded conservatively by its complete entry size before decoding headers.
     // Immutable core estimate and bridge preparation caches: at most the shared bounded cache capacity,
-    // 256 + 4096 bytes each, including serialized keys and allocation overhead.
+    // 256 + 4096 bytes each, including serialized keys and allocation overhead, plus the junction plans.
     // Source-proportional spatial/lookup indices plus 32 MiB for up to 20000
     // accepted repetition records, occupied footprints and their broad phase.
     // These bytes remain charged while the prepared source is retained.

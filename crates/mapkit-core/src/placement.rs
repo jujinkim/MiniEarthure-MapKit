@@ -1090,6 +1090,8 @@ pub(crate) struct PreparedPlacements {
     /// prepared placements prepares them per call and never reads it.
     paint: std::sync::OnceLock<crate::bounds_index::BoundsIndex>,
     pub(crate) barriers: crate::barrier::Spans,
+    /// Junction plans shared by every cell's estimate, ground and sidewalk plans.
+    pub(crate) junctions: crate::road_plan::SharedJunctions,
 }
 fn exclusion_index(d: &MapDocument) -> crate::bounds_index::BoundsIndex {
     crate::bounds_index::BoundsIndex::new(&crate::roads::sidewalk_exclusions(d).map(|p| aabb(p)).collect::<Vec<_>>())
@@ -1141,7 +1143,7 @@ impl PreparedPlacements {
             roads: crate::bounds_index::BoundsIndex::new(&road_bounds),
             buildings: crate::bounds_index::BoundsIndex::new(&building_bounds), solids, exclusions,
             paint: Default::default(),
-            barriers: crate::barrier::Spans::new(d)? })
+            barriers: crate::barrier::Spans::new(d)?, junctions: Default::default() })
     }
     /// [`crate::roads::paint_index`] of `d`, the document these placements were
     /// prepared from.
@@ -1178,7 +1180,7 @@ pub(crate) fn generate(d: &MapDocument, cell: Cell, b: &mut Builder, prepared: O
     // its own preparation below, keeping that preparation's place and errors.
     let mut own_exclusions = None;
     let exclusions = match prepared { Some(value) => &value.exclusions, None => own_exclusions.insert(exclusion_index(d)) };
-    crate::roads::sidewalks(d,b,exclusions).map_err(|mut e| {e.message=format!("sidewalk: {}",e.message);e})?;
+    crate::roads::sidewalks(d,b,exclusions,prepared.map(|p| &p.junctions)).map_err(|mut e| {e.message=format!("sidewalk: {}",e.message);e})?;
     buildings(d,b)?;
     let owned;
     let prepared = if let Some(value)=prepared { value } else { owned=PreparedPlacements::with_exclusions(d, own_exclusions.take().unwrap())?; &owned };

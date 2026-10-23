@@ -4,7 +4,9 @@ use std::{ops::Deref, sync::RwLock};
 
 /// Bounded metadata caches; package admission charges their full capacity.
 pub const PREPARATION_CACHE_ENTRIES: usize = 1024;
-pub const PREPARATION_CACHE_BYTES: u64 = PREPARATION_CACHE_ENTRIES as u64 * (256 + 4096);
+/// The estimate and bridge entries plus the shared junction plans.
+pub const PREPARATION_CACHE_BYTES: u64 = PREPARATION_CACHE_ENTRIES as u64 * (256 + 4096)
+    + crate::road_plan::JUNCTION_CACHE_BYTES as u64;
 
 #[derive(Debug, Serialize)]
 #[serde(transparent)]

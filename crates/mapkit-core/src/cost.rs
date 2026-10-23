@@ -122,7 +122,7 @@ pub(crate) fn estimate_validated(
     // arrangement; sampled or track-integrated terrain keeps the tile allowances.
     let flat = descriptor.is_none() && d.assembled_track.is_none();
     let plan = if flat || d.roads.iter().any(|r| matches!(r.kind, RoadKind::Elevated | RoadKind::Bridge)) {
-        Some(crate::road_plan::surface_plan(d, &area)?)
+        Some(crate::road_plan::surface_plan(d, &area, prepared.map(|p| &p.junctions))?)
     } else { None };
     let mut ground = 0u64;
     if flat {

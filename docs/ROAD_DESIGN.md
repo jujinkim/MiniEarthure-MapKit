@@ -152,6 +152,11 @@ ends at the same position; the planner rules themselves are unchanged.
 
 A local road plan admits up to 24,576 faces and boundaries, enough for the densest
 1:8 city cells with kept source junctions; larger plans fail with `E_BUDGET`.
+A prepared source keeps its junction plans in one thread-safe 2 MiB cache (least
+recently used first out) shared by every cell's estimate, ground and sidewalk plans.
+Each junction is a complete endpoint star, so plans, errors and work never depend on
+it; junctions with designed approaches sample under the caller's profile and are
+planned per call.
 Building/road clearance checks test footprint containment and crossings through
 the footprint's edge index.
 

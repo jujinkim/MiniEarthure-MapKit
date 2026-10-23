@@ -112,8 +112,9 @@ This page lists the domain invariants and links each feature's owner.
   restore uses the validated immutable package, keeps every original payload and
   requires a new directory. Failed opens clear prior native state.
 - The Godot bridge caches cell cost/archive descriptors on the validated source
-  (≤1,024 entries; the shared 4.25 MiB capacity is in both container read
-  allowances). Asset hashes/costs are computed once per source; packed display bytes
+  (≤1,024 entries, 4.25 MiB shared with the core estimates); with the prepared
+  source's 2 MiB junction-plan cache the 6.25 MiB capacity is in both container
+  read allowances. Asset hashes/costs are computed once per source; packed display bytes
   are created lazily on the presentation path only. Headless paths create no
   display bytes or GPU resources.
 - `cargo run -p mapkit-cli --example menu_preview -- INPUT.memap OUTPUT.json` writes

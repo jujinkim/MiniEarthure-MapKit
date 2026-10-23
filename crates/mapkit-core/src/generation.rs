@@ -415,7 +415,8 @@ fn generate_validated(
         }
     }
     if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) {
-        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b, placements.map(|p| p.paint(d))).map_err(|mut e| {
+        crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b, placements.map(|p| p.paint(d)),
+            placements.map(|p| &p.junctions)).map_err(|mut e| {
             e.message = format!("ground surfaces: {}", e.message); e
         })?;
     }

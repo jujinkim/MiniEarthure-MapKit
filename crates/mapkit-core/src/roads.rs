@@ -572,6 +572,8 @@ fn ground_tile_part(
 }
 
 /// `paint` is [`paint_index`] of `d` when prepared; otherwise it is built here.
+/// `junctions` holds the junction plans of `d` when prepared.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate(
     d: &MapDocument,
     bounds: &Bounds,
@@ -580,8 +582,9 @@ pub(crate) fn generate(
     side: usize,
     b: &mut Builder,
     paint: Option<&crate::bounds_index::BoundsIndex>,
+    junctions: Option<&crate::road_plan::SharedJunctions>,
 ) -> Result<()> {
-    let (patches, walls) = crate::road_plan::surface_plan(d, bounds)?;
+    let (patches, walls) = crate::road_plan::surface_plan(d, bounds, junctions)?;
     let (source_spacing,source_side)=(spacing,side);
     let spacing=if d.assembled_track.as_ref().is_some_and(|a|a.terrain_integration()) {spacing.min(200)} else {spacing};
     let side=d.cell_size_cm as usize/spacing as usize+1;
@@ -726,8 +729,10 @@ pub(crate) fn generate(
 /// Widened graph aprons cover corners; only restored ground receives
 /// sidewalk tops. Road carriageways, independent decks and portals are untouched.
 /// `exclusion_index` holds the bounds of [`sidewalk_exclusions`] of `d` in that
-/// order (built once per document by the placement preparation).
-pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crate::bounds_index::BoundsIndex) -> Result<()> {
+/// order (built once per document by the placement preparation). `junctions`
+/// holds the junction plans of `d` when prepared.
+pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crate::bounds_index::BoundsIndex,
+    junctions: Option<&crate::road_plan::SharedJunctions>) -> Result<()> {
     // Width rules can exclude all sidewalks (notably small-scale imports).
     // Such maps need no second expanded road plan or footprint subdivision.
     if !d.roads.iter().any(|r| crate::placement::sidewalk_width(d,r)>0) {
@@ -737,7 +742,7 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crat
         min: b.bounds.min.map(|v| v - 1000),
         max: b.bounds.max.map(|v| v + 1000),
     };
-    let (_, boundary) = validated_plan(d, &expanded)?;
+    let (_, boundary) = validated_plan(d, &expanded, junctions)?;
     let mut patches = vec![];
     let mut buffers = BTreeMap::<&str, (&Road, Vec<Ring>)>::new();
     for edge in boundary {
