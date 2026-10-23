@@ -63,7 +63,7 @@ pub(crate) fn estimate_validated(
     d: &MapDocument,
     cell: Cell,
     max_triangles: usize,
-    barriers: Option<&crate::barrier::Spans>,
+    prepared: Option<&crate::placement::PreparedPlacements>,
 ) -> Result<GenerationCost> {
     let area = d.cell_bounds(cell)?;
     let descriptor = d.heightmaps.iter().find(|h| h.cell == cell);
@@ -127,7 +127,7 @@ pub(crate) fn estimate_validated(
     let mut ground = 0u64;
     if flat {
         let (patches, walls) = plan.as_ref().unwrap();
-        ground = crate::roads::estimate_ground(d, &area, patches)?;
+        ground = crate::roads::estimate_ground(d, &area, patches, prepared.map(|p| p.paint(d)))?;
         add(ground, 7);
         // Structural decks (plus a tunnel ceiling) and portal walls are emitted
         // whole and clipped to the cell afterwards.
@@ -239,8 +239,8 @@ pub(crate) fn estimate_validated(
     }
     if !d.barriers.is_empty() {
         let owned;
-        let spans = match barriers {
-            Some(spans) => spans,
+        let spans = match prepared {
+            Some(prepared) => &prepared.barriers,
             None => { owned = crate::barrier::Spans::new(d)?; &owned }
         };
         // Owned pieces: twelve faces each (sixty when map-edge clipped).

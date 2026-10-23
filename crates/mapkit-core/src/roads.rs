@@ -7,7 +7,7 @@ pub(crate) const SCRATCH_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_FRAGMENTS: usize = 16_384;
 const MAX_WORK: usize = 8_000_000;
 type Poly = Vec<Vertex>;
-use crate::road_plan::{plan, hit, xy, orient, Patch};
+use crate::road_plan::{validated_plan, hit, xy, orient, Patch};
 use i_overlay::{core::{fill_rule::FillRule,overlay::{Overlay,ShapeType},overlay_rule::OverlayRule},i_float::int::point::IntPoint};
 /// Sidewalk clipping rings (integer XY) and overlay results (outer ring first).
 type Ring = Vec<IntPoint<i64>>;
@@ -82,6 +82,28 @@ pub(crate) fn tick(work: &mut usize, n: usize) -> Result<()> {
     } else {
         Ok(())
     }
+}
+/// Same result, final work and Authoring warnings as `n` calls of `tick(work, 1)`.
+/// A single jump past the guard would skip the warning unit ticks record there.
+pub(crate) fn tick_many(work: &mut usize, n: usize) -> Result<()> {
+    if n == 0 {
+        return Ok(());
+    }
+    let end = work.saturating_add(n);
+    if end <= MAX_WORK || end as u64 <= WORK.active_limit() {
+        return tick(work, n);
+    }
+    let to_guard = (WORK.guard as usize).saturating_sub(*work);
+    if to_guard > 0 {
+        tick(work, to_guard)?;
+    }
+    tick(work, 1)
+}
+/// Bounds of `d.surface_areas` in order. It does not depend on the cell, so
+/// prepared maps build it once for every estimate and generation.
+pub(crate) fn paint_index(d: &MapDocument) -> crate::bounds_index::BoundsIndex {
+    crate::bounds_index::BoundsIndex::new(&d.surface_areas.iter()
+        .map(|a| crate::bounds_index::bounds(&a.polygon)).collect::<Vec<_>>())
 }
 // Both halves share the exact same intersection, independent of traversal.
 pub(crate) fn split(poly: &[Vertex], plane: impl Fn(Vertex) -> i128) -> (Poly, Poly) {
@@ -234,7 +256,8 @@ fn ground_tile(
 /// as [`generate`], stopping before triangulation. A face of `k` ring vertices
 /// and `h` holes triangulates to exactly `k - 2 + 2h` faces; only holed faces can
 /// restore collinear vertices dropped by hole bridging (at most two faces each).
-pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch]) -> Result<u64> {
+/// `paint` is [`paint_index`] of `d` when prepared; otherwise it is built here.
+pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch], paint: Option<&crate::bounds_index::BoundsIndex>) -> Result<u64> {
     let spacing = d.cell_size_cm as i64;
     let side = 2usize;
     let fitter = crate::road_design::Fitter::new(d, bounds);
@@ -247,8 +270,8 @@ pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch
         + d.surface_areas.iter().map(|a| a.polygon.len()).sum::<usize>())?;
     let patch_index = crate::bounds_index::BoundsIndex::new(&patches.iter()
         .map(|p| crate::bounds_index::bounds(&p.v.map(xy))).collect::<Vec<_>>());
-    let paint_index = crate::bounds_index::BoundsIndex::new(&d.surface_areas.iter()
-        .map(|a| crate::bounds_index::bounds(&a.polygon)).collect::<Vec<_>>());
+    let owned;
+    let paint_index = match paint { Some(index) => index, None => { owned = paint_index(d); &owned } };
     let mut count = 0u64;
     for y in 0..side - 1 {
         for x in 0..side - 1 {
@@ -302,19 +325,24 @@ fn ground_tile_part(
         *track_edges.entry(edge).or_insert(0usize)+=1;
     }}
     lines.extend(track_edges.into_iter().filter(|(_,count)|*count==1).map(|(edge,_)|edge));
-    let mut shared = BTreeMap::<(&str,u8,Point,Point), Vec<&Patch>>::new();
+    // Patch edges grouped by (road, surface, edge) in key order, owners in patch
+    // order: a stable sort gives the groups of an ordered map without one Vec each.
+    let mut shared = Vec::with_capacity(nearby.len() * 3);
     for patch in &nearby {
         for i in 0..3 {
             let (a,b)=(xy(patch.v[i]),xy(patch.v[(i+1)%3]));
             let (a,b)=if a<b {(a,b)} else {(b,a)};
-            shared.entry((&patch.road.id,patch.surface as u8,a,b)).or_default().push(patch);
+            shared.push(((patch.road.id.as_str(),patch.surface as u8,a,b),*patch));
         }
     }
-    for ((_,_,a,b),owners) in shared {
+    shared.sort_by(|x, y| x.0.cmp(&y.0));
+    for group in shared.chunk_by(|x, y| x.0 == y.0) {
+        let (_,_,a,b) = group[0].0;
+        let owners = |i: usize| group[i].1;
         // Ground follows the terrain, and bridge/underpass footprints do not
         // need their internal fan diagonals to partition that terrain again.
-        let redundant=owners.len()==2 && ((owners[0].road.kind!=RoadKind::Tunnel && owners[0].road.design.is_none())
-            || owners[1].v.iter().all(|p|floor_plane(&owners[0].v,*p)==0));
+        let redundant=group.len()==2 && ((owners(0).road.kind!=RoadKind::Tunnel && owners(0).road.design.is_none())
+            || owners(1).v.iter().all(|p|floor_plane(&owners(0).v,*p)==0));
         if !redundant { lines.push((a,b)); }
     }
     for patch in &nearby {
@@ -372,12 +400,13 @@ fn ground_tile_part(
             }
         }
     }
+    // Same test as `hit` on the area's vertices, without copying them.
     let paint: Vec<_> = paint
         .iter().copied()
-        .filter(|a| {
-            let verts: Vec<_> = a.polygon.iter().map(|p| [p[0], 0, p[1]]).collect();
-            hit(&verts, &bounds, 2)
-        })
+        .filter(|a| (0..2).all(|i| {
+            a.polygon.iter().map(|p| p[i]).min().unwrap() - 2 <= bounds.max[i]
+                && a.polygon.iter().map(|p| p[i]).max().unwrap() + 2 >= bounds.min[i]
+        }))
         .collect();
     for area in &paint {
         for i in 0..area.polygon.len() {
@@ -453,6 +482,12 @@ fn ground_tile_part(
         }
         terrain
     };
+    // Tripled paint polygons and their bounds, once per part instead of per
+    // triangle. A point outside a polygon's bounds is never inside it.
+    let tripled: Vec<(Bounds, Vec<Point>)> = paint.iter().map(|area| {
+        let polygon: Vec<Point> = area.polygon.iter().map(|p| [p[0] * 3, p[1] * 3]).collect();
+        (crate::bounds_index::bounds(&polygon), polygon)
+    }).collect();
     for rings in shapes {
         for triangle in crate::road_arrangement::triangulate(&rings, work)? {
             let center = [
@@ -513,16 +548,11 @@ fn ground_tile_part(
                 }
             }
             if !road && selected.is_some() {
-                for area in &paint {
+                for (area, (area_bounds, polygon)) in paint.iter().zip(&tripled) {
                     tick(work, area.polygon.len())?;
-                    if point_in_polygon(
-                        center,
-                        &area
-                            .polygon
-                            .iter()
-                            .map(|p| [p[0] * 3, p[1] * 3])
-                            .collect::<Vec<_>>(),
-                    ) {
+                    if (0..2).all(|i| area_bounds.min[i] <= center[i] && center[i] <= area_bounds.max[i])
+                        && point_in_polygon(center, polygon)
+                    {
                         selected = Some((area.surface, area.id.as_str()));
                         break;
                     }
@@ -541,6 +571,7 @@ fn ground_tile_part(
     Ok(())
 }
 
+/// `paint` is [`paint_index`] of `d` when prepared; otherwise it is built here.
 pub(crate) fn generate(
     d: &MapDocument,
     bounds: &Bounds,
@@ -548,6 +579,7 @@ pub(crate) fn generate(
     spacing: i64,
     side: usize,
     b: &mut Builder,
+    paint: Option<&crate::bounds_index::BoundsIndex>,
 ) -> Result<()> {
     let (patches, walls) = crate::road_plan::surface_plan(d, bounds)?;
     let (source_spacing,source_side)=(spacing,side);
@@ -568,8 +600,8 @@ pub(crate) fn generate(
         + d.surface_areas.iter().map(|a| a.polygon.len()).sum::<usize>())?;
     let patch_index = crate::bounds_index::BoundsIndex::new(&patches.iter()
         .map(|p| crate::bounds_index::bounds(&p.v.map(xy))).collect::<Vec<_>>());
-    let paint_index = crate::bounds_index::BoundsIndex::new(&d.surface_areas.iter()
-        .map(|a| crate::bounds_index::bounds(&a.polygon)).collect::<Vec<_>>());
+    let owned;
+    let paint_index = match paint { Some(index) => index, None => { owned = paint_index(d); &owned } };
     let cell_bounds = b.bounds.clone();
     let ground_surface = d.ground_surface.unwrap_or(Surface::Grass);
     for y in 0..side - 1 {
@@ -705,7 +737,7 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crat
         min: b.bounds.min.map(|v| v - 1000),
         max: b.bounds.max.map(|v| v + 1000),
     };
-    let (_, boundary) = plan(d, &expanded)?;
+    let (_, boundary) = validated_plan(d, &expanded)?;
     let mut patches = vec![];
     let mut buffers = BTreeMap::<&str, (&Road, Vec<Ring>)>::new();
     for edge in boundary {
@@ -1126,6 +1158,29 @@ fn sidewalk_contains(
 }
 
 #[cfg(test)]
+mod work_charge {
+    use super::*;
+    use crate::profile::Profile;
+
+    #[test]
+    fn tick_many_matches_unit_ticks_in_both_profiles() {
+        let guard = WORK.guard as usize;
+        for profile in [Profile::Runtime, Profile::Authoring] {
+            for start in [0, MAX_WORK - 5, MAX_WORK, MAX_WORK + 3, guard - 5, guard] {
+                for n in [0, 1, 3, 5, 6, 20] {
+                    let run = |lump: bool| profile.run(|| {
+                        let mut work = start;
+                        if lump { tick_many(&mut work, n)?; } else { for _ in 0..n { tick(&mut work, 1)?; } }
+                        Ok(work)
+                    });
+                    assert_eq!(run(true), run(false), "{profile:?} {start} {n}");
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod sidewalk_clip {
     use super::*;
     fn ring(points: &[Point]) -> Ring {
@@ -1227,7 +1282,7 @@ mod arrangement_probe {
         d.roads[0].widths_cm = widths.to_vec();
         d.roads[0].surfaces = vec![Surface::Asphalt; 3];
         let bounds = d.cell_bounds(Cell { x: 0, y: 0 }).unwrap();
-        let (patches, _) = plan(&d, &bounds).unwrap();
+        let (patches, _) = crate::road_plan::plan(&d, &bounds).unwrap();
         let point = |p: Point| [p[0] + shift[0], p[1] + shift[1]];
         let mut work = 0;
         let mut shapes = Vec::new();

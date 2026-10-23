@@ -187,6 +187,12 @@ pub(crate) fn triangulate(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<
     // Hole bridging may simplify exactly collinear vertices. Restore those exact
     // graph vertices on both adjacent triangles; never stitch near an edge.
     let points: BTreeSet<Point> = rings.iter().flatten().copied().collect();
+    // Without such a point the loop below keeps every triangle as is; charge
+    // its point × triangle scan without running it.
+    if !restores_any(&triangles, &points) {
+        crate::roads::tick_many(work, points.len().saturating_mul(triangles.len()))?;
+        return Ok(triangles);
+    }
     for p in points {
         let mut next = Vec::new();
         for t in triangles {
@@ -207,9 +213,147 @@ pub(crate) fn triangulate(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<
     Ok(triangles)
 }
 
+/// Whether a ring point lies strictly inside an edge of a triangle that does not
+/// have it as a vertex: exactly when the restoration loop splits a triangle.
+fn restores_any(triangles: &[[Point; 3]], points: &BTreeSet<Point>) -> bool {
+    let mut by_y: Option<BTreeSet<(i64, i64)>> = None;
+    triangles.iter().any(|t| (0..3).any(|i| {
+        let (a, b) = (t[i], t[(i + 1) % 3]);
+        let outside = |p: &Point| !t.contains(p);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let (lo, hi) = (a.min(b), a.max(b));
+        if dx == 0 && dy == 0 {
+            false
+        } else if dx == 0 {
+            hi[1] - lo[1] >= 2 && points.range([lo[0], lo[1] + 1]..=[lo[0], hi[1] - 1]).any(outside)
+        } else if dy == 0 {
+            let (y, x0, x1) = (a[1], dx.min(0) + a[0], dx.max(0) + a[0]);
+            x1 - x0 >= 2 && by_y.get_or_insert_with(|| points.iter().map(|p| (p[1], p[0])).collect())
+                .range((y, x0 + 1)..=(y, x1 - 1)).any(|&(y, x)| outside(&[x, y]))
+        } else {
+            // Integer points inside the segment are `a + k * step`, 0 < k < g.
+            let g = gcd(dx.unsigned_abs(), dy.unsigned_abs()) as i64;
+            if g <= 64 {
+                (1..g).any(|k| {
+                    let p = [a[0] + k * (dx / g), a[1] + k * (dy / g)];
+                    points.contains(&p) && outside(&p)
+                })
+            } else {
+                points.range([lo[0] + 1, i64::MIN]..=[hi[0] - 1, i64::MAX])
+                    .any(|p| cross(a, b, *p) == 0 && outside(p))
+            }
+        }
+    }))
+}
+
+fn gcd(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self, n: i64) -> i64 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((self.0 >> 33) % n as u64) as i64
+        }
+    }
+
+    /// `triangulate` before the restoration skip: every point scans every triangle.
+    fn triangulate_reference(rings: &[Vec<Point>], work: &mut usize) -> Result<Vec<[Point; 3]>> {
+        if !triangulable(rings) {
+            return Err(error("E_BUDGET", "ground face triangulation limit"));
+        }
+        let mut face_work = 0;
+        let mut triangles = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], &mut face_work)
+            .map_err(|mut e|{e.message=format!("{}: {rings:?}",e.message);e})?;
+        crate::roads::tick(work, face_work)?;
+        let points: BTreeSet<Point> = rings.iter().flatten().copied().collect();
+        for p in points {
+            let mut next = Vec::new();
+            for t in triangles {
+                crate::roads::tick(work, 1)?;
+                if t.contains(&p) { next.push(t); continue; }
+                if let Some(i) = (0..3).find(|&i| on_segment(t[i], t[(i + 1) % 3], p)) {
+                    next.push([t[i], p, t[(i + 2) % 3]]);
+                    next.push([p, t[(i + 1) % 3], t[(i + 2) % 3]]);
+                } else {
+                    next.push(t);
+                }
+            }
+            triangles = next;
+        }
+        Ok(triangles)
+    }
+
+    /// Random tile arrangements: road-like lines and paint rectangles (holes and
+    /// collinear tile-boundary vertices), on a coarse grid for many collinear cuts.
+    fn arrangements(rng: &mut Lcg, count: usize) -> Vec<Vec<Rings>> {
+        let bounds = Bounds { min: [0, 0], max: [12800, 12800] };
+        let mut out = vec![];
+        for case in 0..count {
+            let step = [1, 7, 100][case % 3];
+            let mut point = |rng: &mut Lcg| [(rng.next(15_000) - 1_100) / step * step, (rng.next(15_000) - 1_100) / step * step];
+            let mut lines = vec![];
+            for _ in 0..rng.next(25) { lines.push((point(rng), point(rng))); }
+            for _ in 0..rng.next(12) {
+                let (a, w, h) = (point(rng), 50 + rng.next(3000) / step * step, 50 + rng.next(3000) / step * step);
+                let r = [a, [a[0] + w, a[1]], [a[0] + w, a[1] + h], [a[0], a[1] + h]];
+                for i in 0..4 { lines.push((r[i], r[(i + 1) % 4])); }
+            }
+            if let Ok(faces) = subdivide(&bounds, &lines, &mut 0) { out.push(faces); }
+        }
+        out
+    }
+
+    #[test]
+    fn restoration_skip_matches_the_full_scan_and_its_work() {
+        let mut rng = Lcg(5);
+        let (mut faces, mut restored, mut holed) = (0, 0, 0);
+        for arrangement in arrangements(&mut rng, 400) {
+            for rings in arrangement.iter().filter(|r| triangulable(r)) {
+                for start in [0, 7_999_000, 7_999_990, 8_000_000] {
+                    let (mut old_work, mut new_work) = (start, start);
+                    let old = triangulate_reference(rings, &mut old_work);
+                    let new = triangulate(rings, &mut new_work);
+                    assert_eq!(old, new, "{rings:?} at {start}");
+                    if old.is_ok() { assert_eq!(old_work, new_work, "{rings:?} at {start}"); }
+                }
+                faces += 1;
+                holed += usize::from(rings.len() > 1);
+                let mut w = 0;
+                let base = crate::courtyard::triangulate_rings(&rings[0], &rings[1..], &mut w).unwrap();
+                restored += usize::from(triangulate(rings, &mut 0).unwrap().len() != base.len());
+            }
+        }
+        assert!(faces > 2000 && holed > 50 && restored > 10, "faces {faces} holed {holed} restored {restored}");
+    }
+
+    #[test]
+    fn restoration_test_matches_brute_force() {
+        let mut rng = Lcg(9);
+        let mut hits = 0;
+        for case in 0..4000 {
+            // Small grids hit edges often; scaled grids give long lattice steps.
+            let (n, scale) = ([6, 12, 30][case % 3], [1, 1, 97, 1000][case % 4]);
+            let p = |rng: &mut Lcg| [rng.next(n) * scale, rng.next(n) * scale];
+            let mut triangles: Vec<[Point; 3]> = (0..1 + rng.next(6)).map(|_| [p(&mut rng), p(&mut rng), p(&mut rng)]).collect();
+            if case % 5 == 0 { let t = triangles[0]; triangles.push([t[0], t[0], t[1]]); }
+            if case % 7 == 0 { triangles.push([[0, 0], [n * scale, 0], [0, n * scale]]); }
+            let points: BTreeSet<Point> = (0..1 + rng.next(10)).map(|_| p(&mut rng)).collect();
+            let brute = triangles.iter().any(|t| points.iter().any(|p| !t.contains(p)
+                && (0..3).any(|i| on_segment(t[i], t[(i + 1) % 3], *p))));
+            assert_eq!(restores_any(&triangles, &points), brute, "{triangles:?} {points:?}");
+            hits += usize::from(brute);
+        }
+        assert!(hits > 400 && hits < 3600, "{hits}");
+    }
     #[test]
     fn quantized_junction_hole_touching_boundary_preserves_area() {
         let rings=vec![vec![[18093,98200],[18200,98200],[18200,98400],[18150,98350],[18149,98346],[18142,98330],[18135,98310],[18133,98306],[18127,98288],[18097,98212]],vec![[18134,98306],[18135,98310],[18136,98311]]];

@@ -168,7 +168,7 @@ impl<'a> PlanIndex<'a> {
                 (true, self.road_rank[road], point)
             }
         };
-        plan_selected(&roads, &chains, &key, bounds, self.margin, true, walls, cache)
+        plan_selected(&roads, &chains, &key, bounds, self.margin, true, walls, cache, false)
     }
 
     /// The plan of one graph node's junction from its incident roads alone.
@@ -309,6 +309,45 @@ mod index_tests {
         }
     }
 
+    /// Validated plans skip ends outside the hit segments' bounds without the key
+    /// lookup: the same faces and edges, for both edge rules.
+    #[test]
+    fn validated_plans_match_full_key_lookups() {
+        let faces = |v: &[Patch]| v.iter().map(|p| (p.v, p.road.id.clone(), p.surface, p.terrain_join)).collect::<Vec<_>>();
+        let edges = |v: &[Edge]| v.iter().map(|e| (e.a, e.b, e.station_cm.to_bits(), e.road.id.clone())).collect::<Vec<_>>();
+        for designed in [false, true] {
+            let mut d = fixture(designed);
+            // Long multi-point roads whose far points leave every query.
+            let mut r = d.roads[0].clone();
+            r.id = "long".into(); r.from = "c".into(); r.to = "far-a".into();
+            r.points = vec![[7000, 0, 2500], [9000, 0, 30000], [60000, 0, 70000], [100000, 0, 100000]];
+            r.widths_cm = vec![500; 3]; r.surfaces = vec![Surface::Asphalt; 3]; r.design = None;
+            d.roads.push(r);
+            let mut nodes = BTreeMap::new();
+            for r in &d.roads {
+                nodes.insert(r.from.clone(), r.points[0]);
+                nodes.insert(r.to.clone(), *r.points.last().unwrap());
+            }
+            d.nodes = nodes.into_iter().map(|(id, position)| RoadNode { id, position, level: 0 }).collect();
+            let cell = d.cell_size_cm as i64;
+            d.bounds = Bounds { min: [-cell * (12_000 / cell + 1); 2], max: [cell * (110_000 / cell + 1); 2] };
+            d.validate().unwrap();
+            for reverse in [false, true] {
+                if reverse { d.roads.reverse(); }
+                for x in (-3000..105000).step_by(1700) {
+                    for y in [-2600, -120, 2400, 30000, 99000] {
+                        let area = Bounds { min: [x, y], max: [x + 1500, y + 900] };
+                        for ground_edges in [false, true] {
+                            let (p0, e0) = plan_all(&d, &area, ground_edges, false).unwrap();
+                            let (p1, e1) = plan_all(&d, &area, ground_edges, true).unwrap();
+                            assert_eq!((faces(&p0), edges(&e0)), (faces(&p1), edges(&e1)), "{area:?}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn sparse_city_index_keeps_exact_geometry_and_bounded_query_work() {
         let mut d = fixture(false);
@@ -402,14 +441,21 @@ pub(crate) fn plan<'a>(
     d: &'a MapDocument,
     bounds: &Bounds,
 ) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    plan_all(d, bounds, true)
+    plan_all(d, bounds, true, false)
+}
+
+/// [`plan`] of a validated `d` (generation only).
+pub(crate) fn validated_plan<'a>(d: &'a MapDocument, bounds: &Bounds)
+    -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+    plan_all(d, bounds, true, true)
 }
 
 /// Ground surface generation consumes no ground boundary walls. Sidewalks have
 /// their own expanded plan; structural walls and fixed safety stationing remain.
+/// `d` must be validated (generation and its estimate only).
 pub(crate) fn surface_plan<'a>(d: &'a MapDocument, bounds: &Bounds)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
-    plan_all(d, bounds, false)
+    plan_all(d, bounds, false, true)
 }
 
 /// Point indices of `r` that bound its planned segments: every point, except
@@ -428,26 +474,32 @@ fn chain(r: &Road, nodes: &BTreeMap<&str,(usize,u32)>) -> Vec<usize> {
 }
 /// Plan of every road of `d`. Undesigned roads share one identity [`chain`];
 /// node widths are only gathered when a designed road needs its approaches.
-fn plan_all<'a>(d: &'a MapDocument, bounds: &Bounds, ground_edges: bool) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
+/// `validated`: road ends lie on their nodes and road IDs are unique, so every
+/// [`key`] names one point (see [`plan_selected`]).
+fn plan_all<'a>(d: &'a MapDocument, bounds: &Bounds, ground_edges: bool, validated: bool) -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let roads: Vec<_> = d.roads.iter().collect();
     let nodes = if roads.iter().any(|r| r.design.is_some()) { node_widths(d) } else { BTreeMap::new() };
     let identity: Vec<usize> = (0..roads.iter().map(|r| r.points.len()).max().unwrap_or(0)).collect();
     let designed: Vec<_> = roads.iter().map(|r| r.design.as_ref().map(|_| chain(r, &nodes))).collect();
     let chains: Vec<_> = roads.iter().zip(&designed)
         .map(|(r, chain)| chain.as_deref().unwrap_or(&identity[..r.points.len()])).collect();
-    plan_selected(&roads, &chains, &|i, p| key(roads[i], p), bounds, influence_margin(d), ground_edges, Walls::All, None)
+    plan_selected(&roads, &chains, &|i, p| key(roads[i], p), bounds, influence_margin(d), ground_edges, Walls::All, None, validated)
 }
 
 /// `chains[i]` is [`chain`] of `roads[i]`; `key(i, point)` orders like [`key`]
 /// of `roads[i]` and `point`.
+/// `keyed_points`: equal keys always name the same point. A relevant key is then
+/// an end of a hit segment, so ends outside those segments' bounds are skipped
+/// without the key lookup.
 #[allow(clippy::too_many_arguments)]
 fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key: &dyn Fn(usize, usize) -> K, bounds: &Bounds,
-    margin: i64, ground_edges: bool, keep: Walls, cache: Option<&std::cell::RefCell<JunctionCache<'a, K>>>)
+    margin: i64, ground_edges: bool, keep: Walls, cache: Option<&std::cell::RefCell<JunctionCache<'a, K>>>, keyed_points: bool)
     -> Result<(Vec<Patch<'a>>, Vec<Edge<'a>>)> {
     let mut groups: BTreeMap<K, Vec<Arm>> = BTreeMap::new();
     // Include complete endpoint junctions when a corridor touches this cell.
     let mut relevant = BTreeSet::new();
     let mut local_segments = 0;
+    let mut reach: Option<Bounds> = None;
     for (index, &r) in roads.iter().enumerate() {
         for indices in chains[index].windows(2) {
             let s=[r.points[indices[0]],r.points[indices[1]]];
@@ -458,6 +510,11 @@ fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key
                 }
                 relevant.insert(key(index, indices[0]));
                 relevant.insert(key(index, indices[1]));
+                for p in s.map(xy).into_iter().filter(|_| keyed_points) {
+                    let area = reach.get_or_insert(Bounds { min: p, max: p });
+                    area.min = std::array::from_fn(|a| area.min[a].min(p[a]));
+                    area.max = std::array::from_fn(|a| area.max[a].max(p[a]));
+                }
             }
         }
     }
@@ -466,6 +523,9 @@ fn plan_selected<'a, K: Ord + Copy>(roads: &[&'a Road], chains: &[&[usize]], key
         for indices in chains[index].windows(2) {
             let i=indices[0];let s=[r.points[i],r.points[indices[1]]];
             for end in 0..2 {
+                if keyed_points && !reach.as_ref().is_some_and(|reach| reach.contains(xy(s[end]))) {
+                    continue;
+                }
                 let k = key(index, indices[end]);
                 if relevant.contains(&k) {
                     arm_count += 1;

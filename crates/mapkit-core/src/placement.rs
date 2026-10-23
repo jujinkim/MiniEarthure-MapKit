@@ -1086,6 +1086,9 @@ pub(crate) struct PreparedPlacements {
     solids: Vec<(usize, usize)>,
     /// Bounds of [`crate::roads::sidewalk_exclusions`], in that order.
     exclusions: crate::bounds_index::BoundsIndex,
+    /// Built on first use ([`Self::paint`]): placement generation without
+    /// prepared placements prepares them per call and never reads it.
+    paint: std::sync::OnceLock<crate::bounds_index::BoundsIndex>,
     pub(crate) barriers: crate::barrier::Spans,
 }
 fn exclusion_index(d: &MapDocument) -> crate::bounds_index::BoundsIndex {
@@ -1137,7 +1140,13 @@ impl PreparedPlacements {
             occupied, index: crate::bounds_index::BoundsIndex::new(&bounds),
             roads: crate::bounds_index::BoundsIndex::new(&road_bounds),
             buildings: crate::bounds_index::BoundsIndex::new(&building_bounds), solids, exclusions,
+            paint: Default::default(),
             barriers: crate::barrier::Spans::new(d)? })
+    }
+    /// [`crate::roads::paint_index`] of `d`, the document these placements were
+    /// prepared from.
+    pub(crate) fn paint(&self, d: &MapDocument) -> &crate::bounds_index::BoundsIndex {
+        self.paint.get_or_init(|| crate::roads::paint_index(d))
     }
 }
 impl PreparedPlacements {
