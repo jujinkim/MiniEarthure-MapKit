@@ -8,21 +8,6 @@ pub(super) const IDS: [&str; 8] = [
     "grind_spiral_right_up", "grind_spiral_right_down",
 ];
 
-pub(super) fn template(preset: &str) -> Option<&'static str> {
-    let id = base_preset(preset);
-    match id {
-        "hairpin" | "banked_hairpin" => Some("grind_uturn_right"),
-        "hairpin_left" | "banked_hairpin_left" => Some("grind_uturn_left"),
-        "spatial_s" => Some("grind_s_right"),
-        "spatial_s_left" => Some("grind_s_left"),
-        "spiral360_right_up" => Some("grind_spiral_right_up"),
-        "spiral360_right_down" => Some("grind_spiral_right_down"),
-        "spiral360_left_up" => Some("grind_spiral_left_up"),
-        "spiral360_left_down" => Some("grind_spiral_left_down"),
-        _ => None,
-    }
-}
-
 // An immutable per-corner ticket. Layout retries and backtracking cannot redraw
 // this independent stream; the nth accepted large corner always has ticket n.
 pub(super) fn selected(seed: u64, ordinal: usize) -> bool {
@@ -37,6 +22,8 @@ pub(super) fn selected(seed: u64, ordinal: usize) -> bool {
     chosen
 }
 
+/// Grind corner tickets per seed: the first two corner tickets, each 1/3.
+pub(super) fn tickets(seed: u64) -> usize { (0..2).filter(|&n| selected(seed, n)).count() }
 fn curve(id: &str, points: Vec<Vertex>, width: u32) -> authoring::Instance {
     let mut p = authoring::instance(id, "free_curve", width);
     p.control_points = points;
@@ -157,6 +144,8 @@ pub(super) fn saves_length(s: &Source) -> Result<bool> {
 }
 
 /// Build shared checkpoints only after all route combinations are present.
+/// Test reference: the generator derives the same checkpoints without compiling.
+#[cfg(test)]
 pub(super) fn with_checkpoints(mut source: Source) -> Result<Source> {
     let start = source.checkpoints.first().cloned();
     source.checkpoints.clear();
@@ -173,6 +162,7 @@ pub(super) fn with_checkpoints(mut source: Source) -> Result<Source> {
 }
 
 /// Transactional optional insertion: no failed candidate changes the base graph.
+#[cfg(test)]
 pub(super) fn install(source: &Source, fragment: &Source, ids: &[String], prefix: &str) -> Result<Option<Source>> {
     let attempt = || -> Result<Source> {
         if !saves_length(fragment)? {return Err(error("E_TRACK_CLEARANCE","insufficient shortcut saving"));}

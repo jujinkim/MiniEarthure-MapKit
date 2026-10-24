@@ -22,16 +22,31 @@ and package checkpoints retain their explicit positions.
 - Generation grows a sequence of motifs (`assembled_track/motifs.rs`): sweeps,
   corners, alternating hairpin chains (2–4, ≥8 m straight between, banked at 12 m),
   S-bends, esses, chicanes, spirals, rises/falls and straights; pipe, halfpipe, loop
-  (≤2) and overpass (≤1) gimmicks; gap jumps and boost-before-rise actions. Each
+  (≤2), overpass (≤1) and shortcut gimmicks; gap jumps, drop jumps and
+  boost-before-rise actions. Each
   motif draws its own turn direction; past ±540° of accumulated yaw it leans the
   other way. A per-seed style scales family weights by 0.5–1.5 and the
   600/800/1200/1800 cm width weights (35/35/20/10); widths change only between
-  motifs. No family runs three motifs in a row; pipes are ≥4 motifs apart, gap
-  jumps ≥3.
-- Gap jumps (`jump`, `offset_jump`, `air_ring`) have a 16 m approach and landing
-  straight. The `jump_panel` piece is never generated. Acceleration panels and
-  boost chains follow a hairpin chain or pipe exit, or precede a rise, and never
-  connect directly to a jump piece, including across a circuit seam. Manual actions
+  motifs. No family runs three motifs in a row; pipes and halfpipes have ≥4 other
+  motifs between them, gap and drop jumps ≥3.
+- Pipes are `cylinder` (4/6 m bore) and halfpipes `banked_chicane` (4/6 m) with
+  seeded [control points](SPECIAL_DRIVING.md#pipe-control-points): a curve
+  (45–180°), U-turn (radius ≥10 m), S, rising S (±1–3 m, eased, level ends) or
+  wave, with bend radius max(400, bore/2+200)..1600 cm in 1 m steps and
+  4–16 m leads. About one pipe in eight is a spiral cylinder preset. Above 70% of
+  the sample budget pipe weights drop to a quarter.
+- Every jump has a reason. Gap jumps (`jump`, `offset_jump`, `air_ring`) have a
+  16 m approach and landing straight; their weight triples when the approach is
+  ≥3 m above the lowest placed road. Drop jumps leave a section ≥4 m above the
+  lowest road: a level 16 m `free_curve` takeoff with a 125 cm `jump_panel` action
+  on its last sample at least 4 m before the edge, a `flight_curve` parabola falling 2.5–4 m (at most L/5) over
+  16–24 m, and a 16–20 m `free_curve` landing that eases level. The action declares
+  its landing and passes the compiler's landing height, reach and 6 m runway
+  checks. `motifs::DROP_JUMPS` disables drop jumps if Runtime landing physics
+  disagrees. The `jump_panel` piece is never generated; jump shortcuts are the
+  third reason. Acceleration panels and boost chains follow a hairpin chain or
+  pipe exit, or precede a rise, and never connect directly to a jump piece or a
+  drop takeoff, including across a circuit seam. Manual actions
   remain independent; saved packages keep their declared panels and geometry.
   Automatic air rings sit 3 m above the approach to clear the unboosted jump
   trajectory at the declared minimum entry speed.
@@ -52,20 +67,24 @@ and package checkpoints retain their explicit positions.
 - Search: at most 4 attempts, each with ≤8 weighted draws per motif and up to 3
   consecutive / 48 total motif pops; every draw uses a stream derived from seed,
   attempt, step and retry. Placement clearance uses the padded piece grid and the
-  shared `conflict` predicate; counters update per piece. Limits stay 512 pieces
+  shared `conflict` predicate, including the predecessor exactly as compile checks
+  it; counters update per piece. Limits stay 512 pieces
   and 32,000 samples, within cancellation, package, cell and memory budgets.
   Failure returns `E_TRACK_LAYOUT` with the requested length and reason; callers
   keep their current map. Progress reports `searching` (pieces), `closing`,
   `finishing` and `validating`.
-- A finished layout gets obstacles (seeded spacing; the final recovery share of
-  the route and gap-jump roads stay clear), shared checkpoints from the common
-  policy (thinned evenly to 64 effective gates), and exactly one compile;
-  validation reuses that compile.
+- A finished layout gets obstacles (seeded spacing; no automatic `ramp_*` kinds;
+  the final recovery share of the route, jump, drop and shortcut roads stay clear),
+  drop-jump actions, shortcut branches, the optional narrow section and shared
+  checkpoints from the common policy over every route (thinned evenly to 64
+  effective gates), then one compile; validation reuses it. Only when that compile
+  rejects the result are the shortcuts, then the narrow section, dropped (≤2
+  recompiles); of 384 generations (seeds 0..64 × tiers × modes) 381 compiled once.
 - [Diversity and narrow roads](TRACK_DIVERSITY.md) owns the response-only
   `generation_summary` taxonomy and the narrow-road budget.
-- Ordinary generated roads use 6/8/12/18 m within preset limits. Generated seed
-  tracks currently contain no 4 m ordinary road; dedicated structures and required
-  tube portals retain their own dimensions.
+- Ordinary generated roads use 6/8/12/18 m within preset limits. About one seed in
+  eight narrows one short section to 4 m ([narrow roads](TRACK_DIVERSITY.md#ordinary-narrow-road-budget));
+  dedicated structures and required tube portals retain their own dimensions.
 - `track_seed_defaults(seed)` returns `time_minutes` and `weather`, drawn uniformly
   from 06/09/12/17/18/21 hours and clear/cloudy/rain/snow using an independent stream.
   The Godot bridge exposes the same query. Generation stores this seed time in the
@@ -90,9 +109,10 @@ separate supported recovery and reentry; ring chains have one launch, three ring
 and extended landing. They are editor templates; the seed generator does not place
 them.
 
-Seeded grind-rail corner shortcuts and jump-shortcut routes are currently not
-installed: the motif generator places no shortcut tickets, and seed tracks have one
-route. The shortcut sources, admission and stored-package support are unchanged.
+Seeded grind-rail corner shortcuts and jump-shortcut routes are shortcut motifs,
+placed only for a per-seed ticket ([corner](CORNER_SHORTCUTS.md#selection-and-geometry),
+[jump](JUMP_SHORTCUTS.md#source-and-geometry)); without a ticket their large detour
+corners are never placed. At most two of each are installed.
 [Corner shortcuts](CORNER_SHORTCUTS.md) owns their geometry and admission;
 [Jump shortcuts](JUMP_SHORTCUTS.md) owns the source and geometry contract.
 
@@ -132,11 +152,15 @@ the instance ID and width fields; it never widens source data automatically.
 Validation: `seed_track_generator` covers determinism and `seed_source`
 recompilation (seeds 0..16 per tier and mode), exact sprint sizes, closure of every
 circuit for seeds 0..64 per tier, tier length order, turn balance, hairpin-chain and
-S/chicane frequency, the straight, jump and boost rules, category masks and template
-geometry; `seed_generator_counters` the single compile and clearance-call bound;
+S/chicane frequency, the straight, jump, drop, boost and ramp rules, category masks
+and template geometry, and over 128 short sprints the narrow share (6–20%, measured
+7.8%), ≥80% distinct first pipe shapes (measured 94/99), valid pipe/halfpipe
+special tracks and shortcut counts; `seed_generator_counters` one compile per
+finished attempt plus ≤2 fallbacks (exactly one in 47/48 cases; a compile rejected
+by grounding costs its attempt) and the clearance-call bound;
 ignored `track_generation_speed` the release timing of long tracks.
-`corner_shortcuts` covers zero/one/two placements, all route combinations, curved
-solids and atomic omission (its seeded case is paused with the shortcut tickets);
+`corner_shortcuts` and `jump_shortcuts` cover zero/one/two placements, all route
+combinations, curved solids, atomic omission and seeded tickets with category gates;
 package tests cover every new template and two-branch save/reopen. Obstacle unit tests cover quarterpipe
 handedness, actual wall distance, curved/tapered rejection and the continuous bypass; focused
 `mapkit-core` assembled/track_winding/wall/special-track tests

@@ -19,10 +19,18 @@ convexes drive display, collision and occupancy. Both wall rendering and solids
 use the explicit openings. The venue floor leaves room below the platforms for
 failed jumps and ordinary recovery.
 
-An independent seed stream attempts each suitable long section with probability
-1/3. At most two jump shortcuts are installed, independently of the two-rail limit.
-Failed geometry, clearance, shared checkpoint or resource admission omits the
-whole optional branch. Main roads stay available. All route combinations retain
+Seed generation draws one ticket per seed from the jump stream: one shortcut with
+probability 1/3, two with 1/12, otherwise none (at most two, independently of the
+two-rail limit; only with the `gimmick` category). Each ticket fixes its 5–8
+platforms. A ticket becomes a shortcut motif that places the long main detour
+(`split`, `entry`, `corner`, `merge`) rigidly at the current end; without a ticket
+that detour is never placed. Growth reserves the flight branch against later
+pieces, finish samples the platform corridor against all roads before merging the
+branch, and the single compile runs the full `clear` check. Failed geometry,
+clearance, shared checkpoint or resource admission omits the whole optional
+branch (the compile fallback drops all shortcuts). Main roads stay available.
+Many tickets find no room: over 384 generations (seeds 0..64 × tiers × modes), 55 jump shortcuts were
+installed. All route combinations retain
 ordered common checkpoints; platform order is not a completion requirement.
 
 ## Runtime contract and checks

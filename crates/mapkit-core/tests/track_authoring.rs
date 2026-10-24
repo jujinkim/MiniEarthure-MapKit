@@ -132,6 +132,8 @@ fn category_combinations_time_bounds_and_exclusion() {
                         "tube_entry",
                         "tube_exit",
                         "free_curve",
+                        // Drop jumps (action) and shortcut branches (gimmick) fly on route hints.
+                        "flight_curve",
                         // Connector motifs and the closure alphabet stay available without driving.
                         "right90", "right90_left", "gentle45", "gentle45_left",
                         "slope_up", "slope_down", "spiral90_right_up", "spiral90_left_up",

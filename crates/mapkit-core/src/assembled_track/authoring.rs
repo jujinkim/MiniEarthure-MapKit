@@ -236,6 +236,10 @@ pub(super) fn piece_with(instance: &Instance, cache: &mut piece_cache::PieceCach
         && [instance.width_cm, instance.entry_width_cm, instance.exit_width_cm].iter().any(|v| *v < MIN_WIDTH_CM) {
         return Err(error("E_PIPE_DIMENSIONS", format!("instance {}: width_cm, entry_width_cm and exit_width_cm require a bore/port of at least 400 cm (radius 200 cm); source was not modified", instance.id)));
     }
+    let pipe = !instance.control_points.is_empty() && PIPE_CONTROL_PRESETS.contains(&instance.preset.as_str());
+    if let Some(issue) = pipe.then(|| pipe_control_issue(&instance.preset, instance.width_cm, &instance.control_points)).flatten() {
+        return Err(error("E_PIPE_DIMENSIONS", format!("instance {}: pipe control points: {issue}; source was not modified", instance.id)));
+    }
     let region = !region_widths(&instance.preset).is_empty();
     let min_port = if region { REGION_MIN_WIDTH_CM } else { minimum_port_width(&instance.preset) };
     if !catalogue_ids().contains(&instance.preset.as_str())
@@ -259,7 +263,7 @@ pub(super) fn piece_with(instance: &Instance, cache: &mut piece_cache::PieceCach
         || (!instance.control_points.is_empty()
             && (instance.control_points.len() < 4
                 || (instance.control_points.len() - 1) % 3 != 0
-                || !["free_curve", "flight_curve"].contains(&instance.preset.as_str())))
+                || !["free_curve", "flight_curve"].iter().chain(&PIPE_CONTROL_PRESETS).any(|p| *p == instance.preset)))
     {
         return Err(error(
             "E_TRACK_SOURCE",
@@ -279,6 +283,9 @@ pub(super) fn piece_with(instance: &Instance, cache: &mut piece_cache::PieceCach
         return Err(error("E_TRACK_BUDGET", "curve exceeds sample budget"));
     }
     let p = cache.instance(instance);
+    if pipe && p.path.len() > PIPE_MAX_FRAMES {
+        return Err(error("E_PIPE_DIMENSIONS", format!("instance {}: pipe control points need more than {PIPE_MAX_FRAMES} frames; source was not modified", instance.id)));
+    }
     if p.path.len()+p.alternate_path.len()>MAX_SAMPLES {
         return Err(error("E_TRACK_BUDGET", "curve exceeds final sample budget"));
     }

@@ -314,6 +314,51 @@ fn pipe_path(id: &str, width: u32) -> Vec<Sample> {
     }
     path
 }
+fn cubic(cp: &[Vertex], t: f64) -> ([f64; 3], [f64; 3], [f64; 3]) {
+    let (u, p) = (1.0 - t, |i: usize, j: usize| cp[i][j] as f64);
+    (std::array::from_fn(|j| u*u*u*p(0,j)+3.0*u*u*t*p(1,j)+3.0*u*t*t*p(2,j)+t*t*t*p(3,j)),
+     std::array::from_fn(|j| 3.0*u*u*(p(1,j)-p(0,j))+6.0*u*t*(p(2,j)-p(1,j))+3.0*t*t*(p(3,j)-p(2,j))),
+     std::array::from_fn(|j| 6.0*u*(p(2,j)-2.0*p(1,j)+p(0,j))+6.0*t*(p(3,j)-2.0*p(2,j)+p(1,j))))
+}
+/// Minimum 3D radius of curvature and maximum |grade| over a cubic chain.
+pub(super) fn cubic_limits(points: &[Vertex]) -> (f64, f64) {
+    let (mut radius, mut grade) = (f64::INFINITY, 0.0f64);
+    for cp in points.windows(4).step_by(3) {
+        for n in 0..=64 {
+            let (_, d, dd) = cubic(cp, n as f64 / 64.0);
+            let speed = sampling::length(d);
+            let k = sampling::length(cross(d, dd));
+            radius = radius.min(if speed < 1e-6 { 0.0 } else if k < 1e-9 { f64::INFINITY } else { speed * speed * speed / k });
+            grade = grade.max(d[1].abs() / libm::hypot(d[0], d[2]).max(1e-9));
+        }
+    }
+    (radius, grade)
+}
+/// Pipe or halfpipe centreline from cubic control points: frames at most 50 cm
+/// apart, gravity-aligned like `pipe_path`, bore and lane at width/2.
+pub(super) fn pipe_bezier(points: &[Vertex], width: u32, mode: &str) -> Vec<Sample> {
+    let mut path: Vec<Sample> = vec![];
+    for cp in points.windows(4).step_by(3) {
+        let length: f64 = (0..64).map(|i| {
+            let (a, b) = (cubic(cp, i as f64 / 64.0).0, cubic(cp, (i + 1) as f64 / 64.0).0);
+            sampling::length(std::array::from_fn(|j| b[j] - a[j]))
+        }).sum();
+        let n = (length / 45.0).ceil().max(1.0) as usize;
+        for i in usize::from(!path.is_empty())..=n {
+            let (p, d, _) = cubic(cp, i as f64 / n as f64);
+            let f = norm(d);
+            let mut side = norm([f[2], 0.0, -f[0]]);
+            if sampling::length(side) < 0.5 { side = [1.0, 0.0, 0.0]; }
+            let normal = norm(cross(f, side));
+            let mut s = sample(p.map(round), f, width, mode);
+            s.normal = unit(normal);
+            s.ribbon_cm = Some([-1.0, 1.0].map(|sign| std::array::from_fn(|j| round(p[j] + side[j] * f64::from(width) / 2.0 * sign))));
+            (s.tube_radius_cm, s.safe, s.above_cm, s.below_cm) = (width / 2, false, 250, 50);
+            path.push(s);
+        }
+    }
+    path
+}
 fn spiral_curve(p: &Piece) -> impl Fn(f64)->([f64;3],[f64;3]) {
     let degrees=if p.id.contains("90_") {90.0} else if p.id.contains("180_") {180.0} else {360.0};
     let width=p.width_cm.max(p.entry_width_cm).max(p.exit_width_cm);

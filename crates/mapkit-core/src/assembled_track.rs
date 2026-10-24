@@ -40,15 +40,12 @@ mod grow;
 mod closure;
 mod finish;
 mod diversity;
-// Narrow-section and shortcut installation return with the jump/narrow rules.
-#[allow(dead_code)]
 mod narrow;
 mod tier;
 pub use tier::{Length, Tier};
 pub use diversity::{generation_summary, GenerationSummary, TypeSummary};
 pub use grow::Stats as GenerationStats;
 pub mod templates;
-#[allow(dead_code)]
 mod corner_shortcuts;
 pub mod jump_shortcuts;
 pub use seed_streams::track_seed_defaults;
@@ -503,6 +500,9 @@ pub fn catalogue() -> serde_json::Value {
         "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"region_widths_cm":region_widths(id),"max_port_width_cm":maximum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
         "length_options":{"circuit":tier::options(true),"sprint":tier::options(false)},
+        "pipe_control_points":{"presets":PIPE_CONTROL_PRESETS,"widths_cm":[400,600],"points":"4+3k, k<=6","origin":[0,0,0],"start_direction":[0,0,1],
+            "coordinate_limit_cm":PIPE_CONTROL_LIMIT_CM,"min_radius_cm":{"400":pipe_min_radius_cm(400),"600":pipe_min_radius_cm(600)},
+            "max_grade_percent":15,"level_end_tangent":true,"max_frames":PIPE_MAX_FRAMES,"frame_spacing_cm":50},
         "catalogue_fingerprint":catalogue_fingerprint(),
         "pieces":catalogue_ids().iter().map(|id| catalogue_piece(id)).collect::<Vec<_>>()})
 }
@@ -526,9 +526,9 @@ pub fn supported_widths(id: &str) -> &'static [u32] {
         &[1800]
     } else if base_preset(id) != id {
         &[1200]
-    } else if ["loop", "banked_chicane", "overpass", "finish_plaza"].contains(&id) {
+    } else if ["loop", "overpass", "finish_plaza"].contains(&id) {
         &[400]
-    } else if id.starts_with("cylinder") {
+    } else if pipe_piece(id) {
         &[400, 600]
     } else {
         ROAD_WIDTHS
@@ -1175,6 +1175,28 @@ fn family(id: &str) -> &str {
 fn ramp_tiles(width: u32) -> usize {
     ((f64::from(width) / 3.0 * 1.5 / 0.12) / TILE_CM as f64).ceil() as usize
 }
+/// Presets whose local cubic control points shape a pipe or halfpipe centreline.
+pub const PIPE_CONTROL_PRESETS: [&str; 2] = ["cylinder", "banked_chicane"];
+pub const PIPE_CONTROL_LIMIT_CM: i64 = 6400;
+pub const PIPE_CONTROL_SEGMENTS: usize = 7;
+pub const PIPE_MAX_GRADE: f64 = 0.15;
+pub const PIPE_MAX_FRAMES: usize = 512;
+pub fn pipe_min_radius_cm(width: u32) -> u32 { 400.max(width / 2 + 200) }
+/// Why cubic `points` cannot shape `preset` at `width`, if they cannot. The
+/// radius allows 1% for the cubic arc approximation and eased rise.
+pub fn pipe_control_issue(preset: &str, width: u32, points: &[Vertex]) -> Option<&'static str> {
+    let n = points.len();
+    if !PIPE_CONTROL_PRESETS.contains(&preset) || ![400, 600].contains(&width) { return Some("only cylinder and banked_chicane at 400 or 600 cm take control points"); }
+    if n < 4 || (n - 1) % 3 != 0 || (n - 1) / 3 > PIPE_CONTROL_SEGMENTS { return Some("needs 4+3k control points, k at most 6"); }
+    if points[0] != [0; 3] || points[1][0] != 0 || points[1][1] != 0 || points[1][2] <= 0 { return Some("must start at the origin heading +Z"); }
+    if points.iter().flatten().any(|v| v.abs() > PIPE_CONTROL_LIMIT_CM) { return Some("control points must stay within 6400 cm"); }
+    if points[n - 2][1] != points[n - 1][1] || points[n - 2] == points[n - 1] { return Some("end tangent must be level"); }
+    if points.windows(2).any(|w| w[0] == w[1]) { return Some("repeated control point"); }
+    let (radius, grade) = geometry::cubic_limits(points);
+    if radius < f64::from(pipe_min_radius_cm(width)) * 0.99 { return Some("bend radius below max(400, width/2+200) cm"); }
+    if grade > PIPE_MAX_GRADE { return Some("grade above 15%"); }
+    None
+}
 fn pipe_piece(id: &str) -> bool {
     id.starts_with("cylinder") || id == "banked_chicane"
 }
@@ -1232,7 +1254,9 @@ fn local_shape(id: &str, width: u32, entry: u32, exit: u32, control_points: &[Ve
     counters::bump(&counters::MATERIALIZATIONS);
     let mut out = variant(id, width, entry, exit);
     out.control_points = control_points.to_vec();
-    if !control_points.is_empty() {
+    if !control_points.is_empty() && pipe_piece(id) {
+        out.path = geometry::pipe_bezier(control_points, width, if id == "banked_chicane" { "halfpipe" } else { "cylinder" });
+    } else if !control_points.is_empty() {
         out.path = geometry::bezier(control_points, width, entry, exit);
         if id == "flight_curve" {
             for s in &mut out.path {
@@ -1646,13 +1670,13 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                         },
                         radius_cm: if *id == "loop" {
                             LOOP_RADIUS
-                        } else if *id == "halfpipe" {
-                            200
                         } else {
                             p.width_cm / 2
                         },
                         width_cm: if *id == "loop" {
                             LOOP_WIDTH
+                        } else if *id == "halfpipe" {
+                            p.width_cm
                         } else {
                             WIDTH as u32
                         },
@@ -1660,7 +1684,7 @@ fn road_gimmicks(a: &Assembly) -> Result<Vec<Gimmick>> {
                         centerline: if *id == "loop" {
                             vec![]
                         } else {
-                            variant(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm)
+                            local_shape(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm, &p.control_points)
                                 .path
                                 .iter()
                                 .filter(|s| ["cylinder", "halfpipe"].contains(&s.mode.as_str()))

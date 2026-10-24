@@ -262,7 +262,7 @@ earlier documents keep their bytes, world hashes and generated geometry.
   (`E_GRIND_SOURCE`, `E_GRIND_CONNECTION`, `E_GRIND_BUDGET`).
 - `manual_flight` and static `Source.structures`:
   [manual airborne links](../docs/TRACK_AUTHORING.md#manual-airborne-links-and-static-authored-structures).
-- Pipe minimum radius and bores: [SPECIAL_DRIVING](../docs/SPECIAL_DRIVING.md#pipe-dimensions)
+- Pipe minimum radius, bores and control points: [SPECIAL_DRIVING](../docs/SPECIAL_DRIVING.md#pipe-dimensions)
   (`E_PIPE_DIMENSIONS`).
 
 ## Rendering inputs

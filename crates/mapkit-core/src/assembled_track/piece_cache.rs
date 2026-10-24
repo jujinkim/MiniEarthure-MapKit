@@ -14,8 +14,8 @@ impl PieceCache {
             .or_insert_with(|| local_shape(id, width, entry, exit, control_points)).clone()
     }
     /// Unplaced local geometry, for pose prediction without materializing.
-    pub(super) fn local(&mut self, id: &str, width: u32, entry: u32, exit: u32) -> &Piece {
-        self.shapes.entry((id.into(), width, entry, exit, vec![])).or_insert_with(|| local_shape(id, width, entry, exit, &[]))
+    pub(super) fn local(&mut self, id: &str, width: u32, entry: u32, exit: u32, control_points: &[Vertex]) -> &Piece {
+        self.shapes.entry((id.into(), width, entry, exit, control_points.to_vec())).or_insert_with(|| local_shape(id, width, entry, exit, control_points))
     }
     /// The placed piece for `p`'s preset, widths, control points, chain and pose.
     #[cfg_attr(not(test), allow(dead_code))]

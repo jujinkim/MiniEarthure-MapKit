@@ -478,7 +478,8 @@ pub(super) fn place_reserved(a: &Assembly, reserved: &[std::ops::Range<usize>]) 
     let available = crate::gimmick::MAX_GIMMICKS.saturating_sub(road_objects.len());
     let count = (target as usize).min(available).min(sites.len());
     let mut rng = a.settings.seed ^ 0xd1b54a32d192ed03;
-    let mut kinds:Vec<_>=KINDS.iter().copied().filter(|k|*k!="quarterpipe_right" && *k!="grind_rail").collect();
+    // Automatic ramps launch without a reason; jump barriers stay.
+    let mut kinds:Vec<_>=KINDS.iter().copied().filter(|k|*k!="quarterpipe_right" && *k!="grind_rail" && !k.starts_with("ramp_")).collect();
     for i in (1..kinds.len()).rev() {let j=next(&mut rng) as usize%(i+1);kinds.swap(i,j);}
     let mut out: Vec<Obstacle> = vec![];
     for bin in 0..count {
@@ -620,7 +621,9 @@ mod tests {
         assert_eq!(target,((eligible+spacing/2)/spacing).max(1) as u32);
         a.obstacles=placed;
         let summary=generation_summary(&a);
-        assert!(summary.gimmicks.used>=summary.gimmicks.target,"{summary:?}");
+        // The three automatic ramp kinds were retired; authored ramps still count.
+        assert!(summary.gimmicks.used+3>=summary.gimmicks.target,"{summary:?}");
+        assert!(a.obstacles.iter().all(|o|!o.kind.starts_with("ramp_")));
     }
     fn fixture(id: &str, width: u32) -> Assembly {
         let mut pieces = vec![];
@@ -726,7 +729,7 @@ mod tests {
     #[test]
     fn automatic_quarterpipes_keep_handedness_after_yaw_and_source_conversion() {
         let mut found=std::collections::BTreeSet::new();
-        for seed in 0..64 {
+        for seed in 0..160 {
             let mut a=fixture("sprint_lane",800);
             a.settings.seed=seed;
             a.obstacles=place(&a).unwrap().0;

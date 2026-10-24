@@ -55,7 +55,7 @@ pub(super) fn close(g: &mut Grow) -> Result<bool> {
     let last = g.pieces.len() - 1;
     let end = g.end().clone();
     if let Some(p) = seam(&mut g.cache, &end, &goal) {
-        if straight_run(&p, g.c.tail).0 <= MAX_STRAIGHT_CM && g.admissible(&p, g.c.tail, g.c.samples, g.pieces.len()) && g.clear(&p, Some(last)) {
+        if straight_run(&p, g.c.tail).0 <= MAX_STRAIGHT_CM && g.admissible(&p, g.c.tail, g.c.samples, g.pieces.len()) && g.clear(&p) {
             g.commit(p);
             return Ok(true);
         }
@@ -87,10 +87,11 @@ pub(super) fn close(g: &mut Grow) -> Result<bool> {
         cancellation::checkpoint()?;
         let ancestors = chain(&nodes, index);
         // Clearance is checked when a node is expanded, never for unexpanded children:
-        // clear of placed pieces and of its branch, except the piece it joins.
+        // clear of every placed piece, including the one it joins (as compile checks),
+        // and of its branch except its own parent.
         if index > 0 {
-            let (p, parent) = (&nodes[index].piece, nodes[index].parent);
-            if !g.clear(p, if parent == 0 { Some(last) } else { None })
+            let p = &nodes[index].piece;
+            if !g.clear(p)
                 || ancestors.iter().skip(2).any(|&i| track_grid::near(p, &nodes[i].piece) && authoring::conflict(p, &nodes[i].piece)) {
                 let k = key(p.path.last().unwrap());
                 if visited.get(&k) == Some(&nodes[index].cost) { visited.remove(&k); }
@@ -101,8 +102,8 @@ pub(super) fn close(g: &mut Grow) -> Result<bool> {
         if index > 0 {
             if let Some(p) = seam(&mut g.cache, &node_end, &goal) {
                 let n = &nodes[index];
-                let chained = ancestors.iter().all(|&i| !track_grid::near(&p, &nodes[i].piece) || i == index || !authoring::conflict(&p, &nodes[i].piece));
-                if straight_run(&p, n.tail).0 <= MAX_STRAIGHT_CM && g.admissible(&p, n.tail, n.samples, g.pieces.len() + n.depth) && chained && g.clear(&p, None) {
+                let chained = ancestors.iter().all(|&i| !track_grid::near(&p, &nodes[i].piece) || !authoring::conflict(&p, &nodes[i].piece));
+                if straight_run(&p, n.tail).0 <= MAX_STRAIGHT_CM && g.admissible(&p, n.tail, n.samples, g.pieces.len() + n.depth) && chained && g.clear(&p) {
                     g.stats.nodes += nodes.len();
                     for &i in ancestors.iter().rev() { let piece = nodes[i].piece.clone(); g.commit(piece); }
                     g.commit(p);
@@ -118,7 +119,7 @@ pub(super) fn close(g: &mut Grow) -> Result<bool> {
         let previous = nodes[index].piece.id.clone();
         let mut children = vec![];
         for id in alphabet {
-            let p = g.piece(id, RETURN_WIDTH, None, &node_end, &previous);
+            let p = g.piece(id, RETURN_WIDTH, None, &[], &node_end, &previous);
             let n = &nodes[index];
             let tail = straight_run(&p, n.tail).1;
             let cost = n.cost + u64::from(p.reference_msec);

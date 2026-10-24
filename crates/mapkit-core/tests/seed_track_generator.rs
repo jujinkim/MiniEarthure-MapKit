@@ -37,11 +37,12 @@ fn turn(p: &track::Piece) -> (f64, f64, f64) {
     (right - left, left, right)
 }
 /// Independent straight oracle: optional driving road after the runway; every
-/// special piece, portal and the finish resets the run.
+/// special piece, flight, portal and the finish resets the run.
 fn longest_straight(a: &Assembly) -> u64 {
     let (mut run, mut longest) = (0, 0);
     for (i, p) in base(a).into_iter().enumerate() {
-        if i < 3 || track::category(&p.id) != "driving" || ["tube_entry", "tube_exit", "finish_plaza"].contains(&p.id.as_str()) { run = 0; continue; }
+        if i < 3 || track::category(&p.id) != "driving" || ["tube_entry", "tube_exit", "finish_plaza"].contains(&p.id.as_str())
+            || p.path.iter().any(|s| s.mode == "flight") { run = 0; continue; }
         for w in p.path.windows(2) {
             let (f, g) = (w[0].forward, w[1].forward);
             if ((f[0] as f64 * g[2] as f64 - f[2] as f64 * g[0] as f64) / 1e12).abs() < 0.005 {
@@ -82,7 +83,7 @@ fn boost(id: &str) -> bool { ["acceleration_panel", "boost_chain"].contains(&id)
 fn counted(a: &Assembly) -> usize {
     base(a).iter().skip(3).filter(|p| !["finish_plaza", "tube_entry", "tube_exit"].contains(&p.id.as_str())).count()
 }
-const CONNECTORS: &[&str] = &["straight", "sprint_lane", "finish_plaza", "tube_entry", "tube_exit", "free_curve", "right90", "right90_left", "gentle45",
+const CONNECTORS: &[&str] = &["straight", "sprint_lane", "finish_plaza", "tube_entry", "tube_exit", "free_curve", "flight_curve", "right90", "right90_left", "gentle45",
     "gentle45_left", "slope_up", "slope_down", "spiral90_right_up", "spiral90_left_up", "spiral90_right_down", "spiral90_left_down"];
 /// Rules every generated track keeps, whatever its category mask.
 fn assert_rules(a: &Assembly, label: &str) {
@@ -91,6 +92,19 @@ fn assert_rules(a: &Assembly, label: &str) {
     for i in 0..pieces.len() {
         let next = if i + 1 < pieces.len() { Some(pieces[i + 1]) } else if a.settings.circuit { Some(pieces[0]) } else { None };
         assert!(!(boost(&pieces[i].id) && next.is_some_and(|n| jump(&n.id))), "{label}: boost directly before a jump at {i}");
+        let after = if i + 2 < pieces.len() || a.settings.circuit { Some(pieces[(i + 2) % pieces.len()]) } else { None };
+        assert!(!(boost(&pieces[i].id) && after.is_some_and(|n| n.id == "flight_curve")), "{label}: boost directly before a drop takeoff at {i}");
+    }
+    assert!(a.obstacles.iter().all(|o| !o.kind.starts_with("ramp_")), "{label}: automatic ramp");
+    let source = a.seed_source.as_ref().unwrap();
+    assert!(source.jump_shortcuts.len() <= 2 && source.grind_lines.iter().filter(|l| l.id.ends_with("-rail")).count() <= 2, "{label}: shortcuts");
+    for p in a.pieces.iter().filter(|p| jump(&p.id) || p.id == "flight_curve") {
+        assert!(p.path.iter().any(|s| s.mode == "flight"), "{label}: {} without flight samples", p.id);
+    }
+    for action in source.actions.iter().filter(|a| a.kind == "jump_panel") {
+        let landing = action.landing.as_ref().unwrap_or_else(|| panic!("{label}: jump panel without landing"));
+        let at = |id: &str| a.pieces[source.instances.iter().position(|i| i.id == id).unwrap()].path.clone();
+        assert!(at(&action.piece)[action.sample].position_cm[1] > at(&landing.piece)[landing.sample].position_cm[1], "{label}: drop lands higher");
     }
     assert!(longest_straight(a) <= 3200, "{label}: straight {}", longest_straight(a));
     for p in &a.pieces {
@@ -98,8 +112,8 @@ fn assert_rules(a: &Assembly, label: &str) {
             || a.settings.categories.iter().any(|c| c == track::category(&p.id)), "{label}: {} outside the category mask", p.id);
     }
     if !a.settings.categories.iter().any(|c| c == "gimmick") { assert!(a.obstacles.is_empty(), "{label}: obstacles without gimmicks"); }
-    let summary = track::generation_summary(a);
-    assert_eq!(summary.narrow_road.sections, 0, "{label}");
+    let narrow = track::generation_summary(a).narrow_road;
+    assert!(narrow.sections <= 1 && narrow.length_cm <= 4000 && narrow.length_cm <= a.length_cm / 20, "{label}: narrow {narrow:?}");
     assert!(a.pieces.len() <= 512 && a.pieces.iter().map(|p| p.path.len() + p.alternate_path.len()).sum::<usize>() <= 32000);
     if a.settings.circuit {
         let (end, start) = (pieces.last().unwrap().path.last().unwrap(), &pieces[0].path[0]);
@@ -298,4 +312,43 @@ fn ring_and_grind_templates_reject_crossings() {
         base.paths.push(authoring::Path { id: "base".into(), pieces: vec!["anchor".into()] });
         assert_eq!(templates::append(&base, id, "anchor", "x").unwrap_err().code, code);
     }
+}
+
+#[test]
+fn pipes_jumps_shortcuts_and_narrow_roads_follow_their_rules() {
+    let all: Vec<_> = (0..128).map(|s| settings(s, false, Length::Short)).collect();
+    let results = generate(&all);
+    let (mut narrow, mut drops, mut jumps, mut rails, mut documents) = (0, 0, 0, 0, 0);
+    let mut shapes = std::collections::BTreeSet::new();
+    let mut piped = 0;
+    for (s, r) in all.iter().zip(&results) {
+        let label = format!("{s:?}");
+        let (a, _) = r.as_ref().unwrap_or_else(|e| panic!("{label}: {e:?}"));
+        assert_rules(a, &label);
+        let source = a.seed_source.as_ref().unwrap();
+        narrow += usize::from(track::generation_summary(a).narrow_road.sections == 1);
+        drops += source.actions.iter().filter(|a| a.kind == "jump_panel").count();
+        jumps += source.jump_shortcuts.len();
+        rails += source.grind_lines.iter().filter(|l| l.id.ends_with("-rail")).count();
+        let pipes: Vec<_> = base(a).into_iter().filter(|p| p.id.starts_with("cylinder") || p.id == "banked_chicane").collect();
+        if let Some(p) = pipes.first() {
+            piped += 1;
+            shapes.insert((p.id.clone(), p.width_cm, p.control_points.clone()));
+        }
+        if !pipes.is_empty() && documents < 6 {
+            documents += 1;
+            let d = track::document_from_assembly(a.clone()).unwrap();
+            let tracks: Vec<_> = d.gimmicks.iter().filter_map(|g| g.track.as_ref()).collect();
+            assert!(!tracks.is_empty() && tracks.iter().all(|t| t.valid()), "{label}: special track");
+            for g in d.gimmicks.iter().filter(|g| g.track.as_ref().is_some_and(|t| t.kind == mapkit_core::special_track::TrackKind::SweptHalfPipe)) {
+                let p = &a.pieces[g.id.split('-').nth(1).unwrap().parse::<usize>().unwrap()];
+                let t = g.track.as_ref().unwrap();
+                assert_eq!((t.radius_cm, t.width_cm), (p.width_cm / 2, p.width_cm), "{label}: halfpipe bore");
+            }
+        }
+    }
+    println!("narrow {narrow}/128, drops {drops}, jump shortcuts {jumps}, grind shortcuts {rails}, distinct first pipes {}/{piped}", shapes.len());
+    assert!((8..=26).contains(&narrow), "narrow share {narrow}/128");
+    assert!(shapes.len() * 100 >= piped * 80, "pipe shapes repeat: {}/{piped}", shapes.len());
+    assert!(drops > 0 && jumps > 0 && rails > 0, "drops {drops}, jump shortcuts {jumps}, grind shortcuts {rails}");
 }

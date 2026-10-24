@@ -44,7 +44,8 @@ fn all_pipe_variants_share_bores_and_keep_inside_bend_clearance() {
         }
     }
     assert_eq!(track::supported_widths("straight"), &[400,600,800,1200]);
-    for id in ["loop","banked_chicane"] { assert_eq!(track::supported_widths(id), &[400]); }
+    assert_eq!(track::supported_widths("loop"), &[400]);
+    assert_eq!(track::supported_widths("banked_chicane"), &[400,600]);
 }
 
 #[test]
@@ -162,4 +163,72 @@ fn ramp_footprint_needs_a_continuous_bypass_and_preserves_source_on_failure() {
             }
         }
     }
+}
+
+fn shaped(preset: &str, width: u32, cp: Vec<[i64; 3]>) -> Instance {
+    let mut i = instance("shaped", preset, width);
+    i.control_points = cp;
+    i
+}
+/// A lead, a right-hand quarter arc of radius r and a lead, as cubic points.
+fn quarter(r: i64) -> Vec<[i64; 3]> {
+    let k = (4.0 / 3.0 * (std::f64::consts::PI / 8.0).tan() * r as f64).round() as i64;
+    vec![[0, 0, 0], [0, 0, 200], [0, 0, 400], [0, 0, 600], [0, 0, 600 + k], [r - k, 0, 600 + r], [r, 0, 600 + r],
+        [r + 200, 0, 600 + r], [r + 400, 0, 600 + r], [r + 600, 0, 600 + r]]
+}
+#[test]
+fn control_point_pipes_are_pure_bounded_and_valid_tubes() {
+    for (preset, width) in [("cylinder", 400), ("cylinder", 600), ("banked_chicane", 400), ("banked_chicane", 600)] {
+        let cp = quarter(1000);
+        let p = piece(&shaped(preset, width, cp.clone())).unwrap();
+        assert_eq!(p, piece(&shaped(preset, width, cp.clone())).unwrap(), "{preset}/{width}: pure");
+        let mut moved = shaped(preset, width, cp.clone());
+        moved.position_cm = [1234, 56, -789];
+        let q = piece(&moved).unwrap();
+        assert!(p.path.iter().zip(&q.path).all(|(a, b)| (0..3).all(|j| b.position_cm[j] - a.position_cm[j] == moved.position_cm[j]) && a.forward == b.forward));
+        assert_eq!(p.path[0].position_cm, [0, 0, 0]);
+        assert_eq!(p.path[0].forward, [0, 0, 1_000_000]);
+        assert_eq!(p.path.last().unwrap().position_cm, *cp.last().unwrap());
+        assert_eq!(p.path.last().unwrap().forward, [1_000_000, 0, 0]);
+        assert!(p.path.len() <= 512 && p.path.windows(2).all(|w| (0..3).map(|j| ((w[1].position_cm[j] - w[0].position_cm[j]) as f64).powi(2)).sum::<f64>().sqrt() <= 51.0));
+        let mode = if preset == "cylinder" { "cylinder" } else { "halfpipe" };
+        assert!(p.path.iter().all(|s| s.mode == mode && s.tube_radius_cm == width / 2 && s.lateral_cm == width / 2 && !s.safe));
+        let mut t = tube(&p);
+        if preset == "banked_chicane" { (t.kind, t.width_cm) = (TrackKind::SweptHalfPipe, width); }
+        assert!(t.valid(), "{preset}/{width}");
+        assert_ne!(p.path, piece(&instance("plain", preset, width)).unwrap().path);
+    }
+    assert_eq!(track::supported_widths("banked_chicane"), &[400, 600]);
+    let rules = &track::catalogue()["pipe_control_points"];
+    assert_eq!(rules["presets"], serde_json::json!(["cylinder", "banked_chicane"]));
+    assert_eq!(rules["min_radius_cm"]["600"], 500);
+}
+#[test]
+fn pipe_control_points_reject_invalid_shapes() {
+    let ok = quarter(1000);
+    let mut cases: Vec<(&str, Vec<[i64; 3]>)> = vec![
+        ("count", ok[..8].to_vec()),
+        ("origin", ok.iter().map(|p| [p[0] + 10, p[1], p[2]]).collect()),
+        ("heading", { let mut v = ok.clone(); v[1] = [50, 0, 200]; v }),
+        ("bounds", { let mut v = ok.clone(); for p in &mut v[7..] { p[0] += 6000; } v }),
+        ("radius", quarter(300)),
+        ("grade", { let mut v = ok.clone(); for p in &mut v[2..] { p[1] += 300; } v }),
+        ("level end", { let mut v = ok.clone(); v[9][1] = 40; v }),
+    ];
+    let mut long = vec![[0, 0, 0]];
+    for n in 0..8 { long.extend([[0, 0, 300 * n + 100], [0, 0, 300 * n + 200], [0, 0, 300 * n + 300]]); }
+    cases.push(("segments", long));
+    for (label, cp) in cases {
+        for preset in ["cylinder", "banked_chicane"] {
+            let item = shaped(preset, 400, cp.clone());
+            let before = item.clone();
+            let e = piece(&item).err().unwrap_or_else(|| panic!("{label}/{preset} accepted"));
+            assert_eq!(e.code, "E_PIPE_DIMENSIONS", "{label}/{preset}: {}", e.message);
+            assert_eq!(item, before);
+        }
+    }
+    assert!(piece(&shaped("cylinder", 600, quarter(500))).is_ok());
+    assert_eq!(piece(&shaped("cylinder", 600, quarter(450))).unwrap_err().code, "E_PIPE_DIMENSIONS");
+    assert_eq!(piece(&shaped("cylinder_curve", 400, ok.clone())).unwrap_err().code, "E_TRACK_SOURCE");
+    assert_eq!(piece(&shaped("cylinder", 800, ok)).unwrap_err().code, "E_PIPE_DIMENSIONS");
 }

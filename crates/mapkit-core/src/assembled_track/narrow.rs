@@ -85,48 +85,66 @@ pub(super) fn prepare_fragment(s: &mut authoring::Source) {
     }
 }
 
-pub(super) fn try_section(
-    source: &authoring::Source,
-    a: &Assembly,
-    reserved: &[std::ops::Range<usize>],
-) -> Result<Assembly> {
+/// Pieces a narrow section may use: ordinary level roads whose geometry does
+/// not depend on their own body width once the ports keep theirs.
+const NARROWABLE: [&str; 5] = ["sprint_lane", "straight", "gentle45", "gentle45_left", "chicane"];
+/// Pure selection of the seed's one optional narrow section: about one seed in
+/// eight (`next % 8 == 0` on the narrow stream) narrows 1–2 consecutive
+/// ordinary pieces, ≤40 m and ≤5% of the route, starting and ending between
+/// 20% and 80% of its length, away from the start, jumps, drops, pipes,
+/// shortcuts and obstacles. Empty when the seed has none or nothing fits.
+pub(super) fn select(a: &Assembly, source: &authoring::Source, reserved: &[std::ops::Range<usize>]) -> Vec<usize> {
     let mut rng = a.settings.seed ^ 0x6e61_7272_6f77_3031;
-    if next(&mut rng) % 2 == 0 || measure(a).sections > 0 {
-        return Ok(a.clone());
-    }
-    let mut sites: Vec<_> = a.routes[0]
-        .pieces
-        .iter()
-        .copied()
-        .filter(|&i| {
-            i >= START_PIECES
-                && !reserved.iter().any(|r| r.contains(&i))
-                && a.pieces[i].id == "sprint_lane"
-                && a.pieces[i].entry_width_cm >= 600
-                && a.pieces[i].exit_width_cm >= 600
-                && !a.obstacles.iter().any(|o| o.piece_index == i)
-        })
-        .collect();
-    if !sites.is_empty() {
-        let n = next(&mut rng) as usize % sites.len();
-        sites.rotate_left(n);
-    }
-    for i in sites.into_iter().take(4) {
-        cancellation::checkpoint()?;
-        let mut trial = source.clone();
-        trial.instances[i].width_cm = 400;
-        let mut compiled = match crate::profile::runtime(|| authoring::compile(&trial)) {
-            Ok(a) => a,
-            Err(e) if e.code == "E_CANCELLED" => return Err(e),
-            Err(_) => continue,
-        };
-        if valid(&compiled) && crate::profile::runtime(|| authoring::executable(&compiled)).is_ok() {
-            compiled.authoring = None;
-            compiled.seed_source = Some(trial);
-            return Ok(compiled);
+    if next(&mut rng) % 8 != 0 { return vec![]; }
+    let route = &a.routes[0].pieces;
+    let n = route.len();
+    let calm = |i: usize| {
+        let p = &a.pieces[route[i]];
+        i >= START_PIECES && category(&p.id) == "driving" && !pipe_piece(&p.id)
+            && !["tube_entry", "tube_exit", "finish_plaza", "flight_curve", "loop", "overpass"].contains(&p.id.as_str())
+            && !reserved.iter().any(|r| r.contains(&route[i])) && !a.obstacles.iter().any(|o| o.piece_index == route[i])
+    };
+    let eligible = |i: usize| {
+        let p = &a.pieces[route[i]];
+        calm(i) && NARROWABLE.contains(&p.id.as_str()) && p.width_cm >= 600 && p.entry_width_cm >= 600 && p.exit_width_cm >= 600
+    };
+    let mut stations = vec![0];
+    for &i in route { stations.push(stations.last().unwrap() + race_length(&a.pieces[i])); }
+    let total = *stations.last().unwrap();
+    let limit = (total / 20).min(4000);
+    let mut options = vec![];
+    for i in START_PIECES + 1..n.saturating_sub(1) {
+        for k in 1..=2 {
+            if i + k >= n || !(i..i + k).all(eligible) || !calm(i - 1) || !calm(i + k) { continue; }
+            let (from, to) = (stations[i], stations[i + k]);
+            if from * 5 >= total && to * 5 <= total * 4 && to - from <= limit { options.push((i..i + k).map(|j| route[j]).collect::<Vec<_>>()); }
         }
     }
-    Ok(a.clone())
+    if options.is_empty() { return vec![]; }
+    let first = next(&mut rng) as usize % options.len();
+    options.rotate_left(first);
+    // The tapers must leave a real narrow run inside the chosen pieces, and the
+    // narrowed ports must still clear their neighbours exactly as compile checks.
+    options.into_iter().take(8).find(|sel| {
+        let mut trial = source.clone();
+        apply(&mut trial, sel);
+        let Ok(narrowed) = sel.iter().map(|&i| authoring::piece(&trial.instances[i])).collect::<Result<Vec<_>>>() else { return false };
+        let (first, last) = (sel[0], *sel.last().unwrap());
+        let around = [first - 1, last + 1].map(|i| &a.pieces[i]);
+        narrowed.iter().map(|p| p.path.windows(2).filter(|w| w.iter().all(|s| s.lateral_cm <= 200))
+            .map(|w| distance(w[0].position_cm, w[1].position_cm)).sum::<u64>()).sum::<u64>() >= 400
+            && !narrowed.iter().any(|p| around.iter().any(|q| authoring::conflict(p, q)))
+            && !(narrowed.len() == 2 && authoring::conflict(&narrowed[0], &narrowed[1]))
+    }).unwrap_or_default()
+}
+/// Narrow the selected bodies to 4 m; a two-piece section also narrows its inner joint.
+pub(super) fn apply(source: &mut authoring::Source, selected: &[usize]) {
+    for (k, &i) in selected.iter().enumerate() {
+        let item = &mut source.instances[i];
+        item.width_cm = 400;
+        if k > 0 { item.entry_width_cm = 400; }
+        if k + 1 < selected.len() { item.exit_width_cm = 400; }
+    }
 }
 
 #[cfg(test)]

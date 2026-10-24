@@ -44,19 +44,12 @@ pub struct Shortcut {
     pub merge: Checkpoint,
 }
 
-#[allow(dead_code)] // Seeded installation returns with the jump rules.
-pub(super) fn ticket(seed: u64, ordinal: usize) -> (bool, usize) {
+/// Per-seed jump shortcut tickets from the jump stream: one with 1/3, two with
+/// 1/12, never more. Each ticket fixes its 5..8 platforms.
+pub(super) fn tickets(seed: u64) -> Vec<usize> {
     let mut rng = seed ^ 0x6a75_6d70_3030_3031;
-    let mut n = 0;
-    for _ in 0..=ordinal {
-        loop {
-            n = next(&mut rng);
-            if n < u64::MAX {
-                break;
-            }
-        }
-    }
-    (n % 3 == 0, 5 + ((n >> 32) % 4) as usize)
+    let n = match seed_streams::draw(&mut rng, 12) { 0 => 2, 1..=4 => 1, _ => 0 };
+    (0..n).map(|_| 5 + seed_streams::draw(&mut rng, 4) as usize).collect()
 }
 
 fn direction(a: Vertex, b: Vertex) -> Vertex {
@@ -509,7 +502,7 @@ pub(super) fn gimmicks(s: &Source) -> Vec<Gimmick> {
     out
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub(super) fn install(
     source: &Source,
     fragment: &Source,
@@ -557,6 +550,22 @@ pub(super) fn install(
     }
 }
 
+/// The road part of `clear` before compiling: the sampled platform corridor of a
+/// placed fragment `j` against `pieces`, where `own` are its base roads.
+pub(super) fn corridor_clear(j: &Shortcut, merge: Vertex, pieces: &[Piece], own: &std::ops::Range<usize>) -> bool {
+    let points: Vec<_> = std::iter::once(j.start_ring.position_cm).chain(j.platforms.iter().map(|p| p.position_cm)).chain([j.end_ring.position_cm, merge]).collect();
+    let (lo, hi) = points.iter().fold(([i64::MAX; 3], [i64::MIN; 3]), |(lo, hi), p| (std::array::from_fn(|k| lo[k].min(p[k])), std::array::from_fn(|k| hi[k].max(p[k]))));
+    let near: Vec<_> = (0..pieces.len()).filter(|&i| (0..3).all(|k| pieces[i].reserved_min_cm[k] - 2000 < hi[k] && lo[k] < pieces[i].reserved_max_cm[k] + 2000)).collect();
+    points.windows(2).all(|w| {
+        let count = distance(w[0], w[1]).div_ceil(50).max(1) as i64;
+        (0..=count).all(|n| {
+            let p: Vertex = std::array::from_fn(|k| w[0][k] + (w[1][k] - w[0][k]) * n / count);
+            !near.iter().any(|&i| (!own.contains(&i) || distance(p, j.start_ring.position_cm) >= 1200 && distance(p, merge) >= 1600)
+                && pieces[i].path.iter().any(|r| r.mode != "flight" && (r.position_cm[1] - p[1]).abs() < 300
+                    && (r.position_cm[0] - p[0]).pow(2) + (r.position_cm[2] - p[2]).pow(2) < (r.lateral_cm as i64 + 220).pow(2)))
+        })
+    })
+}
 /// Exact authored solid occupancy and sampled entry/flight/landing vehicle space.
 pub(super) fn clear(a: &Assembly, jump: &Shortcut) -> Result<()> {
     let candidate = a.authoring.as_ref().or(a.seed_source.as_ref()).unwrap();
@@ -665,17 +674,12 @@ mod tests {
     }
     #[test]
     fn independent_tickets_and_atomic_rejection() {
-        let tickets: Vec<_> = (0..900).map(|seed| ticket(seed, 0)).collect();
-        let selected = tickets.iter().filter(|v| v.0).count();
-        assert!((240..360).contains(&selected));
-        assert_eq!(
-            tickets,
-            (0..900).map(|seed| ticket(seed, 0)).collect::<Vec<_>>()
-        );
-        assert_ne!(
-            tickets,
-            (0..900).map(|seed| ticket(seed, 1)).collect::<Vec<_>>()
-        );
+        let all: Vec<_> = (0..1200).map(tickets).collect();
+        let one = all.iter().filter(|t| t.len() == 1).count();
+        let two = all.iter().filter(|t| t.len() == 2).count();
+        assert!((340..460).contains(&one) && (60..140).contains(&two), "{one} {two}");
+        assert!(all.iter().flatten().all(|n| (5..=8).contains(n)));
+        assert_eq!(all, (0..1200).map(tickets).collect::<Vec<_>>());
         let fragment = source(5, true).unwrap();
         let base = source(5, false).unwrap();
         for at in [

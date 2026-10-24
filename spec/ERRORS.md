@@ -110,7 +110,7 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_GRIND_SOURCE` | Invalid authored grind geometry. |
 | `E_GRIND_CONNECTION` | Disconnected grind endpoint or transition. |
 | `E_GRIND_BUDGET` | Authored grind exceeds its bounded resources. |
-| `E_PIPE_DIMENSIONS` | New pipe authoring requires 4/6 m bores and at least 4 m ports; location is reported. |
+| `E_PIPE_DIMENSIONS` | New pipe authoring requires 4/6 m bores and at least 4 m ports, and pipe/halfpipe control points must follow the [pipe control point](../docs/SPECIAL_DRIVING.md#pipe-control-points) rules; location is reported. |
 | `E_TRACK_CLEARANCE` | Attachment footprint and continuous 2.2 m bypass do not fit the named piece/station. |
 | `E_TRACK_SETTINGS` | Invalid procedural track settings. |
 | `E_TRACK_REQUIRED` | Operation requires an authored track. |

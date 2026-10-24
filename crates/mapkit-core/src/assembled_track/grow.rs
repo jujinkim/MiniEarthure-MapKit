@@ -1,7 +1,7 @@
 //! Single-pass motif growth over the padded piece grid. Counters change per
 //! placed piece and are restored from per-motif snapshots when a motif pops.
 use super::*;
-use motifs::{Family, Motif, FAMILIES};
+use motifs::{Family, Motif, Shortcut, FAMILIES};
 use seed_streams::{derive, uniform};
 use std::ops::Range;
 
@@ -25,7 +25,7 @@ pub(super) fn yaw_mdeg(f: Vertex) -> i32 {
 /// Longest optional straight in `p` and its trailing run, continuing `tail`.
 /// Horizontal heading decides, so grades and waves count as straight.
 pub(super) fn straight_run(p: &Piece, mut tail: u64) -> (u64, u64) {
-    if category(&p.id) != "driving" || ["tube_entry", "tube_exit", "approach", "finish_plaza"].contains(&p.id.as_str()) { return (0, 0); }
+    if category(&p.id) != "driving" || ["tube_entry", "tube_exit", "approach", "finish_plaza", "flight_curve"].contains(&p.id.as_str()) { return (0, 0); }
     let mut longest = tail;
     for w in p.path.windows(2) {
         let (a, b) = (w[0].forward, w[1].forward);
@@ -62,11 +62,19 @@ pub(super) struct Counters {
     pub last_pipe: Option<usize>,
     pub last_jump: Option<usize>,
     pub recent: [Option<Family>; 2],
+    /// Lowest placed road height.
+    pub low: i64,
+    pub jump_tickets: usize,
+    pub grind_tickets: usize,
 }
-struct Placed { start: usize, end: usize, before: Counters, reserved: bool }
+struct Placed { start: usize, end: usize, before: Counters, reserved: bool, extra: usize, family: Family, shortcut: Option<Shortcut> }
 pub(super) struct Grown {
     pub pieces: Vec<Piece>,
     pub reserved: Vec<Range<usize>>,
+    /// Takeoff piece of each drop jump: takeoff, flight, landing.
+    pub drops: Vec<usize>,
+    /// Base-route range of each placed shortcut template.
+    pub shortcuts: Vec<(Range<usize>, Shortcut)>,
     pub stats: Stats,
 }
 /// Search effort of one attempt, for tests and tuning.
@@ -84,6 +92,11 @@ pub(super) struct Grow<'a> {
     pub pieces: Vec<Piece>,
     pub grid: track_grid::PieceGrid,
     pub cache: piece_cache::PieceCache,
+    /// Optional shortcut branch roads, reserved against later growth.
+    extra: Vec<Piece>,
+    extra_grid: track_grid::PieceGrid,
+    jump_tickets: Vec<usize>,
+    grind_tickets: usize,
     motifs: Vec<Placed>,
     pub c: Counters,
     retries: Vec<u64>,
@@ -93,8 +106,10 @@ pub(super) struct Grow<'a> {
 }
 impl<'a> Grow<'a> {
     fn new(s: &'a Settings, style: &'a motifs::Style, attempt: u64) -> Self {
+        let gimmick = s.categories.iter().any(|c| c == "gimmick");
         let mut g = Self { s, tier: s.length.tier(), style, attempt, pieces: vec![], grid: Default::default(), cache: Default::default(),
-            motifs: vec![], c: Counters::default(), retries: vec![], next_search: 0, stats: Stats { attempts: attempt + 1, ..Stats::default() } };
+            extra: vec![], extra_grid: Default::default(), jump_tickets: if gimmick { jump_shortcuts::tickets(s.seed) } else { vec![] },
+            grind_tickets: if gimmick { corner_shortcuts::tickets(s.seed) } else { 0 }, motifs: vec![], c: Counters::default(), retries: vec![], next_search: 0, stats: Stats { attempts: attempt + 1, ..Stats::default() } };
         let mut at = [0; 3];
         for _ in 0..START_PIECES {
             let p = g.cache.instance(&authoring::Instance { position_cm: at, ..authoring::instance("", "straight", START_WIDTH) });
@@ -107,15 +122,20 @@ impl<'a> Grow<'a> {
     pub fn has(&self, category: &str) -> bool { self.s.categories.iter().any(|c| c == category) }
     pub fn end(&self) -> &Sample { self.pieces.last().unwrap().path.last().unwrap() }
     /// `id` placed on `end`, after a piece `previous`, exactly as compile builds it.
-    pub fn piece(&mut self, id: &str, w: u32, exit: Option<u32>, end: &Sample, previous: &str) -> Piece {
+    pub fn piece(&mut self, id: &str, w: u32, exit: Option<u32>, cp: &[Vertex], end: &Sample, previous: &str) -> Piece {
         let mut origin = end.position_cm;
         origin[1] -= portal_drop(previous, id, w);
         self.cache.instance(&authoring::Instance { position_cm: origin, rotation_mdeg: [0, yaw_mdeg(end.forward), 0], entry_width_cm: end.lateral_cm * 2,
-            exit_width_cm: exit.unwrap_or(w), ..authoring::instance("", id, w) })
+            exit_width_cm: exit.unwrap_or(w), control_points: cp.to_vec(), ..authoring::instance("", id, w) })
     }
-    /// Clear of every placed piece except `skip`, the predecessor it joins.
-    pub fn clear(&self, p: &Piece, skip: Option<usize>) -> bool {
-        !self.grid.candidates(p).into_iter().any(|j| Some(j) != skip && authoring::conflict(p, &self.pieces[j]))
+    /// Clear of every placed piece, the predecessor it joins included, and of reserved branches.
+    pub fn clear(&self, p: &Piece) -> bool {
+        !self.grid.candidates(p).into_iter().any(|j| authoring::conflict(p, &self.pieces[j]))
+            && !self.extra_grid.candidates(p).into_iter().any(|j| authoring::conflict(p, &self.extra[j]))
+    }
+    fn corridor(&self, p: &Piece) -> bool {
+        self.s.circuit && p.reserved_min_cm[0] < CORRIDOR_CM[2] && CORRIDOR_CM[0] < p.reserved_max_cm[0]
+            && p.reserved_min_cm[2] < CORRIDOR_CM[3] && CORRIDOR_CM[1] < p.reserved_max_cm[2]
     }
     /// Piece/sample budget, straight limit and height range after `tail`/`samples`/`count`.
     pub fn admissible(&self, p: &Piece, tail: u64, samples: usize, count: usize) -> bool {
@@ -133,43 +153,80 @@ impl<'a> Grow<'a> {
         c.counted += usize::from(motifs::counted(&p.id));
         (c.longest, c.tail) = (c.longest.max(longest), tail);
         (c.yaw, c.left, c.right) = (c.yaw + yaw, c.left + left, c.right + right);
+        c.low = c.low.min(p.path.iter().map(|s| s.position_cm[1]).min().unwrap());
         self.grid.push(&p);
         self.pieces.push(p);
     }
     fn push(&mut self, p: Piece) -> bool {
-        let corridor = self.s.circuit && p.reserved_min_cm[0] < CORRIDOR_CM[2] && CORRIDOR_CM[0] < p.reserved_max_cm[0]
-            && p.reserved_min_cm[2] < CORRIDOR_CM[3] && CORRIDOR_CM[1] < p.reserved_max_cm[2];
-        if corridor || !self.admissible(&p, self.c.tail, self.c.samples, self.pieces.len()) || !self.clear(&p, Some(self.pieces.len() - 1)) { return false; }
+        // The predecessor is checked too, exactly as compile does: tapered joins after
+        // loops and control-point shapes do not clear it by construction.
+        if self.corridor(&p) || !self.admissible(&p, self.c.tail, self.c.samples, self.pieces.len()) || !self.clear(&p) { return false; }
         self.commit(p);
         true
     }
-    fn truncate(&mut self, len: usize, c: Counters) {
+    fn truncate(&mut self, len: usize, extra: usize, c: Counters) {
         self.pieces.truncate(len);
         self.grid.truncate(len);
+        self.extra.truncate(extra);
+        self.extra_grid.truncate(extra);
         self.c = c;
     }
+    /// A shortcut template's base roads, rigidly placed at the current end exactly
+    /// as finish places its branch, and that branch reserved when it is clear.
+    fn place_shortcut(&mut self, shortcut: Shortcut) -> bool {
+        let port = self.end().clone();
+        let (start, extra) = (self.pieces.len(), self.extra.len());
+        let (Ok(base), Ok(branch)) = (shortcut.source(false).and_then(|s| templates::place(s, &port)), shortcut.source(true).and_then(|s| templates::place(s, &port))) else { return false };
+        for id in &base.paths[0].pieces {
+            let p = self.cache.instance(base.instances.iter().find(|i| &i.id == id).unwrap());
+            if !self.push(p) { return false; }
+        }
+        let own = start..self.pieces.len();
+        let mut roads = vec![];
+        for i in branch.instances.iter().filter(|i| !base.paths[0].pieces.contains(&i.id)) {
+            let p = self.cache.instance(i);
+            if self.corridor(&p) || self.grid.candidates(&p).into_iter().any(|j| !own.contains(&j) && authoring::conflict(&p, &self.pieces[j]))
+                || self.extra_grid.candidates(&p).into_iter().any(|j| authoring::conflict(&p, &self.extra[j])) { return false; }
+            roads.push(p);
+        }
+        if !branch.grind_lines.is_empty() {
+            let mut lines = authoring::Source::empty();
+            lines.grind_lines = branch.grind_lines.clone();
+            let near: Vec<_> = roads.iter().flat_map(|p| self.grid.candidates(p)).filter(|j| !own.contains(j))
+                .collect::<std::collections::BTreeSet<_>>().into_iter().map(|j| self.pieces[j].clone()).collect();
+            if !templates::clear_of_roads(&lines, &near).unwrap_or(false) { return false; }
+        }
+        debug_assert_eq!(extra, self.extra.len());
+        for p in roads { self.extra_grid.push(&p); self.extra.push(p); }
+        true
+    }
     fn place(&mut self, m: &Motif) -> bool {
-        let (start, before) = (self.pieces.len(), self.c);
-        for s in &m.steps {
-            let (end, previous) = (self.end().clone(), self.pieces.last().unwrap().id.clone());
-            let p = self.piece(&s.id, s.width, s.exit, &end, &previous);
-            if !self.push(p) {
-                self.truncate(start, before);
-                return false;
-            }
+        let (start, extra, before) = (self.pieces.len(), self.extra.len(), self.c);
+        let placed = if let Some(shortcut) = m.shortcut { self.place_shortcut(shortcut) } else {
+            m.steps.iter().all(|s| {
+                let (end, previous) = (self.end().clone(), self.pieces.last().unwrap().id.clone());
+                let p = self.piece(&s.id, s.width, s.exit, &s.cp, &end, &previous);
+                self.push(p)
+            })
+        };
+        if !placed {
+            self.truncate(start, extra, before);
+            return false;
         }
         let (index, c) = (self.motifs.len(), &mut self.c);
         c.recent = [Some(m.family), c.recent[0]];
         if m.family.pipe() { c.last_pipe = Some(index); }
-        if m.family == Family::Jump { c.last_jump = Some(index); }
+        if m.family.jump() { c.last_jump = Some(index); }
         c.loops += u8::from(m.family == Family::Loop);
         c.overpasses += u8::from(m.family == Family::Overpass);
-        self.motifs.push(Placed { start, end: self.pieces.len(), before, reserved: m.reserved });
+        c.jump_tickets += usize::from(m.family == Family::JumpShortcut);
+        c.grind_tickets += usize::from(m.family == Family::GrindShortcut);
+        self.motifs.push(Placed { start, end: self.pieces.len(), before, reserved: m.reserved, extra, family: m.family, shortcut: m.shortcut });
         true
     }
     fn pop(&mut self) -> bool {
         let Some(m) = self.motifs.pop() else { return false };
-        self.truncate(m.start, m.before);
+        self.truncate(m.start, m.extra, m.before);
         true
     }
     /// End position, forward and length after `m`, from cached local shapes only.
@@ -180,7 +237,7 @@ impl<'a> Grow<'a> {
         let mut length = 0;
         for s in &m.steps {
             let rotation = [0, yaw_mdeg(forward), 0];
-            let local = self.cache.local(&s.id, s.width, lateral * 2, s.exit.unwrap_or(s.width));
+            let local = self.cache.local(&s.id, s.width, lateral * 2, s.exit.unwrap_or(s.width), &s.cp);
             let last = local.path.last().unwrap();
             position = add(position, geometry::rotate3(last.position_cm, rotation));
             position[1] -= portal_drop(&previous, &s.id, s.width);
@@ -213,12 +270,17 @@ impl<'a> Grow<'a> {
     }
     fn weight(&mut self, m: &Motif) -> f64 {
         let (f, n, c) = (m.family, self.motifs.len(), self.c);
+        let boosted = ["acceleration_panel", "boost_chain"].contains(&self.pieces.last().unwrap().id.as_str());
         if c.recent == [Some(f), Some(f)] || f.pipe() && c.last_pipe.is_some_and(|i| n - i < 5)
-            || f == Family::Jump && c.last_jump.is_some_and(|i| n - i < 4)
+            || f.jump() && c.last_jump.is_some_and(|i| n - i < 4)
+            || boosted && matches!(f, Family::Drop | Family::JumpShortcut)
             || f == Family::Loop && c.loops >= 2 || f == Family::Overpass && c.overpasses >= 1
             || !self.s.circuit && c.counted + m.counted() > self.tier.sprint_pieces { return 0.0; }
         let mut w = f.base() * self.style.families[f.index()];
         if f.category() == "driving" && !self.has("driving") { w *= 0.5; }
+        // Gap jumps off high ground; pipes back off near the sample budget.
+        if f == Family::Jump && self.end().position_cm[1] - c.low >= 300 { w *= 3.0; }
+        if f.pipe() && c.samples * 10 > MAX_SAMPLES * 7 { w *= 0.25; }
         let (position, forward, length) = self.predict(m);
         if !(HEIGHT_CM.0..=HEIGHT_CM.1).contains(&position[1]) { return 0.0; }
         if self.s.circuit { w *= self.homing(position, forward, length); }
@@ -230,7 +292,8 @@ impl<'a> Grow<'a> {
         if self.retries.len() <= n { self.retries.resize(n + 1, 0); }
         let (seed, attempt, retry) = (self.s.seed, self.attempt, self.retries[n]);
         let end = self.end();
-        let context = motifs::Context { driving: self.has("driving"), action: self.has("action"), lateral: end.lateral_cm, yaw: self.c.yaw, height: end.position_cm[1] };
+        let context = motifs::Context { driving: self.has("driving"), action: self.has("action"), lateral: end.lateral_cm, yaw: self.c.yaw, height: end.position_cm[1],
+            low: self.c.low, jump_ticket: self.jump_tickets.get(self.c.jump_tickets).copied(), grind_ticket: self.c.grind_tickets < self.grind_tickets };
         let mut options = vec![];
         for f in FAMILIES {
             if !self.has(f.category()) && !f.basic() { continue; }
@@ -252,6 +315,8 @@ impl<'a> Grow<'a> {
     }
     fn grown(self) -> Grown {
         Grown { reserved: self.motifs.iter().filter(|m| m.reserved).map(|m| m.start..m.end).collect(),
+            drops: self.motifs.iter().filter(|m| m.family == Family::Drop).map(|m| m.start).collect(),
+            shortcuts: self.motifs.iter().filter_map(|m| m.shortcut.map(|s| (m.start..m.end, s))).collect(),
             pieces: self.pieces, stats: self.stats }
     }
 }
@@ -270,7 +335,7 @@ pub(super) fn grow(s: &Settings, style: &motifs::Style, attempt: u64) -> Result<
             g.step()
         } else if g.c.counted == tier.sprint_pieces {
             let (end, previous) = (g.end().clone(), g.pieces.last().unwrap().id.clone());
-            let p = g.piece("finish_plaza", 400, None, &end, &previous);
+            let p = g.piece("finish_plaza", 400, None, &[], &end, &previous);
             if g.push(p) { return Ok(Ok(g.grown())); }
             false
         } else { g.step() };

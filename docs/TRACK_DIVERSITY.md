@@ -30,8 +30,17 @@ plain recomputation over the final assembly.
 
 ## Ordinary narrow-road budget
 
-Generated ordinary roads use 6/8/12/18 m within catalogue limits; seeded
-narrowing of a straight is currently not applied. Required preparation roads are
+Generated ordinary roads use 6/8/12/18 m within catalogue limits. One draw per
+seed on the narrow stream (`next % 8 == 0`, about 12.5%) may narrow one section:
+`narrow::select` picks, without compiling, one or two consecutive ordinary
+`sprint_lane`, `straight`, `gentle45` or `chicane` pieces at least 6 m wide, ≤40 m and
+≤5% of the base route, lying between 20% and 80% of it, whose neighbours are not
+the runway, jumps, drops, pipes, shortcut roads, finish or obstacle roads. Bodies
+become 4 m (a two-piece section also narrows its joint); ports keep their widths,
+so the shape is unchanged. The tapers must leave ≥4 m of real narrow road and the
+narrowed pieces must clear their neighbours. It is applied before the single
+compile; the compile fallback drops it after the shortcuts. Over 128 short
+sprints 10 tracks (7.8%) carry a section. Required preparation roads are
 ordinary roads too; generated grind approach/landing roads use at least 6 m.
 
 At most one connected 4 m ordinary-road run may exist across all retained main and

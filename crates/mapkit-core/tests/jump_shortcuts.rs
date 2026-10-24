@@ -17,10 +17,9 @@ fn jump_templates_are_disconnected_v1_routes() {
 }
 
 #[test]
-#[ignore = "M6: seeded jump shortcut tickets are paused in the M4 generator"]
 fn seeded_jump_routes_reproduce_and_obey_category_gate() {
-    // Seeds re-chosen after the §44.363 diversity generator; 93 places one jump detour.
-    for (seed,count) in [(0,0),(93,1)] {
+    // Seeds chosen for the motif generator; 1 places one jump detour from its ticket.
+    for (seed,count) in [(0,0),(1,1)] {
         let settings=track::Settings{seed,circuit:false,length:track::Length::Long,..Default::default()};
         let a=track::assemble(&settings).unwrap();
         assert_eq!(a.seed_source.as_ref().unwrap().jump_shortcuts.len(),count);
@@ -28,5 +27,8 @@ fn seeded_jump_routes_reproduce_and_obey_category_gate() {
         let mut disabled=settings;
         disabled.categories=vec!["driving".into(),"action".into()];
         assert!(track::assemble(&disabled).unwrap().seed_source.unwrap().jump_shortcuts.is_empty());
+        let s=a.seed_source.as_ref().unwrap();
+        assert_eq!(s.paths.len(),1<<(count+s.grind_lines.iter().filter(|l|l.id.ends_with("-rail")).count()));
+        assert_eq!(authoring::compile(s).unwrap().pieces,a.pieces);
     }
 }

@@ -53,7 +53,10 @@ scale):
 
 - New cylinder and swept-cylinder bores are 4/6 m (radii 200/300 cm), default 4 m.
   New road and pipe ports have a 400 cm minimum. Generation draws the two bores
-  uniformly at every difficulty.
+  uniformly at every difficulty. `banked_chicane` halfpipes are 4 or 6 m wide;
+  their swept halfpipe uses radius width/2 (200/300 cm) and width `width_cm`.
+  Runtime physics of the 300 cm halfpipe is unverified; if it fails, generation
+  keeps `banked_chicane` at 4 m and varies only its shape.
 - Curved pipes use centreline radius `max(400, bore/2 + 200)` cm. General corners
   and spiral radius/rise formulas keep their existing definitions.
 - The catalogue publishes `min_width_cm`, `loop_min_width_cm`,
@@ -63,6 +66,23 @@ scale):
 - Stored v1 parameters keep their original accepted ranges (pipe radius 100–600 cm).
   Loading, preview, bounds and Undo/Redo use stored-data validation. New authoring
   errors name the location and dimension; no implicit resize or conversion occurs.
+
+## Pipe control points
+
+`cylinder` and `banked_chicane` instances may carry local cubic `control_points`
+(v1 source field shared with free/flight curves). The compiler then sweeps
+`geometry::pipe_bezier` instead of the preset centreline: frames at most 50 cm
+apart, gravity-aligned, `tube_radius = lateral = width/2`, and the gimmick
+centreline is that materialized local path. Rules (`pipe_control_issue`,
+`E_PIPE_DIMENSIONS`, source unmodified):
+
+- width 400 or 600 cm; 4+3k points with k ≤ 6;
+- `cp[0]` is the origin and `cp[1]` lies on +Z; every coordinate within ±6400 cm;
+- minimum 3D curvature radius max(400, width/2+200) cm (1% allowance for cubic
+  arcs and eased rise); |grade| ≤ 15%; level end tangent; ≤512 frames.
+
+The catalogue publishes these as `pipe_control_points`. Without control points the
+preset shapes are unchanged.
 
 ## Pipe material
 
