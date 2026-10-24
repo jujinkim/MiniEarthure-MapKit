@@ -74,7 +74,7 @@ fn append_exit(pieces: &mut Vec<Piece>, id: &str, w: u32, exit: Option<u32>) -> 
     if pieces
         .iter()
         .take(pieces.len().saturating_sub(1))
-        .any(|other| authoring::conflict(&p, other))
+        .any(|other| track_grid::near(&p, other) && authoring::conflict(&p, other))
     {
         return false;
     }
@@ -173,8 +173,8 @@ fn closure(pieces: &mut Vec<Piece>, s: &Settings, required: &Required) -> Result
         let mut parent=Some(index);
         while let Some(i)=parent {if i>0 {chain.push(i);} parent=nodes[i].parent;}
         let clear=|p: &Piece| {
-            !pieces.iter().any(|other|authoring::conflict(p,other))
-                && !chain.iter().any(|i|authoring::conflict(p,&nodes[*i].piece))
+            !pieces.iter().any(|other|track_grid::near(p,other) && authoring::conflict(p,other))
+                && !chain.iter().any(|i|track_grid::near(p,&nodes[*i].piece) && authoring::conflict(p,&nodes[*i].piece))
         };
         let seam=short_seam(last,&goal);
         let joined=authoring::joined(last,&goal);
@@ -421,7 +421,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 let mut valid=true;
                 for id in &fragment.paths[0].pieces {
                     let p=authoring::piece(fragment.instances.iter().find(|i|&i.id==id).unwrap())?;
-                    if pieces.iter().any(|other|authoring::conflict(&p,other)) {valid=false;break;}
+                    if pieces.iter().any(|other|track_grid::near(&p,other) && authoring::conflict(&p,other)) {valid=false;break;}
                     pieces.push(p);
                 }
                 if valid && pieces.len()<=MAX_PIECES && pieces.iter().map(|p|p.path.len()).sum::<usize>()<=MAX_SAMPLES && valid_runs(&pieces,false) {
@@ -445,7 +445,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
                 let mut valid = true;
                 for id in &fragment.paths[0].pieces {
                     let p = authoring::piece(fragment.instances.iter().find(|i| &i.id==id).unwrap())?;
-                    if pieces.iter().any(|other|authoring::conflict(&p,other)) {valid=false;break;}
+                    if pieces.iter().any(|other|track_grid::near(&p,other) && authoring::conflict(&p,other)) {valid=false;break;}
                     pieces.push(p);
                 }
                 if valid && pieces.len()<=MAX_PIECES && pieces.iter().map(|p|p.path.len()).sum::<usize>()<=MAX_SAMPLES

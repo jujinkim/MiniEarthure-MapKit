@@ -228,6 +228,10 @@ pub fn instance(id: &str, preset: &str, width: u32) -> Instance {
     }
 }
 pub fn piece(instance: &Instance) -> Result<Piece> {
+    piece_with(instance, &mut piece_cache::PieceCache::default())
+}
+/// `piece` with local geometry shared across one compile's instances.
+pub(super) fn piece_with(instance: &Instance, cache: &mut piece_cache::PieceCache) -> Result<Piece> {
     if (instance.preset.starts_with("cylinder") || ["tube_entry", "tube_exit"].contains(&instance.preset.as_str()))
         && [instance.width_cm, instance.entry_width_cm, instance.exit_width_cm].iter().any(|v| *v < MIN_WIDTH_CM) {
         return Err(error("E_PIPE_DIMENSIONS", format!("instance {}: width_cm, entry_width_cm and exit_width_cm require a bore/port of at least 400 cm (radius 200 cm); source was not modified", instance.id)));
@@ -274,17 +278,7 @@ pub fn piece(instance: &Instance) -> Result<Piece> {
     if estimated_samples > MAX_SAMPLES {
         return Err(error("E_TRACK_BUDGET", "curve exceeds sample budget"));
     }
-    let mut p = variant(
-        &instance.preset,
-        instance.width_cm,
-        instance.entry_width_cm,
-        instance.exit_width_cm,
-    );
-    p.origin_cm = instance.position_cm;
-    p.rotation_mdeg = instance.rotation_mdeg;
-    p.quarter_turns = (instance.rotation_mdeg[1].rem_euclid(360000) / 90000) as u8;
-    p.control_points = instance.control_points.clone();
-    let p = materialize(&p);
+    let p = cache.instance(instance);
     if p.path.len()+p.alternate_path.len()>MAX_SAMPLES {
         return Err(error("E_TRACK_BUDGET", "curve exceeds final sample budget"));
     }
@@ -377,13 +371,14 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
     let mut names = BTreeMap::new();
     let mut pieces = vec![];
     let mut samples = 0usize;
+    let mut cache = piece_cache::PieceCache::default();
     for i in &source.instances {
         cancellation::checkpoint()?;
         if i.id.is_empty() || i.id.len() > 128 || names.insert(i.id.clone(), pieces.len()).is_some()
         {
             return Err(error("E_TRACK_SOURCE", "instance IDs must be unique"));
         }
-        let p = piece(i)?;
+        let p = piece_with(i, &mut cache)?;
         samples += p.path.len() + p.alternate_path.len();
         if samples > MAX_SAMPLES {
             return Err(error("E_TRACK_BUDGET", "sample budget exceeded"));
@@ -627,8 +622,11 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
         }
     }
     // Full road volume clearance, excluding only a small shared port neighbourhood.
+    // The grid yields every earlier piece that can conflict, in ascending order.
+    let mut grid = track_grid::PieceGrid::default();
     for i in 0..pieces.len() {
-        for j in 0..i {
+        cancellation::checkpoint()?;
+        for j in grid.candidates(&pieces[i]) {
             cancellation::checkpoint()?;
             if !jump_shortcuts::shared_approach(source,i,j) && (pieces[i] == pieces[j] || conflict(&pieces[i], &pieces[j])) {
                 geometry_issues.push(format!(
@@ -637,6 +635,7 @@ fn compile_uncached(source: &Source) -> Result<Assembly> {
                 ));
             }
         }
+        grid.push(&pieces[i]);
     }
     for (i, p) in pieces.iter().enumerate() {
         if geometry::self_intersects(p) {

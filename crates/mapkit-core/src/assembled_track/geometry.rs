@@ -476,7 +476,7 @@ pub(super) fn volume_overlap(a: &Sample, b: &Sample) -> bool {
 /// ribbons. All quantized edges are enclosed; the existing wall and vehicle
 /// margins extend both the sides and the ends. Other geometry keeps the sample
 /// volume check, including banks, tubes, flights, tapers and alternate paths.
-fn straight_footprint(p: &Piece, allow_taper: bool) -> Option<[[f64; 2]; 4]> {
+pub(super) fn straight_footprint(p: &Piece, allow_taper: bool) -> Option<[[f64; 2]; 4]> {
     let first = p.path.first()?;
     if p.path.len() < 2 || !p.alternate_path.is_empty()
         || (!allow_taper && (p.width_cm != p.entry_width_cm || p.width_cm != p.exit_width_cm))

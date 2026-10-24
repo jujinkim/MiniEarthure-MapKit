@@ -33,6 +33,8 @@ mod panels;
 mod junction;
 mod walls;
 mod layout;
+mod track_grid;
+mod piece_cache;
 mod plan;
 mod composition;
 mod diversity;
@@ -465,6 +467,8 @@ pub fn fingerprint() -> String {
             include_bytes!("special_track.rs").as_slice(),
             include_bytes!("curve_sampling.rs").as_slice(),
             include_bytes!("assembled_track/layout.rs").as_slice(),
+            include_bytes!("assembled_track/track_grid.rs").as_slice(),
+            include_bytes!("assembled_track/piece_cache.rs").as_slice(),
             include_bytes!("assembled_track/plan.rs").as_slice(),
             include_bytes!("assembled_track/composition.rs").as_slice(),
             include_bytes!("assembled_track/diversity.rs").as_slice(),
@@ -1229,19 +1233,16 @@ fn variant(id: &str, width: u32, entry: u32, exit: u32) -> Piece {
     p
 }
 fn materialize(p: &Piece) -> Piece {
-    let mut out = variant(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm);
-    out.origin_cm = p.origin_cm;
-    out.quarter_turns = p.quarter_turns;
-    out.rotation_mdeg = p.rotation_mdeg;
-    out.control_points = p.control_points.clone();
-    if !p.control_points.is_empty() {
-        out.path = geometry::bezier(
-            &p.control_points,
-            p.width_cm,
-            p.entry_width_cm,
-            p.exit_width_cm,
-        );
-        if p.id == "flight_curve" {
+    place_shape(local_shape(&p.id, p.width_cm, p.entry_width_cm, p.exit_width_cm, &p.control_points), p)
+}
+/// Local geometry depends only on preset, widths and control points; placement
+/// (`place_shape`) supplies chain metadata, origin and rotation.
+fn local_shape(id: &str, width: u32, entry: u32, exit: u32, control_points: &[Vertex]) -> Piece {
+    let mut out = variant(id, width, entry, exit);
+    out.control_points = control_points.to_vec();
+    if !control_points.is_empty() {
+        out.path = geometry::bezier(control_points, width, entry, exit);
+        if id == "flight_curve" {
             for s in &mut out.path {
                 s.mode = "flight".into();
                 s.safe = false;
@@ -1250,6 +1251,9 @@ fn materialize(p: &Piece) -> Piece {
             }
         }
     }
+    out
+}
+fn place_shape(mut out: Piece, p: &Piece) -> Piece {
     out.chain_id = p.chain_id;
     out.chain_index = p.chain_index;
     out.chain_count = p.chain_count;
@@ -1476,8 +1480,9 @@ impl Assembly {
                 return Err(fail());
             }
         }
+        let grid = track_grid::PieceGrid::new(&self.pieces);
         for i in 0..self.pieces.len() {
-            for j in 0..i.saturating_sub(1) {
+            for j in grid.candidates(&self.pieces[i]).into_iter().take_while(|j| j + 1 < i) {
                 if self.settings.circuit && i + 1 == self.pieces.len() && j == 0 {
                     continue;
                 }
