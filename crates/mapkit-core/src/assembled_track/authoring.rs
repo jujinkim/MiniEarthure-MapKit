@@ -770,7 +770,7 @@ pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
             return overlap;
         }
     }
-    if !layout::overlaps(a, b) || straight_overlap == Some(false) {
+    if !overlaps(a, b) || straight_overlap == Some(false) {
         return false;
     }
     a.path.iter().step_by(2).any(|s| {
@@ -784,6 +784,10 @@ pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
             geometry::volume_overlap(s, t)
         })
     })
+}
+fn overlaps(a: &Piece, b: &Piece) -> bool {
+    (0..3).all(|j| a.reserved_min_cm[j] < b.reserved_max_cm[j] && b.reserved_min_cm[j] < a.reserved_max_cm[j])
+        && a.path.iter().chain(&a.alternate_path).any(|s| b.path.iter().chain(&b.alternate_path).any(|t| geometry::volume_overlap(s, t)))
 }
 pub fn common_checkpoints(a: &Assembly) -> Vec<(usize, usize)> {
     if let Some(source) = a.authoring.as_ref().or(a.seed_source.as_ref()) {
@@ -1208,7 +1212,7 @@ mod checkpoint_tests {
     fn road(count:usize)->Assembly {
         let mut pieces=vec![];let mut origin=[0;3];
         for _ in 0..count {push_piece(&mut pieces,&mut origin,0,"straight",400,true,[0;3]);}
-        layout::finish(pieces,&Settings{circuit:false,..Default::default()})
+        finish::assembly(pieces,&Settings{circuit:false,..Default::default()})
     }
     #[test]
     fn effective_order_is_shared_by_metadata_and_generation_budget() {
@@ -1248,7 +1252,7 @@ mod checkpoint_tests {
         assert_eq!(cps.last().unwrap().1,a.pieces[15].path.len()-1);
         let mut pieces=a.pieces;let mut origin=pieces.last().unwrap().path.last().unwrap().position_cm;
         push_piece(&mut pieces,&mut origin,0,"finish_plaza",400,true,[0;3]);
-        let sprint=layout::finish(pieces,&a.settings);
+        let sprint=finish::assembly(pieces,&a.settings);
         let end=*common_checkpoints(&sprint).last().unwrap();
         assert_eq!(sprint.pieces[end.0].path[end.1].position_cm,sprint.finish_plaza.unwrap().checkpoint_cm);
     }

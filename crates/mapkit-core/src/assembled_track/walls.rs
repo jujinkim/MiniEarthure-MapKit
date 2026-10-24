@@ -466,7 +466,8 @@ mod tests {
     fn wide_walls_keep_gimmick_layout_duration() {
         let s=Settings {seed:42,circuit:false,length:Length::Medium,categories:vec!["gimmick".into()],..Default::default()};
         let a=assemble(&s).unwrap();
-        assert!(a.estimated_msec.abs_diff(90000)<=9000);
+        assert_eq!(a.estimated_msec,a.routes[0].estimated_msec);
+        assert_eq!(u64::from(a.estimated_msec),a.pieces.iter().map(|p|u64::from(p.reference_msec)).sum::<u64>());
     }
     #[test]
     fn loop_wall_normal_thickness_is_fifty_cm() {

@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn grid_truncate_matches_rebuild() {
         let s = Settings { seed: 3, circuit: false, length: Length::Short, ..Settings::default() };
-        let a = layout::assemble(&s).unwrap();
+        let a = assemble(&s).unwrap();
         let mut grid = PieceGrid::new(&a.pieces);
         for len in [a.pieces.len() / 2, 7, 0] {
             grid.truncate(len);
@@ -167,7 +167,7 @@ mod tests {
         let mut collisions = 0;
         for (seed, circuit) in [(1, true), (2, false), (7, true), (42, false)] {
             let s = Settings { seed, circuit, length: Length::Short, ..Settings::default() };
-            let a = layout::assemble(&s).unwrap();
+            let a = assemble(&s).unwrap();
             let source = a.seed_source.as_ref().unwrap();
             collisions += check(Some(source), &a.pieces, &format!("seed {seed} circuit {circuit}"));
             let mut tight = a.pieces.clone();

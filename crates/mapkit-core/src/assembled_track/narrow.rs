@@ -88,7 +88,7 @@ pub(super) fn prepare_fragment(s: &mut authoring::Source) {
 pub(super) fn try_section(
     source: &authoring::Source,
     a: &Assembly,
-    reserved: &composition::Required,
+    reserved: &[std::ops::Range<usize>],
 ) -> Result<Assembly> {
     let mut rng = a.settings.seed ^ 0x6e61_7272_6f77_3031;
     if next(&mut rng) % 2 == 0 || measure(a).sections > 0 {
@@ -138,7 +138,7 @@ mod tests {
         for &w in widths {
             push_piece(&mut pieces, &mut at, 0, "straight", w, true, [0; 3]);
         }
-        layout::finish(pieces, &Settings::default())
+        finish::assembly(pieces, &Settings::default())
     }
     #[test]
     fn actual_narrow_runs_span_pieces_branches_and_the_circuit_seam() {
@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(p.path.first().unwrap().lateral_cm, 300);
         assert_eq!(p.path.last().unwrap().lateral_cm, 300);
         let length = race_length(&p);
-        let a = layout::finish(vec![p], &Settings::default());
+        let a = finish::assembly(vec![p], &Settings::default());
         let n = measure(&a);
         assert_eq!(n.sections, 1);
         assert!(n.length_cm > 0 && n.length_cm < length);
@@ -194,13 +194,13 @@ mod tests {
             "tube_entry",
             "tube_exit",
         ] {
-            let a = layout::finish(
+            let a = finish::assembly(
                 vec![materialize(&variant(id, 400, 400, 400))],
                 &Settings::default(),
             );
             assert_eq!(measure(&a).length_cm, 0, "{id}");
         }
-        let a = layout::finish(
+        let a = finish::assembly(
             vec![materialize(&variant("straight", 600, 800, 400))],
             &Settings::default(),
         );

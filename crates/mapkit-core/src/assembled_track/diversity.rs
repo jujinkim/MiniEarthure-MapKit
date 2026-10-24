@@ -340,7 +340,7 @@ pub fn generation_summary(a: &Assembly) -> GenerationSummary {
 mod tests {
     use super::*;
     fn fixture(ids: &[&str]) -> Assembly {
-        layout::finish(
+        finish::assembly(
             ids.iter()
                 .map(|id| materialize(&catalogue_piece(id)))
                 .collect(),
@@ -422,10 +422,8 @@ mod tests {
             .gimmicks
             .used_types
             .contains(&"grind_rail".into()));
-        assert_eq!(
-            composition::Composition::assembly(&with, &vec![]).special(),
-            composition::Composition::assembly(&without, &vec![]).special()
-        );
+        let special = |a: &Assembly| a.routes[0].pieces.iter().map(|&i| &a.pieces[i]).filter(|p| category(&p.id) != "driving").map(race_length).sum::<u64>();
+        assert_eq!(special(&with), special(&without));
     }
     #[test]
     fn complete_and_constrained_fixtures_keep_the_same_denominators() {

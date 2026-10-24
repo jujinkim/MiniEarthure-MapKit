@@ -1,5 +1,6 @@
 use mapkit_core::assembled_track::{self as track,authoring,Settings};
 #[test]
+#[ignore = "M6: seeded grind shortcut installation is paused in the M4 generator"]
 fn seeded_corner_shortcuts_are_reproducible_and_bounded() {
     // Seeds re-chosen after the §44.363 diversity generator; 11 places one corner rail.
     for (seed,count) in [(0,0),(11,1)] {

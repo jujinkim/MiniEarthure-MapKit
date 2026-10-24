@@ -15,47 +15,57 @@ and package checkpoints retain their explicit positions.
 ## Generation settings
 
 - `categories: ["driving", "gimmick", "action"]`, all enabled by default; empty or
-  unknown selections are rejected. With driving and any special category enabled,
-  gimmick/action pieces occupy 40–60% of the completed base-route distance. With
-  only special categories, the minimum is 40% without an upper cap; driving-only
-  courses contain no special pieces. All-category courses include both gimmicks
-  and actions and at least three families. Selection draws a family before its
-  variants, so additional pipe variants do not increase the pipe family's weight.
-  Mirrored/width variants share a family; identical special families repeat at most
-  twice in a row, including across a circuit seam.
-- Jump panels, gap/offset jumps and air-ring pieces contain a standalone jump
-  panel. Generated acceleration-panel and boost-chain pieces cannot connect
-  directly to any of these jump pieces, including across a circuit seam; an
-  intervening ordinary driving piece permits the sequence. Manual actions remain
-  independent. New generation/recompilation uses this rule; saved packages keep
-  their declared panels and geometry.
+  unknown selections are rejected. Disabled categories contribute no pieces. Without
+  `driving`, only connector roads (straight, sprint lane, right-angle, 45°, grade,
+  90° spiral, portals, the closure seam and the finish) join the special motifs.
+  Without `gimmick` there are no automatic obstacles.
+- Generation grows a sequence of motifs (`assembled_track/motifs.rs`): sweeps,
+  corners, alternating hairpin chains (2–4, ≥8 m straight between, banked at 12 m),
+  S-bends, esses, chicanes, spirals, rises/falls and straights; pipe, halfpipe, loop
+  (≤2) and overpass (≤1) gimmicks; gap jumps and boost-before-rise actions. Each
+  motif draws its own turn direction; past ±540° of accumulated yaw it leans the
+  other way. A per-seed style scales family weights by 0.5–1.5 and the
+  600/800/1200/1800 cm width weights (35/35/20/10); widths change only between
+  motifs. No family runs three motifs in a row; pipes are ≥4 motifs apart, gap
+  jumps ≥3.
+- Gap jumps (`jump`, `offset_jump`, `air_ring`) have a 16 m approach and landing
+  straight. The `jump_panel` piece is never generated. Acceleration panels and
+  boost chains follow a hairpin chain or pipe exit, or precede a rise, and never
+  connect directly to a jump piece, including across a circuit seam. Manual actions
+  remain independent; saved packages keep their declared panels and geometry.
   Automatic air rings sit 3 m above the approach to clear the unboosted jump
   trajectory at the declared minimum entry speed.
+- Optional straights (horizontal heading, so grades count) never exceed 32 m.
+  Sharp corners and 8 m grades are shorter than the clearance between their
+  neighbours, so motifs follow them with a level link or keep them at 6 m.
 - Settings `length` is `short`, `medium` or `long` (default `short`). Circuits
-  race 3/2/2 laps; sprints are one run. Until the generator rewrite lands the
-  layout search maps the tiers to 60/90/120 s and requires the base route at
-  900 cm/s within ±10%; alternative routes are estimated separately. This is a
-  reference estimate, not a measured lap time. The catalogue lists
-  `length_options` per mode.
+  race 3/2/2 laps; sprints are one run of exactly 30/45/60 counted pieces (the
+  runway, finish and pipe portals are not counted). Circuits may close after
+  300/500/750 m. Past 150/300/500 m, motif weights are multiplied by
+  exp(β·(distance gain + ½·heading agreement + height return)) toward the pose
+  40 m behind the start, β = 3.0/1.8/1.0 · ramp^1.5 up to 700/1100/1600 m and 4
+  after it; 40 pieces later the attempt is abandoned. Circuit growth keeps a 40 m
+  by 50 m corridor behind the start free for the return. `estimated_msec` is the
+  base route at 900 cm/s, a reference estimate, not a measured lap time. The
+  catalogue lists `length_options` per mode.
 - Course names are `Seed {seed} · Short|Medium|Long`.
-- Search: at most 24 candidates, 512 pieces, 32,000 samples, within cancellation,
-  package, cell and memory budgets. Failure returns `E_TRACK_LAYOUT` with the
-  requested length, closest time and reason; callers keep their current map.
-- A seed first plans four to six sections with open driving, corners/elevation,
-  gimmick challenge and recovery roles. The plan selects type priorities before
-  layout attempts. Growth and attachments prefer unused types; backtracking uses
-  actual retained placements. The base-route special-distance and straight limits
-  remain hard constraints; preparation/recovery and optional routes add no special
-  distance. Attachments preserve footprint clearance and the continuous bypass.
-- [Diversity and narrow roads](TRACK_DIVERSITY.md) owns the independent piece/gimmick
-  50% goals, taxonomy, candidate ordering and response-only `generation_summary`.
-  After time/safety feasibility, candidates compare largest diversity deficit,
-  combined deficit, time error and section-plan fit. Both goals permit early exit;
-  a shortfall searches up to the existing 24-candidate cap and returns actual counts.
-- Ordinary generated roads use 6/8/12/18 m within preset limits. At most one
-  smoothly tapered 4 m ordinary-road run may occupy at most 5% of base distance,
-  shared across main/optional routes and circuit seams; unsafe narrowing is omitted.
-  Dedicated structures and required tube portals retain their own dimensions.
+- Search: at most 4 attempts, each with ≤8 weighted draws per motif and up to 3
+  consecutive / 48 total motif pops; every draw uses a stream derived from seed,
+  attempt, step and retry. Placement clearance uses the padded piece grid and the
+  shared `conflict` predicate; counters update per piece. Limits stay 512 pieces
+  and 32,000 samples, within cancellation, package, cell and memory budgets.
+  Failure returns `E_TRACK_LAYOUT` with the requested length and reason; callers
+  keep their current map. Progress reports `searching` (pieces), `closing`,
+  `finishing` and `validating`.
+- A finished layout gets obstacles (seeded spacing; the final recovery share of
+  the route and gap-jump roads stay clear), shared checkpoints from the common
+  policy (thinned evenly to 64 effective gates), and exactly one compile;
+  validation reuses that compile.
+- [Diversity and narrow roads](TRACK_DIVERSITY.md) owns the response-only
+  `generation_summary` taxonomy and the narrow-road budget.
+- Ordinary generated roads use 6/8/12/18 m within preset limits. Generated seed
+  tracks currently contain no 4 m ordinary road; dedicated structures and required
+  tube portals retain their own dimensions.
 - `track_seed_defaults(seed)` returns `time_minutes` and `weather`, drawn uniformly
   from 06/09/12/17/18/21 hours and clear/cloudy/rain/snow using an independent stream.
   The Godot bridge exposes the same query. Generation stores this seed time in the
@@ -77,37 +87,25 @@ meshes, collision, clearance and width rules.
 `grind_s_{left,right}`, `grind_spiral_{left,right}_{up,down}` and
 `jump_shortcut_{5,6,7,8}`. Double jumps have
 separate supported recovery and reentry; ring chains have one launch, three rings
-and extended landing. Both can enter the generated base route.
+and extended landing. They are editor templates; the seed generator does not place
+them.
 
-Large hairpin, S and open rising/falling spiral selections expand into ordinary
-composite corners. With `gimmick` enabled, an independent seed ticket attempts a
-shortcut at 1/3 of these corners, with at most two installed per map and zero
-allowed. The 40 cm curved beam uses the grind line's samples/frames and requires
-jump entry, safe supported merge and at least 20% / 5 m saving including entry/exit.
-Unsafe branches are omitted atomically. Two shortcuts have all four route
-combinations and common checkpoints. [Corner shortcuts](CORNER_SHORTCUTS.md) owns
-geometry, admission, template insertion and focused verification details.
-
-Spatial-S selections mix the existing rail shape with long ordinary detours for
-disconnected jump routes.
-With `gimmick` enabled, an independent 1/3 ticket attempts a five-to-eight-platform
-branch with at least 30% saving, explicit fence openings and entry recovery.
-The limit is two jump routes separately from rails. Failed admission omits the
-entire branch; all retained branch combinations share checkpoints.
+Seeded grind-rail corner shortcuts and jump-shortcut routes are currently not
+installed: the motif generator places no shortcut tickets, and seed tracks have one
+route. The shortcut sources, admission and stored-package support are unchanged.
+[Corner shortcuts](CORNER_SHORTCUTS.md) owns their geometry and admission;
 [Jump shortcuts](JUMP_SHORTCUTS.md) owns the source and geometry contract.
 
 ## Circuit returns
 
-Closure runs a bounded best-first search over straight, right-angle, 45°, grade
-and height-return spiral modules, available regardless of category, plus selected action modules and loop/overpass returns with their
-ordinary width preparation. It tracks distance deficits and remaining straight length;
-completed returns must satisfy the same composition and sequence rules as growth. A final cubic
-seam is allowed only between endpoints ≤800 cm apart with control-polygon length
-≤1600 cm, forward-facing tangents and ≤23% vertical tangent component. A closure
-stores at most 4096 nodes and 64 added modules, is attempted after four more
-reference seconds of growth, and stops once time (±10%) and composition are feasible. Equivalent
-50 cm pose bins distinguish straight allowance, special-distance share and the
-last family and portal width before keeping the cheapest arrival. Hand-authored curves are not limited.
+Once a circuit may close, every step first tries an analytic cubic `free_curve`
+seam into the start: ≤60 m, horizontal radius ≥ w/2+400 cm, ≤23% vertical tangent,
+no self intersection, clear of the grid and within the straight limit. Near the
+approach (≤90 m, behind the start, not facing away) a bounded A* over straight,
+45°, right-angle, grade and 90° spiral pieces (6 m) retries the seam after every
+expansion. It stores at most 1024 nodes (a quarter for later searches) and 16
+pieces, checks clearance when a node is expanded, and runs at most six times per
+attempt. No filler or action pieces are added.
 
 ## Saved-package verification
 
@@ -131,10 +129,14 @@ Loading never edits a file. Existing narrow v1 roads, ports, loops and pipes ret
 their stored dimensions. Recompilation applies the new catalogue minima and reports
 the instance ID and width fields; it never widens source data automatically.
 
-Validation: `seed_track_plan` covers deterministic environment, preserved fields,
-completed-course distance density/diversity, category/time/resource bounds,
-source recompilation and template geometry. `corner_shortcuts` covers seed tickets,
-zero/one/two placements, all route combinations, curved solids and atomic omission;
+Validation: `seed_track_generator` covers determinism and `seed_source`
+recompilation (seeds 0..16 per tier and mode), exact sprint sizes, closure of every
+circuit for seeds 0..64 per tier, tier length order, turn balance, hairpin-chain and
+S/chicane frequency, the straight, jump and boost rules, category masks and template
+geometry; `seed_generator_counters` the single compile and clearance-call bound;
+ignored `track_generation_speed` the release timing of long tracks.
+`corner_shortcuts` covers zero/one/two placements, all route combinations, curved
+solids and atomic omission (its seeded case is paused with the shortcut tickets);
 package tests cover every new template and two-branch save/reopen. Obstacle unit tests cover quarterpipe
 handedness, actual wall distance, curved/tapered rejection and the continuous bypass; focused
 `mapkit-core` assembled/track_winding/wall/special-track tests

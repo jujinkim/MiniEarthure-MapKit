@@ -24,27 +24,15 @@ Connection portals, straight recovery curves and finish pieces add no type.
 - Every retained route participates once. Omitted shortcuts and rejected
   attachments add nothing. Optional routes never inflate base special distance.
 
-The immutable seed plan orders types before candidate retries. Growth prefers an
-unused type in the chosen category, trying other unused types after conflicts;
-retained pieces and expanded actions determine usage after rollback. Four to six
-sections begin with open driving, then corners/elevation and gimmick challenge,
-and end with recovery. Roles influence family/category/width and attachment-site
-preferences. Mandatory approaches/landings remain reserved for their modules.
-Attachment placement searches an unused kind's suitable sites before repeating a
-kind, within the existing seeded density, object cap and continuous bypass rules.
-
-Only candidates satisfying existing safety/composition and the interim reference
-duration of their length tier (short/medium/long → 60/90/120 s) ±10% can succeed. Candidate ordering is lexicographic: feasibility,
-largest normalized type-goal shortfall, summed shortfalls, absolute time error,
-section-plan residual. Both goals permit early exit; unmet goals continue within
-the existing maximum 24 candidates. Diversity alone never causes failure.
+Generation does not optimize these goals; variety comes from the motif grammar
+and per-seed style in [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md). The summary is a
+plain recomputation over the final assembly.
 
 ## Ordinary narrow-road budget
 
-Generated ordinary roads normally use 6/8/12/18 m within catalogue limits. A seeded
-attempt may narrow a safe supported straight, preserving its wider eased entry
-and exit. Unsafe narrowing is omitted. Required preparation roads are ordinary
-roads too; generated grind approach/landing roads use at least 6 m.
+Generated ordinary roads use 6/8/12/18 m within catalogue limits; seeded
+narrowing of a straight is currently not applied. Required preparation roads are
+ordinary roads too; generated grind approach/landing roads use at least 6 m.
 
 At most one connected 4 m ordinary-road run may exist across all retained main and
 optional paths, and its actual sampled length must not exceed 5% of base length.

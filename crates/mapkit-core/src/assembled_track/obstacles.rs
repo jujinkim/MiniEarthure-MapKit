@@ -426,9 +426,9 @@ pub(super) fn authored(a: &Assembly, index: usize, o: &authoring::Attachment) ->
     )
 }
 pub(super) fn place(a: &Assembly) -> Result<(Vec<Obstacle>, u64, u32)> {
-    place_reserved(a,&vec![])
+    place_reserved(a,&[])
 }
-pub(super) fn place_reserved(a: &Assembly, reserved: &composition::Required) -> Result<(Vec<Obstacle>, u64, u32)> {
+pub(super) fn place_reserved(a: &Assembly, reserved: &[std::ops::Range<usize>]) -> Result<(Vec<Obstacle>, u64, u32)> {
     if !a.settings.categories.iter().any(|id| id == "gimmick") {
         return Ok((vec![], 0, 0));
     }
@@ -469,8 +469,10 @@ pub(super) fn place_reserved(a: &Assembly, reserved: &composition::Required) -> 
             }
         }
     }
-    let plan = plan::Plan::new(a.settings.seed);
-    let spacing = plan.obstacle_spacing;
+    let plan = seed_streams::obstacle_plan(a.settings.seed);
+    let spacing = plan.spacing;
+    // The final recovery share of the route keeps its road clear.
+    let recovery = a.pieces.iter().map(|p| u64::from(p.reference_msec)).sum::<u64>() * (plan.recovery - 1) / plan.recovery;
     let target = ((eligible + spacing / 2) / spacing).max(1) as u32;
     let road_objects = road_gimmicks(a)?;
     let available = crate::gimmick::MAX_GIMMICKS.saturating_sub(road_objects.len());
@@ -495,8 +497,7 @@ pub(super) fn place_reserved(a: &Assembly, reserved: &composition::Required) -> 
                 cancellation::checkpoint()?;
                 let site = &sites[begin + (start + offset) % (end - begin)];
                 let elapsed:u32=a.pieces.iter().take(site.piece).map(|p|p.reference_msec).sum();
-                let role=&plan.section(elapsed,u32::from(tier::target_seconds(a.settings.length))*1000).role;
-                if matches!(role,plan::Role::Recovery) {continue;}
+                if u64::from(elapsed)>=recovery {continue;}
                 let Some(o) = safe_site(a, site, automatic_kind(kind, side), side)
                 else {
                     continue;
@@ -609,13 +610,14 @@ mod tests {
     use super::*;
     #[test]
     fn suitable_wide_road_fixture_reaches_the_gimmick_type_goal_without_more_objects() {
-        let seed=(0..256).find(|&seed|plan::Plan::new(seed).obstacle_spacing<=2400).unwrap();
+        let seed=(0..256).find(|&seed|seed_streams::obstacle_plan(seed).spacing<=2400).unwrap();
         let mut pieces=vec![];let mut at=[0;3];
         for _ in 0..40 {push_piece(&mut pieces,&mut at,0,"sprint_lane",800,true,[0;3]);}
-        let mut a=layout::finish(pieces,&Settings{seed,circuit:false,..Settings::default()});
+        let mut a=finish::assembly(pieces,&Settings{seed,circuit:false,..Settings::default()});
         let (placed,eligible,target)=place(&a).unwrap();
         assert!(placed.len()<=target as usize);
-        assert_eq!(target,((eligible+plan::Plan::new(seed).obstacle_spacing/2)/plan::Plan::new(seed).obstacle_spacing).max(1) as u32);
+        let spacing=seed_streams::obstacle_plan(seed).spacing;
+        assert_eq!(target,((eligible+spacing/2)/spacing).max(1) as u32);
         a.obstacles=placed;
         let summary=generation_summary(&a);
         assert!(summary.gimmicks.used>=summary.gimmicks.target,"{summary:?}");
@@ -627,7 +629,7 @@ mod tests {
             push_piece(&mut pieces, &mut origin, 0, "straight", width, false, [0; 3]);
         }
         push_piece(&mut pieces, &mut origin, 0, id, width, true, [0; 3]);
-        layout::finish(
+        finish::assembly(
             pieces,
             &Settings {
                 circuit: false,
@@ -890,7 +892,7 @@ mod tests {
             );
         }
         let mut counts = vec![];
-        let spacing=plan::Plan::new(a.settings.seed).obstacle_spacing;
+        let spacing=seed_streams::obstacle_plan(a.settings.seed).spacing;
         for difficulty in ["easy", "normal", "hard"] {
             a.settings.difficulty = difficulty.into();
             let result = place(&a).unwrap();

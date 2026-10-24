@@ -40,10 +40,6 @@ impl Length {
         if circuit { self.tier().circuit_laps } else { 1 }
     }
 }
-/// Interim reference target for the pre-M4 layout search; removed with layout/plan.
-pub(super) fn target_seconds(length: Length) -> u16 {
-    [60, 90, 120][length as usize]
-}
 pub(super) fn options(circuit: bool) -> serde_json::Value {
     serde_json::json!(Length::ALL.iter().map(|l| if circuit {
         serde_json::json!({"length":l,"max_laps":l.max_laps(true)})

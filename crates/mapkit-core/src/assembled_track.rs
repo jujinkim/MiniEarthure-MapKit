@@ -32,20 +32,27 @@ mod road;
 mod panels;
 mod junction;
 mod walls;
-mod layout;
 mod track_grid;
 mod piece_cache;
-mod plan;
-mod composition;
+mod seed_streams;
+mod motifs;
+mod grow;
+mod closure;
+mod finish;
 mod diversity;
+// Narrow-section and shortcut installation return with the jump/narrow rules.
+#[allow(dead_code)]
 mod narrow;
 mod tier;
 pub use tier::{Length, Tier};
 pub use diversity::{generation_summary, GenerationSummary, TypeSummary};
+pub use grow::Stats as GenerationStats;
 pub mod templates;
+#[allow(dead_code)]
 mod corner_shortcuts;
 pub mod jump_shortcuts;
-pub use plan::track_seed_defaults;
+pub use seed_streams::track_seed_defaults;
+use seed_streams::next;
 pub const WIDTHS: &[u32] = &[400, 600, 800, 1200, 1800];
 const ROAD_WIDTHS: &[u32] = &[400, 600, 800, 1200];
 pub const MAX_PORT_WIDTH_CM: u32 = 1800;
@@ -455,11 +462,13 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track.rs").as_slice(),
             include_bytes!("special_track.rs").as_slice(),
             include_bytes!("curve_sampling.rs").as_slice(),
-            include_bytes!("assembled_track/layout.rs").as_slice(),
             include_bytes!("assembled_track/track_grid.rs").as_slice(),
             include_bytes!("assembled_track/piece_cache.rs").as_slice(),
-            include_bytes!("assembled_track/plan.rs").as_slice(),
-            include_bytes!("assembled_track/composition.rs").as_slice(),
+            include_bytes!("assembled_track/seed_streams.rs").as_slice(),
+            include_bytes!("assembled_track/motifs.rs").as_slice(),
+            include_bytes!("assembled_track/grow.rs").as_slice(),
+            include_bytes!("assembled_track/closure.rs").as_slice(),
+            include_bytes!("assembled_track/finish.rs").as_slice(),
             include_bytes!("assembled_track/diversity.rs").as_slice(),
             include_bytes!("assembled_track/narrow.rs").as_slice(),
             include_bytes!("assembled_track/tier.rs").as_slice(),
@@ -1150,13 +1159,6 @@ fn build_local_piece(original_id: &str) -> Piece {
     }
 }
 
-fn next(rng: &mut u64) -> u64 {
-    *rng = rng.wrapping_add(0x9e3779b97f4a7c15);
-    let mut z = *rng;
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
-    z ^ (z >> 31)
-}
 fn family(id: &str) -> &str {
     if pipe_piece(id) {
         "cylinder"
@@ -1314,6 +1316,7 @@ fn position_piece(mut out: Piece, p: &Piece) -> Piece {
     out.reference_msec = (race_length(&out) * 1000 / SPEED as u64) as u32;
     out
 }
+#[cfg_attr(not(test), allow(dead_code))]
 fn push_piece(
     pieces: &mut Vec<Piece>,
     origin: &mut Vertex,
@@ -1381,8 +1384,13 @@ fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
     )
 }
 pub fn assemble(settings: &Settings) -> Result<Assembly> {
+    assemble_with_stats(settings).map(|(a, _)| a)
+}
+/// `assemble` plus the search effort it took. Not a stable API.
+#[doc(hidden)]
+pub fn assemble_with_stats(settings: &Settings) -> Result<(Assembly, GenerationStats)> {
     counters::bump(&counters::ASSEMBLIES);
-    layout::assemble(settings)
+    finish::assemble(settings)
 }
 #[doc(hidden)]
 pub mod counters {
@@ -1453,7 +1461,7 @@ impl Assembly {
                 > MAX_SAMPLES
             || self.generator_fingerprint != fingerprint()
             || self.catalogue_fingerprint != catalogue_fingerprint()
-            || !layout::valid_runs(&self.pieces, self.settings.circuit)
+            || !finish::valid_runs(&self.pieces, self.settings.circuit)
         {
             return Err(fail());
         }

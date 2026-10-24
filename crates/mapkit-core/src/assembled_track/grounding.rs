@@ -456,7 +456,7 @@ mod tests {
                 materialize(&p)
             })
             .collect();
-        layout::finish(
+        finish::assembly(
             pieces,
             &Settings {
                 circuit: false,

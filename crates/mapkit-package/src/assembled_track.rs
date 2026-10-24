@@ -51,7 +51,7 @@ pub(crate) fn bind_overlay_course(document:&mut MapDocument,files:&BTreeMap<Stri
     document.validate()
 }
 pub fn generate(settings: &track::Settings) -> Result<MapDocument> {
-    mapkit_core::cancellation::progress("searching", 0, None, "candidates");
+    mapkit_core::cancellation::progress("searching", 0, None, "pieces");
     let mut d = track::document(settings)?;
     mapkit_core::cancellation::progress("validating", 0, Some(3), "checks");
     let world = super::content_hash(&d, &BTreeMap::new())?;

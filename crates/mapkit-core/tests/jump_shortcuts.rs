@@ -17,6 +17,7 @@ fn jump_templates_are_disconnected_v1_routes() {
 }
 
 #[test]
+#[ignore = "M6: seeded jump shortcut tickets are paused in the M4 generator"]
 fn seeded_jump_routes_reproduce_and_obey_category_gate() {
     // Seeds re-chosen after the §44.363 diversity generator; 93 places one jump detour.
     for (seed,count) in [(0,0),(93,1)] {

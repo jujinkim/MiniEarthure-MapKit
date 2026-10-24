@@ -75,7 +75,6 @@ fn extra_wide_is_excluded_without_driving_category() {
         let settings = track::Settings { seed: 42, circuit, categories: vec!["gimmick".into()], ..Default::default() };
         let a = track::assemble(&settings).unwrap();
         assert!(a.pieces.iter().all(|p| !PRESETS.iter().any(|(id, _, _)| *id == p.id)));
-        assert!(a.estimated_msec.abs_diff(60000) <= 6000);
         assert!(a.pieces.len() <= 512 && a.pieces.iter().map(|p| p.path.len()+p.alternate_path.len()).sum::<usize>() <= 32000);
     }
 }

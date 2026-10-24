@@ -44,6 +44,7 @@ pub struct Shortcut {
     pub merge: Checkpoint,
 }
 
+#[allow(dead_code)] // Seeded installation returns with the jump rules.
 pub(super) fn ticket(seed: u64, ordinal: usize) -> (bool, usize) {
     let mut rng = seed ^ 0x6a75_6d70_3030_3031;
     let mut n = 0;
@@ -508,6 +509,7 @@ pub(super) fn gimmicks(s: &Source) -> Vec<Gimmick> {
     out
 }
 
+#[allow(dead_code)]
 pub(super) fn install(
     source: &Source,
     fragment: &Source,
