@@ -195,8 +195,7 @@ mod tests {
         files.sort();
         let mut checked = 0;
         for path in files {
-            let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()) else { continue; };
-            legacy_length(&mut value);
+            let Ok(value) = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()) else { continue; };
             let label = path.display().to_string();
             let source = serde_json::from_value::<authoring::Source>(value.clone()).ok()
                 .or_else(|| value.get("assembled_track").and_then(|a| a.get("authoring")).and_then(|v| serde_json::from_value(v.clone()).ok()));
@@ -212,19 +211,5 @@ mod tests {
             }
         }
         assert!(checked > 0, "no loadable example tracks");
-    }
-    /// Test-only reading of editor examples that still store `duration_seconds`
-    /// (rewritten to `length` in M8).
-    fn legacy_length(v: &mut serde_json::Value) {
-        match v {
-            serde_json::Value::Object(m) => {
-                if let Some(seconds) = m.remove("duration_seconds").and_then(|s| s.as_u64()) {
-                    m.insert("length".into(), [Length::Short, Length::Medium, Length::Long][usize::from(seconds > 75) + usize::from(seconds > 105)].id().into());
-                }
-                m.values_mut().for_each(legacy_length);
-            }
-            serde_json::Value::Array(a) => a.iter_mut().for_each(legacy_length),
-            _ => {}
-        }
     }
 }

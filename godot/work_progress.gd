@@ -39,4 +39,4 @@ func _draw() -> void:
 	draw_string(font,center+Vector2(-width*.5,6),text,HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color.WHITE)
 
 static func stage_key(stage: String) -> String:
-	return {"preparing":"Preparing generation", "searching":"Searching for a track", "geometry":"Building track surfaces", "validation":"Validating track", "package_validation":"Validating package", "packing":"Packing map", "saving":"Saving map", "reading":"Reading map", "copying":"Copying map", "validating":"Validating package", "preview":"Preparing preview", "preview_meshes":"Preparing preview", "ready":"Ready"}.get(stage,"Preparing generation")
+	return {"preparing":"Preparing generation", "searching":"Searching for a track", "closing":"Closing the track", "finishing":"Finishing the track", "geometry":"Building track surfaces", "validation":"Validating track", "package_validation":"Validating package", "packing":"Packing map", "saving":"Saving map", "reading":"Reading map", "copying":"Copying map", "validating":"Validating package", "preview":"Preparing preview", "preview_meshes":"Preparing preview", "ready":"Ready"}.get(stage,"Preparing generation")
