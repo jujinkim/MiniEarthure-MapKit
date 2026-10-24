@@ -39,6 +39,8 @@ mod plan;
 mod composition;
 mod diversity;
 mod narrow;
+mod tier;
+pub use tier::{Length, Tier};
 pub use diversity::{generation_summary, GenerationSummary, TypeSummary};
 pub mod templates;
 mod corner_shortcuts;
@@ -65,7 +67,7 @@ pub use obstacles::Obstacle;
 pub struct Settings {
     pub seed: u64,
     pub circuit: bool,
-    pub duration_seconds: u16,
+    pub length: Length,
     /// Inert v1 preservation field. New generation always writes "normal".
     pub difficulty: String,
     pub categories: Vec<String>,
@@ -76,7 +78,7 @@ impl Default for Settings {
         Self {
             seed: 1,
             circuit: true,
-            duration_seconds: 60,
+            length: Length::Short,
             difficulty: "normal".into(),
             categories: selection_ids().iter().map(|v| (*v).into()).collect(),
             time_minutes: 720,
@@ -86,9 +88,6 @@ impl Default for Settings {
 impl Settings {
     pub fn normalized(&self) -> Result<Self> {
         if self.seed > 9_007_199_254_740_991
-            || !duration_options(self.circuit)
-                .iter()
-                .any(|v| v.0 == self.duration_seconds)
             || !["easy", "normal", "hard"].contains(&self.difficulty.as_str())
             || self.time_minutes >= 1440
             || self.categories.is_empty()
@@ -100,7 +99,7 @@ impl Settings {
         {
             return Err(error(
                 "E_TRACK_SETTINGS",
-                "invalid seed, duration, difficulty, time or piece selection",
+                "invalid seed, difficulty, time or piece selection",
             ));
         }
         let mut s = self.clone();
@@ -109,17 +108,7 @@ impl Settings {
         Ok(s)
     }
     pub fn max_laps(&self) -> u8 {
-        duration_options(self.circuit)
-            .iter()
-            .find(|v| v.0 == self.duration_seconds)
-            .map_or(1, |v| v.1)
-    }
-}
-pub fn duration_options(circuit: bool) -> &'static [(u16, u8)] {
-    if circuit {
-        &[(60, 3), (90, 2), (120, 2)]
-    } else {
-        &[(60, 1), (90, 1), (120, 1)]
+        self.length.max_laps(self.circuit)
     }
 }
 fn basic_ids() -> &'static [&'static str] {
@@ -473,6 +462,7 @@ pub fn fingerprint() -> String {
             include_bytes!("assembled_track/composition.rs").as_slice(),
             include_bytes!("assembled_track/diversity.rs").as_slice(),
             include_bytes!("assembled_track/narrow.rs").as_slice(),
+            include_bytes!("assembled_track/tier.rs").as_slice(),
             include_bytes!("assembled_track/templates.rs").as_slice(),
             include_bytes!("assembled_track/corner_shortcuts.rs").as_slice(),
             include_bytes!("assembled_track/jump_shortcuts.rs").as_slice(),
@@ -503,8 +493,7 @@ pub fn catalogue() -> serde_json::Value {
         "selection_ids":selection_ids(),"templates":templates::catalogue(),"obstacle_kinds":obstacles::KINDS,"basic_piece_ids":basic_ids(),"widths_cm":WIDTHS,"reference_speed_cmps":SPEED,
         "entries":catalogue_ids().iter().map(|id| serde_json::json!({"id":id,"category":category(id),"widths_cm":supported_widths(id),"default_width_cm":catalogue_width(id),"min_port_width_cm":minimum_port_width(id),"region_widths_cm":region_widths(id),"max_port_width_cm":maximum_port_width(id),"ports":["entry","exit"]})).collect::<Vec<_>>(),
         "selection_groups":{"cylinder":["cylinder","cylinder_curve","cylinder_curve_left","cylinder_uturn","cylinder_uturn_left","cylinder_s_rise","cylinder_wide","cylinder_wide_curve","cylinder_wide_curve_left","cylinder_wide_uturn","cylinder_wide_uturn_left","cylinder_wide_s_rise"]},
-        "duration_options":{"circuit":duration_options(true).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>(),
-            "sprint":duration_options(false).iter().map(|v| serde_json::json!({"seconds":v.0,"max_laps":v.1})).collect::<Vec<_>>()},
+        "length_options":{"circuit":tier::options(true),"sprint":tier::options(false)},
         "catalogue_fingerprint":catalogue_fingerprint(),
         "pieces":catalogue_ids().iter().map(|id| catalogue_piece(id)).collect::<Vec<_>>()})
 }
@@ -1238,6 +1227,7 @@ fn materialize(p: &Piece) -> Piece {
 /// Local geometry depends only on preset, widths and control points; placement
 /// (`place_shape`) supplies chain metadata, origin and rotation.
 fn local_shape(id: &str, width: u32, entry: u32, exit: u32, control_points: &[Vertex]) -> Piece {
+    counters::bump(&counters::MATERIALIZATIONS);
     let mut out = variant(id, width, entry, exit);
     out.control_points = control_points.to_vec();
     if !control_points.is_empty() {
@@ -1391,8 +1381,32 @@ fn statistics(pieces: &[Piece]) -> (u64, u64, u64, u32, VenueFloor) {
     )
 }
 pub fn assemble(settings: &Settings) -> Result<Assembly> {
+    counters::bump(&counters::ASSEMBLIES);
     layout::assemble(settings)
 }
+#[doc(hidden)]
+pub mod counters {
+    //! Process-wide generation instrumentation for tests and profiling.
+    use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+    pub(super) static ASSEMBLIES: AtomicUsize = AtomicUsize::new(0);
+    pub(super) static COMPILES: AtomicUsize = AtomicUsize::new(0);
+    pub(super) static CONFLICTS: AtomicUsize = AtomicUsize::new(0);
+    pub(super) static MATERIALIZATIONS: AtomicUsize = AtomicUsize::new(0);
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+    pub struct GenerationCounters { pub assemblies: usize, pub compiles: usize, pub conflicts: usize, pub materializations: usize }
+    pub(super) fn bump(counter: &AtomicUsize) { counter.fetch_add(1, Relaxed); }
+    pub fn get() -> GenerationCounters {
+        GenerationCounters { assemblies: ASSEMBLIES.load(Relaxed), compiles: COMPILES.load(Relaxed),
+            conflicts: CONFLICTS.load(Relaxed), materializations: MATERIALIZATIONS.load(Relaxed) }
+    }
+    pub fn reset() { for c in [&ASSEMBLIES, &COMPILES, &CONFLICTS, &MATERIALIZATIONS] { c.store(0, Relaxed); } }
+}
+/// Seed assemblies, uncached source compiles, clearance `conflict` calls and
+/// local piece shape builds since the last reset. Not a stable API.
+#[doc(hidden)]
+pub fn generation_counters() -> counters::GenerationCounters { counters::get() }
+#[doc(hidden)]
+pub fn reset_generation_counters() { counters::reset() }
 
 impl Assembly {
     pub fn terrain_policy(&self,index:usize)->crate::road_design::TerrainPolicy {
@@ -1842,7 +1856,10 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
     d.validate()?;
     Ok(d)
 }
-/// Full equality against fresh deterministic source, never a producer success flag.
+/// Full equality against products rebuilt from the stored source. Seed tracks are
+/// checked against their compiled `seed_source` (`validate` proves the assembly
+/// equals it), not by re-running the generator; `verify_seed_reproduction` keeps
+/// the stronger "current generator reproduces these settings" check.
 pub fn verify_document(d: &MapDocument) -> Result<()> {
     let a = d
         .assembled_track
@@ -1856,9 +1873,43 @@ pub fn verify_document(d: &MapDocument) -> Result<()> {
     }
     let expected = if let Some(source) = &a.authoring {
         document_from_assembly(authoring::compile(source)?)?
+    } else if a.seed_source.is_some() {
+        if a.settings.normalized()? != a.settings { return Err(error("E_TRACK_MODIFIED", "seed settings are not normalized")); }
+        document_from_assembly(a.clone())?
     } else {
         document(&a.settings)?
     };
+    verify_against(d, expected)
+}
+/// Regenerates from the stored settings and requires the identical document.
+pub fn verify_seed_reproduction(d: &MapDocument) -> Result<()> {
+    let a = d.assembled_track.as_ref()
+        .filter(|a| a.authoring.is_none())
+        .ok_or_else(|| error("E_TRACK_REQUIRED", "map is not a seeded assembled track"))?;
+    verify_against(d, document(&a.settings)?)
+}
+/// Rebuilds a seed track from its stored `seed_source` under the current compiler,
+/// so a package with a stale generator fingerprint can be exported again. The
+/// settings are not regenerated; derived surface attachments are reapplied.
+pub fn reseal_seed_document(d: &MapDocument) -> Result<MapDocument> {
+    let a = d.assembled_track.as_ref().ok_or_else(|| error("E_TRACK_REQUIRED", "map is not an assembled track"))?;
+    let (None, Some(source)) = (&a.authoring, &a.seed_source) else {
+        return Err(error("E_TRACK_REQUIRED", "reseal requires a seed-sourced track"));
+    };
+    let mut fresh = authoring::compile(source)?;
+    fresh.authoring = None;
+    fresh.seed_source = Some(source.clone());
+    fresh.validate()?;
+    let mut out = document_from_assembly(fresh)?;
+    if !d.surface_attachments.is_empty() { out = surface::apply(&out, d.surface_attachments.clone())?; }
+    out.free_roam = d.free_roam;
+    out.backdrop = d.backdrop.clone();
+    out.normalize();
+    out.validate()?;
+    verify_document(&out)?;
+    Ok(out)
+}
+fn verify_against(d: &MapDocument, expected: MapDocument) -> Result<()> {
     let mut actual = d.clone();
     let (attached,attached_lines)=surface::derived(d,&d.surface_attachments)?;
     actual.gimmicks.retain(|g|!attached.contains(g));

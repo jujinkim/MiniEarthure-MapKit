@@ -443,7 +443,7 @@ mod tests {
     }
     #[test]
     fn seed7_start_cell_occupancy_is_valid() {
-        let d=document(&Settings {seed:7,duration_seconds:60,circuit:false,..Default::default()}).unwrap();
+        let d=document(&Settings {seed:7,length:Length::Short,circuit:false,..Default::default()}).unwrap();
         let a=d.assembled_track.as_ref().unwrap();
         let p=a.pieces[0].path[0].position_cm;
         let cell=d.cell_at([p[0],p[2]]).unwrap();
@@ -464,7 +464,7 @@ mod tests {
     }
     #[test]
     fn wide_walls_keep_gimmick_layout_duration() {
-        let s=Settings {seed:42,circuit:false,duration_seconds:90,categories:vec!["gimmick".into()],..Default::default()};
+        let s=Settings {seed:42,circuit:false,length:Length::Medium,categories:vec!["gimmick".into()],..Default::default()};
         let a=assemble(&s).unwrap();
         assert!(a.estimated_msec.abs_diff(90000)<=9000);
     }

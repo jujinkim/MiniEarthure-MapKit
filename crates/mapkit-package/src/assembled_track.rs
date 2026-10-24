@@ -25,12 +25,7 @@ pub fn course(document: &MapDocument, world: &str) -> Result<Course> {
                     a.estimated_msec as f64 / 1000.0
                 )
             } else {
-                format!(
-                    "Seed {} · {} s{}",
-                    a.settings.seed,
-                    a.settings.duration_seconds,
-                    if a.settings.circuit { "/lap" } else { "" }
-                )
+                format!("Seed {} · {}", a.settings.seed, a.settings.length.label())
             },
             world_content_hash: world.into(),
             mode: if a.settings.circuit {
@@ -123,6 +118,16 @@ pub fn save(settings: &track::Settings, path: &Path) -> Result<serde_json::Value
     Ok(
         serde_json::json!({"document":document,"generation_summary":generation_summary,"path":path,"package_sha256":sha256(&bytes),"package_bytes":bytes.len()}),
     )
+}
+
+/// Re-export a seed package whose generator fingerprint is stale: recompile its
+/// stored `seed_source`, rebind the course and return the current document.
+pub fn reseal_seed(document: &MapDocument) -> Result<MapDocument> {
+    let mut d = track::reseal_seed_document(document)?;
+    let world = super::content_hash(&d, &BTreeMap::new())?;
+    d.courses = vec![course(&d, &world)?];
+    d.validate()?;
+    Ok(d)
 }
 
 pub fn compile_source(source: &track::authoring::Source) -> Result<MapDocument> {

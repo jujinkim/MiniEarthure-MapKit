@@ -199,7 +199,7 @@ fn generated_walls_have_no_reverse_coplanar_duplicates() {
     let d = document(&Settings {
         seed: 1,
         circuit: false,
-        duration_seconds: 60,
+        length: track::Length::Short,
         categories: vec!["driving".into()],
         ..Settings::default()
     })
@@ -338,7 +338,7 @@ fn cancellation_and_invalid_requests() {
         "E_CANCELLED"
     );
     let mut s = Settings::default();
-    s.duration_seconds = 300;
+    s.time_minutes = 1440;
     assert!(assemble(&s).is_err());
     let mut a = assemble(&Settings::default()).unwrap();
     a.pieces[0].path[1].position_cm[1] += 1;
@@ -418,7 +418,7 @@ fn venue_floor_is_collision_only_and_budgeted() {
 fn finish_plaza_and_editable_free_roam_keep_exact_source_validation() {
     let settings = Settings {
         circuit: false,
-        duration_seconds: 60,
+        length: track::Length::Short,
         categories: vec!["driving".into()],
         ..Settings::default()
     };
@@ -741,8 +741,8 @@ fn connected_authored_map_without_checkpoints_still_opens() {
 #[test]
 fn generated_course_and_recovery_metadata_share_effective_checkpoint_order() {
     for settings in [
-        track::Settings{seed:42,circuit:false,duration_seconds:120,categories:vec!["gimmick".into()],..Default::default()},
-        track::Settings{seed:1,circuit:false,duration_seconds:60,..Default::default()},
+        track::Settings{seed:42,circuit:false,length:track::Length::Long,categories:vec!["gimmick".into()],..Default::default()},
+        track::Settings{seed:1,circuit:false,length:track::Length::Short,..Default::default()},
     ] {
         let d=package::generate(&settings).unwrap();
         let assembly=d.assembled_track.as_ref().unwrap();

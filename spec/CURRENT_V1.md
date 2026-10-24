@@ -248,7 +248,7 @@ earlier documents keep their bytes, world hashes and generated geometry.
 
 - Optional `assembled_track` selects the modular track generator; a terrain-
   integrated assembly is an overlay ([ROAD_DESIGN](../docs/ROAD_DESIGN.md)).
-- Seeded settings, categories, 60/90/120 s targets, catalogue and saved-package
+- Seeded settings, categories, short/medium/long length, catalogue and saved-package
   verification: [ASSEMBLED_TRACKS](../docs/ASSEMBLED_TRACKS.md).
 - `Assembly.supports` and `Source.grounded_supports` are required:
   [grounded supports](../docs/TRACK_GEOMETRY.md#grounded-supports).

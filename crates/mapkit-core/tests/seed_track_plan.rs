@@ -1,4 +1,4 @@
-use mapkit_core::assembled_track::{self as track, authoring, templates, Settings};
+use mapkit_core::assembled_track::{self as track, authoring, templates, Length, Settings};
 
 #[test]
 fn new_seed_presets_have_flat_connected_ports_and_safe_geometry() {
@@ -111,11 +111,11 @@ fn compound_templates_expand_to_editable_safe_v1_graphs() {
 #[test]
 fn seeded_compound_actions_reach_completed_routes() {
     let mut found = [false; 3];
-    for (seed,duration_seconds) in [(26,60),(50,60),(114,60),(1,60),(7,60),(31,60),(73,60),(22,120)] {
+    for (seed,length) in [(26,Length::Short),(50,Length::Short),(114,Length::Short),(1,Length::Short),(7,Length::Short),(31,Length::Short),(73,Length::Short),(22,Length::Long)] {
         if found.iter().all(|v| *v) {break;}
         let a = track::assemble(&Settings {
             seed,
-            duration_seconds,
+            length,
             circuit: false,
             ..Settings::default()
         })
@@ -236,7 +236,7 @@ fn representative_seed_courses_exhibit_distinct_shapes() {
             ..Settings::default()
         };
         let a = track::assemble(&settings).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
-        let target = u32::from(settings.duration_seconds) * 1000;
+        let target = target_seconds(settings.length) * 1000;
         assert!(a.estimated_msec.abs_diff(target) <= target / 10);
         let points: Vec<_> = a.pieces.iter().flat_map(|p| &p.path).collect();
         let height = points.iter().map(|s| s.position_cm[1]).max().unwrap()
@@ -281,43 +281,43 @@ fn representative_seed_courses_exhibit_distinct_shapes() {
 }
 
 #[test]
-fn category_masks_shapes_and_duration_options_remain_bounded() {
-    for (circuit, seconds, categories, seed) in [
-        (false, 60, vec!["action"], 17),
-        (false, 90, vec!["gimmick"], 42),
-        (false, 120, vec!["driving"], 15),
-        (true, 60, vec!["driving", "gimmick", "action"], 4),
-        (true, 90, vec!["driving"], 15),
-        (true, 120, vec!["driving", "gimmick", "action"], 31),
-        (false, 90, vec!["driving", "gimmick", "action"], 7),
-        (false, 120, vec!["driving", "gimmick", "action"], 73),
-        (true, 90, vec!["driving", "gimmick", "action"], 42),
-        (false, 60, vec!["driving", "gimmick"], 1),
-        (true, 90, vec!["driving", "gimmick"], 17),
-        (false, 90, vec!["driving", "action"], 31),
-        (true, 60, vec!["driving", "action"], 4),
-        (false, 120, vec!["gimmick", "action"], 7),
-        (true, 120, vec!["gimmick", "action"], 42),
-        (true, 60, vec!["action"], 17),
-        (true, 90, vec!["gimmick"], 42),
+fn category_masks_shapes_and_length_options_remain_bounded() {
+    for (circuit, length, categories, seed) in [
+        (false, Length::Short, vec!["action"], 17),
+        (false, Length::Medium, vec!["gimmick"], 42),
+        (false, Length::Long, vec!["driving"], 15),
+        (true, Length::Short, vec!["driving", "gimmick", "action"], 4),
+        (true, Length::Medium, vec!["driving"], 15),
+        (true, Length::Long, vec!["driving", "gimmick", "action"], 31),
+        (false, Length::Medium, vec!["driving", "gimmick", "action"], 7),
+        (false, Length::Long, vec!["driving", "gimmick", "action"], 73),
+        (true, Length::Medium, vec!["driving", "gimmick", "action"], 42),
+        (false, Length::Short, vec!["driving", "gimmick"], 1),
+        (true, Length::Medium, vec!["driving", "gimmick"], 17),
+        (false, Length::Medium, vec!["driving", "action"], 31),
+        (true, Length::Short, vec!["driving", "action"], 4),
+        (false, Length::Long, vec!["gimmick", "action"], 7),
+        (true, Length::Long, vec!["gimmick", "action"], 42),
+        (true, Length::Short, vec!["action"], 17),
+        (true, Length::Medium, vec!["gimmick"], 42),
     ] {
         let s = Settings {
             seed,
             circuit,
-            duration_seconds: seconds,
+            length,
             categories: categories.iter().map(|s| (*s).into()).collect(),
             ..Settings::default()
         };
         let a = track::assemble(&s)
-            .unwrap_or_else(|e| panic!("{circuit}/{seconds}/{categories:?}: {e:?}"));
+            .unwrap_or_else(|e| panic!("{circuit}/{length:?}/{categories:?}: {e:?}"));
         assert_generated_composition(&a);
         let summary=track::generation_summary(&a);
-        assert!(summary.narrow_road.sections<=1 && summary.narrow_road.length_cm<=a.length_cm/20,"{circuit}/{seconds}/{categories:?}: {summary:?}");
+        assert!(summary.narrow_road.sections<=1 && summary.narrow_road.length_cm<=a.length_cm/20,"{circuit}/{length:?}/{categories:?}: {summary:?}");
         assert_eq!(summary.pieces.used+summary.pieces.missing_types.len(),summary.pieces.total);
         assert_eq!(summary.gimmicks.used+summary.gimmicks.missing_types.len(),summary.gimmicks.total);
         println!("diversity: {}/{} pieces, {}/{} gimmicks, narrow {:?}",summary.pieces.used,summary.pieces.total,summary.gimmicks.used,summary.gimmicks.total,summary.narrow_road);
-        println!("{circuit}/{seconds}/{categories:?}: {} ms, {} pieces", a.estimated_msec, a.pieces.len());
-        assert!(a.estimated_msec.abs_diff(u32::from(seconds) * 1000) <= u32::from(seconds) * 100);
+        println!("{circuit}/{length:?}/{categories:?}: {} ms, {} pieces", a.estimated_msec, a.pieces.len());
+        assert!(a.estimated_msec.abs_diff(target_seconds(length) * 1000) <= target_seconds(length) * 100);
         assert!(a
             .pieces
             .iter()
@@ -442,4 +442,9 @@ fn cancelled_track_search_does_not_publish_or_cancel_replacement() {
     let replacement=mapkit_core::cancellation::CancellationToken::default();
     assert!(!replacement.is_cancelled());
     replacement.run(mapkit_core::cancellation::checkpoint).unwrap();
+}
+
+/// The interim pre-M4 layout search still aims at 60/90/120 s per tier.
+fn target_seconds(length: Length) -> u32 {
+    match length { Length::Short => 60, Length::Medium => 90, Length::Long => 120 }
 }

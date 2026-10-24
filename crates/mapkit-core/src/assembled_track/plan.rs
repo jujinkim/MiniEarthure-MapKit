@@ -152,7 +152,7 @@ impl Plan {
     /// Candidate fit, not a track rating. Compare the actual sequence with its
     /// own section plan; time feasibility sorts ahead of this residual.
     pub fn fit(&self, a: &Assembly) -> u64 {
-        let target = u32::from(a.settings.duration_seconds) * 1000;
+        let target = u32::from(tier::target_seconds(a.settings.length)) * 1000;
         let mut elapsed = 0;
         let mut actual = vec![[0u64; 3]; self.sections.len()];
         let mut straight = vec![0u64; self.sections.len()];
@@ -212,7 +212,7 @@ impl Plan {
         a: &Assembly,
         required: &composition::Required,
     ) -> (bool, u64, u64, u32, u64) {
-        let target = u32::from(a.settings.duration_seconds) * 1000;
+        let target = u32::from(tier::target_seconds(a.settings.length)) * 1000;
         let delta = a.estimated_msec.abs_diff(target);
         let quality = composition::Composition::assembly(a, required);
         let (largest, sum) = generation_summary(a).deficit();

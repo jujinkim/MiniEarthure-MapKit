@@ -20,7 +20,7 @@ fn jump_templates_are_disconnected_v1_routes() {
 fn seeded_jump_routes_reproduce_and_obey_category_gate() {
     // Seeds re-chosen after the §44.363 diversity generator; 93 places one jump detour.
     for (seed,count) in [(0,0),(93,1)] {
-        let settings=track::Settings{seed,circuit:false,duration_seconds:120,..Default::default()};
+        let settings=track::Settings{seed,circuit:false,length:track::Length::Long,..Default::default()};
         let a=track::assemble(&settings).unwrap();
         assert_eq!(a.seed_source.as_ref().unwrap().jump_shortcuts.len(),count);
         assert_eq!(track::assemble(&settings).unwrap(),a);

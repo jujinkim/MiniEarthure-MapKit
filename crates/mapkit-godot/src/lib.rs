@@ -67,6 +67,11 @@ fn response_warned((result, warnings): (mapkit_core::Result<serde_json::Value>, 
 fn authoring<T>(work: impl FnOnce() -> mapkit_core::Result<T>) -> (mapkit_core::Result<T>, Vec<Warning>) {
     Profile::Authoring.run(work)
 }
+/// Body of `reseal_seed_track_document`, outside the Godot class for tests.
+fn reseal_seed_track_json(text: &str) -> mapkit_core::Result<serde_json::Value> {
+    let d = engine_document(text)?;
+    Ok(serde_json::json!({"document":mapkit_package::assembled_track::reseal_seed(&d)?}))
+}
 fn engine_document(text: &str) -> mapkit_core::Result<mapkit_core::MapDocument> {
     serde_json::from_value(engine_value(text)?).map_err(|e|mapkit_core::error("E_JSON",e.to_string()))
 }
@@ -336,6 +341,8 @@ impl MapKitBridge {
             let p=self.package.as_ref().ok_or_else(||mapkit_core::error("E_STATE","open package first"))?;
             let c=mapkit_core::course::decode(course.to_string().as_bytes())?;
             mapkit_package::assembled_track::verify_course(&p.document,&p.inspection.world_content_hash,&c)?;
+            // seed_verified: seed-sourced and compiled (stored geometry equals its
+            // seed_source); it does not claim the current generator reproduces it.
             Ok(serde_json::json!({"seed_verified":p.document.assembled_track.as_ref().is_some_and(|a|a.authoring.is_none()),"assembly":p.document.assembled_track.as_ref().map(mapkit_core::assembled_track::runtime_metadata),"course":c}))
         })()))
     }
@@ -982,6 +989,12 @@ impl MapKitBridge {
             Ok(serde_json::json!({"document":d}))
         }))
     }
+    /// A seed document with a stale generator fingerprint, recompiled from its
+    /// stored seed_source with a fresh course.
+    #[func]
+    fn reseal_seed_track_document(&self, document: GString) -> GString {
+        response_warned(authoring(|| reseal_seed_track_json(&document.to_string())))
+    }
     #[func]
     fn export_project(&self, path: GString, destination: GString) -> GString {
         response(
@@ -1115,5 +1128,41 @@ impl MapKitBridge {
             .map(|b| GString::from(String::from_utf8(b).unwrap().as_str()))
             .unwrap_or_default()
     })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Godot's JSON hands every number over as a float.
+    fn godot_numbers(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Number(n) if n.is_i64() || n.is_u64() => {
+                *v = serde_json::json!(n.as_f64().unwrap());
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(godot_numbers),
+            serde_json::Value::Object(o) => o.values_mut().for_each(godot_numbers),
+            _ => {}
+        }
+    }
+    #[test]
+    fn reseal_seed_track_json_recompiles_a_stale_engine_document() {
+        use mapkit_core::assembled_track::{Length, Settings};
+        let settings = Settings { seed: 1, circuit: false, length: Length::Short, ..Settings::default() };
+        let mut current = mapkit_package::assembled_track::generate(&settings).unwrap();
+        current.free_roam = true;
+        current.backdrop = Some("snow_mountain".into());
+        mapkit_package::assembled_track::reseal(&mut current).unwrap();
+        let mut stale = current.clone();
+        stale.assembled_track.as_mut().unwrap().generator_fingerprint = "0".repeat(64);
+        stale.courses.clear();
+        let mut text = serde_json::to_value(&stale).unwrap();
+        godot_numbers(&mut text);
+        let out = super::reseal_seed_track_json(&text.to_string()).unwrap();
+        let resealed: mapkit_core::MapDocument = serde_json::from_value(out["document"].clone()).unwrap();
+        assert_eq!(resealed, current);
+        let authored = mapkit_package::assembled_track::compile_source(
+            &mapkit_core::assembled_track::authoring::shortcut_source()).unwrap();
+        let text = serde_json::to_string(&authored).unwrap();
+        assert_eq!(super::reseal_seed_track_json(&text).unwrap_err().code, "E_TRACK_REQUIRED");
     }
 }

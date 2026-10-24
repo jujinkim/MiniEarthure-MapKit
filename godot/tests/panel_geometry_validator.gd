@@ -7,7 +7,7 @@ func check(value: bool, label: String) -> void:
 	if not value: failures.append(label); push_error(label)
 func run() -> void:
 	var bridge: RefCounted=ClassDB.instantiate("MapKitBridge")
-	var source := {"original_seed":null,"grounded_supports":false,"settings":{"seed":101,"circuit":false,"duration_seconds":60,"difficulty":"easy","categories":["driving"],"time_minutes":720},"instances":[],"connections":[],"paths":[],"checkpoints":[],"actions":[],"attachments":[]}
+	var source := {"original_seed":null,"grounded_supports":false,"settings":{"seed":101,"circuit":false,"length":"short","difficulty":"easy","categories":["driving"],"time_minutes":720},"instances":[],"connections":[],"paths":[],"checkpoints":[],"actions":[],"attachments":[]}
 	for i in 2:
 		var id: String="road-%d" % i
 		source.instances.append({"id":id,"preset":"slope_up","position_cm":[i*650,0,0],"rotation_mdeg":[0,0,0],"width_cm":400,"entry_width_cm":400,"exit_width_cm":400,"control_points":[]})

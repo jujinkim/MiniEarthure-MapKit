@@ -31,12 +31,16 @@ and package checkpoints retain their explicit positions.
   their declared panels and geometry.
   Automatic air rings sit 3 m above the approach to clear the unboosted jump
   trajectory at the declared minimum entry speed.
-- Circuit (one lap) and sprint offer 60/90/120 s. The base route length at
-  900 cm/s must be within ±10%; alternative routes are estimated separately. This
-  is a reference estimate, not a measured lap time.
+- Settings `length` is `short`, `medium` or `long` (default `short`). Circuits
+  race 3/2/2 laps; sprints are one run. Until the generator rewrite lands the
+  layout search maps the tiers to 60/90/120 s and requires the base route at
+  900 cm/s within ±10%; alternative routes are estimated separately. This is a
+  reference estimate, not a measured lap time. The catalogue lists
+  `length_options` per mode.
+- Course names are `Seed {seed} · Short|Medium|Long`.
 - Search: at most 24 candidates, 512 pieces, 32,000 samples, within cancellation,
-  package, cell and memory budgets. Failure returns `E_TRACK_DURATION` with the
-  requested/closest time and reason; callers keep their current map.
+  package, cell and memory budgets. Failure returns `E_TRACK_LAYOUT` with the
+  requested length, closest time and reason; callers keep their current map.
 - A seed first plans four to six sections with open driving, corners/elevation,
   gimmick challenge and recovery roles. The plan selects type priorities before
   layout attempts. Growth and attachments prefer unused types; backtracking uses
@@ -113,6 +117,16 @@ also check payload hashes, manifest, world identity and resource limits.
 `verify_track` binds the candidate to the saved course; a changed generator or
 catalogue fingerprint does not invalidate a sound package. `pack_bytes`,
 `pack_source` and authoring `verify_document` require current-source equality.
+For seed tracks `verify_document` rebuilds the document from the stored assembly,
+whose `validate` already requires equality with the compiled `seed_source`; it does
+not re-run the generator, so saving generates once. This proves the geometry
+matches its seed graph, not that the current generator reproduces the settings;
+`verify_seed_reproduction` keeps that regeneration check for tests and tools.
+Package hashes and content binding are unchanged. A seed package whose generator
+fingerprint is stale fails export; `reseal_seed_document` (package `reseal_seed`,
+CLI `reseal-track PACKAGE NEW.memap`, Godot `reseal_seed_track_document`)
+recompiles its `seed_source` under the current compiler and rebinds the course.
+Seed sources must still deserialize as current v1 `Settings`.
 Loading never edits a file. Existing narrow v1 roads, ports, loops and pipes retain
 their stored dimensions. Recompilation applies the new catalogue minima and reports
 the instance ID and width fields; it never widens source data automatically.

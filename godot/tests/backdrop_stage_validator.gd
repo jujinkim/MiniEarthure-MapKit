@@ -10,7 +10,7 @@ func _initialize() -> void: run.call_deferred()
 func run() -> void:
 	var native: RefCounted = ClassDB.instantiate("MapKitBridge")
 	var settings: Dictionary = JSON.parse_string(native.track_catalogue()).data.defaults
-	settings.seed=4;settings.duration_seconds=60;settings.categories=["driving"]
+	settings.seed=4;settings.length="short";settings.categories=["driving"]
 	var file := ProjectSettings.globalize_path("user://backdrop.memap")
 	var generated: Dictionary = JSON.parse_string(native.generate_track(JSON.stringify(settings),file))
 	check(generated.ok,"generated fixture")

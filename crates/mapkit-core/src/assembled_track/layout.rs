@@ -146,7 +146,7 @@ fn closure(pieces: &mut Vec<Piece>, s: &Settings, required: &Required) -> Result
     if !s.circuit {return Ok(append(pieces,"finish_plaza",400));}
     struct Node {piece: Piece,parent: Option<usize>,cost: u64,samples: usize,depth: usize,quality: Composition}
     let goal=pieces[0].path[0].clone();
-    let budget=(u32::from(s.duration_seconds)*1100).saturating_sub(pieces.iter().map(|p|p.reference_msec).sum::<u32>());
+    let budget=(u32::from(tier::target_seconds(s.length))*1100).saturating_sub(pieces.iter().map(|p|p.reference_msec).sum::<u32>());
     let heuristic=|sample: &Sample| {
         let ahead=add(sample.position_cm,sample.forward.map(|v|v*500/1_000_000));
         distance(ahead,goal.position_cm)+sample.position_cm[1].abs_diff(goal.position_cm[1])*6
@@ -349,7 +349,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
     let mut fragments:Vec<(usize,authoring::Source)>=vec![];
     let mut blocks=vec![];
     let mut corners = Corners::new();
-    let target = u32::from(s.duration_seconds) * 1000;
+    let target = u32::from(tier::target_seconds(s.length)) * 1000;
     let mut best: Option<(Assembly,Fragments,Corners)> = None;
     let mut backtracks = 0;
     let mut closure_after=target/3;
@@ -475,7 +475,7 @@ fn candidate(s: &Settings, plan: &plan::Plan, attempt: u64) -> Result<Option<(As
     if let Some((mut a,fragments,corners)) = best {
         let required=required_ranges(&fragments);
         let quality=Composition::assembly(&a,&required);
-        if !quality.valid(s) {return Err(error("E_TRACK_DURATION",quality.reason()));}
+        if !quality.valid(s) {return Err(error("E_TRACK_LAYOUT",quality.reason()));}
         if !valid_runs(&a.pieces,s.circuit) || a.pieces.iter().any(|p|geometry::self_intersects(p) || !geometry::ordinary_grade_valid(p)) {return Ok(None);}
         let (obstacles, eligible, target) = obstacles::place_reserved(&a,&required)?;
         a.obstacles=obstacles;a.obstacle_eligible_length_cm=eligible;a.obstacle_target_count=target;
@@ -526,7 +526,7 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
     s.difficulty="normal".into();
     s.time_minutes=track_seed_defaults(s.seed)?["time_minutes"].as_u64().unwrap() as u16;
     let plan=plan::Plan::new(s.seed);
-    let target = u32::from(s.duration_seconds) * 1000;
+    let target = u32::from(tier::target_seconds(s.length)) * 1000;
     let mut best: Option<(Assembly,Required)> = None;
     let mut composition_failure = None;
     let mut support_failure = None;
@@ -535,7 +535,7 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
         cancellation::checkpoint()?;
         let candidate = match candidate(&s, &plan, attempt) {
             Err(e) if e.code == "E_TRACK_CLEARANCE" || e.code == "E_TRACK_GEOMETRY" || e.code == "E_TRACK_DRAFT" => continue,
-            Err(e) if e.code == "E_TRACK_DURATION" => { composition_failure=Some(e); continue; }
+            Err(e) if e.code == "E_TRACK_LAYOUT" => { composition_failure=Some(e); continue; }
             Err(e) if e.code == "E_TRACK_CHECKPOINT_LIMIT" => { checkpoint_failure=Some(e); continue; }
             Err(e) if e.code == "E_TRACK_SUPPORT" => { support_failure = Some(e); continue; }
             other => other?,
@@ -550,16 +550,16 @@ pub(super) fn assemble(settings: &Settings) -> Result<Assembly> {
             if best.as_ref().is_some_and(|(a,r)|a.estimated_msec.abs_diff(target)<=target/10 && Composition::assembly(a,r).valid(&s) && generation_summary(a).targets_met()) {break;}
         }
     }
-    if best.is_none() { if let Some(e)=composition_failure {return Err(error("E_TRACK_DURATION",format!("Requested {} s; no feasible course within 24 candidates: {}",s.duration_seconds,e.message)));} }
+    if best.is_none() { if let Some(e)=composition_failure {return Err(error("E_TRACK_LAYOUT",format!("Requested {} length; no feasible course within 24 candidates: {}",s.length.id(),e.message)));} }
     if best.is_none() { if let Some(e)=checkpoint_failure {return Err(e);} }
-    if best.is_none() { if let Some(e) = support_failure { return Err(error("E_TRACK_SUPPORT", format!("Requested {} s; no valid result in 24 layout candidates: {}", s.duration_seconds, e.message))); } }
-    let (a,_)=best.ok_or_else(||error("E_TRACK_DURATION",format!("Requested {} s; closest unavailable: no connected layout satisfying duration, category density/diversity and the 32 m straight limit within search/resource budget",s.duration_seconds)))?;
+    if best.is_none() { if let Some(e) = support_failure { return Err(error("E_TRACK_SUPPORT", format!("Requested {} length; no valid result in 24 layout candidates: {}", s.length.id(), e.message))); } }
+    let (a,_)=best.ok_or_else(||error("E_TRACK_LAYOUT",format!("Requested {} length; closest unavailable: no connected layout satisfying length, category density/diversity and the 32 m straight limit within search/resource budget",s.length.id())))?;
     if a.estimated_msec.abs_diff(target) > target / 10 {
         return Err(error(
-            "E_TRACK_DURATION",
+            "E_TRACK_LAYOUT",
             format!(
-                "Requested {} s; closest {:.1} s: no result within ±10% in 24 candidates",
-                s.duration_seconds,
+                "Requested {} length; closest {:.1} s: no result within ±10% in 24 candidates",
+                s.length.id(),
                 a.estimated_msec as f64 / 1000.0
             ),
         ));

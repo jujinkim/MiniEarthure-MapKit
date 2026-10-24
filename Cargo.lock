@@ -339,6 +339,7 @@ dependencies = [
  "mapkit-package",
  "schemars",
  "serde_json",
+ "zip",
 ]
 
 [[package]]

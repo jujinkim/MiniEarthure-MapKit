@@ -1665,6 +1665,14 @@
       },
       "additionalProperties": false
     },
+    "Length": {
+      "type": "string",
+      "enum": [
+        "short",
+        "medium",
+        "long"
+      ]
+    },
     "LightBinding": {
       "type": "object",
       "required": [
@@ -2654,7 +2662,7 @@
         "categories",
         "circuit",
         "difficulty",
-        "duration_seconds",
+        "length",
         "seed",
         "time_minutes"
       ],
@@ -2672,10 +2680,8 @@
           "description": "Inert v1 preservation field. New generation always writes \"normal\".",
           "type": "string"
         },
-        "duration_seconds": {
-          "type": "integer",
-          "format": "uint16",
-          "minimum": 0.0
+        "length": {
+          "$ref": "#/definitions/Length"
         },
         "seed": {
           "type": "integer",

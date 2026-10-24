@@ -495,7 +495,7 @@ pub(super) fn place_reserved(a: &Assembly, reserved: &composition::Required) -> 
                 cancellation::checkpoint()?;
                 let site = &sites[begin + (start + offset) % (end - begin)];
                 let elapsed:u32=a.pieces.iter().take(site.piece).map(|p|p.reference_msec).sum();
-                let role=&plan.section(elapsed,u32::from(a.settings.duration_seconds)*1000).role;
+                let role=&plan.section(elapsed,u32::from(tier::target_seconds(a.settings.length))*1000).role;
                 if matches!(role,plan::Role::Recovery) {continue;}
                 let Some(o) = safe_site(a, site, automatic_kind(kind, side), side)
                 else {

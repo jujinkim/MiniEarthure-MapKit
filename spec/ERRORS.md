@@ -133,7 +133,7 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_TRACK_START` | Course proposal: the first route piece has no supported starting sample. |
 | `E_TRACK_CHECKPOINT_OVERLAP` | Course proposal: sprint start and finish overlap. |
 | `E_TRACK_CHECKPOINT_COUNT` | Course proposal: fewer than two non-overlapping checkpoints. |
-| `E_TRACK_DURATION` | No connected seed layout within ±10% of the requested duration in 24 candidates. |
+| `E_TRACK_LAYOUT` | No connected seed layout for the requested length within the search budget. |
 | `E_TRACK_PANEL_SUPPORT` | Panel has no supporting production road triangles or no representable convex surface. |
 | `E_TRACK_PANEL_BUDGET` | Panel exceeds the 32-part limit. |
 | `E_SURFACE_REFERENCE` | Surface attachment target track, editable source or instance is missing. |

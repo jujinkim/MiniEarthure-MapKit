@@ -148,7 +148,7 @@ mod tests {
     }
     #[test]
     fn grid_truncate_matches_rebuild() {
-        let s = Settings { seed: 3, circuit: false, duration_seconds: 60, ..Settings::default() };
+        let s = Settings { seed: 3, circuit: false, length: Length::Short, ..Settings::default() };
         let a = layout::assemble(&s).unwrap();
         let mut grid = PieceGrid::new(&a.pieces);
         for len in [a.pieces.len() / 2, 7, 0] {
@@ -166,7 +166,7 @@ mod tests {
     fn grid_equals_brute_force_on_seed_tracks() {
         let mut collisions = 0;
         for (seed, circuit) in [(1, true), (2, false), (7, true), (42, false)] {
-            let s = Settings { seed, circuit, duration_seconds: 60, ..Settings::default() };
+            let s = Settings { seed, circuit, length: Length::Short, ..Settings::default() };
             let a = layout::assemble(&s).unwrap();
             let source = a.seed_source.as_ref().unwrap();
             collisions += check(Some(source), &a.pieces, &format!("seed {seed} circuit {circuit}"));
@@ -195,7 +195,8 @@ mod tests {
         files.sort();
         let mut checked = 0;
         for path in files {
-            let Ok(value) = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()) else { continue; };
+            let Ok(mut value) = serde_json::from_slice::<serde_json::Value>(&std::fs::read(&path).unwrap()) else { continue; };
+            legacy_length(&mut value);
             let label = path.display().to_string();
             let source = serde_json::from_value::<authoring::Source>(value.clone()).ok()
                 .or_else(|| value.get("assembled_track").and_then(|a| a.get("authoring")).and_then(|v| serde_json::from_value(v.clone()).ok()));
@@ -211,5 +212,19 @@ mod tests {
             }
         }
         assert!(checked > 0, "no loadable example tracks");
+    }
+    /// Test-only reading of editor examples that still store `duration_seconds`
+    /// (rewritten to `length` in M8).
+    fn legacy_length(v: &mut serde_json::Value) {
+        match v {
+            serde_json::Value::Object(m) => {
+                if let Some(seconds) = m.remove("duration_seconds").and_then(|s| s.as_u64()) {
+                    m.insert("length".into(), [Length::Short, Length::Medium, Length::Long][usize::from(seconds > 75) + usize::from(seconds > 105)].id().into());
+                }
+                m.values_mut().for_each(legacy_length);
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(legacy_length),
+            _ => {}
+        }
     }
 }

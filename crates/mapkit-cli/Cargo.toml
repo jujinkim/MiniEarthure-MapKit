@@ -13,3 +13,6 @@ schemars.workspace = true
 [[bin]]
 name = "mapkit"
 path = "src/main.rs"
+
+[dev-dependencies]
+zip = { version = "=0.6.6", default-features = false, features = ["deflate"] }

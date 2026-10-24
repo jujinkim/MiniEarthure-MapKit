@@ -107,7 +107,7 @@ fn widths_curves_helices_and_continuous_jump() {
 fn category_combinations_time_bounds_and_exclusion() {
     for mask in 1..8 {
         for circuit in [false, true] {
-            for seconds in [60, 90, 120] {
+            for (length, seconds) in [(track::Length::Short, 60u32), (track::Length::Medium, 90), (track::Length::Long, 120)] {
                 let categories = track::selection_ids()
                     .iter()
                     .enumerate()
@@ -117,14 +117,14 @@ fn category_combinations_time_bounds_and_exclusion() {
                 let settings = track::Settings {
                     seed: 42,
                     circuit,
-                    duration_seconds: seconds,
+                    length,
                     categories,
                     ..Default::default()
                 };
                 let a = track::assemble(&settings).unwrap_or_else(|e| {
                     panic!("mask={mask} circuit={circuit} seconds={seconds}: {e:?}")
                 });
-                let target = u32::from(seconds) * 1000;
+                let target = seconds * 1000;
                 assert!(a.estimated_msec.abs_diff(target) <= target / 10);
                 for p in &a.pieces {
                     if ![

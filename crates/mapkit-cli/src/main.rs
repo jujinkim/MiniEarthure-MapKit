@@ -3,7 +3,7 @@ use mapkit_package::*;
 use std::path::Path;
 fn run() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let help="usage: mapkit compose-world DOCUMENT.json SOURCE.json ATTACHMENTS.json NEW.json | audit-roads PACKAGE | design-roads INPUT.json NEW.json | compile-track SOURCE.json NEW.memap | track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
+    let help="usage: mapkit compose-world DOCUMENT.json SOURCE.json ATTACHMENTS.json NEW.json | audit-roads PACKAGE | design-roads INPUT.json NEW.json | compile-track SOURCE.json NEW.memap | track-catalogue | generate-track SETTINGS.json NEW.memap | verify-track PACKAGE | reseal-track PACKAGE NEW.memap | inspect|validate|validate-cells PACKAGE | pack PROJECT OUTPUT.memap | unpack PACKAGE NEW_DIRECTORY | generate-chunk PACKAGE X Y OUTPUT.json | schema document|manifest OUTPUT.json | pack-regions PROJECT NEW.mkregions SIDE_CELLS | inspect-regions|audit-regions INDEXED MEMORY_BYTES | unpack-regions INDEXED NEW_DIRECTORY MEMORY_BYTES | generate-region-chunk INDEXED X Y NEW.json SOURCE_MEMORY_BYTES";
     let arg = |i: usize| {
         args.get(i)
             .map(String::as_str)
@@ -55,6 +55,14 @@ fn run() -> Result<()> {
             let c=p.document.courses.first().ok_or_else(||error("E_TRACK_COURSE","course missing"))?;
             mapkit_package::assembled_track::verify(&p.document,&p.inspection.world_content_hash,c)?;
             println!("{}",serde_json::json!({"ok":true,"assembly":p.document.assembled_track}));
+        }
+        "reseal-track" if args.len() == 3 => {
+            let p=read(Path::new(arg(1)?))?;
+            if p.files.keys().any(|k|k!="document.json") {return Err(error("E_TRACK_REQUIRED","reseal-track takes a generated seed package without extra payloads"));}
+            let d=mapkit_package::assembled_track::reseal_seed(&p.document)?;
+            let bytes=pack_bytes(d,std::collections::BTreeMap::new())?;
+            write_new(Path::new(arg(2)?),&bytes)?;
+            println!("{}",serde_json::json!({"package_sha256":sha256(&bytes),"package_bytes":bytes.len()}));
         }
         "unpack-regions" if args.len() == 4 => {
             let budget = arg(3)?.parse::<u64>().map_err(|_| error("E_USAGE", "memory budget must be bytes"))?;

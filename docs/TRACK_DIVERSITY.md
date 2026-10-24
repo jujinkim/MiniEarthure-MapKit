@@ -33,8 +33,8 @@ preferences. Mandatory approaches/landings remain reserved for their modules.
 Attachment placement searches an unused kind's suitable sites before repeating a
 kind, within the existing seeded density, object cap and continuous bypass rules.
 
-Only candidates satisfying existing safety/composition and reference duration
-60/90/120 s ±10% can succeed. Candidate ordering is lexicographic: feasibility,
+Only candidates satisfying existing safety/composition and the interim reference
+duration of their length tier (short/medium/long → 60/90/120 s) ±10% can succeed. Candidate ordering is lexicographic: feasibility,
 largest normalized type-goal shortfall, summed shortfalls, absolute time error,
 section-plan residual. Both goals permit early exit; unmet goals continue within
 the existing maximum 24 candidates. Diversity alone never causes failure.

@@ -333,6 +333,7 @@ pub fn compile(source: &Source) -> Result<Assembly> {
         return Ok(result);
     }
     #[cfg(test)] COMPILE_COUNT.with(|count| count.set(count.get() + 1));
+    counters::bump(&counters::COMPILES);
     let result = compile_uncached(source)?;
     cancellation::checkpoint()?;
     LAST_COMPILED.with(|cache| *cache.borrow_mut() = Some((source.clone(), result.clone())));
@@ -736,6 +737,7 @@ pub(super) fn joined(a: &Sample, b: &Sample) -> bool {
         && a.lateral_cm.abs_diff(b.lateral_cm) <= 1
 }
 pub(super) fn conflict(a: &Piece, b: &Piece) -> bool {
+    counters::bump(&counters::CONFLICTS);
     let mut joints: Vec<_> = [&a.path[0], a.path.last().unwrap()]
         .into_iter()
         .flat_map(|s| {

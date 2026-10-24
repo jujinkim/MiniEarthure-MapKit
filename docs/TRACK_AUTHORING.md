@@ -39,7 +39,9 @@ Seeded generation settings, categories, catalogue and geometry are owned by
 - `mapkit_package::assembled_track::compile_source` creates the document and, when
   executable, binds a public course to its content.
 - Seeded assemblies have `authoring: null` (composed seeded graphs also store
-  `seed_source`); verification regenerates the exact seed. Manual assemblies have
+  `seed_source`); verification recompiles `seed_source` and compares (the
+  generator is not re-run; see [ASSEMBLED_TRACKS](ASSEMBLED_TRACKS.md#saved-package-verification)).
+  `seed_verified` means seed-sourced and compiled. Manual assemblies have
   `authoring: Source`, `seed_source: null`; verification recompiles and compares
   geometry, graph, actions and derived products. Seed provenance never makes edited
   geometry seed-verified. Player completion proof is a separate course concern.

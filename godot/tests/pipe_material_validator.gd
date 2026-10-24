@@ -11,7 +11,7 @@ func verify_material(material: ShaderMaterial, color: Color) -> void:
 	check(not "EMISSION" in material.shader.code, "non-emissive pipe")
 func run() -> void:
 	var bridge: RefCounted = ClassDB.instantiate("MapKitBridge")
-	var source := {"original_seed":null,"grounded_supports":false,"settings":{"seed":101,"circuit":false,"duration_seconds":60,"difficulty":"easy","categories":["driving"],"time_minutes":720},"instances":[],"connections":[],"paths":[],"checkpoints":[],"actions":[],"attachments":[]}
+	var source := {"original_seed":null,"grounded_supports":false,"settings":{"seed":101,"circuit":false,"length":"short","difficulty":"easy","categories":["driving"],"time_minutes":720},"instances":[],"connections":[],"paths":[],"checkpoints":[],"actions":[],"attachments":[]}
 	for row: Array in [["pipe", "cylinder_curve", 400], ["road", "straight", 400], ["loop", "loop", 400], ["halfpipe", "banked_chicane", 400]]:
 		source.instances.append({"id":row[0],"preset":row[1],"position_cm":[source.instances.size()*4000,0,0],"rotation_mdeg":[0,0,0],"width_cm":row[2],"entry_width_cm":400,"exit_width_cm":400,"control_points":[]})
 	var result: Dictionary = JSON.parse_string(bridge.compile_track_source(JSON.stringify(source)))

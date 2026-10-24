@@ -66,7 +66,7 @@ mod tests {
     fn cached_placement_reproduces_seed_tracks() {
         let mut cache = PieceCache::default();
         for (seed, circuit) in [(5, true), (6, false)] {
-            let a = layout::assemble(&Settings { seed, circuit, duration_seconds: 60, ..Settings::default() }).unwrap();
+            let a = layout::assemble(&Settings { seed, circuit, length: Length::Short, ..Settings::default() }).unwrap();
             for p in &a.pieces { assert_eq!(&cache.place(p), p, "seed {seed} {}", p.id); }
         }
     }
