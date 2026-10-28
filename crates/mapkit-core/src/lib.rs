@@ -402,6 +402,11 @@ pub struct MapDocument {
     /// Hedges, fences and walls; cut automatically at road corridors.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub barriers: Vec<barrier::Barrier>,
+    /// Drivable area: simple outer rings (map plane) inside `bounds`, at most
+    /// [`MAX_PLAY_AREA_RINGS`] of at most 512 vertices; absent means the whole
+    /// bounds rectangle. Consumers stop vehicles and draw the edge at it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub play_area: Vec<Vec<Point>>,
     pub buildings: Vec<Building>,
     pub zones: Vec<Zone>,
     pub assets: Vec<Asset>,
@@ -476,6 +481,19 @@ fn intersects(a: Point, b: Point, c: Point, d: Point) -> bool {
         || on_segment(a, b, d)
         || on_segment(c, d, a)
         || on_segment(c, d, b)
+}
+pub const MAX_PLAY_AREA_RINGS: usize = 16;
+fn validate_play_area(d: &MapDocument) -> Result<()> {
+    if d.play_area.len() > MAX_PLAY_AREA_RINGS || d.play_area.iter().any(|ring| !polygon_valid(ring, &d.bounds)) {
+        return Err(error("E_PLAY_AREA", "play area needs at most 16 simple rings of 3..512 vertices inside the bounds"));
+    }
+    Ok(())
+}
+/// True when `p` lies in the play area (inside any ring, or anywhere in the
+/// bounds when the document has none).
+pub fn in_play_area(d: &MapDocument, p: Point) -> bool {
+    if d.play_area.is_empty() { return d.bounds.contains(p); }
+    d.play_area.iter().any(|ring| point_in_polygon(p, ring))
 }
 pub fn point_in_polygon(p: Point, poly: &[Point]) -> bool {
     let mut inside = false;
@@ -892,6 +910,7 @@ impl MapDocument {
         }
         if let Some(track) = &self.assembled_track { track.validate_stored()?; }
         barrier::validate(self)?;
+        validate_play_area(self)?;
         placement::validate(self)?;
         Ok(())
     }

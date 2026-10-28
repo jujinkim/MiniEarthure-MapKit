@@ -141,6 +141,22 @@
         "$ref": "#/definitions/Placement"
       }
     },
+    "play_area": {
+      "description": "Drivable area: simple outer rings (map plane) inside `bounds`, at most [`MAX_PLAY_AREA_RINGS`] of at most 512 vertices; absent means the whole bounds rectangle. Consumers stop vehicles and draw the edge at it.",
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "maxItems": 2,
+          "minItems": 2
+        }
+      }
+    },
     "pois": {
       "description": "Informational, terrain-relative facilities; never collision geometry.",
       "type": "array",

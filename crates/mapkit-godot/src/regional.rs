@@ -59,6 +59,7 @@ impl MapKitRegionReader {
                 "cell_size_cm": index.world.cell_size_cm, "side_cells": index.side_cells,
                 "ground_surface": index.world.ground_surface.unwrap_or(mapkit_core::Surface::Grass),
                 "terrain_base_cm": index.world.terrain_base_cm,
+                "play_area": index.world.play_area,
                 "region_count": index.regions.len(), "execution_cells": index.world.cell_count()?,
                 "retained_memory_bytes": reader.index_retained_bytes() * 2, "verification": "index-only"});
             self.world = Some(index.world.clone());
@@ -224,6 +225,19 @@ impl MapKitRegionReader {
                 )
             })
             .unwrap_or_default()
+    }
+    /// Play-area rings as flat [x0, y0, x1, y1, ...] map-cm arrays; empty when
+    /// the whole bounds rectangle is drivable.
+    #[func]
+    fn play_area(&self) -> VarArray {
+        let mut rings = VarArray::new();
+        if let Some(d) = self.world.as_ref() {
+            for ring in &d.play_area {
+                let flat: Vec<i64> = ring.iter().flat_map(|p| [p[0], p[1]]).collect();
+                rings.push(&PackedInt64Array::from(&flat[..]).to_variant());
+            }
+        }
+        rings
     }
     #[func]
     fn query_cells(

@@ -137,9 +137,9 @@ This page lists the domain invariants and links each feature's owner.
   neither tested nor charged.
 - These checks charge the existing placement work allowance.
 
-## City ground, barriers and building parts
+## City ground, barriers, building parts and play area
 
-All three are optional; absent/empty values are omitted from canonical JSON, so
+All four are optional; absent/empty values are omitted from canonical JSON, so
 earlier documents keep their bytes, world hashes and generated geometry.
 
 - `MapDocument.ground_surface` (`asphalt|concrete|dirt|gravel|grass`, absent =
@@ -189,6 +189,11 @@ earlier documents keep their bytes, world hashes and generated geometry.
   vegetation/repetition clearance (indexed per solid), sidewalk exclusion,
   implicit sidewalk widths, regional retention, overview (one entry per solid
   under the record ID), distant faces, shortcut clearance and surface probes.
+- `MapDocument.play_area` (optional, absent = the whole `bounds` rectangle): up to
+  16 simple outer rings `[[x,y],...]` of 3..512 in-bounds vertices (`E_PLAY_AREA`
+  otherwise). It is world metadata: it changes no generated cell, and the regional
+  index and `open_index` carry it. Consumers stop vehicles whose footprint leaves
+  every ring (as at the rectangle) and draw the edge along the rings.
 
 ## Courses and completion references
 

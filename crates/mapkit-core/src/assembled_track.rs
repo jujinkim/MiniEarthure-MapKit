@@ -1868,6 +1868,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
         roads: vec![],
         surface_areas: vec![],
         ground_surface: None,
+        play_area: vec![],
         barriers: vec![],
         buildings: vec![],
         zones: vec![],

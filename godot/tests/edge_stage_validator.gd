@@ -64,6 +64,20 @@ func run() -> void:
 	check(is_equal_approx(((raised.get_node("EdgeWall") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX][0].y, 3.0) and (raised.get_node("EdgeSkirtNorth") as Node3D).position.y < 3.0, "terrain base lifts the wall and skirt")
 	raised.free()
 	stage.free()
+	# Play-area rings: striped panels along each ring, per-vertex floors.
+	var area_rings := [[[1000, 1000], [200000, 1000], [100000, 300000]], [[150000, 320000], [160000, 320000], [155000, 330000]]]
+	var outlined := EDGE.create(bounds, 1.0, Color.GRAY, 2.0, EDGE.SKIRT_MARGIN_M, area_rings)
+	var ring_wall: MeshInstance3D = outlined.get_node("EdgeWall")
+	var ring_vertices: PackedVector3Array = (ring_wall.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	check(ring_vertices.size() == 24 and outlined.get_meta("edge_rings").size() == 2, "one panel per ring edge (3 + 3)")
+	check(ring_vertices[0].is_equal_approx(Vector3(10.0, 2.0 - EDGE.SINK_M, -10.0)) and is_equal_approx(ring_vertices[2].y, 2.0 + EDGE.WALL_HEIGHT_M), "ring panels stand on the floor, sunk below it")
+	check(ring_wall.material_override is ShaderMaterial and outlined.get_node_or_null("EdgeSkirtNorth") != null, "no-entry stripes; the rectangle skirt stays")
+	var floors := [PackedFloat32Array([5.0, 6.0, 7.0]), PackedFloat32Array([1.0, 1.0, 1.0])]
+	check(EDGE.set_floors(outlined, floors), "floors follow sampled ground")
+	ring_vertices = ((outlined.get_node("EdgeWall") as MeshInstance3D).mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	check(is_equal_approx(ring_vertices[1].y, 6.0 - EDGE.SINK_M) and outlined.get_children().filter(func(n: Node) -> bool: return n.name == "EdgeWall").size() == 1, "one rebuilt wall on the new floors")
+	check(not EDGE.set_floors(outlined, [PackedFloat32Array([1.0])]), "a floor count mismatch is refused")
+	outlined.free()
 	# Sky ground tint: stored before configure, applied to the sky material afterwards.
 	var renderer: Node3D = RENDERER.new()
 	renderer.set_ground_tint(Color(0.5, 0.4, 0.3), 1.0)

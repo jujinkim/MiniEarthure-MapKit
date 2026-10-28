@@ -97,8 +97,11 @@ Bounded (non-standalone) maps get `godot/edge_stage.gd` instead: translucent
 unshaded panels standing on the document rectangle (`map_bounds()`, 12 m, alpha
 fading to the top, two-sided, no shadows) and four ground slabs in the map's
 ground colour outside the rectangle, 2,048 m wide, just below `terrain_base_cm`.
-It is display-only and deterministic; the Runtime footprint guard still holds
-vehicles at the rectangle. Consumers lease `RESERVATION_BYTES` (256 KiB) and set
+With a `play_area` the panels follow its rings instead: red and white diagonal
+no-entry stripes (3 m), 12 m tall and sunk 1 m below each vertex floor;
+`set_floors` rebuilds them on per-vertex ground heights a consumer samples once the
+cells beneath load. It is display-only and deterministic; the Runtime footprint
+guard still holds vehicles at the same edge (rectangle and rings). Consumers lease `RESERVATION_BYTES` (256 KiB) and set
 the sky ground tint to the same colour; `edge_stage_validator` covers it.
 
 ## Grounded supports

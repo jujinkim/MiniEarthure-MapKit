@@ -114,6 +114,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         repetitions,
         ground_surface: _,
         barriers,
+        play_area,
         attributions,
         provenance,
         ..
@@ -329,6 +330,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             retained.polygons(holes)?;
         }
     }
+    retained.polygons(play_area)?;
     retained.vector(barriers)?;
     for mapkit_core::barrier::Barrier { id, kind: _, line, height_cm: _, thickness_cm: _ } in barriers {
         retained.string(id)?;
@@ -986,6 +988,7 @@ mod tests {
             "repetitions",
             "ground_surface",
             "barriers",
+            "play_area",
             "attributions",
             "provenance",
         ]

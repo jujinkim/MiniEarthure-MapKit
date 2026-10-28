@@ -228,6 +228,7 @@ impl Serialize for Document<'_> {
         fields!(m, d, map_id);
         m.serialize_entry("nodes", &Normalized(&d.nodes, self.1))?;
         m.serialize_entry("placements", &Normalized(&d.placements, self.1))?;
+        if !d.play_area.is_empty() { m.serialize_entry("play_area", &d.play_area)?; }
         if !d.pois.is_empty() { m.serialize_entry("pois", &Normalized(&d.pois, self.1))?; }
         fields!(m, d, recipe_version);
         if !d.repetitions.is_empty() {
@@ -504,6 +505,20 @@ mod tests {
         grass.ground_surface = Some(Surface::Grass);
         compare(&grass, &files);
         assert_eq!(crate::content_hash(&grass, &files).unwrap(), before);
+    }
+
+    #[test]
+    fn borrowed_stream_matches_a_play_area() {
+        let files = payloads();
+        let mut d = minimal();
+        let before = crate::content_hash(&d, &files).unwrap();
+        d.play_area = vec![vec![[10, 10], [900, 10], [900, 900]], vec![[1, 1], [5, 1], [1, 5]]];
+        compare(&d, &files);
+        assert_ne!(crate::content_hash(&d, &files).unwrap(), before);
+        // Ring order is meaningful source data and is kept.
+        let mut swapped = d.clone();
+        swapped.play_area.reverse();
+        compare(&swapped, &files);
     }
 
     #[test]

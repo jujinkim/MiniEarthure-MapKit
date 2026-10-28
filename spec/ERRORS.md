@@ -106,6 +106,7 @@ Additional current v1 authoring/runtime input diagnostics:
 | `E_ROAD_ENVIRONMENT` | Preserved terrain penetrates a road driving surface. |
 | `E_PLACEMENT` | Invalid placement transform or asset use. |
 | `E_WATER` | Invalid water geometry/profile. |
+| `E_PLAY_AREA` | Play area rings are too many, too large, self-intersecting or leave the bounds. |
 | `E_GIMMICK` | Invalid driving structure/effect declaration. |
 | `E_GRIND_SOURCE` | Invalid authored grind geometry. |
 | `E_GRIND_CONNECTION` | Disconnected grind endpoint or transition. |
