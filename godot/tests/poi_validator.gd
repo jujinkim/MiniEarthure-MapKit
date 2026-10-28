@@ -12,5 +12,7 @@ func _initialize() -> void:
 	check(entries[0].label=="도서관","map-owned Korean label preserved")
 	check(not entries[0].box.intersects(entries[1].box),"visible labels do not overlap")
 	check(POI.layout([],project,Rect2(0,0,400,200),font).is_empty(),"empty maps have no pins")
+	var places := POI.layout([{"position":[50,50],"name":"영통","category":"station"},{"position":[150,50],"name":"Shop","category":"shop"},{"position":[250,50],"name":"Other"}],project,Rect2(0,0,400,200),font)
+	check(places.size()==3 and places[0].color==POI.CATEGORY_COLORS.station and places[0].radius > places[1].radius and places[2].color==POI.COLOR,"city place categories colour pins; stations are larger")
 	print("poi_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
