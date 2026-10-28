@@ -332,10 +332,10 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
             proxy([0, 500, 0], [80, 25, 40]),
         ]),
         // City street furniture at game scale (the car is about 61 cm wide).
-        // Signal poles carry a renderer-drawn head: on the arm end (horizontal)
-        // or on the pole (vertical). Local +x points over the road.
-        "builtin:signal_h" => Some(vec![proxy([0, 110, 0], [8, 220, 8]), proxy([70, 214, 0], [140, 6, 6])]),
-        "builtin:signal_v" => Some(vec![proxy([0, 110, 0], [8, 220, 8])]),
+        // Signal poles are solid; the renderer draws the display-only arm and
+        // head over the road (horizontal) or the head on the pole (vertical),
+        // so the footprint stays beside the road. Local +x points over the road.
+        "builtin:signal_h" | "builtin:signal_v" => Some(vec![proxy([0, 110, 0], [8, 220, 8])]),
         "builtin:bus_shelter" => Some(vec![
             proxy([0, 95, 0], [160, 4, 50]),
             proxy([0, 47, -23], [160, 86, 3]),

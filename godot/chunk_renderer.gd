@@ -58,6 +58,16 @@ static func _detail_resource(key: String) -> Resource:
 			var box := BoxMesh.new()
 			box.size = Vector3(0.45, 0.14, 0.10)
 			value = box
+		"arm":
+			var box := BoxMesh.new()
+			box.size = Vector3(1.4, 0.06, 0.06)
+			value = box
+		"metal":
+			var paint := StandardMaterial3D.new()
+			paint.albedo_color = Color("4a5055")
+			paint.metallic = 0.6
+			paint.roughness = 0.4
+			value = paint
 		"bench_seat":
 			var box := BoxMesh.new()
 			box.size = Vector3(0.6, 0.05, 0.18)
@@ -102,7 +112,9 @@ static func _street_detail(id: String, object: Dictionary) -> Node3D:
 	anchor.rotation.y = float(turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0)
 	var lamp := "signal_odd" if turns % 2 == 1 else "signal_even"
 	match id:
-		"builtin:signal_h": anchor.add_child(_detail_mesh("head", lamp, Vector3(1.32, 2.06, 0.0)))
+		"builtin:signal_h":
+			anchor.add_child(_detail_mesh("arm", "metal", Vector3(0.7, 2.14, 0.0)))
+			anchor.add_child(_detail_mesh("head", lamp, Vector3(1.32, 2.06, 0.0)))
 		"builtin:signal_v": anchor.add_child(_detail_mesh("head", lamp, Vector3(0.0, 1.85, -0.09), Basis(Vector3.BACK, PI / 2.0)))
 		"builtin:bench": anchor.add_child(_detail_mesh("bench_seat", "wood", Vector3(0.0, 0.18, 0.0)))
 		_: anchor.add_child(_detail_mesh("shrub", "leaf", Vector3(0.0, 0.2, 0.0)))

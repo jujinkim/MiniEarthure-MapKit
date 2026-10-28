@@ -196,8 +196,9 @@ earlier documents keep their bytes, world hashes and generated geometry.
   `RoadMarkings.one_way` (-1..1, 0 omitted) and `stop_lines` (false omitted) are
   display-only markings fields.
 - City street furniture builtins (game scale, local +x over the road):
-  `builtin:signal_h` (pole and arm, horizontal head on the arm end) and
-  `builtin:signal_v` (pole, vertical head) with renderer-drawn heads whose lamps
+  `builtin:signal_h` (solid pole; display-only arm over the road with a horizontal
+  head on its end) and `builtin:signal_v` (solid pole, vertical head) with
+  renderer-drawn heads whose lamps
   cycle locally (green 6 s, yellow 2 s, red 8 s, odd quarter turns half a cycle
   apart, never synced); solid `builtin:bus_shelter`, `builtin:subway_entrance`,
   `builtin:station_sign`; display-only `builtin:bench` and `builtin:shrub` (no
