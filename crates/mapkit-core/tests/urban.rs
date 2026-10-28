@@ -170,6 +170,8 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
             edge_lines: true,
             crosswalk_start: true,
             crosswalk_end: true,
+            one_way: 0,
+            stop_lines: false,
         });
         assert_eq!(
             generate_cell(&d, 0).hash().unwrap(),

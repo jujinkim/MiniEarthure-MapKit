@@ -246,7 +246,7 @@ fn dense_city() -> MapDocument {
         kind,
         clearance_cm: matches!(kind, RoadKind::Tunnel | RoadKind::Underpass).then_some(450),
         sidewalk_cm: sidewalk,
-        markings: marked.then_some(RoadMarkings { color: None, lanes: 2, center_line: true, edge_lines: false, crosswalk_start: false, crosswalk_end: false }),
+        markings: marked.then_some(RoadMarkings { color: None, lanes: 2, center_line: true, edge_lines: false, crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false }),
     };
     let lines: Vec<i64> = (0..6).map(|i| 3200 + i * 6400).collect();
     for (i, &x) in lines.iter().enumerate() {

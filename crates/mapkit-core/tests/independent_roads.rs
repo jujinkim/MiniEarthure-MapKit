@@ -93,7 +93,7 @@ fn dense_curved_sidewalks_stay_within_existing_cell_work_and_geometry_budgets() 
     let design=Design{control_points:vec![[0,100,400],[2800,100,400],[3600,100,2800],[6400,100,2800]],terrain_policy:TerrainPolicy::AutoFit,shoulder_cm:600};
     road_design::compile(&mut d.roads[0],design,600).unwrap();
     d.roads[0].sidewalk_cm=Some(200);
-    d.roads[0].markings=Some(RoadMarkings{lanes:2,center_line:true,edge_lines:true,crosswalk_start:false,crosswalk_end:false,color:None});
+    d.roads[0].markings=Some(RoadMarkings{lanes:2,center_line:true,edge_lines:true,crosswalk_start:false,crosswalk_end:false,color:None,one_way:0,stop_lines:false});
     d.nodes[0].position=d.roads[0].points[0];d.nodes[1].position=*d.roads[0].points.last().unwrap();
     let grid=HeightGrid{side:17,heights_cm:(0..289).map(|i|i as i64%17*3).collect()};
     let prepared=PreparedMap::new(d).unwrap();

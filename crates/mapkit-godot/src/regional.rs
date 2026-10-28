@@ -60,6 +60,7 @@ impl MapKitRegionReader {
                 "ground_surface": index.world.ground_surface.unwrap_or(mapkit_core::Surface::Grass),
                 "terrain_base_cm": index.world.terrain_base_cm,
                 "play_area": index.world.play_area,
+                "traffic": index.world.traffic.unwrap_or_default(),
                 "region_count": index.regions.len(), "execution_cells": index.world.cell_count()?,
                 "retained_memory_bytes": reader.index_retained_bytes() * 2, "verification": "index-only"});
             self.world = Some(index.world.clone());

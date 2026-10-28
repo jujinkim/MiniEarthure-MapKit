@@ -242,6 +242,7 @@ impl Serialize for Document<'_> {
         }
         if !d.surface_attachments.is_empty() {m.serialize_entry("surface_attachments",&serde_json::to_value(&d.surface_attachments).map_err(serde::ser::Error::custom)?)?;}
         fields!(m, d, terrain_base_cm, theme);
+        if let Some(traffic) = &d.traffic { m.serialize_entry("traffic", traffic)?; }
         if !d.water_bodies.is_empty() {m.serialize_entry("water_bodies", &Normalized(&d.water_bodies,self.1))?;}
         m.serialize_entry("zones", &Normalized(&d.zones, self.1))?;
         m.end()
@@ -280,6 +281,8 @@ record!(RoadMarkings, d, m, {
         edge_lines,
         lanes
     );
+    if d.one_way != 0 {fields!(m,d,one_way);}
+    if d.stop_lines {fields!(m,d,stop_lines);}
 });
 record!(SurfaceArea, d, m, {
     fields!(m, d, id, polygon, surface);
@@ -508,6 +511,14 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_stream_matches_a_traffic_convention() {
+        let files = payloads();
+        let mut d = minimal();
+        d.traffic = Some(mapkit_core::Traffic { driving_side: mapkit_core::DrivingSide::Left, signal_style: mapkit_core::SignalStyle::Vertical });
+        compare(&d, &files);
+    }
+
+    #[test]
     fn borrowed_stream_matches_a_play_area() {
         let files = payloads();
         let mut d = minimal();
@@ -535,6 +546,8 @@ mod tests {
             edge_lines: false,
             crosswalk_start: true,
             crosswalk_end: false,
+            one_way: 0,
+            stop_lines: false,
         });
         d.roads[0].sidewalk_cm = Some(0);
         d.roads[0].clearance_cm = Some(340);

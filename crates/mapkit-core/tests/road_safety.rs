@@ -37,6 +37,8 @@ fn source(kind: RoadKind, points: Vec<Vertex>) -> MapDocument {
             edge_lines: true,
             crosswalk_start: false,
             crosswalk_end: false,
+            one_way: 0,
+            stop_lines: false,
         }),
     };
     d

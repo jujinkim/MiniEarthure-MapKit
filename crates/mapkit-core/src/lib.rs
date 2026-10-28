@@ -165,7 +165,17 @@ pub struct RoadMarkings {
     pub edge_lines: bool,
     pub crosswalk_start: bool,
     pub crosswalk_end: bool,
+    /// Travel direction of a one-way road along its points (1) or against them
+    /// (-1); 0 (omitted) is two-way. Display only.
+    #[serde(default, skip_serializing_if = "is_zero_i8")]
+    #[schemars(range(min = -1, max = 1))]
+    pub one_way: i8,
+    /// Stop lines and lane arrows on the inbound half at junction ends with at
+    /// least three arms (omitted when false). Display only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stop_lines: bool,
 }
+fn is_zero_i8(value: &i8) -> bool { *value == 0 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceArea {
@@ -407,6 +417,10 @@ pub struct MapDocument {
     /// bounds rectangle. Consumers stop vehicles and draw the edge at it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub play_area: Vec<Vec<Point>>,
+    /// Road convention for generated markings and street furniture; absent means
+    /// right-hand traffic with horizontal signals. Display only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traffic: Option<Traffic>,
     pub buildings: Vec<Building>,
     pub zones: Vec<Zone>,
     pub assets: Vec<Asset>,
@@ -481,6 +495,18 @@ fn intersects(a: Point, b: Point, c: Point, d: Point) -> bool {
         || on_segment(a, b, d)
         || on_segment(c, d, a)
         || on_segment(c, d, b)
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DrivingSide { #[default] Right, Left }
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalStyle { #[default] Horizontal, Vertical }
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
+pub struct Traffic {
+    pub driving_side: DrivingSide,
+    pub signal_style: SignalStyle,
 }
 pub const MAX_PLAY_AREA_RINGS: usize = 16;
 fn validate_play_area(d: &MapDocument) -> Result<()> {

@@ -74,7 +74,7 @@ pub fn decorate(
                 r.id, bounds.min[0], bounds.min[1], surface
             );
             if !styles.contains_key(key.as_str()) {
-                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false };
+                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false };
                 let m = r.markings.as_ref().unwrap_or(&unmarked);
                 let mut paths = PackedVector4Array::new();
                 let mut metrics = PackedVector4Array::new();
@@ -130,6 +130,28 @@ pub fn decorate(
                 paths.resize(128);
                 metrics.resize(128);
                 borders.resize(128);
+                // Junction ends (three or more arms) of a road with stop lines:
+                // bit 1 left, 2 straight, 4 right turns from the inbound heading,
+                // bit 8 marks the junction itself.
+                let turns = |node: &str, at_end: bool| -> i64 {
+                    if !m.stop_lines || r.points.len() < 2 { return 0; }
+                    let arms: Vec<_> = d.roads.iter().filter(|o| o.id != r.id && (o.from == node || o.to == node)).collect();
+                    if arms.len() < 2 { return 0; }
+                    let n = r.points.len();
+                    let (a, b) = if at_end { (r.points[n - 2], r.points[n - 1]) } else { (r.points[1], r.points[0]) };
+                    let inbound = [(b[0] - a[0]) as f64, (b[2] - a[2]) as f64];
+                    let mut mask = 8;
+                    for o in arms {
+                        let k = o.points.len();
+                        if k < 2 { continue; }
+                        let (p0, p1) = if o.from == node { (o.points[0], o.points[1]) } else { (o.points[k - 1], o.points[k - 2]) };
+                        let out = [(p1[0] - p0[0]) as f64, (p1[2] - p0[2]) as f64];
+                        let angle = (inbound[0] * out[1] - inbound[1] * out[0]).atan2(inbound[0] * out[0] + inbound[1] * out[1]).to_degrees();
+                        mask |= if angle.abs() < 35.0 { 2 } else if (35.0..150.0).contains(&angle) { 1 } else if (-150.0..=-35.0).contains(&angle) { 4 } else { 0 };
+                    }
+                    mask
+                };
+                let left_hand = d.traffic.is_some_and(|t| t.driving_side == mapkit_core::DrivingSide::Left);
                 let tint = m.color.map(|c|Color::from_rgba(c[0] as f32/255.,c[1] as f32/255.,c[2] as f32/255.,1.));
                 let mut style=vdict!{
                     "snow_retention_percent"=>r.snow_retention_percent as f64,
@@ -137,7 +159,8 @@ pub fn decorate(
                     "road_paths"=>&paths,"road_metrics"=>&metrics,"road_borders"=>&borders,
                     "path_count"=>path_count as i64,"edge_count"=>edge_count as i64,
                     "lanes"=>m.lanes as i64,"center_line"=>m.center_line,
-                    "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64};
+                    "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64,
+                    "stop_start"=>turns(&r.from, false),"stop_end"=>turns(&r.to, true),"one_way"=>m.one_way as i64,"left_hand"=>left_hand};
                 if let Some(tint)=tint { style.set("base_color",tint); }
                 styles.set(key.as_str(),&style);
             }

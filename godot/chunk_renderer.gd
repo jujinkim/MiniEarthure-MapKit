@@ -20,6 +20,94 @@ static var _steps := 0
 static var _phase_usec: Dictionary = {}
 static var _phase_peak_usec: Dictionary = {}
 
+const BUILTINS := ["builtin:tree", "builtin:fence", "builtin:streetlight", "builtin:signal_h", "builtin:signal_v",
+	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub"]
+## Display-only detail meshes drawn by the renderer: signal heads on their poles,
+## benches and shrubs (no collision). Meshes and materials are shared.
+const STREET_DETAILS := {"builtin:signal_h": true, "builtin:signal_v": true, "builtin:bench": true, "builtin:shrub": true}
+## Signal lamps cycle green 6 s, yellow 2 s, red 8 s; cross approaches (odd
+## quarter turns) run half a cycle apart. Local display only, never synced.
+const SIGNAL_SHADER := """shader_type spatial;
+render_mode cull_back;
+uniform float phase = 0.0;
+varying vec3 local;
+void vertex() { local = VERTEX; }
+void fragment() {
+	float t = fract(TIME / 16.0 + phase) * 16.0;
+	float lamp = local.x;
+	vec3 body = vec3(0.08, 0.08, 0.09);
+	vec3 lit = vec3(0.0);
+	bool face = abs(NORMAL.z) > 0.5;
+	if (face) {
+		if (lamp < -0.07 && t >= 8.0) lit = vec3(1.0, 0.12, 0.08);
+		else if (lamp > 0.07 && t < 6.0) lit = vec3(0.1, 1.0, 0.35);
+		else if (abs(lamp) <= 0.07 && t >= 6.0 && t < 8.0) lit = vec3(1.0, 0.78, 0.1);
+	}
+	ALBEDO = body + lit * 0.2;
+	EMISSION = lit * 2.5;
+	ROUGHNESS = 0.6;
+}
+"""
+static var _details := {}
+
+static func _detail_resource(key: String) -> Resource:
+	if _details.has(key): return _details[key]
+	var value: Resource
+	match key:
+		"head":
+			var box := BoxMesh.new()
+			box.size = Vector3(0.45, 0.14, 0.10)
+			value = box
+		"bench_seat":
+			var box := BoxMesh.new()
+			box.size = Vector3(0.6, 0.05, 0.18)
+			value = box
+		"shrub":
+			var sphere := SphereMesh.new()
+			sphere.radius = 0.32
+			sphere.height = 0.42
+			sphere.radial_segments = 8
+			sphere.rings = 4
+			value = sphere
+		"wood", "leaf":
+			var paint := StandardMaterial3D.new()
+			paint.albedo_color = Color("8a6a46") if key == "wood" else Color("4f7a45")
+			paint.roughness = 0.9
+			value = paint
+		_:
+			var shader := Shader.new()
+			shader.code = SIGNAL_SHADER
+			var lights := ShaderMaterial.new()
+			lights.shader = shader
+			lights.set_shader_parameter("phase", 0.5 if key == "signal_odd" else 0.0)
+			value = lights
+	_details[key] = value
+	return value
+
+static func _detail_mesh(mesh_key: String, material_key: String, at: Vector3, basis := Basis()) -> MeshInstance3D:
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = _detail_resource(mesh_key)
+	mesh.material_override = _detail_resource(material_key)
+	mesh.transform = Transform3D(basis, at)
+	mesh.set_meta("mapkit_decoration", true)
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mesh
+
+static func _street_detail(id: String, object: Dictionary) -> Node3D:
+	var anchor := Node3D.new()
+	anchor.set_meta("mapkit_asset_id", id)
+	anchor.set_meta("mapkit_object_id", str(object.id))
+	anchor.position = scene_position(object.position)
+	var turns := int(object.quarter_turns)
+	anchor.rotation.y = float(turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0)
+	var lamp := "signal_odd" if turns % 2 == 1 else "signal_even"
+	match id:
+		"builtin:signal_h": anchor.add_child(_detail_mesh("head", lamp, Vector3(1.32, 2.06, 0.0)))
+		"builtin:signal_v": anchor.add_child(_detail_mesh("head", lamp, Vector3(0.0, 1.85, -0.09), Basis(Vector3.BACK, PI / 2.0)))
+		"builtin:bench": anchor.add_child(_detail_mesh("bench_seat", "wood", Vector3(0.0, 0.18, 0.0)))
+		_: anchor.add_child(_detail_mesh("shrub", "leaf", Vector3(0.0, 0.2, 0.0)))
+	return anchor
+
 static func scene_position(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.01
 
@@ -251,8 +339,13 @@ static func _advance(job: Dictionary) -> bool:
 				job.root.add_child(anchor)
 				track_instance_nodes(job.lease, anchor)
 				continue
-			if id not in ["builtin:tree", "builtin:fence", "builtin:streetlight"]:
+			if id not in BUILTINS:
 				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
+			if STREET_DETAILS.has(id):
+				var detail := _street_detail(id, object)
+				track_resources(job, detail, true)
+				job.root.add_child(detail)
+				continue
 			if id != "builtin:tree": continue
 			var canopy_mesh: Mesh
 			if job.get("resources") != null:
@@ -387,7 +480,9 @@ static func fail(job: Dictionary, code: String, message: String) -> bool:
 
 static func material_color(key: String) -> Color:
 	if key.begins_with("builtin:"):
-		return {"builtin:tree": Color("745138"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63")}.get(key, Color.GRAY)
+		return {"builtin:tree": Color("745138"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63"),
+			"builtin:signal_h": Color("4a5055"), "builtin:signal_v": Color("4a5055"), "builtin:bus_shelter": Color("7aa0b8"),
+			"builtin:subway_entrance": Color("3f6fa8"), "builtin:station_sign": Color("2f7fd0")}.get(key, Color.GRAY)
 	if key.begins_with("barrier:"):
 		return {"barrier:hedge": Color("486447"), "barrier:fence": Color("9b764f"), "barrier:wall": Color("b7b8b0")}.get(key, Color.GRAY)
 	if not key.contains(":"):
@@ -573,7 +668,7 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
-	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,key.get_slice(":",0))
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,key.get_slice(":",0))
 
 static func occluding_surface(key: String) -> bool:
 	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])

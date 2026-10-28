@@ -217,6 +217,17 @@
       "type": "string",
       "pattern": "^(default|urban|rural)$"
     },
+    "traffic": {
+      "description": "Road convention for generated markings and street furniture; absent means right-hand traffic with horizontal signals. Display only.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Traffic"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "water_bodies": {
       "type": "array",
       "items": {
@@ -1114,6 +1125,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "DrivingSide": {
+      "type": "string",
+      "enum": [
+        "right",
+        "left"
+      ]
     },
     "Effect": {
       "type": "object",
@@ -2758,6 +2776,13 @@
       },
       "additionalProperties": false
     },
+    "SignalStyle": {
+      "type": "string",
+      "enum": [
+        "horizontal",
+        "vertical"
+      ]
+    },
     "Source": {
       "type": "object",
       "required": [
@@ -2979,6 +3004,22 @@
         "swept_cylinder",
         "swept_half_pipe"
       ]
+    },
+    "Traffic": {
+      "type": "object",
+      "required": [
+        "driving_side",
+        "signal_style"
+      ],
+      "properties": {
+        "driving_side": {
+          "$ref": "#/definitions/DrivingSide"
+        },
+        "signal_style": {
+          "$ref": "#/definitions/SignalStyle"
+        }
+      },
+      "additionalProperties": false
     },
     "TubeFrame": {
       "type": "object",

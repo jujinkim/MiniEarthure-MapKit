@@ -115,6 +115,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         ground_surface: _,
         barriers,
         play_area,
+        traffic: _,
         attributions,
         provenance,
         ..
@@ -290,6 +291,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             edge_lines: _,
             crosswalk_start: _,
             crosswalk_end: _,
+            one_way: _,
+            stop_lines: _,
         }) = markings
         {}
     }
@@ -718,6 +721,8 @@ mod tests {
                     edge_lines: false,
                     crosswalk_start: false,
                     crosswalk_end: false,
+                    one_way: 0,
+                    stop_lines: false,
                 }),
             },
         );
@@ -989,6 +994,7 @@ mod tests {
             "ground_surface",
             "barriers",
             "play_area",
+            "traffic",
             "attributions",
             "provenance",
         ]

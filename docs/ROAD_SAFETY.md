@@ -28,6 +28,14 @@ safety furniture, placement intersection and regional influence margin.
   the carriageway. Degree-two roads share a half-curve endpoint; larger
   intersections stop paint at the mouth. Dashes fit complete cycles between nodes
   with cell-independent phase. Crosswalks keep their authored flags.
+- `RoadMarkings.stop_lines` (optional, false) paints a stop line and lane arrows
+  on the inbound half at each road end meeting at least two other roads, before
+  the crosswalk when present; `one_way` (1 along the points, -1 against, 0 two-way)
+  makes the whole width inbound at the travel end only. Each inbound lane gets
+  arrows from the other arms' angles (straight within 35°, left/right to 150°):
+  the leftmost lane its left turn, the rightmost its right turn, others straight.
+  `MapDocument.traffic.driving_side` picks the inbound half (absent = right). All of
+  it is shader paint from the road style; geometry and hashes of cells are unchanged.
 
 ## Safety solids
 

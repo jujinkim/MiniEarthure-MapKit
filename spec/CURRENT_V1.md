@@ -190,6 +190,18 @@ earlier documents keep their bytes, world hashes and generated geometry.
   vegetation/repetition clearance (indexed per solid), sidewalk exclusion,
   implicit sidewalk widths, regional retention, overview (one entry per solid
   under the record ID), distant faces, shortcut clearance and surface probes.
+- `MapDocument.traffic` (optional): `{driving_side: right|left, signal_style:
+  horizontal|vertical}`, absent = right/horizontal; display convention for road
+  markings ([ROAD_SAFETY](../docs/ROAD_SAFETY.md)) and street furniture authoring.
+  `RoadMarkings.one_way` (-1..1, 0 omitted) and `stop_lines` (false omitted) are
+  display-only markings fields.
+- City street furniture builtins (game scale, local +x over the road):
+  `builtin:signal_h` (pole and arm, horizontal head on the arm end) and
+  `builtin:signal_v` (pole, vertical head) with renderer-drawn heads whose lamps
+  cycle locally (green 6 s, yellow 2 s, red 8 s, odd quarter turns half a cycle
+  apart, never synced); solid `builtin:bus_shelter`, `builtin:subway_entrance`,
+  `builtin:station_sign`; display-only `builtin:bench` and `builtin:shrub` (no
+  collision, 80/70 cm square footprints).
 - `MapDocument.play_area` (optional, absent = the whole `bounds` rectangle): up to
   16 simple outer rings `[[x,y],...]` of 3..512 in-bounds vertices (`E_PLAY_AREA`
   otherwise). It is world metadata: it changes no generated cell, and the regional

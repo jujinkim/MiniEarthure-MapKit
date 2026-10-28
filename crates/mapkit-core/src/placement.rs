@@ -331,6 +331,21 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
             proxy([0, 250, 0], [20, 500, 20]),
             proxy([0, 500, 0], [80, 25, 40]),
         ]),
+        // City street furniture at game scale (the car is about 61 cm wide).
+        // Signal poles carry a renderer-drawn head: on the arm end (horizontal)
+        // or on the pole (vertical). Local +x points over the road.
+        "builtin:signal_h" => Some(vec![proxy([0, 110, 0], [8, 220, 8]), proxy([70, 214, 0], [140, 6, 6])]),
+        "builtin:signal_v" => Some(vec![proxy([0, 110, 0], [8, 220, 8])]),
+        "builtin:bus_shelter" => Some(vec![
+            proxy([0, 95, 0], [160, 4, 50]),
+            proxy([0, 47, -23], [160, 86, 3]),
+            proxy([-78, 45, 21], [4, 90, 4]),
+            proxy([78, 45, 21], [4, 90, 4]),
+        ]),
+        "builtin:subway_entrance" => Some(vec![proxy([0, 55, 0], [80, 110, 120])]),
+        "builtin:station_sign" => Some(vec![proxy([0, 90, 0], [24, 180, 24])]),
+        // Display-only details: no collision, a small reserved footprint.
+        "builtin:bench" | "builtin:shrub" => Some(vec![]),
         _ => None,
     }
 }
@@ -359,11 +374,15 @@ pub(crate) fn proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
         })
         .collect()
 }
+/// Footprint half size of a display-only builtin, else None.
+pub(crate) fn detail_radius(id: &str) -> Option<i64> {
+    match id { "builtin:bench" => Some(40), "builtin:shrub" => Some(35), _ => None }
+}
 pub(crate) fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
-    if p.asset_id == "builtin:tree" {
+    if let Some(radius) = if p.asset_id == "builtin:tree" { Some(TREE_RADIUS) } else { detail_radius(&p.asset_id) } {
         return rectangle(
-            [p.position[0] - TREE_RADIUS, p.position[2] - TREE_RADIUS],
-            [p.position[0] + TREE_RADIUS, p.position[2] + TREE_RADIUS],
+            [p.position[0] - radius, p.position[2] - radius],
+            [p.position[0] + radius, p.position[2] + radius],
         )
         .to_vec();
     }

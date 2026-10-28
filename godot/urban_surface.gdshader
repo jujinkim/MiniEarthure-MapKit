@@ -18,9 +18,34 @@ uniform bool center_line = true;
 uniform bool edge_lines = true;
 uniform bool crosswalk_start = false;
 uniform bool crosswalk_end = false;
+// Junction-end lane arrows (bits 1 left, 2 straight, 4 right; 8 junction) and
+// inbound stop lines; one_way 1 along the points, -1 against them.
+uniform int stop_start = 0;
+uniform int stop_end = 0;
+uniform int one_way = 0;
+uniform bool left_hand = false;
 varying vec3 world_position;
 varying vec3 world_normal;
 void vertex() { world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL); }
+float arrow(float a,float v,bool straight,bool left,bool right) {
+    // a: metres back from the arrow tip toward the stop line's far side; v: lane offset (driver's right +).
+    float paint=0.0;
+    if(straight) {
+        if(a>0.35 && a<1.3 && abs(v)<0.04) paint=1.0;
+        if(a>=0.0 && a<=0.35 && abs(v)<0.16*(a/0.35)) paint=1.0;
+    }
+    for(int side=0;side<2;side++) {
+        bool turn=side==0 ? left : right;
+        if(!turn) continue;
+        float sd=side==0 ? -1.0 : 1.0;
+        float lateral=sd*v;
+        if(a>0.55 && a<1.3 && abs(v)<0.04) paint=1.0;
+        if(a>0.5 && a<0.6 && lateral>-0.04 && lateral<0.26) paint=1.0;
+        float t=(lateral-0.26)/0.14;
+        if(t>=0.0 && t<=1.0 && abs(a-0.55)<0.15*(1.0-t)) paint=1.0;
+    }
+    return paint;
+}
 float band(float distance,float width) {
     // Nearest-segment ownership changes at bends and material boundaries.
     // Bound derivative AA so these discontinuities cannot paint remote speckles.
@@ -103,7 +128,28 @@ void fragment() {
                 if(crossing && abs(across)<half_width-0.25) {
                     white=step(0.43,fract((across+half_width)/0.65)); yellow=0.0;
                 }
-                if(abs(across)<half_width-0.25 && ((crosswalk_start && station>1.95 && station<2.08)||(crosswalk_end && e>1.95 && e<2.08))) white=1.0;
+                if(abs(across)<half_width-0.25 && ((crosswalk_start && stop_start==0 && station>1.95 && station<2.08)||(crosswalk_end && stop_end==0 && e>1.95 && e<2.08))) white=1.0;
+                for(int s=0;s<2;s++) {
+                    int mask=s==0 ? stop_start : stop_end;
+                    float h=s==0 ? -1.0 : 1.0;
+                    if(mask==0 || (one_way!=0 && float(one_way)!=h)) continue;
+                    float to_end=s==0 ? station : e;
+                    float bar=(s==0 ? crosswalk_start : crosswalk_end) ? 1.95 : 0.55;
+                    float r=h*across; // across > 0 is right of the path direction in scene xz
+                    float r0=one_way!=0 || left_hand ? -half_width : 0.0;
+                    float r1=one_way!=0 || !left_hand ? half_width : 0.0;
+                    int count=one_way!=0 ? lanes : max(lanes/2,1);
+                    if(r<=r0+0.05 || r>=r1-0.05) continue;
+                    if(to_end>bar && to_end<bar+0.14) white=1.0;
+                    float w=(r1-r0)/float(count);
+                    int k=int(clamp(floor((r-r0)/w),0.0,float(count-1)));
+                    float v=r-(r0+(float(k)+0.5)*w);
+                    bool turn_left=(mask&1)!=0 && k==0;
+                    bool turn_right=(mask&4)!=0 && k==count-1;
+                    bool straight=(mask&2)!=0 && (count<=2 || (k>0 && k<count-1));
+                    if(count==1) { turn_left=(mask&1)!=0; turn_right=(mask&4)!=0; straight=(mask&2)!=0; }
+                    white=max(white,arrow(to_end-(bar+0.6),v,straight,turn_left,turn_right));
+                }
             }
         }
         color=mix(color,vec3(0.92,0.91,0.85),white);
