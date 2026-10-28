@@ -26,6 +26,7 @@ func run() -> void:
 		var context: RefCounted=cache.environment_context()
 		check(context!=null and cache.bytes()==QUALITY.tile_bytes(p.texture_size,10),"exact admitted tier memory")
 		for texture: Texture2D in context.tiles.values(): check(texture.get_width()==p.texture_size,"requested texture resolution")
+		check(context.signs.get_width()==(1024 if p.texture_size>=256 else 512),"sign atlas halves with 128px tiles")
 		QUALITY.current=QUALITY.profile(2-level)
 		check(context==cache.environment_context(),"live quality keeps existing texture owner")
 		cache.shutdown();context=null

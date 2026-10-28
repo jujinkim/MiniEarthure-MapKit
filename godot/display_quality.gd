@@ -56,8 +56,9 @@ static func apply_material(material: Material, value: Dictionary) -> void:
 		material.set_shader_parameter("quality_level",int(value.water))
 
 static func tile_bytes(size: int, count: int) -> int:
-	# Mipmaps + generation scratch, CPU/GPU copies and retirement overlap.
-	return 1048576 + count * size * size * 24
+	# Mipmaps + generation scratch, CPU/GPU copies and retirement overlap,
+	# for the tiles and the 1024x640 sign atlas (512x320 with 128px tiles).
+	return 1048576 + count * size * size * 24 + (1024 * 640 if size >= 256 else 512 * 320) * 24
 
 static func prepare_lods(mesh: Mesh, observer := Callable()) -> Mesh:
 	var job := begin_lods(mesh)

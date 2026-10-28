@@ -27,6 +27,13 @@ uniform bool left_hand = false;
 varying vec3 world_position;
 varying vec3 world_normal;
 void vertex() { world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL); }
+float urban_hash(vec2 v) { return fract(sin(dot(v,vec2(127.1,311.7)))*43758.5453); }
+float value_noise(vec2 v) {
+    vec2 i=floor(v);
+    vec2 f=fract(v);
+    f=f*f*(3.0-2.0*f);
+    return mix(mix(urban_hash(i),urban_hash(i+vec2(1.0,0.0)),f.x),mix(urban_hash(i+vec2(0.0,1.0)),urban_hash(i+vec2(1.0,1.0)),f.x),f.y);
+}
 float arrow(float a,float v,bool straight,bool left,bool right) {
     // a: metres back from the arrow tip toward the stop line's far side; v: lane offset (driver's right +).
     float paint=0.0;
@@ -56,9 +63,36 @@ void fragment() {
     vec2 p=world_position.xz;
     float effect_weight=surface_effect_weight(length(VERTEX));
     vec3 color=base_color.rgb;
+    float view_distance=length(VERTEX);
+    // Small features fade before they could shimmer between pixels.
+    float close=effect_weight*(1.0-smoothstep(6.0,24.0,view_distance));
+    float wear=0.5;
+    float rough_shift=0.0;
     if(effect_weight>0.0) {
-        float noise=fract(sin(dot(floor(p*150.0),vec2(12.9898,78.233)))*43758.5453);
-        color*=1.0+(0.035*noise-0.0175)*effect_weight;
+        float broad=value_noise(p*0.18)*0.6+value_noise(p*0.55+vec2(11.0,4.0))*0.4;
+        float fine=value_noise(p*6.0);
+        wear=value_noise(p*2.3+vec2(17.0,3.0));
+        if(!paving) {
+            // Asphalt: broad tonal blotches, light aggregate, sealed repair
+            // patches and thin cracks. Roughness follows the same wear.
+            color*=1.0+((broad-0.5)*0.18+(fine-0.5)*0.06)*effect_weight;
+            float stone=smoothstep(0.80,0.92,value_noise(p*26.0+vec2(fine*3.0)));
+            color=mix(color,color*1.35+0.02,stone*0.35*close);
+            vec2 slot=floor(p/3.5);
+            vec2 local=fract(p/3.5);
+            vec2 extent=0.2+0.5*vec2(urban_hash(slot+1.3),urban_hash(slot+2.7));
+            float repaired=step(0.86,urban_hash(slot+vec2(5.0,9.0)))*step(abs(local.x-0.5),extent.x*0.5)*step(abs(local.y-0.5),extent.y*0.5);
+            color*=1.0-0.13*repaired*effect_weight;
+            // Domain-warped ridges keep cracks jagged and sparse.
+            vec2 warped=p*1.3+0.35*vec2(value_noise(p*5.0),value_noise(p*5.0+vec2(5.0,1.0)));
+            float ridge=abs(value_noise(warped+vec2(3.0,7.0))-0.5);
+            float crack=(1.0-smoothstep(0.0,0.005+fwidth(ridge),ridge))*smoothstep(0.68,0.78,value_noise(p*0.3+vec2(1.0,9.0)));
+            color*=1.0-0.28*crack*close;
+            rough_shift=(broad-0.5)*0.08-0.05*repaired;
+        } else {
+            // Paving: per-slab tone and the same broad weathering.
+            color*=1.0+((urban_hash(floor(p/0.7))-0.5)*0.08+(broad-0.5)*0.12)*effect_weight;
+        }
     }
     float tile_roughness=0.9;
     if(detail_enabled && length(VERTEX)<48.0 && effect_weight>0.0) {
@@ -152,15 +186,26 @@ void fragment() {
                 }
             }
         }
-        color=mix(color,vec3(0.92,0.91,0.85),white);
-        color=mix(color,vec3(0.93,0.65,0.12),yellow);
+        // Worn paint: uneven coverage, scuffed by wheel tracks.
+        float track=0.0;
+        if(body && effect_weight>0.0) {
+            float lane_width=2.0*half_width/float(max(lanes,1));
+            float lateral=abs(fract((across+half_width)/max(lane_width,0.01))-0.5);
+            track=(1.0-smoothstep(0.04,0.10,abs(lateral-0.24)))*step(abs(across),half_width);
+            color*=1.0-0.07*track*effect_weight;
+            rough_shift-=0.10*track*effect_weight;
+        }
+        float coverage=mix(1.0,clamp(0.62+0.5*smoothstep(0.2,0.65,wear)-0.3*track,0.35,1.0),effect_weight);
+        color=mix(color,vec3(0.86,0.86,0.81)*(0.96+0.06*wear),white*coverage);
+        color=mix(color,vec3(0.85,0.64,0.21)*(0.96+0.06*wear),yellow*coverage);
+        rough_shift-=0.25*max(white,yellow)*coverage;
     }
     vec2 weather = environment_enabled ? texelFetch(environment_data,ivec2(0,0),0).xy : vec2(0.0);
     weather.y *= snow_retention_percent * 0.01;
     color *= 1.0-weather.x*0.22;
     color = mix(color,vec3(0.68,0.76,0.79),weather.y*0.90);
     ALBEDO=color;
-    ROUGHNESS=mix(mix(tile_roughness,0.27,weather.x),0.95,weather.y);
+    ROUGHNESS=mix(mix(clamp(tile_roughness+rough_shift,0.4,1.0),0.27,weather.x),0.95,weather.y);
     float puddle=0.0;
     if(effect_weight>0.0 && weather.x>0.2) puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y)*effect_weight;
     ALBEDO*=1.0-puddle*0.10;

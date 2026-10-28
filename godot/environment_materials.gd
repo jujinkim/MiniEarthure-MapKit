@@ -4,8 +4,11 @@ const PROFILE := preload("./environment_profile.gd")
 const DETAIL := preload("./material_detail.gdshaderinc")
 const TILE_KINDS := ["brick","plaster","wood","stone","asphalt","concrete","earth","grass","metal","leaf"]
 # Same conservative CPU/GPU/import allowance as validated package bitmaps.
-const MEMORY_BYTES := 1048576 + 10 * 256 * 256 * 24
+const MEMORY_BYTES := 1048576 + 10 * 256 * 256 * 24 + 1024 * 640 * 24
+# Original storefront signs (scripts/sign_atlas.py); halved for 128px tiles.
+const SIGN_ATLAS := "textures/sign_atlas.png"
 var tiles: Dictionary = {}
+var signs: ImageTexture
 var pixels: Image
 var texture: ImageTexture
 var materials: Dictionary = {}
@@ -27,10 +30,10 @@ func _init(size := 256, deferred_tiles := false) -> void:
 		while not prepare_tile(): pass
 
 func prepare_tile(lease: RefCounted = null) -> bool:
-	if tile_cursor >= TILE_KINDS.size() or load_failed: return true
-	var kind: String = TILE_KINDS[tile_cursor]
+	if tile_cursor > TILE_KINDS.size() or load_failed: return true
+	var kind: String = TILE_KINDS[tile_cursor] if tile_cursor < TILE_KINDS.size() else ""
 	if tile_image == null:
-		var path: String = get_script().resource_path.get_base_dir().path_join("textures/racing/"+(str(tile_size)+"/" if tile_size != 256 else "")+kind+".png")
+		var path: String = get_script().resource_path.get_base_dir().path_join(SIGN_ATLAS if kind.is_empty() else "textures/racing/"+(str(tile_size)+"/" if tile_size != 256 else "")+kind+".png")
 		# Trusted engine import remapping also works in exports. Decode and GPU
 		# upload are separate admitted steps; never preload texture owners.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
@@ -38,12 +41,15 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 		load_failed = tile_image == null or tile_image.is_empty()
 		if lease != null and tile_image != null: lease.track(tile_image)
 		return load_failed
+	if kind.is_empty() and tile_size < 256: tile_image.resize(tile_image.get_width() / 2, tile_image.get_height() / 2, Image.INTERPOLATE_BILINEAR)
 	tile_image.generate_mipmaps()
-	tiles[kind] = ImageTexture.create_from_image(tile_image)
-	if lease != null: lease.track(tiles[kind])
+	var uploaded := ImageTexture.create_from_image(tile_image)
+	if kind.is_empty(): signs = uploaded
+	else: tiles[kind] = uploaded
+	if lease != null: lease.track(uploaded)
 	tile_image = null
 	tile_cursor += 1
-	return tile_cursor >= TILE_KINDS.size()
+	return tile_cursor > TILE_KINDS.size()
 
 func update(seconds: float, wet: float, snow: float, sun_altitude: float, sunset_minutes: int) -> void:
 	pixels.set_pixel(0,0,Color(wet,snow,0,0))
@@ -136,6 +142,12 @@ func bind_detail(material: ShaderMaterial, kind: String, apply_quality := true) 
 	material.set_shader_parameter("detail_tile",tiles[kind])
 	material.set_shader_parameter("detail_scale",0.5 if kind in ["asphalt","concrete","plaster","metal"] else (1.0 if kind in ["leaf","earth","grass"] else 0.75))
 
+## Commercial generated facades draw storefront signs from the shared atlas.
+func bind_signs(material: ShaderMaterial) -> void:
+	if signs == null: return
+	material.set_shader_parameter("sign_atlas",signs)
+	material.set_shader_parameter("signs_enabled",true)
+
 func style_mesh(mesh: Mesh, binding: Dictionary, instances := false, observer := Callable()) -> Mesh:
 	# Own surface bindings; vertex/index buffers and texture resources remain shared.
 	var started := Time.get_ticks_usec()
@@ -188,5 +200,6 @@ func track(lease: RefCounted) -> void:
 	lease.track(texture)
 	lease.track(shader)
 	for tile: Texture2D in tiles.values(): lease.track(tile)
+	if signs != null: lease.track(signs)
 	for reference: WeakRef in materials.values():
 		if reference.get_ref() != null: lease.track(reference.get_ref())

@@ -241,6 +241,7 @@ static func _advance(job: Dictionary) -> bool:
 			arrays[Mesh.ARRAY_VERTEX] = chunk.scene_vertices.slice(first * 3, offset * 3)
 			arrays[Mesh.ARRAY_NORMAL] = chunk.scene_normals.slice(first * 3, offset * 3)
 			arrays[Mesh.ARRAY_TEX_UV] = chunk.wall_uv.slice(first * 3, offset * 3)
+			if chunk.get("facade_seeds", PackedVector2Array()).size() == chunk.wall_uv.size(): arrays[Mesh.ARRAY_TEX_UV2] = chunk.facade_seeds.slice(first * 3, offset * 3)
 			var prepared := ArrayMesh.new()
 			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 			mesh.mesh = prepared
@@ -390,6 +391,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 	arrays[Mesh.ARRAY_VERTEX] = batch.vertices
 	arrays[Mesh.ARRAY_NORMAL] = batch.normals
 	arrays[Mesh.ARRAY_TEX_UV] = batch.uv
+	if not batch.get("uv2", PackedVector2Array()).is_empty(): arrays[Mesh.ARRAY_TEX_UV2] = batch.uv2
 	var mesh := MeshInstance3D.new()
 	var resource := ArrayMesh.new()
 	resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -574,6 +576,7 @@ static func _generated_material(job: Dictionary, key: String, presentation: Dict
 	if context != null and not key.begins_with("rc:") and not _urban_surface(key,presentation):
 		var generated: ShaderMaterial = context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0,0.9,defer_quality)
 		bind_facade(generated,key,presentation)
+		if facade_kind(key) == 3: context.bind_signs(generated)
 		return generated
 	var material := surface_material(key,presentation,job.get("urban_shader"))
 	if material is StandardMaterial3D:

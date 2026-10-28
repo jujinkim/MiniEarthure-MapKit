@@ -36,6 +36,12 @@ safety furniture, placement intersection and regional influence margin.
   the leftmost lane its left turn, the rightmost its right turn, others straight.
   `MapDocument.traffic.driving_side` picks the inbound half (absent = right). All of
   it is shader paint from the road style; geometry and hashes of cells are unchanged.
+- Urban asphalt (`urban_surface.gdshader`) adds broad tonal blotches, light
+  aggregate, seeded repair patches and sparse domain-warped cracks from world
+  position; marked roads darken and polish two wheel tracks per lane, and paint
+  has uneven, track-scuffed coverage with lower roughness. Paving varies per slab.
+  Small features fade by 24 m and all variation fades with the effect weight;
+  colours, geometry and contact surfaces are unchanged.
 
 ## Safety solids
 

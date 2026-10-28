@@ -32,6 +32,7 @@ func run() -> void:
 	var context: RefCounted=cache.environment_context()
 	check(context!=null and cache.bytes()==MATERIALS.MEMORY_BYTES,"shared texture charge before materialization")
 	check(context.tiles.size()==10,"ten common 256px packed tiles")
+	check(context.signs!=null and context.signs.get_width()==1024 and context.signs.get_height()==640,"shared storefront sign atlas")
 	surface_factory_quality(context)
 	var source:=StandardMaterial3D.new()
 	var picture:=Image.create(128,128,false,Image.FORMAT_RGBA8);picture.fill(Color(.5,.5,1,1))

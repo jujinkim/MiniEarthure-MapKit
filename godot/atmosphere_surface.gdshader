@@ -39,9 +39,15 @@ uniform float building_seed = 0.5;
 // 3 commercial, 4 industrial, 5 public. Floor pitch is in scene metres (3 m ÷ D).
 uniform int facade_kind = 0;
 uniform float floor_pitch = 3.0;
+// Shared original storefront signs: 16x32 grid, 8 category rows of 64.
+uniform sampler2D sign_atlas : source_color, filter_linear_mipmap, repeat_disable;
+uniform bool signs_enabled = false;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float seed;
+// Generated building solids carry UV2 (seed, 1000 + base metres); -1 elsewhere.
+varying float solid_seed;
+varying float solid_base;
 float facade_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
 void vertex() {
     UV=UV*uv_scale.xy+uv_offset.xy;
@@ -54,6 +60,8 @@ void vertex() {
     }
     world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
     seed = distant ? UV.x : (INSTANCE_CUSTOM.a > 0.5 ? INSTANCE_CUSTOM.x : building_seed);
+    solid_seed = !distant && facade_kind>0 && UV2.y>0.5 ? UV2.x : -1.0;
+    solid_base = solid_seed>=0.0 ? (MODEL_MATRIX * vec4(0.0,UV2.y-1000.0,0.0,1.0)).y : 0.0;
 }
 void fragment() {
     vec4 weather = texelFetch(environment_data,ivec2(0,0),0);
@@ -87,35 +95,71 @@ void fragment() {
         float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
         color *= 1.0 + (0.016*grain-0.008)*effect_weight;
     }
-    // Generated walls: floor bands, window panes and a per-face seed. Roofs,
-    // bottoms, distant meshes and imported assets keep their own appearance.
+    // Generated walls: floor bands, window panes and a per-building seed.
+    // Palette and window variants fade with effect weight, so far near walls
+    // keep the distant mesh's colour. Roofs, bottoms, distant meshes and
+    // imported assets keep their own appearance.
     float facade_wall = 0.0;
     float facade_window = 0.0;
     float facade_lit = 0.0;
     float facade_seed = seed;
+    vec3 facade_sign = vec3(0.0);
     if(facade_kind>0 && !distant && abs(world_normal.y)<0.5) {
         facade_wall = 1.0;
         vec3 n = normalize(world_normal);
-        facade_seed = facade_hash(vec2(round(dot(n,world_position)*4.0),round(n.x*8.0)+round(n.z*8.0)*17.0));
+        // Older packed meshes without UV2 vary each wall plane instead.
+        facade_seed = solid_seed>=0.0 ? solid_seed : facade_hash(vec2(round(dot(n,world_position)*4.0),round(n.x*8.0)+round(n.z*8.0)*17.0));
         if(effect_weight>0.0) {
+            float variant = floor(fract(facade_seed*7.31)*4.0);
+            vec3 tone = variant<1.0 ? vec3(1.06,1.0,0.90) : (variant<2.0 ? vec3(0.93,0.98,1.06) : (variant<3.0 ? vec3(1.08,0.90,0.80) : vec3(1.07,1.07,1.05)));
+            color *= mix(vec3(1.0),tone*(0.92+0.16*fract(facade_seed*13.7)),effect_weight);
             float u = dot(world_position,normalize(vec3(-n.z,0.0,n.x)));
-            float v = world_position.y;
+            float v = world_position.y-solid_base;
             float bay = facade_kind==1 ? 1.3 : (facade_kind==2 ? 1.8 : (facade_kind==3 ? 0.8 : (facade_kind==4 ? 1.0 : 1.5)));
+            bay *= 0.8+0.5*fract(facade_seed*3.17);
             vec2 cell = vec2(u/(floor_pitch*bay),v/floor_pitch);
             vec2 f = fract(cell);
             vec4 pane = facade_kind==1 ? vec4(0.2,0.75,0.3,0.75) : (facade_kind==2 ? vec4(0.3,0.7,0.3,0.7) : (facade_kind==3 ? vec4(0.1,0.9,0.15,0.85) : (facade_kind==4 ? vec4(0.15,0.85,0.6,0.85) : vec4(0.3,0.7,0.2,0.85))));
+            // Apartments, offices and public walls: tall, ribbon or square panes.
+            if(facade_kind!=2 && facade_kind!=4) {
+                if(variant>=1.0 && variant<2.0) pane = vec4(0.35,0.65,0.12,0.86);
+                else if(variant>=2.0 && variant<3.0) pane = vec4(0.0,1.0,0.32,0.76);
+                else if(variant>=3.0) pane = vec4(0.25,0.75,0.38,0.80);
+            }
             float window = step(pane.x,f.x)*step(f.x,pane.y)*step(pane.z,f.y)*step(f.y,pane.w);
-            if(facade_kind==3 && v<floor_pitch) window = step(0.12,f.y)*step(f.y,0.9);
+            if(facade_kind==3 && v<floor_pitch) window = step(0.12,f.y)*step(f.y,0.78);
             if(facade_kind==4) {
                 color *= 1.0-0.08*step(0.85,fract(u/(0.6*floor_pitch)));
                 window *= step(0.5,facade_hash(vec2(floor(cell.x),floor(cell.y)*3.0)));
             }
-            if(facade_kind==1) color *= 1.0-0.14*step(0.94,f.y);
-            if(facade_kind==5) color *= 1.0+0.05*step(f.y,0.08);
+            if(facade_kind==1) color *= 1.0-0.14*step(0.94,f.y)*effect_weight;
+            if(facade_kind==1 && fract(facade_seed*5.3)<0.5) color *= 1.0+0.08*step(f.y,0.1)*step(1.0,cell.y)*effect_weight;
+            if(facade_kind==5) color *= 1.0+0.05*step(f.y,0.08)*effect_weight;
             facade_window = window*effect_weight;
             facade_lit = step(0.35,facade_hash(floor(cell)+facade_seed*7.0));
-            color = mix(color,vec3(0.21,0.25,0.29),facade_window*0.85);
+            vec3 glass = fract(facade_seed*11.1)<0.4 ? vec3(0.21,0.25,0.29) : (fract(facade_seed*11.1)<0.7 ? vec3(0.17,0.24,0.25) : vec3(0.25,0.23,0.21));
+            color = mix(color,glass,facade_window*0.85);
             surface_roughness = mix(surface_roughness,0.32,facade_window);
+            // Commercial ground floors: one storefront sign per bay pair, in
+            // the band between the shop window and the first floor.
+            if(signs_enabled && facade_kind==3 && v>0.78*floor_pitch && v<1.08*floor_pitch) {
+                float width = floor_pitch*bay*2.0;
+                // Seen from outside, signs read left to right along -u.
+                float slot = floor(-u/width);
+                float along = fract(-u/width);
+                float pick = facade_hash(vec2(slot,facade_seed*977.0));
+                if(pick<0.85) {
+                    float index = floor(pick/0.85*512.0);
+                    vec2 local = vec2((along-0.06)/0.88,1.0-(v-0.80*floor_pitch)/(0.26*floor_pitch));
+                    if(local.x>0.0 && local.x<1.0 && local.y>0.0 && local.y<1.0) {
+                        vec2 atlas = (vec2(mod(index,16.0),floor(index/16.0))+clamp(local,vec2(0.02),vec2(0.98)))/vec2(16.0,32.0);
+                        facade_sign = texture(sign_atlas,atlas).rgb;
+                        color = mix(color,facade_sign,effect_weight);
+                        surface_roughness = mix(surface_roughness,0.4,effect_weight);
+                        facade_window = 0.0;
+                    }
+                }
+            }
         }
         color *= 0.97+0.06*facade_seed;
     }
@@ -166,6 +210,8 @@ void fragment() {
         else if(facade_kind>0) windows = facade_wall*mix(0.15,facade_window*facade_lit,effect_weight);
         else if(effect_weight>0.0) windows=mix(0.8,step(0.2,fract(floor(world_position.x*0.7)+floor(world_position.y*0.6)*0.618+seed)),effect_weight);
         EMISSION = enabled ? vec3(1.0,0.63,0.28)*windows*1.2 : vec3(0.0);
+        // Storefront signs stay lit through the night.
+        if(clock.z < 0.0) EMISSION += facade_sign*0.55*effect_weight;
     } else if(role == 2 && enabled) {
         // Authored bulbs/signs retain their material colour in both LODs.
         EMISSION = enabled ? color*0.9 : vec3(0.0);

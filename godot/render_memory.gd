@@ -48,14 +48,18 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 			var vertices := PackedVector3Array()
 			var normals := PackedVector3Array()
 			var uv := PackedVector2Array()
+			var uv2 := PackedVector2Array()
 			vertices.resize(count); normals.resize(count); uv.resize(count)
 			var source_uv: PackedVector2Array = chunk.wall_uv
+			var seeds: PackedVector2Array = chunk.get("facade_seeds", PackedVector2Array())
+			if seeds.size() == source_uv.size(): uv2.resize(count)
 			for index in count:
 				var source := int(indices[first + index / 3]) * 3 + index % 3
 				vertices[index] = chunk.scene_vertices[source]
 				normals[index] = chunk.scene_normals[source]
 				uv[index] = source_uv[source]
-			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv})
+				if not uv2.is_empty(): uv2[index] = seeds[source]
+			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv, "uv2": uv2})
 	return result
 
 static func estimate(chunk: Dictionary, asset_bytes: int) -> int:

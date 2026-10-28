@@ -20,6 +20,10 @@ pub struct MapKitPackedGeometry {
     scene_normals: PackedVector3Array,
     ground_uv: PackedVector2Array,
     wall_uv: PackedVector2Array,
+    /// Per vertex: (seed, FACADE_BASE_OFFSET + base metres) on a generated
+    /// building solid (one per connected solid of a record), (0, 0) elsewhere.
+    /// The base lets ground-floor facades follow terrain. Display only.
+    facade_seeds: PackedVector2Array,
     prism_vertices: PackedInt64Array,
     prism_indices: PackedInt32Array,
     materials: PackedStringArray,
@@ -100,6 +104,7 @@ impl MapKitPackedGeometry {
             "scene_normals" => &self.scene_normals,
             "ground_uv" => &self.ground_uv,
             "wall_uv" => &self.wall_uv,
+            "facade_seeds" => &self.facade_seeds,
             "building_prism_vertices_cm" => &self.prism_vertices,
             "building_prism_object_indices" => &self.prism_indices,
             "building_materials" => &self.materials,
@@ -137,6 +142,55 @@ pub(super) fn warnings_array(warnings: &[mapkit_core::Warning]) -> VarArray {
     }
     list
 }
+/// Added to a solid's scene-metre base height so that y > 0.5 marks a seed.
+const FACADE_BASE_OFFSET: f32 = 1000.0;
+/// One stable seed per connected building solid: triangles of a building
+/// object that share a vertex form one solid (walls and roof of one part).
+fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &[i32]) -> Vec<Vector2> {
+    let buildings: std::collections::BTreeSet<i32> = prism_indices.iter().copied().collect();
+    let mut parent: Vec<usize> = (0..chunk.triangles.len()).collect();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i]; }
+        i
+    }
+    let mut owner = BTreeMap::<(i32, [i64; 3]), usize>::new();
+    for (t, triangle) in chunk.triangles.iter().enumerate() {
+        if !buildings.contains(&object_indices[t]) { continue; }
+        for v in triangle.vertices {
+            match owner.get(&(object_indices[t], v)) {
+                Some(&other) => { let (a, b) = (find(&mut parent, t), find(&mut parent, other)); if a != b { parent[a.max(b)] = a.min(b); } }
+                None => { owner.insert((object_indices[t], v), t); }
+            }
+        }
+    }
+    // The seed hashes the record ID and the solid's smallest vertex.
+    let mut smallest = BTreeMap::<usize, ([i64; 3], i64)>::new();
+    for (t, triangle) in chunk.triangles.iter().enumerate() {
+        if !buildings.contains(&object_indices[t]) { continue; }
+        let root = find(&mut parent, t);
+        let low = triangle.vertices.iter().min().copied().unwrap();
+        let base = triangle.vertices.iter().map(|v| v[1]).min().unwrap();
+        smallest.entry(root).and_modify(|(v, b)| { if low < *v { *v = low; } *b = (*b).min(base); }).or_insert((low, base));
+    }
+    let mut values = BTreeMap::<usize, f32>::new();
+    let mut seeds = Vec::with_capacity(chunk.triangles.len() * 3);
+    for (t, triangle) in chunk.triangles.iter().enumerate() {
+        let value = if buildings.contains(&object_indices[t]) {
+            let root = find(&mut parent, t);
+            let seed = *values.entry(root).or_insert_with(|| {
+                let digest = mapkit_core::sha256(format!("{}|{:?}", triangle.object_id, smallest[&root].0).as_bytes());
+                u32::from_str_radix(&digest[..6], 16).unwrap() as f32 / 16_777_215.0
+            });
+            let base = smallest[&root].1 as f32 * (mapkit_core::WORLD_SCALE as f32 / 100.0);
+            Vector2::new(seed, FACADE_BASE_OFFSET + base)
+        } else {
+            Vector2::ZERO
+        };
+        seeds.extend([value; 3]);
+    }
+    seeds
+}
+
 pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
     let hash = chunk.hash()?;
     let mut vertices = Vec::with_capacity(chunk.triangles.len() * 9);
@@ -223,6 +277,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         materials[id as usize] = prism.material.as_str().into();
         usages[id as usize] = prism.usage.as_str().into();
     }
+    let facade_seeds = facade_seeds(&chunk, &object_indices, &prism_indices);
     let mut convex_vertices = vec![];
     let mut convex_offsets = vec![0i32];
     let mut convex_ids = PackedStringArray::new();
@@ -249,6 +304,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         scene_normals: PackedVector3Array::from(scene_normals.as_slice()),
         ground_uv: PackedVector2Array::from(ground_uv.as_slice()),
         wall_uv: PackedVector2Array::from(wall_uv.as_slice()),
+        facade_seeds: PackedVector2Array::from(facade_seeds.as_slice()),
         prism_vertices: PackedInt64Array::from(prism_vertices.as_slice()),
         prism_indices: PackedInt32Array::from(prism_indices.as_slice()),
         materials: PackedStringArray::from(materials.as_slice()),
@@ -275,4 +331,35 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
     Ok(
         vdict! { "chunk" => &data, "generated_sha256" => hash.as_str(), "generated_counts" => &counts },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn triangle(object: &str, vertices: [[i64; 3]; 3]) -> mapkit_core::Triangle {
+        mapkit_core::Triangle { contact_class: 0, snow_retention_percent: 100, vertices, surface: Surface::Concrete, object_id: object.into(), spawnable: false }
+    }
+
+    #[test]
+    fn facade_seeds_follow_connected_building_solids_and_their_base() {
+        // Object 0: two solids (one raised); object 1: ground, not a building.
+        let triangles = vec![
+            triangle("b", [[0, 300, 0], [100, 300, 0], [0, 600, 0]]),
+            triangle("b", [[100, 300, 0], [100, 600, 0], [0, 600, 0]]),
+            triangle("b", [[500, 900, 0], [600, 900, 0], [500, 1200, 0]]),
+            triangle("g", [[0, 0, 0], [100, 0, 0], [0, 0, 100]]),
+        ];
+        let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
+            cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
+        let seeds = facade_seeds(&chunk, &[0, 0, 0, 1], &[0]);
+        assert_eq!(seeds.len(), 12);
+        assert!(seeds[..6].iter().all(|s| *s == seeds[0]), "one seed per connected solid");
+        assert_ne!(seeds[0].x, seeds[6].x, "separate solids of a record vary");
+        let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
+        assert_eq!(seeds[0].y, FACADE_BASE_OFFSET + 300.0 * scale);
+        assert_eq!(seeds[6].y, FACADE_BASE_OFFSET + 900.0 * scale);
+        assert!(seeds[9..].iter().all(|s| *s == Vector2::ZERO), "non-building triangles carry no seed");
+        assert_eq!(facade_seeds(&chunk, &[0, 0, 0, 1], &[0]), seeds, "stable");
+    }
 }

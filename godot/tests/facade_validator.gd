@@ -25,14 +25,16 @@ func run() -> void:
 	var job := {"resources":cache,"urban_shader":cache.urban_shader()}
 	var names := {}
 	for uniform: Dictionary in MATERIALS.new().shader.get_shader_uniform_list(): names[uniform.name] = true
-	check(names.has("facade_kind") and names.has("floor_pitch") and names.has("lighting_role"),"surface shader compiles with the facade uniforms")
+	check(names.has("facade_kind") and names.has("floor_pitch") and names.has("lighting_role") and names.has("sign_atlas"),"surface shader compiles with the facade uniforms")
 	var kinds := {"concrete:residential":1,"brick:residential":2,"wood:residential":2,"concrete:commercial":3,"brick:commercial":3,"wood:industrial":4,"concrete:public":5,"brick:home":0,"concrete":0,"barrier:wall":0,"rc:wall":0,"builtin:tree":0}
 	for key: String in kinds:
 		check(RENDER.facade_kind(key) == kinds[key],"facade kind "+key)
 	var scaled: ShaderMaterial = RENDER._generated_material(job,"concrete:commercial",{"facade_floor_cm":100})
 	check(scaled.get_shader_parameter("facade_kind") == 3 and is_equal_approx(scaled.get_shader_parameter("floor_pitch"),1.0) and scaled.get_shader_parameter("lighting_role") == 1,"generated walls carry the facade kind, 1:3 floor pitch and night windows")
+	check(scaled.get_shader_parameter("signs_enabled") == true and scaled.get_shader_parameter("sign_atlas") == context.signs,"commercial walls draw the shared sign atlas")
 	var unscaled: ShaderMaterial = RENDER._generated_material(job,"brick:residential",{})
 	check(is_equal_approx(unscaled.get_shader_parameter("floor_pitch"),3.0) and unscaled.get_shader_parameter("facade_kind") == 2,"missing scale provenance keeps 3 m floors")
+	check(unscaled.get_shader_parameter("signs_enabled") == null,"homes carry no storefront signs")
 	var plain: ShaderMaterial = RENDER._generated_material(job,"brick:home",{})
 	check(plain.get_shader_parameter("facade_kind") == null and plain.get_shader_parameter("lighting_role") == null,"unknown use keeps a plain unlit wall")
 	var ground: ShaderMaterial = RENDER._generated_material(job,"grass",{})

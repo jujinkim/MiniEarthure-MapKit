@@ -28,8 +28,10 @@ lease. Shared GLB templates capture opaque parameters before scene upload and
 activate their shared shader one surface at a time. Source materials retire during
 import; pending bindings retain the same bitmap and context leases. Textures load
 after admission through Godot resource remapping with mipmaps,
-never script preloads. Shared context reservations are 4.75/16/61MiB respectively
-(`1MiB + 10 × size² × 24`), including CPU/GPU/mipmap/retirement overlap. Cache and
+never script preloads. The sign atlas loads as one more admitted step after the
+tiles (halved to 512×320 with 128px tiles). Shared context reservations are
+8.5/31/76MiB respectively (`1MiB + 10 × size² × 24` plus the atlas pixels × 24),
+including CPU/GPU/mipmap/retirement overlap. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.
 
 ## Track and authored scenery
@@ -71,10 +73,21 @@ industrial = panel ribs with sparse high windows, public = tall windows with sto
 courses), the night-window role and a floor pitch of 3 m ÷ the map scale 1:D that
 presentation publishes as `facade_floor_cm` (300 when no OSM layer records a scale).
 Panes and bands are drawn procedurally from world position on vertical faces within the
-quality effect distance; storeys align to scene height, not to each building's base.
-Every planar face takes a stable seed from its plane, which varies wall brightness by
-±3 % and the night switch-off minute per face. Roofs, bottoms, imported assets and
-distant meshes are unchanged. No external image is used.
+quality effect distance. Packed chunks carry UV2 (seed, 1000 + base metres) on every
+generated building solid (triangles of one record sharing a vertex): the seed hashes
+the record ID and the solid's smallest vertex. Storeys start at the solid's base, so
+ground floors follow terrain. The seed picks one of four wall tones (±8 % hue/value),
+the bay width (0.8–1.3×), one of four pane patterns on apartment, commercial and
+public walls (standard, tall, ribbon, square), an apartment balcony-slab band and the
+glass tint, all faded with the effect weight so far walls keep the distant colour; it
+also varies brightness by ±3 % and sets the night switch-off minute per building.
+Meshes without UV2 keep a per-plane seed and scene-height storeys. Commercial walls
+draw a storefront sign per two bays (85 %) between the shop window and the first floor
+from the shared original atlas `textures/sign_atlas.png` (512 signs of 64×20 px:
+8 category rows of colours, a pictogram and glyphs of an invented script, no font,
+text or external image; `scripts/sign_atlas.py` reproduces it). Signs read left to
+right from outside and glow at night. Roofs, bottoms, imported assets and distant
+meshes are unchanged.
 
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC
