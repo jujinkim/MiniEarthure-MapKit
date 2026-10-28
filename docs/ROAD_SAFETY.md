@@ -1,6 +1,6 @@
 # Rounded streets and automatic deck safety
 
-Source coordinates, road/node IDs, widths and the 12 cm curb height are authored
+Source coordinates, road/node IDs, widths and the 12 cm curb height (3 cm on real-city OSM maps, [ROAD_CONTACT](ROAD_CONTACT.md)) are authored
 input. Designed road curves are owned by [ROAD_DESIGN](ROAD_DESIGN.md).
 
 ## Shared plan

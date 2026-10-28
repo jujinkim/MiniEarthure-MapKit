@@ -27,7 +27,7 @@ acceptance is user verification.
 
 ## Sidewalk boundaries and shared geometry
 
-Sidewalk tops are 12cm above their clipped ground polygons. The generator unions
+Sidewalk tops are 12 cm above their clipped ground polygons, 3 cm on maps whose OSM layer records an authored 1:D scale (`authored_units.source_denominator`, real-city imports). The generator unions
 these footprints in integer XY and emits walls only on exposed boundaries,
 excluding internal fragments and cell seams. Source edges retain bottom heights
 and road identity. A 1cm support check removes false boundaries from rounded

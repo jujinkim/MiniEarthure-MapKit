@@ -250,8 +250,16 @@ fn indexed_validation_retains_manual_overlap_rejection() {
 }
 #[test]
 fn paving_and_sidewalks_share_the_sloping_terrain_plane() {
-    for recipe in [1] {
+    // Real-city maps (an OSM layer with a recorded 1:D scale) use the low curb.
+    for (recipe, city, curb) in [(1, false, 12), (1, true, 3)] {
         let mut d = doc_recipe(0, recipe);
+        if city {
+            d.attributions.push(Attribution {
+                source: "synthetic OSM".into(),
+                license: "ODbL-1.0".into(),
+                notice: r#"{"adapter":"osm-extract-v1","authored_units":{"source_denominator":3}}"#.into(),
+            });
+        }
         d.roads[0].kind = RoadKind::Ground;
         d.roads[0].sidewalk_cm = Some(100);
         d.surface_areas.push(SurfaceArea {
@@ -283,7 +291,7 @@ fn paving_and_sidewalks_share_the_sloping_terrain_plane() {
         for (id, p, offset) in [
             ("paving", [1200, 1400], 0),
             ("road", [1200, 800], 0),
-            ("road:sidewalk", [1200, 550], 12),
+            ("road:sidewalk", [1200, 550], curb),
         ] {
             assert_eq!(
                 sample(&c, id, p).unwrap()[1],

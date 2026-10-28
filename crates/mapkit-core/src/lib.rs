@@ -1180,6 +1180,17 @@ mod urban;
 pub use placement::BuildingPrism;
 
 /// Exact piecewise planar height of the immutable input grid, including seams.
+/// The authored OSM map scale 1:D (1–8) that an `osm-extract-v1` layer records
+/// in its attribution notice (`authored_units.source_denominator`), if any.
+pub fn osm_source_denominator(d: &MapDocument) -> Option<u64> {
+    d.attributions
+        .iter()
+        .filter(|a| a.notice.contains("osm-extract-v1"))
+        .filter_map(|a| serde_json::from_str::<serde_json::Value>(&a.notice).ok())
+        .filter(|meta| meta.get("adapter").and_then(|v| v.as_str()) == Some("osm-extract-v1"))
+        .filter_map(|meta| meta.get("authored_units")?.get("source_denominator")?.as_u64())
+        .find(|d| (1..=8).contains(d))
+}
 pub fn terrain_height(bounds:&Bounds,spacing:i64,side:usize,grid:Option<&HeightGrid>,base:i64,p:Point)->i64 {
     let Some(grid)=grid else {return base;};
     let x=((p[0]-bounds.min[0]).div_euclid(spacing)).clamp(0,side as i64-2) as usize;

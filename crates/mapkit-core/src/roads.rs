@@ -731,8 +731,17 @@ pub(crate) fn generate(
 /// `exclusion_index` holds the bounds of [`sidewalk_exclusions`] of `d` in that
 /// order (built once per document by the placement preparation). `junctions`
 /// holds the junction plans of `d` when prepared.
+/// Sidewalk curb rise in map centimetres.
+pub(crate) const CURB_CM: i64 = 12;
+/// Curb rise on maps an OSM layer authored at a recorded 1:D scale (real-city
+/// imports): low enough that a curb only nudges the car.
+pub(crate) const CITY_CURB_CM: i64 = 3;
+pub(crate) fn curb_cm(d: &MapDocument) -> i64 {
+    if crate::osm_source_denominator(d).is_some() { CITY_CURB_CM } else { CURB_CM }
+}
+
 pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crate::bounds_index::BoundsIndex,
-    junctions: Option<&crate::road_plan::SharedJunctions>) -> Result<()> {
+    curb: i64, junctions: Option<&crate::road_plan::SharedJunctions>) -> Result<()> {
     // Width rules can exclude all sidewalks (notably small-scale imports).
     // Such maps need no second expanded road plan or footprint subdivision.
     if !d.roads.iter().any(|r| crate::placement::sidewalk_width(d,r)>0) {
@@ -824,7 +833,7 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crat
             for shape in fitted {
                 let rings: Vec<Vec<Point>> = shape.iter().map(|r| r.iter().map(|p| [p.x, p.y]).collect()).collect();
                 for triangle in crate::road_arrangement::triangulate(&rings,&mut work)? {
-                    let top=triangle.map(|p| {let p=bottom(p);[p[0],p[1]+12,p[2]]});
+                    let top=triangle.map(|p| {let p=bottom(p);[p[0],p[1]+curb,p[2]]});
                     emit(b,&top,Surface::Concrete,&id,true)?;
                     tops.push(triangle.to_vec());
                 }
@@ -837,7 +846,7 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crat
             }
         }
     }
-    sidewalk_boundary_walls(b, &edges, &tops, &mut work).map_err(|mut e| {
+    sidewalk_boundary_walls(b, &edges, &tops, curb, &mut work).map_err(|mut e| {
         e.message=format!("boundary of {} tops/{} edges, work {work}: {}",tops.len(),edges.len(),e.message);e
     })?;
     Ok(())
@@ -933,6 +942,7 @@ fn sidewalk_boundary_walls(
     b: &mut Builder,
     edges: &[(Vertex, Vertex, &str)],
     tops: &[Vec<Point>],
+    curb: i64,
     work: &mut usize,
 ) -> Result<()> {
     let mut overlay = Overlay::<i64>::new(edges.len());
@@ -1111,8 +1121,8 @@ fn sidewalk_boundary_walls(
                         [
                             first,
                             last,
-                            [last[0], last[1] + 12, last[2]],
-                            [first[0], first[1] + 12, first[2]],
+                            [last[0], last[1] + curb, last[2]],
+                            [first[0], first[1] + curb, first[2]],
                         ],
                         Surface::Concrete,
                         &format!("{id}:sidewalk"),

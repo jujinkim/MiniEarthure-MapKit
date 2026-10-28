@@ -326,14 +326,7 @@ pub(crate) fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
 /// that an OSM layer records in its attribution notice (`authored_units.source_denominator`);
 /// 300 cm when no layer states a scale. Display only; the document is unchanged.
 pub(crate) fn facade_floor_cm(document: &mapkit_core::MapDocument) -> i64 {
-    document
-        .attributions
-        .iter()
-        .filter_map(|a| serde_json::from_str::<serde_json::Value>(&a.notice).ok())
-        .filter(|meta| meta.get("adapter").and_then(|v| v.as_str()) == Some("osm-extract-v1"))
-        .filter_map(|meta| meta.get("authored_units")?.get("source_denominator")?.as_u64())
-        .find(|d| (1..=8).contains(d))
-        .map_or(300, |d| (300.0 / d as f64).round() as i64)
+    mapkit_core::osm_source_denominator(document).map_or(300, |d| (300.0 / d as f64).round() as i64)
 }
 
 #[cfg(test)]
