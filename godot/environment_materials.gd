@@ -38,6 +38,11 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 		# upload are separate admitted steps; never preload texture owners.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
 		tile_image = tile.get_image() if tile != null else null
+		if kind.is_empty() and (tile_image == null or tile_image.is_empty()):
+			# Signs are optional decoration: a missing atlas keeps plain walls.
+			tile_image = null
+			tile_cursor += 1
+			return true
 		load_failed = tile_image == null or tile_image.is_empty()
 		if lease != null and tile_image != null: lease.track(tile_image)
 		return load_failed
