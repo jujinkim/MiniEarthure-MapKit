@@ -257,9 +257,10 @@ fn ground_tile(
 /// and `h` holes triangulates to exactly `k - 2 + 2h` faces; only holed faces can
 /// restore collinear vertices dropped by hole bridging (at most two faces each).
 /// `paint` is [`paint_index`] of `d` when prepared; otherwise it is built here.
-pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch], paint: Option<&crate::bounds_index::BoundsIndex>) -> Result<u64> {
-    let spacing = d.cell_size_cm as i64;
-    let side = 2usize;
+/// Ground faces of the cell's terrain tiles (`spacing`, `side` samples per
+/// edge; one tile on a flat cell). Terrain heights never change the plan-view
+/// arrangement, so heightmap cells count on the flat base.
+pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch], paint: Option<&crate::bounds_index::BoundsIndex>, spacing: i64, side: usize) -> Result<u64> {
     let fitter = crate::road_design::Fitter::new(d, bounds);
     let height = |x: usize, y: usize| fitter.height(
         [bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing],

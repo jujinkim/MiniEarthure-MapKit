@@ -1,9 +1,9 @@
 //! Allocation planning for successful generation; never materializes geometry.
 //! Every count is an upper bound of what generation emits, because generation
-//! fails closed above `triangles`. Cells without a heightmap or assembled track
-//! pre-run the ground arrangement (no triangulation) and bound sidewalks from
-//! that ground count and the nearby sidewalk segments; other cells keep the
-//! sampled-terrain allowances.
+//! fails closed above `triangles`. Cells without an assembled track pre-run the
+//! ground arrangement of their terrain tiles (no triangulation) and bound
+//! sidewalks from that ground count and the nearby sidewalk segments; track
+//! cells keep the sampled-terrain allowances.
 use super::*;
 
 /// Conservative counts, not process/GPU byte measurements. Runtime adapters own
@@ -118,16 +118,17 @@ pub(crate) fn estimate_validated(
     let ny = ((area.max[1] - area.min[1]) / spacing + 1).min(side as i64 - 1) as u64;
     let partial = (area.max[0] - area.min[0]) < d.cell_size_cm as i64
         || (area.max[1] - area.min[1]) < d.cell_size_cm as i64;
-    // Flat cells (one terrain tile, no decoded heights) count the real ground
-    // arrangement; sampled or track-integrated terrain keeps the tile allowances.
-    let flat = descriptor.is_none() && d.assembled_track.is_none();
+    // Cells without a track count the real ground arrangement of their terrain
+    // tiles (one tile when flat); track terrain keeps the tile allowances.
+    let flat = d.assembled_track.is_none();
     let plan = if flat || d.roads.iter().any(|r| matches!(r.kind, RoadKind::Elevated | RoadKind::Bridge)) {
         Some(crate::road_plan::surface_plan(d, &area, prepared.map(|p| &p.junctions))?)
     } else { None };
     let mut ground = 0u64;
     if flat {
         let (patches, walls) = plan.as_ref().unwrap();
-        ground = crate::roads::estimate_ground(d, &area, patches, prepared.map(|p| p.paint(d)))?;
+        let (tile, tiles) = if descriptor.is_some() { (spacing, side as usize) } else { (d.cell_size_cm as i64, 2) };
+        ground = crate::roads::estimate_ground(d, &area, patches, prepared.map(|p| p.paint(d)), tile, tiles)?;
         add(ground, 7);
         // Structural decks (plus a tunnel ceiling) and portal walls are emitted
         // whole and clipped to the cell afterwards.
