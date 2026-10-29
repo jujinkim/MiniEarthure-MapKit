@@ -74,7 +74,10 @@ safety furniture, placement intersection and regional influence margin.
 
 `tests/road_safety.rs` (decks, mouths, dead ends, layered crossings, seams,
 archives, cancellation, reserved IDs) and the Godot `road_safety_validator`
-(`MAPKIT_ROAD_CAPTURE` optionally writes an image). `road_safety_probe` checks
+(`MAPKIT_ROAD_CAPTURE` optionally writes an image). Renderer-drawn signal heads,
+benches and shrubs share process-lifetime meshes and materials; a cell's display
+lease tracks only their nodes, so it retires with the cell
+(`street_detail_lease_validator`). `road_safety_probe` checks
 public regional examples. `reseal_courses` copies course definitions onto a new map
 identity without completion evidence and never overwrites. Vector status:
 [DETERMINISM](../spec/DETERMINISM.md). Vehicle driving and appearance are user checks.

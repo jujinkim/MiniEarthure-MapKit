@@ -100,6 +100,7 @@ static func _detail_mesh(mesh_key: String, material_key: String, at: Vector3, ba
 	mesh.material_override = _detail_resource(material_key)
 	mesh.transform = Transform3D(basis, at)
 	mesh.set_meta("mapkit_decoration", true)
+	mesh.set_meta("mapkit_static_detail", true)
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mesh
 
@@ -356,7 +357,7 @@ static func _advance(job: Dictionary) -> bool:
 				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
 			if STREET_DETAILS.has(id):
 				var detail := _street_detail(id, object)
-				track_resources(job, detail, true)
+				track_resources(job, detail)
 				job.root.add_child(detail)
 				continue
 			if id != "builtin:tree": continue
@@ -447,13 +448,16 @@ static func _track_resources(job: Dictionary, node: Node, shared_mesh: bool, qua
 		if occluder != null: node.add_child(occluder)
 	if job.get("lease") == null: return
 	if node is MeshInstance3D:
-		# A cached canopy must not keep every cell's private reservation alive.
-		if shared_mesh: job.lease.track(node)
+		# A cached canopy or process-lifetime street detail must not keep every
+		# cell's private reservation alive; the node carries the charge.
+		var detail: bool = node.get_meta("mapkit_static_detail", false)
+		if shared_mesh or detail: job.lease.track(node)
 		else: job.lease.track(node.mesh)
-		track_material(job, node.material_override)
-		for i in node.mesh.get_surface_count():
-			track_material(job, node.mesh.surface_get_material(i))
-			track_material(job, node.get_surface_override_material(i))
+		if not detail:
+			track_material(job, node.material_override)
+			for i in node.mesh.get_surface_count():
+				track_material(job, node.mesh.surface_get_material(i))
+				track_material(job, node.get_surface_override_material(i))
 	for child: Node in node.get_children(): _track_resources(job, child, false, quality)
 
 static func track_material(job: Dictionary, material: Material) -> void:
