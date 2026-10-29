@@ -95,7 +95,15 @@ This page lists the domain invariants and links each feature's owner.
 - File-backed `read_with_budget(path, allowance)` bounds compressed input before
   allocation and checks the validation peak before retaining inflated payloads.
   Cost inspection streams JSON through a 64 KiB buffer; string tails beyond 256
-  encoded bytes are charged at a reduced per-byte rate.
+  encoded bytes are charged at a reduced per-byte rate in the retained estimate.
+  The same scan bounds each JSON file's serde_json `Value` tree from its tokens
+  (vector capacities from 4 by doubling, 632-byte map leaves or 640 + 160 per key
+  above 11 keys, string bytes, 32-byte root slot); the transient peak charges four
+  such trees (parse, typed form, content-hash Value and its canonical copy) plus
+  the canonical bytes. Unusual syntax, nesting beyond 128 levels and GLB JSON keep
+  34 bytes per byte per tree. `tests/read_peak.rs` checks the plan against a
+  counting allocator for adversarial shapes and, given MAPKIT_PEAK_PACKAGES, local
+  packages.
 - Godot `open_project(path)` opens the user's project directory in memory under
   Authoring (`Package::from_project`, no ZIP round trip): the same document, files,
   manifest and `world_content_hash` as a stored-preview package, with

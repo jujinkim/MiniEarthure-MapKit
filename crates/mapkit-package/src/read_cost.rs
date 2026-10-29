@@ -23,6 +23,7 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
     let mut expanded = 0u64;
     let mut structured = 0u64;
     let mut long_strings = 0u64;
+    let mut tree = 0u64;
     let mut pngs = 0u64;
     let mut image_peak = 8 * 1024 * 1024u64;
     let mut metadata = 1024 * 1024u64;
@@ -73,13 +74,17 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
             structured += entry.size();
         }
         if name.ends_with(".json") {
-            long_strings += match long_string_bytes(&mut entry, entry_size) {
-                Ok(tail) => tail,
+            let shape = match json_shape(&mut entry, entry_size) {
+                Ok(shape) => shape,
                 Err(e) if e.code == "E_CANCELLED" => return Err(e),
                 // A damaged stream gets no discount. Admission still precedes
                 // full decoding and its precise corruption/hash diagnostics.
-                Err(_) => 0,
+                Err(_) => JsonShape::default(),
             };
+            long_strings += shape.tail;
+            tree += shape.tree.unwrap_or(entry_size * LEGACY_TREE_RATE);
+        } else if name.ends_with(".glb") {
+            tree += entry_size * LEGACY_TREE_RATE;
         }
         if name.ends_with(".glb") || name.ends_with(".png") || name.ends_with(".webp") {
             image_peak = image_peak.max(decoder_peak(&mut entry, &name, entry_size));
@@ -89,13 +94,15 @@ pub fn inspect_read_cost(bytes: &[u8]) -> Result<ReadCost> {
         }
         metadata += 1024 + name.len() as u64 * 8;
     }
-    Ok(planned(expanded, structured, long_strings, pngs, image_peak, metadata, bytes.len() as u64))
+    Ok(planned(expanded, structured, long_strings, tree, pngs, image_peak, metadata, bytes.len() as u64))
 }
 
 /// The same planning allowance for in-memory project files and their manifest
 /// size; no compressed container exists.
 pub(crate) fn files_cost(manifest_bytes: u64, files: &BTreeMap<String, Vec<u8>>) -> Result<ReadCost> {
     let (mut expanded, mut structured, mut long_strings, mut pngs) = (manifest_bytes, manifest_bytes, 0u64, 0u64);
+    // The manifest is not scanned here: charge it at the legacy rate.
+    let mut tree = manifest_bytes * LEGACY_TREE_RATE;
     let mut image_peak = 8 * 1024 * 1024u64;
     let mut metadata = 1024 * 1024u64 + 1024 + "manifest.json".len() as u64 * 8;
     for (name, bytes) in files {
@@ -105,11 +112,15 @@ pub(crate) fn files_cost(manifest_bytes: u64, files: &BTreeMap<String, Vec<u8>>)
             structured += size;
         }
         if name.ends_with(".json") {
-            long_strings += match long_string_bytes(&mut bytes.as_slice(), size) {
-                Ok(tail) => tail,
+            let shape = match json_shape(&mut bytes.as_slice(), size) {
+                Ok(shape) => shape,
                 Err(e) if e.code == "E_CANCELLED" => return Err(e),
-                Err(_) => 0,
+                Err(_) => JsonShape::default(),
             };
+            long_strings += shape.tail;
+            tree += shape.tree.unwrap_or(size * LEGACY_TREE_RATE);
+        } else if name.ends_with(".glb") {
+            tree += size * LEGACY_TREE_RATE;
         }
         if name.ends_with(".glb") || name.ends_with(".png") || name.ends_with(".webp") {
             image_peak = image_peak.max(decoder_peak(&mut bytes.as_slice(), name, size));
@@ -119,10 +130,15 @@ pub(crate) fn files_cost(manifest_bytes: u64, files: &BTreeMap<String, Vec<u8>>)
         }
         metadata += 1024 + name.len() as u64 * 8;
     }
-    Ok(planned(expanded, structured, long_strings, pngs, image_peak, metadata, 0))
+    Ok(planned(expanded, structured, long_strings, tree, pngs, image_peak, metadata, 0))
 }
 
-fn planned(expanded: u64, structured: u64, long_strings: u64, pngs: u64, image_peak: u64, metadata: u64, compressed: u64) -> ReadCost {
+/// Unscanned or unusual JSON (and GLB JSON) is charged one Value tree of 34
+/// bytes per byte, so its four overlapping trees keep the previous 136 B/B.
+const LEGACY_TREE_RATE: u64 = 34;
+
+#[allow(clippy::too_many_arguments)]
+fn planned(expanded: u64, structured: u64, long_strings: u64, tree: u64, pngs: u64, image_peak: u64, metadata: u64, compressed: u64) -> ReadCost {
     // Payload vectors, typed document/manifest and their strings. GLB JSON is
     // bounded conservatively by its complete entry size before decoding headers.
     // Immutable core estimate and bridge preparation caches: at most the shared bounded cache capacity,
@@ -136,11 +152,14 @@ fn planned(expanded: u64, structured: u64, long_strings: u64, pngs: u64, image_p
     // copies of its tail. Expanded input buffers remain charged separately.
     let structure = structured - long_strings;
     let retained = expanded * 2 + structure * 40 + long_strings * 4 + metadata + mapkit_core::PREPARATION_CACHE_BYTES + 32 * 1024 * 1024;
-    // Strict JSON key validation, typed parsing and content-hash canonicalization
-    // overlap with retained data. Image decoder limits are sequential; heightmap
+    // Strict JSON key validation builds one serde_json Value tree; typed parsing
+    // and the content hash (a typed clone, its Value and the canonical copy of
+    // that Value) overlap with it: at most four trees of the scanned bound
+    // (`json_shape`), each no smaller than its typed form, plus the canonical
+    // bytes they serialize to. Image decoder limits are sequential; heightmap
     // seams retain at most four edges of 513 i64 samples per PNG under v1 limits.
     let transient =
-        structure * 96 + long_strings * 8 + compressed * 2 + image_peak.max(track_workspace(structured)) + pngs * (4 * 513 * 8 + 256);
+        tree * 4 + structured + compressed * 2 + image_peak.max(track_workspace(structured)) + pngs * (4 * 513 * 8 + 256);
     ReadCost {
         retained_memory_bytes: retained,
         validation_peak_bytes: (retained + transient).max(compressed * 4 + 8 * 1024 * 1024),
@@ -152,10 +171,36 @@ fn planned(expanded: u64, structured: u64, long_strings: u64, pngs: u64, image_p
 /// Unknown/incomplete string syntax retains the old conservative allowance.
 /// Size, CRC, duplicate keys, UTF-8, syntax and hashes are still validated by the
 /// normal reader. The 64 KiB buffer fits the existing 8 MiB pre-index allowance.
-fn long_string_bytes(entry: &mut impl Read, expected: u64) -> Result<u64> {
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct JsonShape {
+    /// Encoded bytes beyond the first 256 of every string (0 when unusual).
+    pub tail: u64,
+    /// Upper bound of the serde_json `Value` tree's heap bytes; None when the
+    /// syntax is unusual or nesting exceeds the parser's depth limit.
+    pub tree: Option<u64>,
+}
+
+/// serde_json refuses nesting deeper than 128 before allocating further.
+const MAX_DEPTH: usize = 128;
+/// `Value` is 32 bytes. A non-empty `Vec<Value>` grows by doubling from 4.
+fn array_heap(n: u64) -> u64 {
+    if n == 0 { 0 } else { 32 * n.max(4).next_power_of_two() }
+}
+/// `BTreeMap<String, Value>` (serde_json without `preserve_order`): one 632-byte
+/// leaf up to 11 entries; larger maps keep leaves at least five entries full
+/// plus internal nodes (728 bytes).
+fn object_heap(n: u64) -> u64 {
+    if n == 0 { 0 } else if n <= 11 { 632 } else { 640 + 160 * n }
+}
+
+pub(crate) fn json_shape(entry: &mut impl Read, expected: u64) -> Result<JsonShape> {
     let mut buffer = [0u8; 64 * 1024];
     let (mut seen, mut tail, mut length) = (0u64, 0u64, 0u64);
     let (mut quoted, mut escaped, mut invalid) = (false, false, false);
+    // Container stack (object?, entries or elements) and the root slot.
+    let mut stack = [(false, 0u64); MAX_DEPTH + 1];
+    let (mut depth, mut tree, mut scalar, mut deep) = (0usize, 32u64, false, false);
+    let element = |stack: &mut [(bool, u64)], depth: usize| if depth > 0 && !stack[depth - 1].0 { stack[depth - 1].1 += 1 };
     loop {
         mapkit_core::cancellation::checkpoint()?;
         let count = entry.read(&mut buffer).map_err(zip_error)?;
@@ -163,23 +208,57 @@ fn long_string_bytes(entry: &mut impl Read, expected: u64) -> Result<u64> {
         seen += count as u64;
         if seen > expected { return Err(error("E_LIMIT", "ZIP decompressed size mismatch")); }
         for &byte in &buffer[..count] {
-            if !quoted {
-                if byte == b'"' { quoted = true; length = 0; }
-            } else if !escaped && byte == b'"' {
-                tail += length.saturating_sub(256);
-                quoted = false;
-            } else {
-                length += 1;
-                if byte < 0x20 { invalid = true; }
-                if escaped {
-                    if !matches!(byte, b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' | b'u') { invalid = true; }
-                    escaped = false;
-                } else if byte == b'\\' { escaped = true; }
+            if quoted {
+                if !escaped && byte == b'"' {
+                    tail += length.saturating_sub(256);
+                    tree += length;
+                    quoted = false;
+                } else {
+                    length += 1;
+                    if byte < 0x20 { invalid = true; }
+                    if escaped {
+                        if !matches!(byte, b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' | b'u') { invalid = true; }
+                        escaped = false;
+                    } else if byte == b'\\' { escaped = true; }
+                }
+                continue;
+            }
+            match byte {
+                b'"' => { scalar = false; quoted = true; length = 0; element(&mut stack, depth); }
+                b'[' | b'{' => {
+                    scalar = false;
+                    element(&mut stack, depth);
+                    if depth == MAX_DEPTH { deep = true; continue; }
+                    if deep { continue; }
+                    stack[depth] = (byte == b'{', 0);
+                    depth += 1;
+                }
+                b']' | b'}' => {
+                    scalar = false;
+                    if deep { continue; }
+                    if depth == 0 || stack[depth - 1].0 != (byte == b'}') { invalid = true; continue; }
+                    depth -= 1;
+                    let (object, n) = stack[depth];
+                    tree += if object { object_heap(n) } else { array_heap(n) };
+                }
+                b':' => { scalar = false; if depth > 0 && stack[depth - 1].0 { stack[depth - 1].1 += 1 } }
+                b',' | b' ' | b'\n' | b'\r' | b'\t' => scalar = false,
+                _ => {
+                    // Numbers and literals: count their first byte only.
+                    if !scalar { element(&mut stack, depth); }
+                    scalar = true;
+                }
             }
         }
     }
     if seen != expected { return Err(error("E_LIMIT", "ZIP decompressed size mismatch")); }
-    Ok(if quoted || invalid { 0 } else { tail })
+    let unusual = quoted || invalid;
+    Ok(JsonShape { tail: if unusual { 0 } else { tail }, tree: (!unusual && !deep && depth == 0).then_some(tree) })
+}
+
+#[cfg(test)]
+fn long_string_bytes(entry: &mut impl Read, expected: u64) -> Result<u64> {
+    json_shape(entry, expected).map(|shape| shape.tail)
 }
 
 #[cfg(test)]
@@ -195,6 +274,22 @@ mod string_accounting_tests {
         }
         assert!(long_string_bytes(&mut source.as_slice(), 1).is_err());
         assert!(long_string_bytes(&mut source.as_slice(), source.len() as u64 + 1).is_err());
+    }
+    #[test]
+    fn value_tree_bound_follows_vectors_maps_and_strings() {
+        let shape = |text: &str| json_shape(&mut text.as_bytes(), text.len() as u64).unwrap();
+        // Root slot, one array of three (capacity 4), no strings.
+        assert_eq!(shape("[0, 1, 2]").tree, Some(32 + 128));
+        // Five elements grow to capacity 8; nested pairs keep their own vectors.
+        assert_eq!(shape("[[0],[1],{},[],5]").tree, Some(32 + 256 + 2 * 128));
+        // One map leaf, key and string bytes, the inner array.
+        assert_eq!(shape(r#"{"ab": "xyz", "c": [true]}"#).tree, Some(32 + 632 + 2 + 3 + 1 + 128));
+        let wide = format!("{{{}}}", (0..12).map(|i| format!("\"{i:x}\":0")).collect::<Vec<_>>().join(","));
+        assert_eq!(shape(&wide).tree, Some(32 + 640 + 160 * 12 + 12));
+        // Unusual input and nesting beyond serde_json's depth limit fall back.
+        assert_eq!(shape(&format!("{}{}", "[".repeat(129), "]".repeat(129))).tree, None);
+        assert!(shape(&format!("{}{}", "[".repeat(128), "]".repeat(128))).tree.is_some());
+        for bad in ["[1", "]", "[}", "\"open"] { assert_eq!(shape(bad).tree, None, "{bad}"); }
     }
     #[test]
     fn cancellation_interrupts_scanning_at_the_next_bounded_block() {

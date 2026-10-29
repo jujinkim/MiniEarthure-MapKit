@@ -446,16 +446,18 @@ fn validation_budget_rejects_before_inflating_payloads() {
         entry.data_start() as usize
     };
     corrupt[position] ^= 0xff;
-    assert_eq!(inspect_read_cost(&corrupt).unwrap(), cost);
+    // A damaged stream gets no discount over the intact package.
+    let damaged = inspect_read_cost(&corrupt).unwrap();
+    assert!(damaged.validation_peak_bytes >= cost.validation_peak_bytes && damaged.retained_memory_bytes == cost.retained_memory_bytes);
     assert_eq!(
-        read_bytes_with_budget(&corrupt, cost.validation_peak_bytes - 1)
+        read_bytes_with_budget(&corrupt, damaged.validation_peak_bytes - 1)
             .err()
             .unwrap()
             .code,
         "E_MEMORY_BUDGET"
     );
     assert_ne!(
-        read_bytes_with_budget(&corrupt, cost.validation_peak_bytes)
+        read_bytes_with_budget(&corrupt, damaged.validation_peak_bytes)
             .err()
             .unwrap()
             .code,
