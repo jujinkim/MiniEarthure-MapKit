@@ -9,7 +9,7 @@ static func profile(level: int) -> Dictionary:
 		"water":level, "sky":level, "material_detail":level, "vegetation_motion":[0.0,.5,1.0][level], "lod_bias":[.55,.8,1.0][level], "decoration_distance":[64.0,112.0,192.0][level],
 		"detail_distance":[96.0,128.0,160.0][level],
 		"surface_effect_distance":[48.0,96.0,160.0][level], "weather_amount":[.4,.7,1.0][level],
-		"occlusion":level > 0, "light_count":[4,6,8][level]}
+		"occlusion":level > 0, "light_count":[4,6,8][level], "sky_radiance":[32,64,128][level]}
 
 static func active() -> Dictionary:
 	return profile(1) if current.is_empty() else current.duplicate()
@@ -55,10 +55,24 @@ static func apply_material(material: Material, value: Dictionary) -> void:
 		material.shader = preload("./water_surface_high.gdshader") if int(value.water) == 2 else preload("./water_surface.gdshader")
 		material.set_shader_parameter("quality_level",int(value.water))
 
+## The environment context's tile kinds end with this many facade relief
+## layers (environment_materials.FACADE_LAYERS), loaded at most 256 px.
+const FACADE_TILE_LAYERS := 5
+const FACADE_TILE_MAX := 256
+
 static func tile_bytes(size: int, count: int) -> int:
 	# Mipmaps + generation scratch, CPU/GPU copies and retirement overlap,
-	# for the tiles and the 1024x640 sign atlas (512x320 with 128px tiles).
-	return 1048576 + count * size * size * 24 + (1024 * 640 if size >= 256 else 512 * 320) * 24
+	# for `count` tile kinds (the last FACADE_TILE_LAYERS are facade layers
+	# capped at FACADE_TILE_MAX) and the 1024x640 sign atlas (512x320 with
+	# 128px tiles).
+	var facade := mini(size,FACADE_TILE_MAX)
+	return 1048576 + (count - FACADE_TILE_LAYERS) * size * size * 24 + FACADE_TILE_LAYERS * facade * facade * 24 + (1024 * 640 if size >= 256 else 512 * 320) * 24
+
+## Estimated sky radiance cubemap of a tier from the engine's texture-array
+## allocation: six RGBA16F faces with mipmaps for each of eight roughness
+## layers (unmeasured; excludes the small downsampled copy).
+static func radiance_bytes(size: int) -> int:
+	return 6 * 8 * size * size * 8 * 4 / 3
 
 static func prepare_lods(mesh: Mesh, observer := Callable()) -> Mesh:
 	var job := begin_lods(mesh)

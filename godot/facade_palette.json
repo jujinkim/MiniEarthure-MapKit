@@ -10,6 +10,24 @@
     "wood": [[160,120,80],[140,104,70],[176,140,96],[120,92,64],[150,126,92],[184,150,110],[130,100,72],[166,130,88]]
   },
   "accent": [[52,78,128],[128,48,52],[60,110,80],[196,108,52],[48,120,128],[110,80,60],[90,96,110],[150,120,60]],
+  "finishes": {
+    "about": "Near-wall finishes (display only; the distant mesh ignores this table). A record picks one finish for all its walls by an integer PCG hash of its seed against the key's cumulative weights (atmosphere_surface.gdshader). tile: facade texture layer (textures/facade, empty for none); tile_floors: tile edge in storeys; metallic at most 0.1 (walls keep their diffuse brightness, so near and distant walls match; metal reads through roughness and specular); curtain_wall: glass between anodised mullions, commercial walls only, no tile. Keys without weights (wood) keep their racing detail tile.",
+    "kinds": {
+      "brick": {"tile": "brick", "tile_floors": 0.5, "roughness": 0.86, "metallic": 0.0, "specular": 0.3},
+      "plaster": {"tile": "plaster", "tile_floors": 1.0, "roughness": 0.9, "metallic": 0.0, "specular": 0.3},
+      "concrete": {"tile": "concrete", "tile_floors": 1.2, "roughness": 0.78, "metallic": 0.0, "specular": 0.35},
+      "stone": {"tile": "stone", "tile_floors": 1.0, "roughness": 0.66, "metallic": 0.0, "specular": 0.4},
+      "metal": {"tile": "metal", "tile_floors": 1.0, "roughness": 0.42, "metallic": 0.1, "specular": 0.5},
+      "curtain": {"tile": "", "tile_floors": 1.0, "roughness": 0.35, "metallic": 0.1, "specular": 0.5, "curtain_wall": true}
+    },
+    "weights": {
+      "concrete:residential": {"plaster": 55, "concrete": 25, "stone": 15, "metal": 5},
+      "concrete:commercial": {"plaster": 25, "concrete": 15, "stone": 20, "metal": 15, "curtain": 25},
+      "concrete:industrial": {"metal": 55, "concrete": 35, "plaster": 10},
+      "concrete:public": {"stone": 40, "concrete": 30, "plaster": 30},
+      "brick": {"brick": 100}
+    }
+  },
   "roof": {
     "concrete": [[110,140,112],[96,128,104],[150,150,146],[120,120,118],[170,166,156],[126,146,120],[100,104,108],[140,150,140]],
     "brick": [[150,80,64],[118,72,62],[92,92,98],[132,100,82],[160,96,72],[104,84,76],[120,120,124],[140,88,70]],

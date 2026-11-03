@@ -81,6 +81,16 @@ Splashes use one shared quad/material and a fixed 64-slot MultiMesh (24 on low),
 with at most two extra surface rays per 10Hz update. Covered/steep surfaces suppress
 splashes. Clear weather and snow retire pool contents without reallocating.
 
+Sky radiance (the only reflection source; ambient light is a flat colour) follows
+the display tier: 32/64/128px on low/medium/high (`display_quality` `sky_radiance`),
+set at `configure` and on live quality changes. `display_quality.radiance_bytes`
+estimates its cubemap from the engine's texture-array allocation (six RGBA16F faces
+with mipmaps for each of eight roughness layers): 0.5/2/8MiB. The estimate is not
+measured and excludes the engine's small downsampled copy; every sky owner allocates
+its own. Glass and wet surfaces read the sharper reflection on higher tiers. Surface
+materials also read the renderer's cloud cover and daylight from `environment_data`
+(pixel 0: wet, snow, cloud cover, daylight) for the daylight glass reflection.
+
 Wet upward surfaces share world-space puddle masks, small ripple normals,
 roughness 0.22 and modest specular response. There is no planar reflection pass
 or fluid simulation. Shader includes expand before context-owned duplication for

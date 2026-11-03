@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from PIL import Image
-from richer_assets import create,textures,unpack,water_mesh
+from richer_assets import FACADE_TILES,create,facade_textures,textures,unpack,water_mesh
 
 ROOT=Path(__file__).resolve().parents[1]
 class RicherAssets(unittest.TestCase):
@@ -31,6 +31,27 @@ class RicherAssets(unittest.TestCase):
                     # Small relief, no grain normal spikes at any texture tier.
                     for channel in ('B','A'):
                         self.assertLess(max(image.getchannel(channel).getdata())-min(image.getchannel(channel).getdata()),15)
+
+    def test_facade_relief_tiles_reproduce_at_every_tier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tiles=Path(tmp);facade_textures(tiles)
+            produced=sorted(str(t.relative_to(tiles)) for t in tiles.rglob('*.png'))
+            self.assertEqual(produced,sorted(f'{d}{k}.png' for d in ['','128/'] for k in FACADE_TILES))
+            for tile in tiles.rglob('*.png'):
+                self.assertEqual(tile.read_bytes(),(ROOT/'godot/textures/facade'/tile.relative_to(tiles)).read_bytes())
+                size=256 if tile.parent==tiles else int(tile.parent.name)
+                with Image.open(tile) as image:
+                    self.assertEqual((image.size,image.mode),((size,size),'RGBA'))
+                    light=list(image.getchannel('R').getdata());rough=list(image.getchannel('G').getdata())
+                    self.assertAlmostEqual(sum(light)/len(light)/255,.65,delta=.004)
+                    self.assertAlmostEqual(sum(rough)/len(rough)/255,.5,delta=.004)
+                    # Real relief, stronger than the flat racing tiles, never saturated.
+                    self.assertGreater(max(light)-min(light),30)
+                    if size==256:
+                        for channel in ('B','A'):
+                            values=list(image.getchannel(channel).getdata())
+                            self.assertGreater(max(values)-min(values),40,tile)
+                            self.assertAlmostEqual(sum(values)/len(values)/255,.5,delta=.01)
 
     def test_common_library_and_tiles_reproduce_without_embedded_bitmaps(self):
         with tempfile.TemporaryDirectory() as tmp:

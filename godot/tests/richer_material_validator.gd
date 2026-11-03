@@ -32,6 +32,16 @@ func run() -> void:
 	var context: RefCounted=cache.environment_context()
 	check(context!=null and cache.bytes()==MATERIALS.MEMORY_BYTES,"shared texture charge before materialization")
 	check(context.tiles.size()==10,"ten common 256px packed tiles")
+	check(MATERIALS.TILE_KINDS.size()==15 and MATERIALS.FACADE_LAYERS.size()==QUALITY.FACADE_TILE_LAYERS and MATERIALS.TILE_KINDS.slice(10)==MATERIALS.FACADE_LAYERS.map(func(layer): return "facade:"+layer) and MATERIALS.MEMORY_BYTES==QUALITY.tile_bytes(256,MATERIALS.TILE_KINDS.size()),"context charge counts ten racing tiles and five facade layers")
+	var facades: Texture2DArray=context.facades
+	check(facades!=null and facades.get_layers()==5 and facades.get_width()==256 and facades.get_height()==256 and facades.has_mipmaps(),"five 256px mipmapped facade relief layers")
+	for layer: String in MATERIALS.FACADE_LAYERS:
+		for size in [128,256]:
+			var path:=(MATERIALS as Script).resource_path.get_base_dir().path_join("textures/facade/"+("" if size==256 else str(size)+"/")+layer+".png")
+			var source:=Image.load_from_file(ProjectSettings.globalize_path(path))
+			check(source!=null and source.get_width()==size and source.get_height()==size,"facade tile %s at %d px"%[layer,size])
+	facades=null
+	check(not context.tiles.has("facade:brick"),"facade layers never bind as racing detail tiles")
 	check(context.signs!=null and context.signs.get_width()==1024 and context.signs.get_height()==640,"shared storefront sign atlas")
 	surface_factory_quality(context)
 	var source:=StandardMaterial3D.new()

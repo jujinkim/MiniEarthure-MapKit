@@ -135,9 +135,9 @@ cell reservations and job-local importers; caches cannot subtract unproven allow
 
 ## Shared miniature material tiles
 
-Weather reserves 8.5/31/76 MiB for ten 128/256/512 px tiles, the storefront sign
-atlas (512×320 or 1024×640) and CPU/GPU/mipmap/retirement overlap, even without
-admission callbacks. All five source bitmap
+Weather reserves 10.375/38.5/83.5 MiB for ten 128/256/512 px racing tiles, five
+facade relief layers (at most 256 px), the storefront sign atlas (512×320 or
+1024×640) and CPU/GPU/mipmap/retirement overlap, even without admission callbacks. All five source bitmap
 slots join asset leases. See [materials](docs/RICHER_MATERIALS.md).
 
 ## LOD and occlusion admission

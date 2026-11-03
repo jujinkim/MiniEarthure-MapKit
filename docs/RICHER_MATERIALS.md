@@ -14,6 +14,16 @@ blades, soil crumbs, leaf veins) within the same bounds. The original tiles rema
 available as source artifacts. Generated grass ground (`lawn`) adds world-space lush
 and dry patches (about 10 m) at every distance and clumps, blades and clover within
 the effect distance.
+`scripts/richer_assets.py --textures --facade` creates the facade relief tiles under
+`godot/textures/facade` at 128/256px (no 512px tier: 256px already holds 2–5mm per
+texel at 1:3): brick in running bond with recessed mortar (6 bricks × 20 courses),
+painted plaster/stucco grain, formwork concrete (2 × 4 panels with recessed joints,
+six tie holes each and bug holes), stone cladding (five courses of cut slabs) and
+trapezoid metal ribs with a panel seam. They are packed like the racing tiles
+(luminance mean 0.65, normal XY from a blurred height field) except that green is a
+roughness factor centred at 0.5. The context loads them as one `Texture2DArray`
+(`facades`, layer order `FACADE_LAYERS`) after the racing tiles; a missing layer
+leaves walls on the racing tiles.
 The shader bounds variation to 88–112% of the authored colour and reduces relief.
 Low retains the same base colours; medium adds roughness/AO and high adds restrained
 normals. Detail fades continuously at 32–48m to the authored mean colour.
@@ -32,10 +42,12 @@ lease. Shared GLB templates capture opaque parameters before scene upload and
 activate their shared shader one surface at a time. Source materials retire during
 import; pending bindings retain the same bitmap and context leases. Textures load
 after admission through Godot resource remapping with mipmaps,
-never script preloads. The sign atlas loads as one more admitted step after the
-tiles (halved to 512×320 with 128px tiles). Shared context reservations are
-8.5/31/76MiB respectively (`1MiB + 10 × size² × 24` plus the atlas pixels × 24),
-including CPU/GPU/mipmap/retirement overlap. Cache and
+never script preloads. The five facade layers load one per admitted step after the
+racing tiles (the last step uploads the array) and the sign atlas follows (halved to
+512×320 with 128px tiles). Shared context reservations are 10.375/38.5/83.5MiB for
+128/256/512px tiers (`display_quality.tile_bytes`: `1MiB + 10 × size² × 24` racing
+tiles + `5 × min(size, 256)² × 24` facade layers + the atlas pixels × 24), including
+CPU/GPU/mipmap/retirement overlap. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.
 
 ## Track and authored scenery
@@ -116,6 +128,54 @@ the integer slot or cell, so each choice is constant across its pixels. Signs sa
 with analytic gradients (anisotropic) and fade to one tile colour once a sign texel
 covers more than four pixels. Bottoms and imported assets are unchanged.
 
+Wall finishes make a record's walls read as one material. `facade_palette.json`
+`finishes` lists the finishes (facade tile layer, tile edge in storeys, roughness,
+metallic, specular) and per key the weights: concrete residential mostly painted
+plaster with exposed concrete, stone and metal panels; commercial adds a glass
+curtain wall (commercial keys only); industrial mostly metal panels and concrete;
+public stone, concrete and plaster; brick keys stay brick; wood keys have none and
+keep the racing wood tile. `bind_facade` binds them as slots (`facade_finish`,
+`facade_finish_look`, `facade_finish_count`, at most six), and every brick, wood and
+concrete surface carries the shared facade array. `vertex()` picks one finish per
+record (a flat varying) with one integer PCG of the 12-bit record seed against the
+cumulative weights, so all walls of a building agree at every pixel. Within the
+effect distance the finish sets the roughness, metallic and specular of walls, piers
+and stall risers; shop frames, canopy shadow, fascia and signs keep the plain
+response. Metallic stays at most 0.1 so a finished wall keeps its diffuse brightness
+and matches the distant body colour (metal panels read through roughness 0.42 and
+specular 0.5); far walls fade back to the plain response, and neither the albedo
+mean nor the distant body colours change. A finished wall samples its tile in
+wall-plane metres (u along the wall, v from the solid base, so courses start at the
+ground) with analytic gradients and anisotropic filtering, only where relief shows.
+Its luminance (75–125%, `facade_luminance`) reaches the effect distance on
+medium/high, where mipmaps leave only coarse joints and courses; roughness, AO and
+the ×0.12 bump (medium/high) stay within the 32–48m detail range. Low keeps the
+luminance within 32–48m only. The racing tile is skipped on finished and curtain
+walls. Panes, frames, fascia and signs take no relief.
+
+Pane, mullion and spandrel shares are box-filtered over the pixel footprint (an exact
+pulse integral per cell axis, with the fitted commercial storey height), so thin
+mullions and spandrels settle on their area share instead of aliasing. Window
+openings are recessed: a reveal band 0.06 storeys wide (0.015 on curtain walls)
+inside each pane edge stays wall, 18% darker, and on medium/high its normal tilts
+towards the opening; the band fades out before it is narrower than about two pixels.
+Edges on the cell boundary (ribbon windows) are continuous glass without a reveal.
+Shop windows have their own frames and mullions (shop part 4) instead of reveals.
+Glass (punched windows, curtain walls and shop windows alike) has roughness
+0.08–0.15 per record and specular 0.55. On medium/high in daylight its tint keeps
+45% of its strength and the glass adds what it reflects as emission: the procedural
+sky's zenith/horizon gradient and cloud grey along the reflected ray (street and
+opposite walls below the horizon), weighted by Schlick Fresnel from a 0.10 base and
+scaled by the environment's daylight and cloud cover (`environment_data` pixel 0:
+wet, snow, cloud cover, daylight), so dusk, overcast and night follow the sky; at
+night it is off. Each pane leans up to about ±1.5° and reflects 70–130% as much; both
+settle once a pane nears a pixel. Low keeps plain tinted glass. Curtain walls glaze
+each cell between 4% mullions and transoms in neutral anodised grey above a dark
+coated spandrel (no wall tile), in a reflective tint (blue, green, bronze or silver,
+metallic 0.35); at night half as many of their panes are lit (a second PCG draw per
+cell), at 60% strength, so a glazed tower does not outshine punched walls; shop
+fronts stay fully lit. Other night window choices are unchanged.
+
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC
 bindings likewise defer detail quality at `_environment_surface`. This applies the
@@ -160,7 +220,12 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `surface_style_validator` compares generated/imported/distant swatches at every
 quality tier, including daylight, night and snow, Low tile visibility and mean
 luminance at detail/distance transitions. `test_richer_assets.py` reproduces
-library bytes and texture tiers. Render `generated_material_validator` to compare
+library bytes and the racing, original and facade texture tiers. `facade_validator`
+checks the finish slots, the curtain-wall rule, the metallic cap, known PCG answers
+and the per-record pick against a GDScript mirror of the hash (shares within 3% of
+the weights over all 4096 records); rendered, it compares the shader's own pick on a
+wall quad, daylight glass reflection, each finish's wall brightness near and beyond
+the effect distance (within 15%) and identical far walls. Render `generated_material_validator` to compare
 GPU uniforms and pixels before corrective quality updates, with prepared/unbatched
 geometry, cancellation and last-borrower retirement. Its optional
 `MAPKIT_SKIP_PIXEL_COMPARISON=1` explicitly skips only pixel comparison.

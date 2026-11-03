@@ -8,6 +8,7 @@ const BUILDING_BASE := {"brick": Color("b46c50"), "wood": Color("997347"), "conc
 const BUILDING_TINT := {"residential": Color("e8d6bd"), "commercial": Color("9fb4c4"), "industrial": Color("8b8f93"), "public": Color("d9c89a")}
 const URBAN_SURFACE := preload("./urban_surface.gdshader")
 const FACADE_PALETTE := preload("./facade_palette.json")
+const ENVIRONMENT_LAYERS: Array = preload("./environment_materials.gd").FACADE_LAYERS
 const PLAN := preload("./render_memory.gd")
 const QUALITY := preload("./display_quality.gd")
 const INSTANCES := preload("./render_instances.gd")
@@ -628,6 +629,38 @@ static func bind_facade(material: Material, key: String, presentation: Dictionar
 	material.set_shader_parameter("facade_roof", palette.roof)
 	material.set_shader_parameter("facade_accent", palette.accent)
 	material.set_shader_parameter("facade_palette", true)
+	var finishes := facade_finishes(key)
+	material.set_shader_parameter("facade_finish", finishes.finish)
+	material.set_shader_parameter("facade_finish_look", finishes.look)
+	material.set_shader_parameter("facade_finish_count", finishes.names.size())
+
+## Wall finishes of a generated building key (`facade_palette.json` finishes) in
+## shader slots: finish (tile layer or -1, tile floors, roughness, metallic) and
+## look (specular, curtain wall, cumulative weight). Curtain walls only on
+## commercial keys; keys without weights (wood) have none.
+static var _facade_finishes := {}
+static func facade_finishes(key: String) -> Dictionary:
+	if _facade_finishes.has(key): return _facade_finishes[key]
+	var fields := key.split(":")
+	var table: Dictionary = FACADE_PALETTE.data.get("finishes", {})
+	var weights: Dictionary = table.get("weights", {}).get(fields[0] if fields[0] in ["brick", "wood"] else key, {})
+	var result := {"names": PackedStringArray(), "finish": PackedVector4Array(), "look": PackedVector4Array()}
+	var total := 0.0
+	for name: String in weights:
+		var kind: Dictionary = table.kinds[name]
+		if kind.get("curtain_wall", false) and facade_kind(key) != 3: continue
+		total += float(weights[name])
+	var cumulative := 0.0
+	for name: String in weights:
+		var kind: Dictionary = table.kinds[name]
+		if result.names.size() == 6 or (kind.get("curtain_wall", false) and facade_kind(key) != 3) or total <= 0.0: continue
+		cumulative += float(weights[name])
+		result.names.append(name)
+		result.finish.append(Vector4(float(ENVIRONMENT_LAYERS.find(str(kind.get("tile", "")))), float(kind.tile_floors), float(kind.roughness), float(kind.metallic)))
+		result.look.append(Vector4(float(kind.specular), 1.0 if kind.get("curtain_wall", false) else 0.0, cumulative / total, 0.0))
+	result.make_read_only()
+	_facade_finishes[key] = result
+	return result
 
 ## Record palettes of a generated building key (sRGB 0..1), the same entries the
 ## distant mesh uses (`facade_palette.json`, mapkit-package distant.rs).

@@ -1,6 +1,6 @@
 extends SceneTree
 ## Generated building facades: key classification, twelve base colours and the
-## record palettes shared with the distant mesh, floor pitch from the recorded
+## record palettes shared with the distant mesh, per-record wall finishes, floor pitch from the recorded
 ## map scale, shader uniforms, the solid top (CUSTOM0) binding and the
 ## commercial storey/shop-front layout.
 const RENDER := preload("../chunk_renderer.gd")
@@ -103,7 +103,7 @@ func storefront_layout() -> void:
 			var sign_width := minf(width*0.88,sign_height*3.5)
 			check(absf(sign_width/sign_height/3.5-1.0) <= 0.05 and sign_width <= width*0.88 and storefront(width*0.5,0.78+0.5*0.20,ground,width,width*0.5,2.0,pitch) == 7,"sign aspect 56:16 within the fascia (slot %.2f)"%width)
 	var code: String = MATERIALS.new().shader.code
-	for marker: String in ["if(height<=0.0) return vec2(pitch);","float ground = min(1.5*pitch,height);","upper<0.75*pitch ? 0.0 : upper/max(1.0,floor(upper/pitch+0.01))","if(height<=0.0) return 1.0+(v-storeys.x)/pitch;","if(v<height) return storeys.y>0.0 ? 1.0+(v-storeys.x)/storeys.y : 1.0;","return 1.0+(storeys.y>0.0 ? round((height-storeys.x)/storeys.y) : 0.0)+(v-height)/pitch;","facade_row(v,storeys,solid_height,floor_pitch)","facade_kind==3 && storeys.y<=0.0 && v<solid_height) window = 0.0;"]:
+	for marker: String in ["if(height<=0.0) return vec2(pitch);","float ground = min(1.5*pitch,height);","upper<0.75*pitch ? 0.0 : upper/max(1.0,floor(upper/pitch+0.01))","if(height<=0.0) return 1.0+(v-storeys.x)/pitch;","if(v<height) return storeys.y>0.0 ? 1.0+(v-storeys.x)/storeys.y : 1.0;","return 1.0+(storeys.y>0.0 ? round((height-storeys.x)/storeys.y) : 0.0)+(v-height)/pitch;","facade_row(v,storeys,solid_height,floor_pitch)","facade_kind==3 && storeys.y<=0.0 && v<solid_height) { window = 0.0; spandrel = 0.0; }"]:
 		check(code.contains(marker),"shader storeys match the mirror: "+marker)
 	for marker: String in ["if(w>=0.78) return 7;","if(w>=0.765) return 6;","d<0.15*pitch-frame && w<0.72-frame/ground) ? 3 : 4;","if(w<0.08) return 1;","if(w>=0.10 && w<0.68) {","abs(s-round(s/pane)*pane)<0.012*pitch ? 4 : 2;","if(w>=0.70 && w<0.76) return 5;","slot_width*(0.22+0.28*float(slot_layout%3u)),2.0+float((slot_layout>>2u)&1u)","float sign_height = 0.20*storeys.x;","float sign_width = min(slot_width*0.88,sign_height*3.5);"]:
 		check(code.contains(marker),"shader shop front matches the mirror: "+marker)
@@ -156,6 +156,136 @@ func top_binding() -> void:
 	await process_frame
 	await process_frame
 
+# GDScript mirror of facade_pcg / facade_unit and the per-record finish pick.
+static func pcg(v: int) -> int:
+	var s := (v * 747796405 + 2891336453) & 0xFFFFFFFF
+	var w := (((s >> ((s >> 28) + 4)) ^ s) * 277803737) & 0xFFFFFFFF
+	return ((w >> 22) ^ w) & 0xFFFFFFFF
+
+static func finish_of(look: PackedVector4Array, record: int) -> int:
+	var pick := float(pcg(record ^ 1759714724) >> 8) / 16777216.0
+	for i in look.size():
+		if pick < look[i].z: return i
+	return look.size() - 1
+
+## Wall finishes: the palette table in shader slots, curtain walls only on
+## commercial keys, one deterministic finish per record near its weight.
+func finishes(job: Dictionary, context: RefCounted) -> void:
+	var table: Dictionary = RENDER.FACADE_PALETTE.data.finishes
+	var code: String = MATERIALS.new().shader.code
+	check(code.contains("varying flat int finish_slot;") and code.contains("float finish_pick = facade_unit(uint(int(floor(solid_seed*4096.0)))^1759714724u);") and code.contains("if(i<facade_finish_count && finish_pick<facade_finish_look[i].z) { finish_slot=i; break; }") and code.contains("int finish = facade_record && facade_surface ? finish_slot : -1;"),"vertex() picks the finish once per record with the integer hash (mirrored here)")
+	check(code.contains("textureGrad(facade_tiles,") and code.contains("facade_luminance(detail.r)") and code.contains("facade_bump(detail.ba,wall_tangent)"),"walls sample the facade relief tiles with analytic gradients")
+	check(code.contains("if(facade_relief && shop_part<=1 && tone_relief>0.0) {"),"the facade tile is fetched only where relief shows")
+	check(code.contains("detail_enabled && !facade_relief && !curtain"),"finished walls and curtain walls skip the racing tile")
+	check(code.contains("if(finish>=0 && shop_part<=1) {"),"the finish response spares frames, canopy, fascia and signs")
+	check(code.contains("float window = facade_span(cell.x,pane.x,pane.y,cell_fw.x)*facade_span(cell.y,pane.z,pane.w,cell_fw.y);"),"panes, mullions and spandrels are box-filtered over the pixel footprint")
+	check(code.contains("EMISSION += glass_reflection;") and code.contains("*facade_window*weather.w;"),"daylight glass reflection is light, scaled by the environment's daylight")
+	# Known answers pin the hash itself (an independent PCG reference), so the
+	# mirror and the shader source cannot drift together unnoticed.
+	check(pcg(0 ^ 1759714724) == 3561045559 and pcg(1 ^ 1759714724) == 1454332419 and pcg(4095 ^ 1759714724) == 462394992,"facade_pcg known answers")
+	var commercial: Dictionary = RENDER.facade_finishes("concrete:commercial")
+	check([0,1,2,4095].map(func(record): return commercial.names[finish_of(commercial.look,record)]) == ["curtain","concrete","plaster","plaster"],"commercial finish known answers for records 0, 1, 2 and 4095")
+	for key: String in ["concrete:residential","concrete:commercial","concrete:industrial","concrete:public","brick:residential","brick:commercial","wood:residential","concrete:school"]:
+		var bound: Dictionary = RENDER.facade_finishes(key)
+		var fields := key.split(":")
+		var weights: Dictionary = table.weights.get(fields[0] if fields[0] in ["brick","wood"] else key,{})
+		if RENDER.facade_kind(key) == 0: weights = {}
+		var material: ShaderMaterial = RENDER._generated_material(job,key,{"facade_floor_cm":100})
+		if RENDER.facade_kind(key) == 0:
+			check(material.get_shader_parameter("facade_finish_count") == null,"no finish without a facade: "+key)
+			continue
+		check(material.get_shader_parameter("facade_finish_count") == bound.names.size() and material.get_shader_parameter("facade_finish") == bound.finish and material.get_shader_parameter("facade_finish_look") == bound.look,"walls bind their finish slots: "+key)
+		check(material.get_shader_parameter("facade_tiles") == context.facades and material.get_shader_parameter("facade_tiles_enabled") == true,"walls bind the shared facade tile array: "+key)
+		check(bound.names.size() == weights.size() - (1 if weights.has("curtain") and RENDER.facade_kind(key) != 3 else 0) and bound.names.size() <= 6,"finish count follows the weights: "+key)
+		check(bound.names.is_empty() or is_equal_approx(bound.look[bound.look.size()-1].z,1.0),"cumulative weights end at 1: "+key)
+		var total := 0.0
+		for name: String in bound.names: total += float(weights[name])
+		var counts := {}
+		for i in bound.names.size():
+			var kind: Dictionary = table.kinds[bound.names[i]]
+			check(bound.finish[i].is_equal_approx(Vector4(float(MATERIALS.FACADE_LAYERS.find(kind.tile)),float(kind.tile_floors),float(kind.roughness),float(kind.metallic))) and is_equal_approx(bound.look[i].x,float(kind.specular)),"finish %s slot follows the table: %s"%[bound.names[i],key])
+			check(bound.finish[i].x >= 0.0 if bound.look[i].y == 0.0 else bound.finish[i].x == -1.0,"finish %s names a facade tile layer (curtain walls none)"%bound.names[i])
+			check(bound.finish[i].w <= 0.1001,"finish %s keeps the wall's diffuse brightness (metallic at most 0.1)"%bound.names[i])
+			check(bound.look[i].y == (1.0 if kind.get("curtain_wall",false) else 0.0) and (bound.look[i].y == 0.0 or RENDER.facade_kind(key) == 3),"curtain walls only on commercial walls: "+key)
+		for record in 4096:
+			var pick := finish_of(bound.look,record)
+			counts[pick] = int(counts.get(pick,0)) + 1
+		for i in bound.names.size():
+			var share := float(counts.get(i,0)) / 4096.0
+			check(absf(share - float(weights[bound.names[i]]) / total) < 0.03,"record finish shares follow the weights (%s %s %.3f)"%[key,bound.names[i],share])
+	check(RENDER.facade_finishes("wood:residential").names.is_empty(),"wood walls keep their racing detail tile")
+
+## Mean output luminance of the rows showing wall heights low..high metres on
+## the finish_pixels quad (2 m tall from 1 m, centred columns only).
+static func band_luminance(picture: Image, low: float, high: float) -> float:
+	var total := 0.0
+	var count := 0
+	var h := picture.get_height()
+	var w := picture.get_width()
+	for y in range(ceili((3.0-high)/2.0*h),floori((3.0-low)/2.0*h)):
+		for x in range(w/2-int(h*0.4),w/2+int(h*0.4)):
+			var c := picture.get_pixel(x,y)
+			total += c.r*0.2126+c.g*0.7152+c.b*0.0722
+			count += 1
+	return total/maxf(count,1)
+
+## Rendered runs only: the shader's own pick agrees with finish_of on records
+## of every commercial finish (curtain walls show dark spandrel glass where the
+## other finishes show wall), daylight glass reflection is added light, each
+## wall band keeps its brightness near and beyond the effect distance, and far
+## walls of every finish are identical.
+func finish_pixels(job: Dictionary, context: RefCounted) -> void:
+	if DisplayServer.get_name() == "headless": return
+	root.size = Vector2i(128,128)
+	var scene := Node3D.new(); root.add_child(scene)
+	var world := WorldEnvironment.new(); world.environment = Environment.new()
+	world.environment.background_mode = Environment.BG_COLOR
+	world.environment.background_color = Color.BLACK
+	world.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	world.environment.ambient_light_color = Color.WHITE
+	world.environment.ambient_light_energy = 1.0
+	world.environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	scene.add_child(world)
+	var camera := Camera3D.new(); camera.projection = Camera3D.PROJECTION_ORTHOGONAL; camera.size = 2.0; camera.far = 1000.0
+	scene.add_child(camera); camera.current = true
+	var material: ShaderMaterial = RENDER._generated_material(job,"concrete:commercial",{"facade_floor_cm":100})
+	var bound: Dictionary = RENDER.facade_finishes("concrete:commercial")
+	var node := MeshInstance3D.new(); scene.add_child(node)
+	node.material_override = material
+	var far := []
+	# One record per finish, all with body entry 0 and the same jitter.
+	for record in [0,8,16,24,40]:
+		var finish: String = bound.names[finish_of(bound.look,record)]
+		var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(-1,1,0),Vector3(1,1,0),Vector3(1,3,0),Vector3(-1,1,0),Vector3(1,3,0),Vector3(-1,3,0)])
+		var normals := PackedVector3Array(); var seeds := PackedVector2Array()
+		for i in 6: normals.append(Vector3.BACK); seeds.append(Vector2((float(record)+0.5)/4096.0,1000.0))
+		arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_TEX_UV2] = seeds
+		var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+		node.mesh = mesh
+		var sample := {}
+		for distance in [4.0,250.0]:
+			camera.position = Vector3(0,2,distance)
+			for daylight in [1.0,0.0]:
+				context.update(43200,0,0,0.8,1080,0.18,daylight)
+				for frame in 4: await process_frame
+				await RenderingServer.frame_post_draw
+				var picture := root.get_texture().get_image()
+				# The wall band under every pane variant (0.02–0.09 storey) and a glass band.
+				sample["%d/%d"%[int(distance),int(daylight)]] = Vector2(band_luminance(picture,1.02,1.09),band_luminance(picture,1.45,1.6))
+		print("FACADE_FINISH record=%d finish=%s near_day=%s near_dark=%s far=%s" % [record,finish,sample["4/1"],sample["4/0"],sample["250/1"]])
+		var near: Vector2 = sample["4/1"]
+		check((near.x < 0.45) == (finish == "curtain"),"rendered pick matches finish_of for record %d (%s, wall band %.3f)"%[record,finish,near.x])
+		# Daylight glass trades body tint for reflected light: a curtain wall's
+		# glass band brightens clearly, punched walls never darken.
+		check(near.y > sample["4/0"].y+(0.05 if finish == "curtain" else -0.005),"daylight glass reflects as added light (record %d)"%record)
+		if finish != "curtain": check(absf(near.x/maxf(sample["250/1"].x,0.01)-1.0) < 0.15,"%s wall keeps its brightness beyond the effect distance (%.3f near, %.3f far)"%[finish,near.x,sample["250/1"].x])
+		far.append(sample["250/1"])
+	for value: Vector2 in far: check(value.distance_to(far[0]) < 0.02,"far walls of every finish match")
+	node.free()
+	scene.queue_free()
+	await process_frame
+
 func run() -> void:
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
 	cache.environment_profile = {"lights":[]}
@@ -166,6 +296,10 @@ func run() -> void:
 	for uniform: Dictionary in MATERIALS.new().shader.get_shader_uniform_list(): names[uniform.name] = true
 	check(names.has("facade_kind") and names.has("floor_pitch") and names.has("lighting_role") and names.has("sign_atlas"),"surface shader compiles with the facade uniforms")
 	check(names.has("facade_body") and names.has("facade_roof") and names.has("facade_accent") and names.has("facade_palette"),"surface shader compiles with the record palette uniforms")
+	check(names.has("facade_finish") and names.has("facade_finish_look") and names.has("facade_finish_count") and names.has("facade_tiles") and names.has("facade_tiles_enabled"),"surface shader compiles with the finish and facade tile uniforms")
+	check(context.facades is Texture2DArray and context.facades.get_layers() == MATERIALS.FACADE_LAYERS.size(),"shared facade tile array")
+	finishes(job,context)
+	await finish_pixels(job,context)
 	# Per-solid choices must not depend on interpolated values: flat seeds and an
 	# integer hash keep each sign slot and lit window one choice across its pixels.
 	var code: String = MATERIALS.new().shader.code

@@ -22,3 +22,17 @@ vec3 detail_bump(vec3 p, vec3 n) {
     vec3 a=abs(n);
     return a.y>max(a.x,a.z) ? vec3(-d.x,0.0,-d.y) : (a.x>a.z ? vec3(0.0,-d.y,-d.x) : vec3(-d.x,-d.y,0.0));
 }
+// Facade relief (generated building walls with a finish): a texture array of
+// brick, plaster, formwork concrete, stone and metal tiles packed like the
+// racing tiles (G is a roughness factor centred at 0.5). Walls take stronger
+// relief than the deliberately flat racing tiles: luminance 75–125 %, bump x0.12.
+uniform sampler2DArray facade_tiles : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool facade_tiles_enabled = false;
+const float FACADE_BUMP = 0.12;
+float facade_luminance(float value) { return clamp(value/0.65,0.75,1.25); }
+// World-space perturbation of a wall from the tile's normal XY (u along the
+// wall tangent, v up), x0.12.
+vec3 facade_bump(vec2 packed, vec3 tangent) {
+    vec2 d=(packed*2.0-1.0)*FACADE_BUMP;
+    return -(tangent*d.x+vec3(0.0,d.y,0.0));
+}

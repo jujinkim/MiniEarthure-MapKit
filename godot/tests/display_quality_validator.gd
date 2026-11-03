@@ -17,6 +17,17 @@ class Lease extends RefCounted:
 func check(ok: bool, label: String) -> void:
 	if not ok: failed=true; push_error(label)
 func _initialize() -> void: run.call_deferred()
+## The shared Environment's sky radiance follows the tier (32/64/128 px) at
+## configure and on live quality changes. Checked on the mapping and source:
+## resizing an undrawn Sky here reported GL radiance textures leaked at exit.
+func radiance_tiers() -> void:
+	var renderer := preload("../environment_renderer.gd")
+	for level in 3:
+		check(renderer.radiance_size(int(QUALITY.profile(level).sky_radiance))==[Sky.RADIANCE_SIZE_32,Sky.RADIANCE_SIZE_64,Sky.RADIANCE_SIZE_128][level],"tier %d radiance"%level)
+	var code: String=(renderer as Script).source_code
+	check(code.contains('settings.sky.radiance_size = radiance_size(int(quality.get("sky_radiance",32)))'),"configure starts from the active tier's radiance")
+	check(code.contains('var size := radiance_size(int(value.get("sky_radiance",32)))') and code.contains("if settings.sky.radiance_size != size: settings.sky.radiance_size = size"),"live quality changes resize the radiance")
+
 func run() -> void:
 	for level in 3:
 		var p := QUALITY.profile(level)
@@ -24,8 +35,11 @@ func run() -> void:
 		cache.quality_profile=p
 		cache.environment_profile={"lights":[]}
 		var context: RefCounted=cache.environment_context()
-		check(context!=null and cache.bytes()==QUALITY.tile_bytes(p.texture_size,10),"exact admitted tier memory")
+		check(context!=null and cache.bytes()==QUALITY.tile_bytes(p.texture_size,15) and MATERIALS.TILE_KINDS.size()==15,"exact admitted tier memory (ten racing tiles, five facade layers)")
 		for texture: Texture2D in context.tiles.values(): check(texture.get_width()==p.texture_size,"requested texture resolution")
+		check(context.facades!=null and context.facades.get_width()==mini(p.texture_size,256) and context.facades.get_layers()==5,"facade layers at the tier resolution, at most 256 px")
+		check(QUALITY.tile_bytes(p.texture_size,15)==1048576+10*p.texture_size*p.texture_size*24+5*mini(p.texture_size,256)*mini(p.texture_size,256)*24+(1024*640 if p.texture_size>=256 else 512*320)*24,"tier charge: ten racing tiles, five capped facade layers, sign atlas")
+		check(p.sky_radiance==[32,64,128][level] and QUALITY.radiance_bytes(p.sky_radiance)==6*8*p.sky_radiance*p.sky_radiance*8*4/3,"sky radiance per tier and its cubemap bound")
 		check(context.signs.get_width()==(1024 if p.texture_size>=256 else 512),"sign atlas halves with 128px tiles")
 		QUALITY.current=QUALITY.profile(2-level)
 		check(context==cache.environment_context(),"live quality keeps existing texture owner")
@@ -41,6 +55,7 @@ func run() -> void:
 	batches=planner.prepare_batches(chunk)
 	check(batches.size()==1 and batches[0].vertices==chunk.scene_vertices,"a face crossing a bucket edge batches together without changing ordered geometry")
 	var scene := Node3D.new();root.add_child(scene)
+	radiance_tiers()
 	await tracked_quality()
 	await instance_quality()
 	occluder_reuse(scene)

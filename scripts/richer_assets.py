@@ -250,6 +250,122 @@ def textures(destination, racing=False):
             target.mkdir(exist_ok=True)
             image.resize((resolution,resolution),Image.Resampling.LANCZOS).save(target/(kind+'.png'),compress_level=9)
 
+# Facade relief tiles (layer order of the shader's facade texture array). Each
+# 512px master is periodic and holds whole units: 6 bricks x 20 courses, a 2x4
+# grid of formwork panels with six tie holes each, five stone courses, eight
+# trapezoid metal ribs, and free stucco grain for plaster.
+FACADE_TILES=['brick','plaster','concrete','stone','metal']
+
+def _value_noise(rng,cells,size=512):
+    """Periodic smooth value noise, one random value per lattice cell."""
+    grid=[[rng.uniform(-1,1) for _ in range(cells)] for _ in range(cells)];step=size/cells
+    def sample(x,y):
+        fx=x/step;fy=y/step;ix=int(fx);iy=int(fy);tx=fx-ix;ty=fy-iy
+        tx=tx*tx*(3-2*tx);ty=ty*ty*(3-2*ty)
+        a=grid[iy%cells];b=grid[(iy+1)%cells]
+        return (a[ix%cells]*(1-tx)+a[(ix+1)%cells]*tx)*(1-ty)+(b[ix%cells]*(1-tx)+b[(ix+1)%cells]*tx)*ty
+    return sample
+
+def _joint(distance,half):
+    """1 inside a mortar/panel joint of the given half width, soft 2px shoulder."""
+    t=max(0.0,min(1.0,(distance-half)/2.0));return 1.0-t*t*(3-2*t)
+
+def facade_texel(kind,x,y,rng_cache):
+    """(height, luminance, roughness) of one master texel; rng_cache holds the
+    per-kind noise and per-unit random tables built once in facade_textures."""
+    c=rng_cache;fine=c['fine'][y*512+x]
+    if kind=='brick':
+        course=512/20;width=512/6;row=int(y//course)
+        bx=(x+(width/2 if row%2 else 0))%width;by=y%course
+        column=int(((x+(width/2 if row%2 else 0))%512)//width)%6
+        m=_joint(min(bx,width-bx,by,course-by),1.3)
+        tone=c['bricks'][row*6+column]
+        face=.78+c['n32'](x,y)*.03+fine*.02
+        height=face*(1-m)+.30*m
+        light=(.64+tone*.07+c['n8'](x,y)*.03+c['n128'](x,y)*.02+fine*.03)*(1-m)+(.80+fine*.04)*m
+        rough=(.48+fine*.05+tone*.03)*(1-m)+.62*m
+    elif kind=='plaster':
+        grain=c['n128'](x,y)*.55+c['n64'](x,y)*.30+fine*.15
+        height=.5+grain*.32
+        light=.65+c['n8'](x,y)*.045+c['n3'](x,y)*.03+grain*.035
+        rough=.5+grain*.05+c['n8'](x,y)*.03
+    elif kind=='concrete':
+        pw=256;ph=128;px=x%pw;py=y%ph;panel=int(y//ph)*2+int(x//pw)
+        m=_joint(min(px,pw-px,py,ph-py),1.2)
+        hole=min(math.hypot(px-hx,py-hy) for hx in (pw/6,pw/2,pw*5/6) for hy in (ph/4,ph*3/4))
+        cone=max(0.0,1.0-hole/4.5)
+        pits=c['pits'][y*512+x]
+        tone=c['units'][panel]
+        height=.62+c['n64'](x,y)*.025+fine*.012-m*.30-cone*.45-pits*.25
+        light=.66+tone*.05+c['n16'](x,y)*.035+c['n64'](x,y)*.015+fine*.02-m*.10-min(cone*1.6,1.0)*.28-pits*.10
+        rough=.52+fine*.04+c['n16'](x,y)*.03+m*.08+cone*.1
+    elif kind=='stone':
+        course=512/5;row=int(y//course);start,bounds=c['cuts'][row]
+        sx=(x-start)%512;slab=0
+        while sx>=bounds[slab+1]:slab+=1
+        left=bounds[slab];right=bounds[slab+1];by=y%course
+        m=_joint(min(sx-left,right-sx,by,course-by),1.4)
+        tone=c['units'][(row*7+slab)%len(c['units'])]
+        speck=c['n128'](x,y)*.5+fine*.5
+        height=(.72+speck*.035+tone*.02)*(1-m)+.36*m
+        light=(.65+tone*.05+speck*.05+c['n16'](x,y)*.02)*(1-m)+(.55+fine*.03)*m
+        rough=(.46+speck*.05-tone*.04)*(1-m)+.60*m
+    else:
+        p=x%64.0;d=abs(p-32.0) # trapezoid rib: 16px crest, 8px webs, 32px pan
+        rib=1.0 if d<8 else (0.0 if d>16 else 1.0-(d-8)/8)
+        seam=_joint(min(y,512-y),1.0)
+        streak=c['streak'](x,y)
+        height=.30+rib*.62-seam*.25+fine*.008
+        light=.64+rib*.03+streak*.035+fine*.015-seam*.12
+        rough=.45+streak*.06+fine*.03+seam*.08
+    return height,light,rough
+
+def facade_textures(destination):
+    """Facade relief tiles: luminance (mean 0.65), roughness factor (mean 0.5),
+    normal XY from the blurred height field; 256px at the root, 128px below.
+    No 512px tier: a 256px tile already holds 2-5mm per texel at 1:3."""
+    destination.mkdir(parents=True,exist_ok=True)
+    gains={'brick':4.0,'plaster':5.0,'concrete':4.0,'stone':4.0,'metal':6.0}
+    for index,kind in enumerate(FACADE_TILES):
+        rng=random.Random(7310+index);size=512
+        cache={'fine':[rng.random()-.5 for _ in range(size*size)],
+               'n3':_value_noise(rng,3),'n8':_value_noise(rng,8),'n16':_value_noise(rng,16),
+               'n32':_value_noise(rng,32),'n64':_value_noise(rng,64),'n128':_value_noise(rng,128),
+               'units':[rng.uniform(-1,1) for _ in range(64)],'bricks':[rng.uniform(-1,1) for _ in range(120)]}
+        streak_rows=[rng.uniform(-1,1) for _ in range(128)];streak_n=_value_noise(rng,4)
+        cache['streak']=lambda x,y:(streak_rows[int(x//4)%128]*(1-(x%4)/4)+streak_rows[int(x//4+1)%128]*((x%4)/4))*.6+streak_n(x,y)*.4
+        cuts=[]
+        for _ in range(5):
+            widths=[rng.uniform(.75,1.25) for _ in range(3)];scale=512/sum(widths)
+            cuts.append((rng.uniform(0,512),[0.0,widths[0]*scale,(widths[0]+widths[1])*scale,512.0]))
+        cache['cuts']=cuts
+        pits=[0.0]*(size*size)
+        for _ in range(60):
+            cx=rng.uniform(0,512);cy=rng.uniform(0,512);r=rng.uniform(1.0,2.2)
+            for yy in range(int(cy-3),int(cy+4)):
+                for xx in range(int(cx-3),int(cx+4)):
+                    v=max(0.0,1.0-math.hypot(xx-cx,yy-cy)/r)
+                    if v>0:k=(yy%512)*512+xx%512;pits[k]=max(pits[k],v)
+        cache['pits']=pits
+        heights=[];base=[]
+        for y in range(size):
+            for x in range(size):
+                h,l,r=facade_texel(kind,x,y,cache);heights.append(h);base.append((l,r))
+        blurred=[sum(heights[((y+dy)%size)*size+(x+dx)%size] for dy in (-1,0,1) for dx in (-1,0,1))/9 for y in range(size) for x in range(size)]
+        mean_l=sum(v[0] for v in base)/len(base);mean_r=sum(v[1] for v in base)/len(base)
+        gain=gains[kind];pixels=[]
+        for y in range(size):
+            for x in range(size):
+                dx=(blurred[y*size+(x+1)%size]-blurred[y*size+(x-1)%size])*.5*gain
+                dy=(blurred[((y+1)%size)*size+x]-blurred[((y-1)%size)*size+x])*.5*gain
+                light,rough=base[y*size+x]
+                pixels.append(tuple(round(max(0,min(1,v))*255) for v in [light+.65-mean_l,rough+.5-mean_r,.5+dx*.5,.5+dy*.5]))
+        image=Image.new('RGBA',(size,size));image.putdata(pixels)
+        for resolution in [128,256]:
+            target=destination if resolution==256 else destination/str(resolution)
+            target.mkdir(exist_ok=True)
+            image.resize((resolution,resolution),Image.Resampling.LANCZOS).save(target/(kind+'.png'),compress_level=9)
+
 def create(destination):
     destination.mkdir(parents=True,exist_ok=False);(destination/'.gdignore').write_text('')
     (destination/'assets').mkdir();assets=[];hashes={}
@@ -260,5 +376,7 @@ def create(destination):
     (destination/'library.json').write_text(json.dumps(dict(version=1,assets=assets,sha256=hashes,license='MIT'),indent=2)+'\n')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');p.add_argument('--racing',action='store_true');a=p.parse_args()
-    textures(a.destination,a.racing) if a.textures else create(a.destination)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');p.add_argument('--racing',action='store_true');p.add_argument('--facade',action='store_true');a=p.parse_args()
+    if a.textures and a.facade:facade_textures(a.destination)
+    elif a.textures:textures(a.destination,a.racing)
+    else:create(a.destination)

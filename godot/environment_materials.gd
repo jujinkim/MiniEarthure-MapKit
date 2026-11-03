@@ -2,12 +2,18 @@ extends RefCounted
 const SURFACE := preload("./atmosphere_surface.gdshader")
 const PROFILE := preload("./environment_profile.gd")
 const DETAIL := preload("./material_detail.gdshaderinc")
-const TILE_KINDS := ["brick","plaster","wood","stone","asphalt","concrete","earth","grass","metal","leaf"]
+# Ten racing detail tiles (`tiles`), then the five facade relief layers
+# (`facades`, one Texture2DArray in FACADE_LAYERS order) for generated walls.
+const TILE_KINDS := ["brick","plaster","wood","stone","asphalt","concrete","earth","grass","metal","leaf","facade:brick","facade:plaster","facade:concrete","facade:stone","facade:metal"]
+const FACADE_LAYERS := ["brick","plaster","concrete","stone","metal"]
 # Same conservative CPU/GPU/import allowance as validated package bitmaps.
-const MEMORY_BYTES := 1048576 + 10 * 256 * 256 * 24 + 1024 * 640 * 24
+const MEMORY_BYTES := 1048576 + 15 * 256 * 256 * 24 + 1024 * 640 * 24
 # Original storefront signs (scripts/sign_atlas.py); halved for 128px tiles.
 const SIGN_ATLAS := "textures/sign_atlas.png"
 var tiles: Dictionary = {}
+var facades: Texture2DArray
+var _facade_images: Array[Image] = []
+var _facade_missing := false
 var signs: ImageTexture
 var pixels: Image
 var texture: ImageTexture
@@ -21,7 +27,7 @@ var load_failed := false
 func _init(size := 256, deferred_tiles := false) -> void:
 	tile_size = size
 	pixels = Image.create(2,1,false,Image.FORMAT_RGBAF)
-	pixels.set_pixel(0,0,Color(0,0,0,0))
+	pixels.set_pixel(0,0,Color(0,0,0.18,1))
 	pixels.set_pixel(1,0,Color(43200,0,1,64800))
 	texture = ImageTexture.create_from_image(pixels)
 	shader = Shader.new()
@@ -33,21 +39,40 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 	if tile_cursor > TILE_KINDS.size() or load_failed: return true
 	var kind: String = TILE_KINDS[tile_cursor] if tile_cursor < TILE_KINDS.size() else ""
 	if tile_image == null:
-		var path: String = get_script().resource_path.get_base_dir().path_join(SIGN_ATLAS if kind.is_empty() else "textures/racing/"+(str(tile_size)+"/" if tile_size != 256 else "")+kind+".png")
+		# Facade layers stop at 256 px (display_quality.FACADE_TILE_MAX).
+		var facade := kind.begins_with("facade:")
+		var size := mini(tile_size,preload("./display_quality.gd").FACADE_TILE_MAX) if facade else tile_size
+		var path: String = get_script().resource_path.get_base_dir().path_join(SIGN_ATLAS if kind.is_empty() else ("textures/facade/" if facade else "textures/racing/")+(str(size)+"/" if size != 256 else "")+kind.trim_prefix("facade:")+".png")
 		# Trusted engine import remapping also works in exports. Decode and GPU
 		# upload are separate admitted steps; never preload texture owners.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
 		tile_image = tile.get_image() if tile != null else null
-		if kind.is_empty() and (tile_image == null or tile_image.is_empty()):
-			# Signs are optional decoration: a missing atlas keeps plain walls.
+		if (kind.is_empty() or kind.begins_with("facade:")) and (tile_image == null or tile_image.is_empty()):
+			# Signs and facade relief are optional decoration: a missing atlas
+			# keeps plain walls, a missing layer keeps walls on the racing tiles.
 			tile_image = null
+			if kind.begins_with("facade:"):
+				_facade_missing = true
+				_facade_images.clear()
 			tile_cursor += 1
-			return true
+			return tile_cursor > TILE_KINDS.size()
 		load_failed = tile_image == null or tile_image.is_empty()
 		if lease != null and tile_image != null: lease.track(tile_image)
 		return load_failed
 	if kind.is_empty() and tile_size < 256: tile_image.resize(tile_image.get_width() / 2, tile_image.get_height() / 2, Image.INTERPOLATE_BILINEAR)
 	tile_image.generate_mipmaps()
+	if kind.begins_with("facade:"):
+		# Layers wait as mipmapped images; the last one uploads the whole array.
+		if not _facade_missing: _facade_images.append(tile_image)
+		tile_image = null
+		if _facade_images.size() == FACADE_LAYERS.size():
+			var layers := Texture2DArray.new()
+			if layers.create_from_images(_facade_images) == OK:
+				facades = layers
+				if lease != null: lease.track(facades)
+			_facade_images.clear()
+		tile_cursor += 1
+		return tile_cursor > TILE_KINDS.size()
 	var uploaded := ImageTexture.create_from_image(tile_image)
 	if kind.is_empty(): signs = uploaded
 	else: tiles[kind] = uploaded
@@ -56,8 +81,12 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 	tile_cursor += 1
 	return tile_cursor > TILE_KINDS.size()
 
-func update(seconds: float, wet: float, snow: float, sun_altitude: float, sunset_minutes: int) -> void:
-	pixels.set_pixel(0,0,Color(wet,snow,0,0))
+## Environment pixels: (wet, snow, cloud cover, daylight) and (seconds, night,
+## sun altitude, sunset seconds). Cloud cover and daylight drive the glass
+## reflection; without the renderer's values daylight follows the sun altitude.
+func update(seconds: float, wet: float, snow: float, sun_altitude: float, sunset_minutes: int, clouds := 0.18, daylight := -1.0) -> void:
+	if daylight < 0.0: daylight = smoothstep(-0.05,0.15,sun_altitude)
+	pixels.set_pixel(0,0,Color(wet,snow,clouds,daylight))
 	pixels.set_pixel(1,0,Color(fposmod(seconds,86400.0),PROFILE.night_index(seconds),sun_altitude,sunset_minutes*60.0))
 	texture.update(pixels)
 
@@ -122,6 +151,10 @@ func generated_material(color: Color, kind: String, metallic := 0.0, roughness :
 func _finish_surface(result: ShaderMaterial, kind: String, defer_quality := false) -> void:
 	# Apply detail quality with wind below, or once the attaching node is tracked.
 	bind_detail(result,kind,false)
+	# Wall materials of generated buildings (and their imported/preview wrappers,
+	# so both paths stay identical) carry the facade array; only a finish bound
+	# by chunk_renderer.bind_facade makes the shader sample it.
+	if kind in ["brick","wood","concrete"]: bind_facade_tiles(result)
 	result.set_meta("mapkit_surface",true)
 	result.set_meta("mapkit_vegetation",kind == "leaf")
 	result.set_shader_parameter("vegetation",kind == "leaf")
@@ -147,6 +180,14 @@ func bind_detail(material: ShaderMaterial, kind: String, apply_quality := true) 
 	material.set_shader_parameter("detail_enabled",true)
 	material.set_shader_parameter("detail_tile",tiles[kind])
 	material.set_shader_parameter("detail_scale",0.5 if kind in ["asphalt","concrete","plaster","metal"] else (1.0 if kind in ["leaf","earth","grass"] else 0.75))
+
+## Generated building walls with a finish (facade_palette.json `finishes`) draw
+## their relief from the shared facade tile array instead of the racing tile.
+## Bound with the surface for brick, wood and concrete materials.
+func bind_facade_tiles(material: ShaderMaterial) -> void:
+	if facades == null: return
+	material.set_shader_parameter("facade_tiles",facades)
+	material.set_shader_parameter("facade_tiles_enabled",true)
 
 ## Commercial generated facades draw storefront signs from the shared atlas.
 func bind_signs(material: ShaderMaterial) -> void:
@@ -206,6 +247,7 @@ func track(lease: RefCounted) -> void:
 	lease.track(texture)
 	lease.track(shader)
 	for tile: Texture2D in tiles.values(): lease.track(tile)
+	if facades != null: lease.track(facades)
 	if signs != null: lease.track(signs)
 	for reference: WeakRef in materials.values():
 		if reference.get_ref() != null: lease.track(reference.get_ref())

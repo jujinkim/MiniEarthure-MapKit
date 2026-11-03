@@ -69,7 +69,7 @@ func configure(environment: Environment, key: DirectionalLight3D, low_quality: b
 	low = low_quality
 	settings.background_mode = Environment.BG_SKY
 	settings.sky = Sky.new()
-	settings.sky.radiance_size = Sky.RADIANCE_SIZE_32
+	settings.sky.radiance_size = radiance_size(int(quality.get("sky_radiance",32)))
 	settings.sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	sky_material = ShaderMaterial.new()
 	sky_material.shader = SKY_SHADER
@@ -196,7 +196,7 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	sky_material.set_shader_parameter("aurora",aurora_strength if concept == "polar" and aurora_event else 0.0)
 	if resources != null and resources.has_method("environment_context"):
 		_context = resources.environment_context()
-		if _context != null: _context.update(state.seconds,_wet,_snow,float(celestial.altitude),int(celestial.get("sunset_minutes",state.config.sunset_minutes)))
+		if _context != null: _context.update(state.seconds,_wet,_snow,float(celestial.altitude),int(celestial.get("sunset_minutes",state.config.sunset_minutes)),_clouds,day)
 	_update_precipitation(state,camera_position)
 	_update_static_lights(state,camera_position)
 
@@ -305,9 +305,16 @@ func update_dynamic_lights(camera_position: Vector3, groups: Array) -> void:
 		light.spot_attenuation = float(candidate.get("attenuation", 1.0))
 		light.spot_angle_attenuation = float(candidate.get("angle_attenuation", 1.0))
 
+static func radiance_size(pixels: int) -> Sky.RadianceSize:
+	return Sky.RADIANCE_SIZE_128 if pixels >= 128 else (Sky.RADIANCE_SIZE_64 if pixels >= 64 else Sky.RADIANCE_SIZE_32)
+
 func apply_display_quality(value: Dictionary) -> void:
 	quality = value.duplicate()
 	if sky_material != null: sky_material.set_shader_parameter("quality_level",int(value.sky))
+	# Sharper sky reflections (glass, wet roads) per tier: 32/64/128 px.
+	if settings != null and settings.sky != null:
+		var size := radiance_size(int(value.get("sky_radiance",32)))
+		if settings.sky.radiance_size != size: settings.sky.radiance_size = size
 	low = int(value.level) == 0
 	if sun != null: sun.directional_shadow_max_distance = float(value.shadow_distance)
 	if moon != null: moon.directional_shadow_max_distance = float(value.shadow_distance)
