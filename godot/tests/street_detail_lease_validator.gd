@@ -48,6 +48,31 @@ func run() -> void:
 		shrubs[shrub.get_child(0).mesh] = true
 		tree.free(); shrub.free()
 	check(canopies.size() == 3 and shrubs.size() == 3, "three canopy and three shrub variants")
+	# The renderer instances a cell's city tree canopies: one MultiMesh per variant.
+	var cell_lease := Lease.new()
+	var cell := Node3D.new()
+	root.add_child(cell)
+	var objects: Array = []
+	for index in 40: objects.append({"id": "tree-%d" % index, "asset_id": "builtin:city_tree", "position": [index * 300, 0, 0], "quarter_turns": 0})
+	objects.append({"id": "bench", "asset_id": "builtin:bench", "position": [0, 0, 900], "quarter_turns": 0})
+	var job := {"lease": cell_lease, "root": cell, "chunk": {"objects": objects}}
+	for object: Dictionary in objects:
+		if object.asset_id == "builtin:city_tree": CHUNKS._city_canopy_instance(job, object)
+	var groups: Array = cell.find_children("*", "MultiMeshInstance3D", false, false)
+	var drawn := 0
+	for group: MultiMeshInstance3D in groups: drawn += group.multimesh.visible_instance_count
+	check(groups.size() == 3 and drawn == 40 and groups.all(func(g): return g.multimesh.instance_count == 40 and g.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON), "40 canopies in three shared-mesh MultiMeshes")
+	# Headless rendering keeps no instance buffers: compare the shared placement
+	# with the node path's canopy instead.
+	var first: Dictionary = CHUNKS.city_canopy_transform(objects[1])
+	var single := CHUNKS._street_detail("builtin:city_tree", objects[1])
+	var crown: MeshInstance3D = single.get_child(0)
+	check(groups[first.variant].multimesh.mesh == crown.mesh and (single.transform * crown.transform).is_equal_approx(first.transform), "instances and nodes place the same canopy")
+	single.free()
+	cell_lease.seal()
+	cell.free()
+	for frame in 2: await process_frame
+	check(cell_lease.retired(), "freeing the cell retires its canopy lease")
 	check(leases.all(func(lease): return not lease.retired()), "a live cell keeps its lease")
 	world.get_child(0).free()
 	for frame in 2: await process_frame

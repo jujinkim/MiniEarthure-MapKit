@@ -151,6 +151,46 @@ static func _street_detail(id: String, object: Dictionary) -> Node3D:
 			anchor.add_child(_detail_mesh("shrub_%d" % variant, "leaf_%d" % variant, Vector3(0.0, SHRUBS[variant].y * 0.48, 0.0), Basis(Vector3.UP, TAU * fmod(pick * 5.0, 1.0))))
 	return anchor
 
+## A cell's city tree canopies share one MultiMesh per canopy variant (one draw
+## each instead of a node per tree); trunks are generated faces. The shared mesh
+## and material are process-lifetime details; the cell's lease carries the nodes.
+static func _city_canopy_instance(job: Dictionary, object: Dictionary) -> void:
+	if not job.has("city_canopies"):
+		var count := 0
+		for other: Dictionary in job.chunk.objects: count += int(str(other.asset_id) == "builtin:city_tree")
+		var groups: Array[MultiMeshInstance3D] = []
+		for variant in CITY_CANOPIES.size():
+			var multi := MultiMesh.new()
+			multi.transform_format = MultiMesh.TRANSFORM_3D
+			multi.mesh = _detail_resource("canopy_%d" % variant)
+			multi.instance_count = count
+			multi.visible_instance_count = 0
+			var node := MultiMeshInstance3D.new()
+			node.multimesh = multi
+			node.material_override = _detail_resource("crown_%d" % variant)
+			node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			node.set_meta("mapkit_static_detail", true)
+			if job.get("lease") != null:
+				job.lease.track(node)
+				job.lease.track(multi)
+			job.root.add_child(node)
+			groups.append(node)
+		job.city_canopies = groups
+	var transform := city_canopy_transform(object)
+	var node: MultiMeshInstance3D = job.city_canopies[int(transform.variant)]
+	var index := node.multimesh.visible_instance_count
+	node.multimesh.set_instance_transform(index, transform.transform)
+	node.multimesh.visible_instance_count = index + 1
+
+## Canopy variant and scene transform of a city tree (shared with `_street_detail`).
+static func city_canopy_transform(object: Dictionary) -> Dictionary:
+	var pick := _identity_unit(object.id)
+	var variant := int(pick * 3.0) % 3
+	var scale := 0.85 + 0.3 * fmod(pick * 7.0, 1.0)
+	var shape: Vector2 = CITY_CANOPIES[variant]
+	var basis := Basis(Vector3.UP, TAU * fmod(pick * 13.0, 1.0)).scaled(Vector3.ONE * scale)
+	return {"variant": variant, "transform": Transform3D(basis, scene_position(object.position) + Vector3.UP * (1.30 + shape.y * scale * 0.5))}
+
 ## Stable display-only value in [0, 1) from an object identity.
 static func _identity_unit(id: Variant) -> float:
 	return float(str(id).sha256_text().substr(0, 6).hex_to_int()) / 16777216.0
@@ -390,6 +430,9 @@ static func _advance(job: Dictionary) -> bool:
 				continue
 			if id not in BUILTINS:
 				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
+			if id == "builtin:city_tree":
+				_city_canopy_instance(job, object)
+				continue
 			if STREET_DETAILS.has(id):
 				var detail := _street_detail(id, object)
 				track_resources(job, detail)
