@@ -91,10 +91,15 @@ column every 5–8 bays and on the base storey. The solid seed varies brightness
 and sets the night switch-off minute. Meshes without UV2 keep a per-plane seed, four
 faded tones and scene-height storeys. Commercial walls
 draw a storefront sign per two bays (85 %) between the shop window and the first floor
-from the shared original atlas `textures/sign_atlas.png` (512 signs of 64×20 px:
+from the shared original atlas `textures/sign_atlas.png` (512 tiles of 64×20 px, each
+sign in the central 56×16 px with edge-repeat gutters, tiles downsampled one by one:
 8 category rows of colours, a pictogram and glyphs of an invented script, no font,
 text or external image; `scripts/sign_atlas.py` reproduces it). Signs read left to
-right from outside and glow at night. Bottoms and imported assets are unchanged.
+right from outside and glow at night. The solid seed and base are flat varyings and
+per-slot sign and lit-window choices use an integer (PCG) hash of the 24-bit seed and
+the integer slot or cell, so each choice is constant across its pixels. Signs sample
+with analytic gradients (anisotropic) and fade to one tile colour once a sign texel
+covers more than four pixels. Bottoms and imported assets are unchanged.
 
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Reproduce the original MIT storefront sign atlas (godot/textures/sign_atlas.png).
 
-512 signs (8 categories x 64) of 64x20 px in a 16x32 grid (drawn at 2x and
-downsampled), from fixed seeds:
+512 signs (8 categories x 64) in a 16x32 grid of 64x20 px tiles (drawn at 2x and
+downsampled), from fixed seeds. Each sign fills the central 56x16 px of its tile;
+the 4/2 px gutters repeat its edge pixels so filtering and mipmaps never blend
+a neighbouring sign. Content:
 background, border, an optional pictogram and 2-6 glyphs of an invented,
 language-neutral script. No font, text or external image is used.
 """
@@ -14,6 +16,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 COLUMNS, ROWS, WIDTH, HEIGHT = 16, 32, 128, 40  # Drawing size; saved at half.
+GUTTER_X, GUTTER_Y = 8, 4  # Drawing-size edge-repeat gutters (4/2 px saved).
 # Category rows of 64 signs: (backgrounds, ink colours, pictogram).
 CATEGORIES = [
     ("food", [(196, 40, 32), (226, 110, 30), (240, 180, 40), (150, 30, 40)], [(255, 248, 225), (40, 20, 10)], "bowl"),
@@ -95,13 +98,29 @@ def sign(rng, category):
     return image
 
 
+def tile(image):
+    """Shrink a drawn sign into the tile's content area and repeat its edges
+    into the gutters."""
+    w, h = WIDTH - 2 * GUTTER_X, HEIGHT - 2 * GUTTER_Y
+    content = image.resize((w, h), Image.LANCZOS)
+    out = Image.new("RGB", (WIDTH, HEIGHT))
+    out.paste(content, (GUTTER_X, GUTTER_Y))
+    out.paste(content.crop((0, 0, 1, h)).resize((GUTTER_X, h)), (0, GUTTER_Y))
+    out.paste(content.crop((w - 1, 0, w, h)).resize((GUTTER_X, h)), (WIDTH - GUTTER_X, GUTTER_Y))
+    out.paste(out.crop((0, GUTTER_Y, WIDTH, GUTTER_Y + 1)).resize((WIDTH, GUTTER_Y)), (0, 0))
+    out.paste(out.crop((0, HEIGHT - GUTTER_Y - 1, WIDTH, HEIGHT - GUTTER_Y)).resize((WIDTH, GUTTER_Y)), (0, HEIGHT - GUTTER_Y))
+    return out
+
+
 def build(path):
-    atlas = Image.new("RGB", (COLUMNS * WIDTH, ROWS * HEIGHT))
+    # Each tile is downsampled on its own, so no filter kernel crosses a tile edge.
+    w, h = WIDTH // 2, HEIGHT // 2
+    atlas = Image.new("RGB", (COLUMNS * w, ROWS * h))
     for index in range(COLUMNS * ROWS):
         category = CATEGORIES[index // 64]
         rng = random.Random(f"miniearthure-sign-{index}")
-        atlas.paste(sign(rng, category), ((index % COLUMNS) * WIDTH, (index // COLUMNS) * HEIGHT))
-    atlas.resize((COLUMNS * WIDTH // 2, ROWS * HEIGHT // 2), Image.LANCZOS).save(path, optimize=True)
+        atlas.paste(tile(sign(rng, category)).resize((w, h), Image.LANCZOS), ((index % COLUMNS) * w, (index // COLUMNS) * h))
+    atlas.save(path, optimize=True)
 
 
 if __name__ == "__main__":

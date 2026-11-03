@@ -28,6 +28,12 @@ func run() -> void:
 	for uniform: Dictionary in MATERIALS.new().shader.get_shader_uniform_list(): names[uniform.name] = true
 	check(names.has("facade_kind") and names.has("floor_pitch") and names.has("lighting_role") and names.has("sign_atlas"),"surface shader compiles with the facade uniforms")
 	check(names.has("facade_body") and names.has("facade_roof") and names.has("facade_accent") and names.has("facade_palette"),"surface shader compiles with the record palette uniforms")
+	# Per-solid choices must not depend on interpolated values: flat seeds and an
+	# integer hash keep each sign slot and lit window one choice across its pixels.
+	var code: String = MATERIALS.new().shader.code
+	check(code.contains("varying flat float solid_seed;") and code.contains("varying flat float solid_base;"),"solid seed and base are flat varyings")
+	check(code.contains("float pick = facade_unit(") and code.contains("facade_lit = step(0.35,facade_unit("),"sign picks and lit windows use the integer hash")
+	check(code.contains("textureGrad(sign_atlas") and not code.contains("texture(sign_atlas"),"signs sample with analytic gradients")
 	var kinds := {"concrete:residential":1,"brick:residential":2,"wood:residential":2,"concrete:commercial":3,"brick:commercial":3,"wood:industrial":4,"concrete:public":5,"brick:home":0,"concrete":0,"barrier:wall":0,"rc:wall":0,"builtin:tree":0}
 	for key: String in kinds:
 		check(RENDER.facade_kind(key) == kinds[key],"facade kind "+key)

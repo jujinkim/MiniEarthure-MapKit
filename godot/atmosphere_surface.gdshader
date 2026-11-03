@@ -47,16 +47,24 @@ uniform vec3 facade_body[8];
 uniform vec3 facade_roof[8];
 uniform vec3 facade_accent[8];
 uniform bool facade_palette = false;
-// Shared original storefront signs: 16x32 grid, 8 category rows of 64.
-uniform sampler2D sign_atlas : source_color, filter_linear_mipmap, repeat_disable;
+// Shared original storefront signs: 16x32 grid, 8 category rows of 64. Each
+// 64x20 tile holds its sign in the central 56x16 with edge-repeat gutters.
+uniform sampler2D sign_atlas : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform bool signs_enabled = false;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float seed;
 // Generated building solids carry UV2 (seed, 1000 + base metres); -1 elsewhere.
-varying float solid_seed;
-varying float solid_base;
+// Every vertex of a solid holds the same values, so they are not interpolated:
+// interpolation error would make per-pixel choices (signs, lit windows) flicker.
+varying flat float solid_seed;
+varying flat float solid_base;
 float facade_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
+// Integer hash (PCG) for discrete facade choices: exact for the 24-bit packed
+// seed and integer cells, unlike the sine hash above (continuous noise only).
+uint facade_pcg(uint v) { uint s=v*747796405u+2891336453u; uint w=((s>>((s>>28u)+4u))^s)*277803737u; return (w>>22u)^w; }
+uint facade_cell(float v) { return uint(int(v)+1048576); }
+float facade_unit(uint v) { return float(facade_pcg(v)>>8u)/16777216.0; }
 float lawn_noise(vec2 p) {
     vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
     float a=facade_hash(i), b=facade_hash(i+vec2(1.0,0.0)), c=facade_hash(i+vec2(0.0,1.0)), d=facade_hash(i+vec2(1.0,1.0));
@@ -89,6 +97,9 @@ void fragment() {
     if(vertex_tinted && !distant) color *= COLOR.rgb;
     if(textured) color *= texture(albedo_texture,UV).rgb;
     float view_distance=length(VERTEX);
+    // Screen derivatives in uniform control flow, for the facade sign lookup.
+    vec3 position_dx=dFdx(world_position);
+    vec3 position_dy=dFdy(world_position);
     float effect_weight=surface_effect_weight(view_distance);
     float surface_roughness=roughness;
     if(effect_weight>0.0) {
@@ -169,7 +180,8 @@ void fragment() {
             if(facade_kind==1 && fract(facade_seed*5.3)<0.5) color *= 1.0+0.08*step(f.y,0.1)*step(1.0,cell.y)*effect_weight;
             if(facade_kind==5) color *= 1.0+0.05*step(f.y,0.08)*effect_weight;
             facade_window = window*effect_weight;
-            facade_lit = step(0.35,facade_hash(floor(cell)+facade_seed*7.0));
+            uint seed_bits = uint(round(clamp(facade_seed,0.0,1.0)*16777216.0));
+            facade_lit = step(0.35,facade_unit(seed_bits^facade_pcg(facade_cell(floor(cell.x))^facade_pcg(facade_cell(floor(cell.y))))));
             float glass_pick = facade_record ? float((record>>6)&3)/4.0+0.1 : fract(facade_seed*11.1);
             vec3 glass = glass_pick<0.4 ? vec3(0.21,0.25,0.29) : (glass_pick<0.7 ? vec3(0.17,0.24,0.25) : vec3(0.25,0.23,0.21));
             color = mix(color,glass,facade_window*0.85);
@@ -179,15 +191,34 @@ void fragment() {
             if(signs_enabled && facade_kind==3 && v>0.78*floor_pitch && v<1.08*floor_pitch) {
                 float width = floor_pitch*bay*2.0;
                 // Seen from outside, signs read left to right along -u.
-                float slot = floor(-u/width);
-                float along = fract(-u/width);
-                float pick = facade_hash(vec2(slot,facade_seed*977.0));
+                float run = -u/width;
+                float slot = floor(run);
+                float along = fract(run);
+                float pick = facade_unit(seed_bits^facade_pcg(facade_cell(slot)));
                 if(pick<0.85) {
-                    float index = floor(pick/0.85*512.0);
-                    vec2 local = vec2((along-0.06)/0.88,1.0-(v-0.80*floor_pitch)/(0.26*floor_pitch));
+                    float index = min(floor(pick/0.85*512.0),511.0);
+                    float sign_height = 0.26*floor_pitch;
+                    vec2 local = vec2((along-0.06)/0.88,1.0-(v-0.80*floor_pitch)/sign_height);
                     if(local.x>0.0 && local.x<1.0 && local.y>0.0 && local.y<1.0) {
-                        vec2 atlas = (vec2(mod(index,16.0),floor(index/16.0))+clamp(local,vec2(0.02),vec2(0.98)))/vec2(16.0,32.0);
-                        facade_sign = texture(sign_atlas,atlas).rgb;
+                        // Content is the central 56x16 of a 64x20 tile.
+                        const vec2 grid = vec2(16.0,32.0);
+                        const vec2 content = vec2(56.0/64.0,16.0/20.0);
+                        vec2 tile = vec2(mod(index,16.0),floor(index/16.0));
+                        vec2 atlas = (tile+(1.0-content)*0.5+clamp(local,vec2(0.0),vec2(1.0))*content)/grid;
+                        // Analytic gradients (the slot fract and branches would break
+                        // implicit mip selection); far signs settle on one blurred
+                        // level instead of crawling.
+                        vec3 tangent = normalize(vec3(-n.z,0.0,n.x));
+                        vec2 scale = content/grid*vec2(-1.0/(width*0.88),-1.0/sign_height);
+                        vec2 gx = vec2(dot(position_dx,tangent),position_dx.y)*scale;
+                        vec2 gy = vec2(dot(position_dy,tangent),position_dy.y)*scale;
+                        vec2 texels = vec2(textureSize(sign_atlas,0));
+                        float lod = log2(max(max(length(gx*texels),length(gy*texels)),1e-6));
+                        vec3 near_sign = textureGrad(sign_atlas,atlas,gx,gy).rgb;
+                        // The level where a tile is 16x5 texels (2 at full size, 1 on
+                        // the halved low atlas) keeps whole texels inside each tile.
+                        vec3 far_sign = textureLod(sign_atlas,(tile+0.5)/grid,max(log2(texels.x/256.0),0.0)).rgb;
+                        facade_sign = mix(near_sign,far_sign,smoothstep(2.0,3.5,lod));
                         color = mix(color,facade_sign,effect_weight);
                         surface_roughness = mix(surface_roughness,0.4,effect_weight);
                         facade_window = 0.0;
