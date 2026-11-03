@@ -46,6 +46,10 @@ both import and styling costs to detect displaced work. `material_track`
 measures lease tracking, and `material_finalize` covers node margin, shadow and
 override setup. `occluder_cached_arrays` marks reuse of retained decoded CPU faces;
 `occluder_arrays` marks a mesh readback for independently prepared/preview meshes.
+Generated chunk batches (walls, buildings) prepare their occluder from the vertex
+array they were built from and never read the surface back; once 64 faces are held,
+a face of a held direction/height band no larger than every held face is refused
+before the replacement scan (`chunk_occluder_validator` pins identical faces).
 They count even zero-duration calls and attach a surface index where applicable.
 Private LOD outputs avoid material copies; borrowed meshes still need them.
 Observers last one advance; reports retain primitives. Callback costs overlap

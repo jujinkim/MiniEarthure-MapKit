@@ -140,7 +140,8 @@ static func node_can_occlude(node: MeshInstance3D) -> bool:
 		if not opaque_material(node.get_surface_override_material(surface)): return false
 	return true
 
-static func _offer_occluder_face(faces: Array[Dictionary], sectors: Dictionary, face: Dictionary) -> void:
+## Returns whether the held faces changed.
+static func _offer_occluder_face(faces: Array[Dictionary], sectors: Dictionary, face: Dictionary) -> bool:
 	var replace := -1
 	if faces.size()>=64:
 		for index in faces.size():
@@ -148,13 +149,14 @@ static func _offer_occluder_face(faces: Array[Dictionary], sectors: Dictionary, 
 			# Preserve at least one face in each represented direction/height band.
 			if held.sector!=face.sector and int(sectors[held.sector])<=1: continue
 			if replace<0 or held.area<faces[replace].area: replace=index
-		if replace<0 or (sectors.has(face.sector) and face.area<=faces[replace].area): return
+		if replace<0 or (sectors.has(face.sector) and face.area<=faces[replace].area): return false
 		var old: int=faces[replace].sector
 		sectors[old]-=1
 		if sectors[old]==0: sectors.erase(old)
 		faces[replace]=face
 	else: faces.append(face)
 	sectors[face.sector]=int(sectors.get(face.sector,0))+1
+	return true
 
 static func _occluder_shape(mesh: Mesh, surface_arrays: Array = [], observer := Callable()) -> ArrayOccluder3D:
 	# A conservative subset of actual opaque upright faces. Never fill a model
@@ -166,6 +168,10 @@ static func _occluder_shape(mesh: Mesh, surface_arrays: Array = [], observer := 
 	var surface_count := mesh.get_surface_count()
 	var per_surface := maxi(4,512/maxi(1,surface_count))
 	var order := 0
+	# Smallest held area: once 64 faces are held, a face of an already held
+	# sector no larger than every held face is always refused, so it is skipped
+	# before the scan (same selection, no per-face 64-entry pass).
+	var smallest := INF
 	for surface in surface_count:
 		var material := mesh.surface_get_material(surface)
 		if not opaque_material(material): continue
@@ -193,7 +199,15 @@ static func _occluder_shape(mesh: Mesh, surface_arrays: Array = [], observer := 
 			var center := (a+b+c)/3.0
 			var side := (0 if normal.x<0.0 else 1) if absf(normal.x)>=absf(normal.z) else (2 if normal.z<0.0 else 3)
 			var band := clampi(floori((center.y-bounds.position.y)/maxf(.01,bounds.size.y)*4.0),0,3)
-			_offer_occluder_face(faces,sectors,{"a":a,"b":b,"c":c,"area":area,"sector":side*4+band,"order":order})
+			var sector := side*4+band
+			if faces.size()>=64 and area<=smallest and sectors.has(sector):
+				order+=1
+				continue
+			if _offer_occluder_face(faces,sectors,{"a":a,"b":b,"c":c,"area":area,"sector":sector,"order":order}):
+				if faces.size()<64: smallest=minf(smallest,area)
+				else:
+					smallest=INF
+					for held: Dictionary in faces: smallest=minf(smallest,held.area)
 			order+=1
 	faces.sort_custom(func(a: Dictionary,b: Dictionary): return a.order<b.order)
 	for face: Dictionary in faces:

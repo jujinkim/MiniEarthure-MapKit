@@ -246,6 +246,7 @@ static func _advance(job: Dictionary) -> bool:
 			var prepared := ArrayMesh.new()
 			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 			mesh.mesh = prepared
+			_prepare_batch_occluder(prepared, key, arrays[Mesh.ARRAY_VERTEX])
 		else:
 			var surface := SurfaceTool.new()
 			surface.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -398,6 +399,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 	resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.mesh = resource
 	var key: String = batch.key
+	_prepare_batch_occluder(resource, key, batch.vertices)
 	if not job.materials.has(key):
 		var presentation: Dictionary = job.chunk.get("presentation", {})
 		var sources: Dictionary = presentation.get("assets", {})
@@ -424,6 +426,13 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 	job.root.add_child(mesh)
 	job.triangle += 1
 	return false
+
+## An occluding batch derives its occluder faces from the vertex array it was
+## built from: reading a just-uploaded surface back waits for the GPU (Metal,
+## Vulkan) inside the attachment budget. The faces are identical; the shape is
+## leased once by QUALITY.occluder() when the node is tracked.
+static func _prepare_batch_occluder(mesh: ArrayMesh, key: String, vertices: PackedVector3Array) -> void:
+	if occluding_surface(key): QUALITY.prepare_occluder(mesh, null, [[vertices, null]])
 
 static func display_material_key(chunk: Dictionary, triangle: int) -> String:
 	return PLAN.material_key(chunk, triangle)
