@@ -14,6 +14,9 @@ uniform vec4 road_borders[128];
 uniform int path_count = 0;
 uniform int edge_count = 0;
 uniform int lanes = 2;
+// Painted lane width in metres; 0 shares the road width between the lanes.
+// With it, lanes stay centred, edge lines bound them and the rest is shoulder.
+uniform float lane_width = 0.0;
 uniform bool center_line = true;
 uniform bool edge_lines = true;
 uniform bool crosswalk_start = false;
@@ -137,7 +140,9 @@ void fragment() {
         }
         float white=0.0;
         float yellow=0.0;
-        if(edge_lines) {
+        float lane_half=lane_width>0.0 ? min(half_width,0.5*lane_width*float(max(lanes,1))) : half_width;
+        bool shoulder=lane_width>0.0 && lane_half<half_width-0.12;
+        if(edge_lines && !shoulder) {
             for(int i=0;i<128;i++) {
                 if(i>=edge_count) break;
                 vec2 a=road_borders[i].xy;
@@ -150,9 +155,10 @@ void fragment() {
             }
         }
         if(body) {
+            if(edge_lines && shoulder) white=max(white,band(abs(across)-lane_half,0.04));
             for(int lane=1;lane<8;lane++) {
                 if(lane>=lanes) break;
-                float x=-half_width+2.0*half_width*float(lane)/float(lanes);
+                float x=-lane_half+2.0*lane_half*float(lane)/float(lanes);
                 if(center_line && lane*2==lanes) yellow=max(yellow,band(abs(across)-0.07,0.025));
                 else if(abs(fract(station/max(period,0.001)+0.5)-0.5)<0.28) white=max(white,band(across-x,0.035));
             }
@@ -170,8 +176,8 @@ void fragment() {
                     float to_end=s==0 ? station : e;
                     float bar=(s==0 ? crosswalk_start : crosswalk_end) ? 1.95 : 0.55;
                     float r=h*across; // across > 0 is right of the path direction in scene xz
-                    float r0=one_way!=0 || left_hand ? -half_width : 0.0;
-                    float r1=one_way!=0 || !left_hand ? half_width : 0.0;
+                    float r0=one_way!=0 || left_hand ? -lane_half : 0.0;
+                    float r1=one_way!=0 || !left_hand ? lane_half : 0.0;
                     int count=one_way!=0 ? lanes : max(lanes/2,1);
                     if(r<=r0+0.05 || r>=r1-0.05) continue;
                     if(to_end>bar && to_end<bar+0.14) white=1.0;
@@ -189,9 +195,9 @@ void fragment() {
         // Worn paint: uneven coverage, scuffed by wheel tracks.
         float track=0.0;
         if(body && effect_weight>0.0) {
-            float lane_width=2.0*half_width/float(max(lanes,1));
-            float lateral=abs(fract((across+half_width)/max(lane_width,0.01))-0.5);
-            track=(1.0-smoothstep(0.04,0.10,abs(lateral-0.24)))*step(abs(across),half_width);
+            float lane_span=2.0*lane_half/float(max(lanes,1));
+            float lateral=abs(fract((across+lane_half)/max(lane_span,0.01))-0.5);
+            track=(1.0-smoothstep(0.04,0.10,abs(lateral-0.24)))*step(abs(across),lane_half);
             color*=1.0-0.07*track*effect_weight;
             rough_shift-=0.10*track*effect_weight;
         }

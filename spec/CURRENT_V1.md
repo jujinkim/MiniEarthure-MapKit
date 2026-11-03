@@ -201,8 +201,8 @@ earlier documents keep their bytes, world hashes and generated geometry.
 - `MapDocument.traffic` (optional): `{driving_side: right|left, signal_style:
   horizontal|vertical}`, absent = right/horizontal; display convention for road
   markings ([ROAD_SAFETY](../docs/ROAD_SAFETY.md)) and street furniture authoring.
-  `RoadMarkings.one_way` (-1..1, 0 omitted) and `stop_lines` (false omitted) are
-  display-only markings fields.
+  `RoadMarkings.one_way` (-1..1, 0 omitted), `stop_lines` (false omitted) and
+  `lane_width_cm` (0 omitted, else 50..1000) are display-only markings fields.
 - City street furniture builtins (game scale, local +x over the road):
   `builtin:signal_h` (solid pole; display-only arm over the road with a horizontal
   head on its end) and `builtin:signal_v` (solid pole, vertical head) with

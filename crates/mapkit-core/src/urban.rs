@@ -51,9 +51,10 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         if road
             .markings
             .as_ref()
-            .is_some_and(|m| !(1..=8).contains(&m.lanes) || !(-1..=1).contains(&m.one_way))
+            .is_some_and(|m| !(1..=8).contains(&m.lanes) || !(-1..=1).contains(&m.one_way)
+                || !(m.lane_width_cm == 0 || (50..=1000).contains(&m.lane_width_cm)))
         {
-            return Err(error("E_GEOMETRY", "road markings require 1..8 lanes and one_way -1..1"));
+            return Err(error("E_GEOMETRY", "road markings require 1..8 lanes, one_way -1..1 and a lane width of 0 or 50..1000 cm"));
         }
     }
     paint_disjoint(d, &mut 0)

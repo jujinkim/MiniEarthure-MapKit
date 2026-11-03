@@ -293,6 +293,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             crosswalk_end: _,
             one_way: _,
             stop_lines: _,
+            lane_width_cm: _,
         }) = markings
         {}
     }
@@ -723,6 +724,7 @@ mod tests {
                     crosswalk_end: false,
                     one_way: 0,
                     stop_lines: false,
+                    lane_width_cm: 0,
                 }),
             },
         );

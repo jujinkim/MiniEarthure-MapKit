@@ -36,6 +36,12 @@ safety furniture, placement intersection and regional influence margin.
   the leftmost lane its left turn, the rightmost its right turn, others straight.
   `MapDocument.traffic.driving_side` picks the inbound half (absent = right). All of
   it is shader paint from the road style; geometry and hashes of cells are unchanged.
+- `RoadMarkings.lane_width_cm` (optional, 0 omitted, else 50..1000 map cm) keeps
+  every painted lane that wide, centred on the road (clamped to its width). Lane
+  dividers, the center line, stop lines, arrows and wheel-track wear stay inside
+  that band; with more than 12 cm left per side the edge lines bound the band and
+  the remainder is shoulder. Omitted, the lanes share the road width and edge lines
+  follow the paint borders.
 - Urban asphalt (`urban_surface.gdshader`) adds broad tonal blotches, light
   aggregate, seeded repair patches and sparse domain-warped cracks from world
   position; marked roads darken and polish two wheel tracks per lane, and paint

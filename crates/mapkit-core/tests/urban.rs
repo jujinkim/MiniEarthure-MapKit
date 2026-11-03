@@ -172,12 +172,21 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
             crosswalk_end: true,
             one_way: 0,
             stop_lines: false,
+            lane_width_cm: 0,
         });
         assert_eq!(
             generate_cell(&d, 0).hash().unwrap(),
             c.hash().unwrap(),
             "markings never change collision"
         );
+        d.roads[0].markings.as_mut().unwrap().lane_width_cm = 120;
+        assert!(d.validate().is_ok(), "a painted lane width of 50..1000 cm is accepted");
+        assert_eq!(generate_cell(&d, 0).hash().unwrap(), c.hash().unwrap(), "lane width is display only");
+        for invalid in [1, 49, 1001] {
+            d.roads[0].markings.as_mut().unwrap().lane_width_cm = invalid;
+            assert!(d.validate().is_err(), "lane width {invalid} cm is refused");
+        }
+        d.roads[0].markings.as_mut().unwrap().lane_width_cm = 0;
         d.roads[0].markings.as_mut().unwrap().lanes = 0;
         assert!(d.validate().is_err());
     }

@@ -74,7 +74,7 @@ pub fn decorate(
                 r.id, bounds.min[0], bounds.min[1], surface
             );
             if !styles.contains_key(key.as_str()) {
-                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false };
+                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 };
                 let m = r.markings.as_ref().unwrap_or(&unmarked);
                 let mut paths = PackedVector4Array::new();
                 let mut metrics = PackedVector4Array::new();
@@ -160,7 +160,8 @@ pub fn decorate(
                     "path_count"=>path_count as i64,"edge_count"=>edge_count as i64,
                     "lanes"=>m.lanes as i64,"center_line"=>m.center_line,
                     "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64,
-                    "stop_start"=>turns(&r.from, false),"stop_end"=>turns(&r.to, true),"one_way"=>m.one_way as i64,"left_hand"=>left_hand};
+                    "stop_start"=>turns(&r.from, false),"stop_end"=>turns(&r.to, true),"one_way"=>m.one_way as i64,"left_hand"=>left_hand,
+                    "lane_width"=>m.lane_width_cm as f64 / 100.0};
                 if let Some(tint)=tint { style.set("base_color",tint); }
                 styles.set(key.as_str(),&style);
             }

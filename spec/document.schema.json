@@ -2533,6 +2533,13 @@
         "edge_lines": {
           "type": "boolean"
         },
+        "lane_width_cm": {
+          "description": "Painted lane width in map centimetres, 0 (omitted) or 50..1000: the lanes keep this width centred on the road, edge lines bound them and the rest of the width is shoulder. Omitted, lanes share the road width. Display only.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 1000.0,
+          "minimum": 0.0
+        },
         "lanes": {
           "type": "integer",
           "format": "uint8",

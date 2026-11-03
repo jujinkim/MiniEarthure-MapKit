@@ -278,9 +278,10 @@ record!(RoadMarkings, d, m, {
         d,
         crosswalk_end,
         crosswalk_start,
-        edge_lines,
-        lanes
+        edge_lines
     );
+    if d.lane_width_cm != 0 {fields!(m,d,lane_width_cm);}
+    fields!(m, d, lanes);
     if d.one_way != 0 {fields!(m,d,one_way);}
     if d.stop_lines {fields!(m,d,stop_lines);}
 });
@@ -548,6 +549,7 @@ mod tests {
             crosswalk_end: false,
             one_way: 0,
             stop_lines: false,
+            lane_width_cm: 0,
         });
         d.roads[0].sidewalk_cm = Some(0);
         d.roads[0].clearance_cm = Some(340);
