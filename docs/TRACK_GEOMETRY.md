@@ -97,12 +97,25 @@ Bounded (non-standalone) maps get `godot/edge_stage.gd` instead: translucent
 unshaded panels standing on the document rectangle (`map_bounds()`, 12 m, alpha
 fading to the top, two-sided, no shadows) and four ground slabs in the map's
 ground colour outside the rectangle, 2,048 m wide, just below `terrain_base_cm`.
-With a `play_area` the panels follow its rings instead: red and white diagonal
-no-entry stripes (3 m), 12 m tall and sunk 1 m below each vertex floor;
-`set_floors` rebuilds them on per-vertex ground heights a consumer samples once the
-cells beneath load. It is display-only and deterministic; the Runtime footprint
-guard still holds vehicles at the same edge (rectangle and rings). Consumers lease `RESERVATION_BYTES` (256 KiB) and set
-the sky ground tint to the same colour; `edge_stage_validator` covers it.
+With a `play_area` the stage draws a virtual fence along its rings instead: one
+unshaded quad per ring segment, sunk 2 m below each vertex floor and 12 m tall,
+whose shader paints a constant-alpha (0.35) red and white no-entry panel (3 m
+diagonal stripes) up to 2.4 m, dark posts every 4 m, a lit top rail and a faint
+curtain (alpha 0.12 fading out) up to 12 m, so the fence adds no geometry.
+`set_floors` rebuilds the quads on per-vertex ground heights a consumer samples
+once the cells beneath load; `floor_requests` groups the vertices by the cell
+under them and `fit_floors` samples them with one downward ray each through the
+Runtime fence colliders (meta `play_area_fence`). The stage is display-only and deterministic. On a
+rectangle the Runtime footprint guard holds vehicles at the edge; on rings the
+Runtime also attaches a collision fence built from the same shared geometry,
+`godot/play_area_fence.gd` (ring segments clipped per cell, inner face on the
+ring, 0.3 m depth outward, lengthened past convex vertices and shortened at
+concave vertices sharper than 90 degrees so no box reaches into the play area,
+2 m sink, 12 m above the ground; it has no Client dependency). Consumers lease `RESERVATION_BYTES` (256 KiB, which includes a ring
+fence of up to 768 segments with its CPU, GPU and rebuild copies;
+`reservation_bytes(play_area)` sizes larger play areas) and set the sky ground
+tint to the same colour; `edge_stage_validator` covers the stage and the shared
+fence geometry.
 
 ## Grounded supports
 

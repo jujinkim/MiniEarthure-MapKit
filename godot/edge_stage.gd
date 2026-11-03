@@ -1,34 +1,69 @@
 extends RefCounted
-## Display-only map edge for bounded package maps: translucent panels standing on
-## the document rectangle, or striped no-entry panels along the `play_area` rings
-## when the map has them, and a ground skirt in the map's ground colour outside the
-## rectangle. No collision, occupancy or spawn metadata; the Runtime footprint
-## guard still stops vehicles at the same edge, so drive geometry never changes.
+## Map edge for bounded package maps: translucent panels standing on the document
+## rectangle, or a virtual fence along the `play_area` rings when the map has them,
+## and a ground skirt in the map's ground colour outside the rectangle. This stage
+## is display only. On a rectangle the Runtime footprint guard stops vehicles at
+## the same edge; on rings the Runtime also attaches the matching collision fence
+## (`play_area_fence.gd`), so the car is stopped by the wall it sees.
+const FENCE := preload("./play_area_fence.gd")
 const NAME := "MapEdgeStage"
 const WALL_HEIGHT_M := 12.0
 const WALL_COLOR := Color(0.55, 0.85, 1.0)
 const WALL_ALPHA := 0.30
 const SKIRT_MARGIN_M := 2048.0
 const SKIRT_THICKNESS_M := 0.5
-## Presentation allowance: one wall mesh, four skirt boxes and two materials.
+## Ring fence quads: 4 vertices (position 12 B, UV 8 B) and 6 indices (4 B) each.
+const RING_SEGMENT_BYTES := 4 * (12 + 8) + 6 * 4
+## Presentation allowance: one wall mesh, four skirt boxes and two materials,
+## including a ring fence of up to INCLUDED_RING_SEGMENTS with its CPU copy, GPU
+## copy and the transient mesh of one floor rebuild (`reservation_bytes` sizes a
+## larger play area exactly).
 const RESERVATION_BYTES := 256 * 1024
-## Play-area panels: diagonal no-entry stripes of STRIPE_M, sunk SINK_M into the
-## ground below each vertex floor so sloped terrain shows no gap.
+const INCLUDED_RING_SEGMENTS := 768
+## Ring fence: one quad per ring segment from SINK_M below the floor to
+## WALL_HEIGHT_M. The shader paints a constant-alpha no-entry panel up to
+## FENCE.VISIBLE_HEIGHT_M with posts every FENCE.POST_SPACING_M, a lit top rail
+## and a faint curtain above it, so the fence costs no extra geometry.
 const STRIPE_M := 3.0
-const SINK_M := 1.0
+const SINK_M := FENCE.SINK_M
+const FENCE_ALPHA := 0.35
+const CURTAIN_ALPHA := 0.12
 const STRIPE_SHADER := """shader_type spatial;
 render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
 uniform float stripe_m = 3.0;
-uniform float alpha = 0.3;
+uniform float alpha = 0.35;
+uniform float curtain_alpha = 0.12;
+uniform float panel_m = 2.4;
+uniform float wall_m = 12.0;
+uniform float post_m = 4.0;
 varying float along;
 varying float rise;
 void vertex() { along = UV.x; rise = UV.y; }
 void fragment() {
-	bool red = fract((along + rise * 12.0) / (2.0 * stripe_m)) < 0.5;
-	ALBEDO = red ? vec3(0.9, 0.12, 0.1) : vec3(0.95, 0.95, 0.92);
-	ALPHA = alpha * clamp(1.0 - rise, 0.0, 1.0);
+	float post = abs(fract(along / post_m + 0.5) - 0.5) * post_m;
+	if (post < 0.05 && rise < panel_m + 0.12) {
+		ALBEDO = vec3(0.2, 0.21, 0.23);
+		ALPHA = 0.85;
+	} else if (rise >= panel_m - 0.09 && rise < panel_m) {
+		ALBEDO = vec3(1.0, 0.86, 0.32);
+		ALPHA = 0.9;
+	} else if (rise < panel_m) {
+		bool red = fract((along + rise) / (2.0 * stripe_m)) < 0.5;
+		ALBEDO = red ? vec3(0.9, 0.12, 0.1) : vec3(0.95, 0.95, 0.92);
+		ALPHA = alpha;
+	} else {
+		ALBEDO = vec3(0.55, 0.85, 1.0);
+		ALPHA = curtain_alpha * clamp(1.0 - (rise - panel_m) / max(wall_m - panel_m, 0.01), 0.0, 1.0);
+	}
 }
 """
+
+## Display allowance for `create` with these rings (document or flat bridge
+## form): RESERVATION_BYTES plus three copies of every segment beyond the included ones.
+static func reservation_bytes(play_area: Array) -> int:
+	var segments := 0
+	for ring: PackedVector2Array in FENCE.rings_cm(play_area): segments += ring.size()
+	return RESERVATION_BYTES + maxi(0, segments - INCLUDED_RING_SEGMENTS) * RING_SEGMENT_BYTES * 3
 
 ## Scene-metre rings of the document `play_area` (map cm [[x, y], ...] rings).
 static func rings(play_area: Array, world_scale: float) -> Array:
@@ -147,6 +182,48 @@ static func set_floors(root: Node3D, floors: Array) -> bool:
 	root.set_meta("edge_floors", floors)
 	return true
 
+## Fence vertices waiting for ground, keyed by the document cell under each
+## (`cell_at(x_cm, y_cm)` -> PackedInt32Array [x, y], as the bridge's):
+## {cell: [[ring, vertex], ...]}. Empty for a rectangle stage.
+static func floor_requests(root: Node3D, world_scale: float, cell_at: Callable) -> Dictionary:
+	var result := {}
+	if not is_instance_valid(root) or not root.has_meta("edge_rings") or not cell_at.is_valid() or not is_finite(world_scale) or world_scale <= 0.0: return result
+	var outline: Array = root.get_meta("edge_rings")
+	for r in range(outline.size()):
+		for i in range(outline[r].size()):
+			var point: Vector2 = outline[r][i] * (100.0 / world_scale)
+			var at: PackedInt32Array = cell_at.call(roundi(point.x), roundi(-point.y))
+			if at.size() != 2: continue
+			var cell := Vector2i(at[0], at[1])
+			if not result.has(cell): result[cell] = []
+			result[cell].append([r, i])
+	return result
+
+## Stands the requested vertices of `cells` (whose collision registered) on the
+## first ground below them: one downward ray each in `space`, passing through the
+## Runtime's play-area fence colliders (FENCE.META) so the panels do not sit on
+## the fence top. Consumes those cells' requests; true when the panels rebuilt.
+static func fit_floors(root: Node3D, space: PhysicsDirectSpaceState3D, requests: Dictionary, cells: Array) -> bool:
+	if not is_instance_valid(root) or space == null or not root.has_meta("edge_rings"): return false
+	var outline: Array = root.get_meta("edge_rings")
+	var floors: Array = root.get_meta("edge_floors").duplicate(true)
+	var changed := false
+	for cell: Vector2i in cells:
+		for item: Array in requests.get(cell, []):
+			var point: Vector2 = outline[item[0]][item[1]]
+			var query := PhysicsRayQueryParameters3D.create(Vector3(point.x, 5000.0, point.y), Vector3(point.x, -5000.0, point.y))
+			var hit := space.intersect_ray(query)
+			var fences: Array[RID] = []
+			while not hit.is_empty() and hit.collider.has_meta(FENCE.META) and fences.size() < 4:
+				fences.append(hit.rid)
+				query.exclude = fences
+				hit = space.intersect_ray(query)
+			if hit.is_empty() or hit.collider.has_meta(FENCE.META): continue
+			floors[item[0]][item[1]] = hit.position.y
+			changed = true
+		requests.erase(cell)
+	return changed and set_floors(root, floors)
+
 static func _ring_wall(outline: Array, floors: Array) -> MeshInstance3D:
 	var vertices := PackedVector3Array()
 	var uvs := PackedVector2Array()
@@ -161,9 +238,11 @@ static func _ring_wall(outline: Array, floors: Array) -> MeshInstance3D:
 			var b := ring[j]
 			var length := a.distance_to(b)
 			var base := vertices.size()
+			# UV: metres along the ring and above the local floor (a parallelogram
+			# quad, so the shader's heights stay exact on sloped floors).
 			vertices.append_array([Vector3(a.x, levels[i] - SINK_M, a.y), Vector3(b.x, levels[j] - SINK_M, b.y),
 				Vector3(b.x, levels[j] + WALL_HEIGHT_M, b.y), Vector3(a.x, levels[i] + WALL_HEIGHT_M, a.y)])
-			uvs.append_array([Vector2(along, 0.0), Vector2(along + length, 0.0), Vector2(along + length, 1.0), Vector2(along, 1.0)])
+			uvs.append_array([Vector2(along, -SINK_M), Vector2(along + length, -SINK_M), Vector2(along + length, WALL_HEIGHT_M), Vector2(along, WALL_HEIGHT_M)])
 			indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
 			along += length
 	var arrays := []
@@ -178,7 +257,11 @@ static func _ring_wall(outline: Array, floors: Array) -> MeshInstance3D:
 	var paint := ShaderMaterial.new()
 	paint.shader = shader
 	paint.set_shader_parameter("stripe_m", STRIPE_M)
-	paint.set_shader_parameter("alpha", WALL_ALPHA)
+	paint.set_shader_parameter("alpha", FENCE_ALPHA)
+	paint.set_shader_parameter("curtain_alpha", CURTAIN_ALPHA)
+	paint.set_shader_parameter("panel_m", FENCE.VISIBLE_HEIGHT_M)
+	paint.set_shader_parameter("wall_m", WALL_HEIGHT_M)
+	paint.set_shader_parameter("post_m", FENCE.POST_SPACING_M)
 	var wall := MeshInstance3D.new()
 	wall.name = "EdgeWall"
 	wall.mesh = mesh
