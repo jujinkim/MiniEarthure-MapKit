@@ -169,8 +169,16 @@ the footprint's edge index.
 - `mapkit audit-roads PACKAGE` samples generated collision every 0.5 m on five
   width lines against the designed surface (at most 1 cm deviation), checks
   junction fans/overlap, duplicate terrain contacts, per-cell road-paint budgets
-  and the default-world 12% design grade.
-- Dense road paint is compacted within 1 cm for display; collision keeps full curve
-  sampling, and shader path/exterior arrays stay capped at 128 segments.
+  (a road, or a road joined with its degree-two neighbours, over the 128-segment
+  paint cap is an audit error) and the default-world 12% design grade.
+- Every road's paint (centre path and edge-line exterior, designed or not) is
+  compacted within 1 cm for display, with dash stations measured before
+  compaction; compacted exterior chains keep their plan direction, which the
+  shader's inward edge-line offset relies on. Collision keeps full curve sampling.
+  Shader path/exterior arrays stay capped at 128 segments. A road still over the
+  cap in a cell, after compaction, is drawn unpainted in that cell (Editor
+  responses warn `road_paint_segments`), and a degree-two joined path over the cap
+  falls back to the road's own path (warning `road_paint_join`); the cell still
+  loads. Paint never fails a cell.
 
 Detailed real driving on designed roads is user verification.

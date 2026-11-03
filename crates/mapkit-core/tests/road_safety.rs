@@ -404,7 +404,7 @@ fn acute_ground_approach_unions_and_quantized_tangencies_remain_simple() {
         let cell = d.cell_at([5000, 5000]).unwrap();
         let c = generated(&d, cell);
         assert!(!c.chunk.triangles.is_empty());
-        assert!(d.road_paint(&d.cell_bounds(cell).unwrap()).is_ok());
+        assert!(d.road_paint(&d.cell_bounds(cell).unwrap()).unwrap().overflow.is_empty());
         d.roads.reverse();
         d.nodes.reverse();
         assert_eq!(

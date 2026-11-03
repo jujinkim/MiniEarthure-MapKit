@@ -65,7 +65,8 @@ safety furniture, placement intersection and regional influence margin.
 
 - Spatial/regional influence includes curve mouths and outer furniture. Costs
   include convex/occupied pieces, rendered triangles, IDs and paint uniforms.
-  Cancellation and local plan/paint budgets reject excess work.
+  Cancellation, local plan budgets and paint work ticks reject excess work; paint
+  over the 128-segment shader cap only drops that road's paint in the cell.
 - Placement validation builds one transient road bounds/endpoint index per
   document; courtyard checks compare corridor polygons directly with building
   rings. The 8 million work limit (enough for about 11,000 dense 1:8 city

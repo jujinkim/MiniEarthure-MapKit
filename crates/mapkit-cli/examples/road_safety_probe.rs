@@ -58,7 +58,12 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             };
             assert!(generated.solids.len() as u64 <= cost.occupied_solids);
             assert!(generated.chunk.asset_convexes.len() as u64 <= cost.asset_convexes);
-            let _ = p.document.road_paint(&p.document.cell_bounds(*cell)?)?;
+            // Over-cap paint no longer fails a cell; the probe still reports it.
+            let paint = p.document.road_paint(&p.document.cell_bounds(*cell)?)?;
+            if !paint.overflow.is_empty() {
+                println!("ROAD_FAILURE {id} {cell:?} road paint overflow {:?}", paint.overflow);
+                failures += 1;
+            }
             for (_, point, surface) in starts.iter().filter(|s| s.0 == *cell) {
                 generated.chunk.spawn(&SpawnRequest {
                     position_cm: *point,

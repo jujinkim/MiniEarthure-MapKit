@@ -11,6 +11,17 @@ fn height_with_margin(v:[Vertex;3],p:[f64;2],margin:f64)->Option<f64> {
     let v=((c[2]-a[2])*(p[0]-c[0])+(a[0]-c[0])*(p[1]-c[2]))/det;
     (u>=margin && v>=margin && u+v<=1.0-margin).then_some(u*a[1]+v*b[1]+(1.0-u-v)*c[1])
 }
+/// Presentation drops paint over the shader cap; authoring keeps it an error.
+fn paint_budget(d:&MapDocument,bounds:&Bounds)->Result<()> {
+    let paint=d.road_paint(bounds)?;let cap=mapkit_core::RoadPaint::SEGMENTS;
+    if let Some((id,count))=paint.overflow.iter().next() {
+        return Err(error("E_BUDGET",format!("{id} has {count} local path/exterior segments, over {cap}")));
+    }
+    for r in d.roads.iter().filter(|r|paint.paths.contains_key(&r.id)) {
+        if let (_,Some(count))=paint.joined(d,r) {return Err(error("E_BUDGET",format!("{} has {count} joined local path segments, over {cap}",r.id)));}
+    }
+    Ok(())
+}
 pub fn audit(package:&Package,max_grade:f64)->Result<serde_json::Value> {
     let d=&package.document;
     let mut queries:BTreeMap<Cell,Vec<(String,[f64;2],f64)>>=BTreeMap::new();
@@ -48,7 +59,7 @@ pub fn audit(package:&Package,max_grade:f64)->Result<serde_json::Value> {
     let mut count=0u64;let mut max_error=0.0f64;
     for (cell,points) in &queries {
         cancellation::checkpoint()?;
-        d.road_paint(&d.cell_bounds(*cell)?).map_err(|mut e|{e.message=format!("road paint cell {cell:?}: {}",e.message);e})?;
+        paint_budget(d,&d.cell_bounds(*cell)?).map_err(|mut e|{e.message=format!("road paint cell {cell:?}: {}",e.message);e})?;
         let actual=package.generate(*cell,500_000).map_err(|mut e|{e.message=format!("road audit cell {cell:?}: {}",e.message);e})?;
         let reference=mapkit_core::road_design::design_triangles(d,&d.cell_bounds(*cell)?)?;
         let mut probes=points.clone();
@@ -84,4 +95,52 @@ pub fn audit(package:&Package,max_grade:f64)->Result<serde_json::Value> {
         }
     }
     Ok(serde_json::json!({"sample_spacing_cm":50,"width_lines":5,"collision_samples":count,"road_cells":queries.len(),"max_design_deviation_cm":max_error,"max_sampled_grade":grade}))
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn paint_over_the_shader_cap_stays_an_audit_error() {
+        let mut d:MapDocument=serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+        d.roads.truncate(1);d.nodes.clear();d.buildings.clear();d.zones.clear();
+        d.bounds=Bounds{min:[0,0],max:[20000,10000]};
+        let wiggle:Vec<Vertex>=(0..=300).map(|i|{let x=2000+i*50;[x,0,5000+(200.0*(x as f64*std::f64::consts::TAU/2000.0).sin()).round() as i64]}).collect();
+        let n=wiggle.len()-1;
+        let r=&mut d.roads[0];
+        r.points=wiggle;r.widths_cm=vec![400;n];r.surfaces=vec![Surface::Asphalt;n];r.design=None;r.from="a".into();r.to="b".into();
+        r.markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:true,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0});
+        for (id,p) in [("a",r.points[0]),("b",*r.points.last().unwrap())] {d.nodes.push(RoadNode{id:id.into(),position:p,level:0});}
+        assert!(!d.road_paint(&d.bounds).unwrap().overflow.is_empty(),"presentation degrades");
+        let e=paint_budget(&d,&d.bounds).unwrap_err();
+        assert_eq!(e.code,"E_BUDGET");assert!(e.message.contains("local path/exterior segments"),"{}",e.message);
+        d.roads[0].markings=None;
+        paint_budget(&d,&d.bounds).unwrap();
+        // Two degree-two halves within the cap whose joined path is over it.
+        d.roads[0].markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:false,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0});
+        let mut b=d.roads[0].clone();
+        let half=b.points.len()/2;
+        b.id="b".into();b.from="m".into();b.points.drain(..half);b.widths_cm.truncate(b.points.len()-1);b.surfaces.truncate(b.points.len()-1);
+        let a=&mut d.roads[0];a.to="m".into();a.points.truncate(half+1);a.widths_cm.truncate(half);a.surfaces.truncate(half);
+        d.nodes.push(RoadNode{id:"m".into(),position:b.points[0],level:0});d.nodes[1].position=*b.points.last().unwrap();
+        d.roads.push(b);
+        let paint=d.road_paint(&d.bounds).unwrap();
+        assert!(paint.overflow.is_empty()&&paint.paths.values().all(|p|p.len()<=RoadPaint::SEGMENTS));
+        assert!(paint.joined(&d,&d.roads[0]).1.is_some(),"{:?}",paint.paths.values().map(Vec::len).collect::<Vec<_>>());
+        let e=paint_budget(&d,&d.bounds).unwrap_err();
+        assert_eq!(e.code,"E_BUDGET");assert!(e.message.contains("joined local path segments"),"{}",e.message);
+    }
+    #[test]
+    fn audit_reports_a_designed_road_over_the_paint_cap() {
+        let (mut d,files)=crate::read_project(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"),"/../../examples/roads"))).unwrap();
+        d.roads.truncate(1);d.nodes.clear();d.buildings.clear();d.zones.clear();
+        let wiggle:Vec<Vertex>=(0..=300).map(|i|{let x=500+i*30;[x,0,2500+(300.0*(x as f64*std::f64::consts::TAU/1000.0).sin()).round() as i64]}).collect();
+        let r=&mut d.roads[0];
+        r.points=wiggle.clone();r.from="a".into();r.to="b".into();r.kind=RoadKind::Ground;
+        r.markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:false,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0});
+        mapkit_core::road_design::compile(r,mapkit_core::road_design::from_points(&wiggle).unwrap(),400).unwrap();
+        for (id,p) in [("a",r.points[0]),("b",*r.points.last().unwrap())] {d.nodes.push(RoadNode{id:id.into(),position:p,level:0});}
+        let (package,_)=Profile::Authoring.run(||crate::Package::from_project(d,files));
+        let e=audit(&package.unwrap(),0.12).unwrap_err();
+        assert_eq!(e.code,"E_BUDGET");assert!(e.message.starts_with("road paint cell"),"{}",e.message);
+    }
 }

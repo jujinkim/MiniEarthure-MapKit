@@ -18,6 +18,31 @@ pub struct RoadPaintSegment {
 pub struct RoadPaint {
     pub paths: BTreeMap<String, Vec<RoadPaintSegment>>,
     pub edges: BTreeMap<String, Vec<[Vertex; 2]>>,
+    /// Roads whose compacted local path or exterior still exceeds the 128-segment
+    /// shader cap, with the larger count. Their paint is left out of `paths` and
+    /// `edges` for these bounds: a display degradation, never a cell failure.
+    pub overflow: BTreeMap<String, usize>,
+}
+impl RoadPaint {
+    /// Shader path/exterior uniform array length (`urban_surface.gdshader`).
+    pub const SEGMENTS: usize = 128;
+    /// Centre-line paint of `r` joined with its degree-two neighbours, as
+    /// presentation uploads it. A joined path over the cap falls back to the
+    /// road's own path (always within the cap) and also returns the joined count.
+    pub fn joined<'a>(&'a self, d: &MapDocument, r: &Road) -> (Vec<&'a RoadPaintSegment>, Option<usize>) {
+        let mut connected = vec![r.id.as_str()];
+        for node in [&r.from, &r.to] {
+            let arms: Vec<_> = d.roads.iter().filter(|o| &o.from == node || &o.to == node).collect();
+            if arms.len() == 2 {
+                for o in arms {
+                    if !connected.contains(&o.id.as_str()) { connected.push(&o.id); }
+                }
+            }
+        }
+        let path: Vec<_> = connected.iter().filter_map(|id| self.paths.get(*id)).flatten().collect();
+        if path.len() <= Self::SEGMENTS { return (path, None); }
+        (self.paths.get(&r.id).into_iter().flatten().collect(), Some(path.len()))
+    }
 }
 
 impl MapDocument {
@@ -54,9 +79,7 @@ impl MapDocument {
             }
         }
         let mut work=0;
-        for road in self.roads.iter().filter(|r|r.design.is_some()) {
-            if let Some(edges)=result.edges.get_mut(&road.id) {*edges=compact_edges(edges,&mut work)?;}
-        }
+        for edges in result.edges.values_mut() {*edges=compact_edges(edges,&mut work)?;}
         for r in self.roads.iter().filter(|r| r.markings.is_some()
             && r.points.windows(2).any(|s|hit(s,bounds,widest(r)/2+100))) {
             crate::cancellation::checkpoint()?;
@@ -156,7 +179,7 @@ impl MapDocument {
             } else {
                 240.0
             };
-            let indices=if r.design.is_some(){compact_path(&path,&mut work)?}else{(0..path.len()).collect()};
+            let indices=compact_path(&path,&mut work)?;
             for indices in indices.windows(2) {
                 let s=[path[indices[0]],path[indices[1]]];
                 let len = length(s[0].0, s[1].0);
@@ -176,21 +199,25 @@ impl MapDocument {
                 }
             }
         }
-        if result.paths.values().any(|v| v.len() > 128)
-            || result.edges.values().any(|v| v.len() > 128)
-        {
-            return Err(error(
-                "E_BUDGET",
-                "road paint exceeds 128 local path/exterior segments",
-            ));
+        let counts = result.paths.iter().map(|(id, v)| (id, v.len()))
+            .chain(result.edges.iter().map(|(id, v)| (id, v.len())));
+        for (id, count) in counts {
+            if count > RoadPaint::SEGMENTS {
+                let known = result.overflow.entry(id.clone()).or_default();
+                *known = (*known).max(count);
+            }
+        }
+        for id in result.overflow.keys() {
+            result.paths.remove(id);
+            result.edges.remove(id);
         }
         Ok(result)
     }
 }
 
-/// Presentation alone may merge almost-collinear samples within one source
-/// centimetre. Collision keeps every authored sample. Work and shader caps stay
-/// unchanged, and path stations are measured before compaction across all cells.
+/// Presentation alone merges almost-collinear samples of every road within one
+/// source centimetre. Collision keeps every authored sample. Work and shader caps
+/// stay unchanged, and path stations are measured before compaction across all cells.
 fn compact_path(path:&[(Vertex,f64)],work:&mut usize)->Result<Vec<usize>> {
     if path.len()<3{return Ok((0..path.len()).collect());}
     let mut keep=BTreeSet::from([0,path.len()-1]);let mut pending=vec![(0,path.len()-1)];
@@ -219,13 +246,17 @@ fn compact_edges(edges:&[[Vertex;2]],work:&mut usize)->Result<Vec<[Vertex;2]>> {
         .chain(edges.iter().enumerate().map(|(i,e)|(e[0],i))).collect();
     for (start,mut i) in starts {
         if used.contains(&i){continue;}
+        // Keep each exterior's plan direction: the shader offsets a border to
+        // its right, into the road. A chain only continues through same-direction edges.
+        let forward=edges[i][0]==start;
         let mut at=start;let mut path=vec![(at,0.0)];
         loop {
             crate::roads::tick(work,1)?;used.insert(i);
-            at=if edges[i][0]==at{edges[i][1]}else{edges[i][0]};path.push((at,0.0));
+            at=edges[i][forward as usize];path.push((at,0.0));
             if adjacent[&at].len()!=2{break;}
-            let Some(&next)=adjacent[&at].iter().find(|n|!used.contains(*n)) else{break;};i=next;
+            let Some(&next)=adjacent[&at].iter().find(|&&n|!used.contains(&n)&&edges[n][!forward as usize]==at) else{break;};i=next;
         }
+        if !forward{path.reverse();}
         for pair in compact_path(&path,work)?.windows(2){out.push([path[pair[0]].0,path[pair[1]].0]);}
     }
     Ok(out)

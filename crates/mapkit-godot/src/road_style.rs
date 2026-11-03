@@ -1,7 +1,23 @@
 //! Bounded per-triangle presentation references; never alter the collision archive.
 use godot::prelude::*;
-use mapkit_core::MapDocument;
+use mapkit_core::{MapDocument, RoadPaint};
 use std::collections::BTreeMap;
+
+/// Paint over the shader cap degrades display only; Authoring scopes warn.
+/// `joined` marks a degree-two join that fell back to the road's own path.
+fn note_overflow(count: usize, joined: bool) {
+    mapkit_core::profile::note(mapkit_core::Warning {
+        code: if joined { "road_paint_join" } else { "road_paint_segments" }.into(),
+        actual: count as u64,
+        limit: RoadPaint::SEGMENTS as u64,
+        message: if joined {
+            "Joined road paint over the 128-segment shader cap falls back to each road's own path"
+        } else {
+            "Road paint over the 128-segment shader cap is omitted in this cell"
+        }.into(),
+        runtime_rejects: false,
+    });
+}
 
 pub fn decorate(
     d: &MapDocument,
@@ -62,6 +78,9 @@ pub fn decorate(
         y: cell.get("y").unwrap().to::<i32>(),
     })?;
     let paint = d.road_paint(&bounds)?;
+    if let Some(&count) = paint.overflow.values().max() {
+        note_overflow(count, false);
+    }
     for (id, _p, spawn, surface) in faces {
         let mut key = if id.ends_with(":safety:metal") {
             "safety:metal".into()
@@ -87,39 +106,18 @@ pub fn decorate(
                         -b[2] as f32 / 100.0,
                     )
                 };
-                let mut connected = vec![r.id.as_str()];
-                for node in [&r.from, &r.to] {
-                    let arms: Vec<_> = d
-                        .roads
-                        .iter()
-                        .filter(|other| &other.from == node || &other.to == node)
-                        .collect();
-                    if arms.len() == 2 {
-                        for other in arms {
-                            if !connected.contains(&other.id.as_str()) {
-                                connected.push(&other.id);
-                            }
-                        }
-                    }
+                let (path, overflow) = paint.joined(d, r);
+                if let Some(count) = overflow {
+                    note_overflow(count, true);
                 }
-                for id in connected {
-                    if let Some(path) = paint.paths.get(id) {
-                        for s in path {
-                            paths.push(segment(s.a, s.b));
-                            metrics.push(Vector4::new(
-                                s.width_cm as f32 / 100.0,
-                                s.station_cm as f32 / 100.0,
-                                s.period_cm as f32 / 100.0,
-                                s.total_cm as f32 / 100.0,
-                            ));
-                        }
-                    }
-                }
-                if paths.len() > 128 {
-                    return Err(mapkit_core::Error {
-                        code: "E_BUDGET".into(),
-                        message: format!("road {} paint exceeds 128 joined segments", r.id),
-                    });
+                for s in path {
+                    paths.push(segment(s.a, s.b));
+                    metrics.push(Vector4::new(
+                        s.width_cm as f32 / 100.0,
+                        s.station_cm as f32 / 100.0,
+                        s.period_cm as f32 / 100.0,
+                        s.total_cm as f32 / 100.0,
+                    ));
                 }
                 if let Some(edges) = paint.edges.get(&r.id) {
                     for e in edges {
@@ -172,4 +170,35 @@ pub fn decorate(
     presentation.set("road_styles", &styles);
     presentation.set("urban_surfaces", true);
     Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use mapkit_core::{Profile, RoadPaint, RoadPaintSegment};
+    #[test]
+    fn paint_over_the_shader_cap_degrades_without_an_error() {
+        let mut d: mapkit_core::MapDocument =
+            serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
+        let mut road = d.roads[0].clone();
+        road.markings = None;
+        d.roads = ["a", "b", "c"].iter().zip([("n0", "n1"), ("n1", "n2"), ("n3", "n4")]).map(|(id, (from, to))| {
+            mapkit_core::Road { id: (*id).into(), from: from.into(), to: to.into(), ..road.clone() }
+        }).collect();
+        let segments = |n| (0..n).map(|i| RoadPaintSegment { a: [i, 0, 0], b: [i + 1, 0, 0], width_cm: 400.0,
+            station_cm: i as f64, period_cm: 240.0, total_cm: n as f64 }).collect::<Vec<_>>();
+        let mut paint = RoadPaint::default();
+        paint.paths.insert("a".into(), segments(60));
+        paint.paths.insert("b".into(), segments(60));
+        paint.overflow.insert("c".into(), 140);
+        let (path, overflow) = paint.joined(&d, &d.roads[0]);
+        assert_eq!((path.len(), overflow), (120, None), "degree-two neighbours join within the cap");
+        paint.paths.insert("b".into(), segments(100));
+        let (path, overflow) = paint.joined(&d, &d.roads[0]);
+        assert_eq!((path.len(), overflow), (60, Some(160)), "an over-cap join falls back to the road's own path");
+        let (path, overflow) = paint.joined(&d, &d.roads[2]);
+        assert_eq!((path.len(), overflow), (0, None), "core omitted the over-cap road's paint");
+        let (_, warnings) = Profile::Authoring.run(|| { super::note_overflow(160, false); super::note_overflow(140, true); Ok(()) });
+        let warnings: Vec<_> = warnings.iter().map(|w| (w.code.as_ref(), w.actual, w.limit, w.runtime_rejects)).collect();
+        assert_eq!(warnings, [("road_paint_segments", 160, 128, false), ("road_paint_join", 140, 128, false)]);
+        assert!(Profile::Runtime.run(|| { super::note_overflow(160, false); Ok(()) }).1.is_empty());
+    }
 }
