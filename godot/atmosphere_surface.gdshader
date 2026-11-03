@@ -39,6 +39,12 @@ uniform float building_seed = 0.5;
 // 3 commercial, 4 industrial, 5 public. Floor pitch is in scene metres (3 m ÷ D).
 uniform int facade_kind = 0;
 uniform float floor_pitch = 3.0;
+// Record palettes (sRGB, facade_palette.json) bound per building material:
+// body (seed bits 0..2), roof (bits 3..5) and apartment accent (bits 6..8).
+uniform vec3 facade_body[8];
+uniform vec3 facade_roof[8];
+uniform vec3 facade_accent[8];
+uniform bool facade_palette = false;
 // Shared original storefront signs: 16x32 grid, 8 category rows of 64.
 uniform sampler2D sign_atlas : source_color, filter_linear_mipmap, repeat_disable;
 uniform bool signs_enabled = false;
@@ -49,6 +55,7 @@ varying float seed;
 varying float solid_seed;
 varying float solid_base;
 float facade_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
+vec3 facade_linear(vec3 c, bool srgb_output) { return srgb_output ? c : mix(c/12.92,pow((c+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),c)); }
 void vertex() {
     UV=UV*uv_scale.xy+uv_offset.xy;
     world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz;
@@ -104,19 +111,29 @@ void fragment() {
     float facade_lit = 0.0;
     float facade_seed = seed;
     vec3 facade_sign = vec3(0.0);
+    // A record (one site and category) shares its palette; the distant mesh
+    // picks the same body/roof entries, so the colours never fade with distance.
+    bool facade_record = facade_palette && facade_kind>0 && !distant && solid_seed>=0.0;
+    int record = facade_record ? int(floor(solid_seed*4096.0)) : 0;
+    float solid_jitter = facade_record ? fract(solid_seed*4096.0) : seed;
+    vec3 facade_base = max(base_color.rgb,vec3(0.02));
+    if(facade_record && world_normal.y>=0.5) color *= facade_linear(facade_roof[(record>>3)&7],OUTPUT_IS_SRGB)/facade_base;
     if(facade_kind>0 && !distant && abs(world_normal.y)<0.5) {
         facade_wall = 1.0;
         vec3 n = normalize(world_normal);
         // Older packed meshes without UV2 vary each wall plane instead.
         facade_seed = solid_seed>=0.0 ? solid_seed : facade_hash(vec2(round(dot(n,world_position)*4.0),round(n.x*8.0)+round(n.z*8.0)*17.0));
+        if(facade_record) color *= facade_linear(facade_body[record&7],OUTPUT_IS_SRGB)/facade_base;
         if(effect_weight>0.0) {
-            float variant = floor(fract(facade_seed*7.31)*4.0);
-            vec3 tone = variant<1.0 ? vec3(1.06,1.0,0.90) : (variant<2.0 ? vec3(0.93,0.98,1.06) : (variant<3.0 ? vec3(1.08,0.90,0.80) : vec3(1.07,1.07,1.05)));
-            color *= mix(vec3(1.0),tone*(0.92+0.16*fract(facade_seed*13.7)),effect_weight);
+            float variant = facade_record ? float((record>>3)&3) : floor(fract(facade_seed*7.31)*4.0);
+            if(!facade_record) {
+                vec3 tone = variant<1.0 ? vec3(1.06,1.0,0.90) : (variant<2.0 ? vec3(0.93,0.98,1.06) : (variant<3.0 ? vec3(1.08,0.90,0.80) : vec3(1.07,1.07,1.05)));
+                color *= mix(vec3(1.0),tone*(0.92+0.16*fract(facade_seed*13.7)),effect_weight);
+            }
             float u = dot(world_position,normalize(vec3(-n.z,0.0,n.x)));
             float v = world_position.y-solid_base;
             float bay = facade_kind==1 ? 1.3 : (facade_kind==2 ? 1.8 : (facade_kind==3 ? 0.8 : (facade_kind==4 ? 1.0 : 1.5)));
-            bay *= 0.8+0.5*fract(facade_seed*3.17);
+            bay *= facade_record ? 0.8+0.5*float((record>>9)&7)/7.0 : 0.8+0.5*fract(facade_seed*3.17);
             vec2 cell = vec2(u/(floor_pitch*bay),v/floor_pitch);
             vec2 f = fract(cell);
             vec4 pane = facade_kind==1 ? vec4(0.2,0.75,0.3,0.75) : (facade_kind==2 ? vec4(0.3,0.7,0.3,0.7) : (facade_kind==3 ? vec4(0.1,0.9,0.15,0.85) : (facade_kind==4 ? vec4(0.15,0.85,0.6,0.85) : vec4(0.3,0.7,0.2,0.85))));
@@ -127,6 +144,15 @@ void fragment() {
                 else if(variant>=3.0) pane = vec4(0.25,0.75,0.38,0.80);
             }
             float window = step(pane.x,f.x)*step(f.x,pane.y)*step(pane.z,f.y)*step(f.y,pane.w);
+            // Apartment complexes: a coloured column every 5–8 bays and a
+            // darker accent base storey give each complex its own identity.
+            if(facade_record && facade_kind==1) {
+                vec3 accent = facade_linear(facade_accent[(record>>6)&7],OUTPUT_IS_SRGB);
+                float column = step(mod(floor(cell.x),float(5+((record>>9)&3))),0.5);
+                float base_storey = step(v,floor_pitch*0.92);
+                color = mix(color,accent,max(column*(1.0-window),base_storey*0.55)*effect_weight);
+                window *= 1.0-base_storey;
+            }
             if(facade_kind==3 && v<floor_pitch) window = step(0.12,f.y)*step(f.y,0.78);
             if(facade_kind==4) {
                 color *= 1.0-0.08*step(0.85,fract(u/(0.6*floor_pitch)));
@@ -137,7 +163,8 @@ void fragment() {
             if(facade_kind==5) color *= 1.0+0.05*step(f.y,0.08)*effect_weight;
             facade_window = window*effect_weight;
             facade_lit = step(0.35,facade_hash(floor(cell)+facade_seed*7.0));
-            vec3 glass = fract(facade_seed*11.1)<0.4 ? vec3(0.21,0.25,0.29) : (fract(facade_seed*11.1)<0.7 ? vec3(0.17,0.24,0.25) : vec3(0.25,0.23,0.21));
+            float glass_pick = facade_record ? float((record>>6)&3)/4.0+0.1 : fract(facade_seed*11.1);
+            vec3 glass = glass_pick<0.4 ? vec3(0.21,0.25,0.29) : (glass_pick<0.7 ? vec3(0.17,0.24,0.25) : vec3(0.25,0.23,0.21));
             color = mix(color,glass,facade_window*0.85);
             surface_roughness = mix(surface_roughness,0.32,facade_window);
             // Commercial ground floors: one storefront sign per bay pair, in
@@ -161,7 +188,7 @@ void fragment() {
                 }
             }
         }
-        color *= 0.97+0.06*facade_seed;
+        color *= facade_record ? 0.96+0.08*solid_jitter : 0.97+0.06*facade_seed;
     }
     if(terrain_surface || (distant && UV.y < -0.5)) {
         float broad=sin(world_position.x*0.055+sin(world_position.z*0.037))*cos(world_position.z*0.063);

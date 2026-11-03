@@ -64,9 +64,9 @@ before assigning the complete source once, with identical final shader code.
 Canopy leaves create independent bindings with leaf colour, roughness 1.0, detail
 and wind. The shared shader retains double-sided rendering; borrowed shaders/textures
 keep the context charged.
-Generated building walls (material keys `brick|wood|concrete:usage`) take one of twelve
-colours: the material base blended towards the use tint (concrete 0.6, brick and wood 0.3),
-shared byte-for-byte with the distant mesh. `bind_facade` gives those bindings a facade
+Generated building walls (material keys `brick|wood|concrete:usage`) bind one of twelve
+base colours (the material base blended towards the use tint, concrete 0.6, brick and
+wood 0.3) and the record palettes of their key. `bind_facade` gives those bindings a facade
 kind (concrete residential = apartment bands and balcony slabs, brick/wood residential =
 house, commercial = shopfront glass on the lowest storey and a curtain-wall grid above,
 industrial = panel ribs with sparse high windows, public = tall windows with stone
@@ -74,20 +74,23 @@ courses), the night-window role and a floor pitch of 3 m ÷ the map scale 1:D th
 presentation publishes as `facade_floor_cm` (300 when no OSM layer records a scale).
 Panes and bands are drawn procedurally from world position on vertical faces within the
 quality effect distance. Packed chunks carry UV2 (seed, 1000 + base metres) on every
-generated building solid (triangles of one record sharing a vertex): the seed hashes
-the record ID and the solid's smallest vertex. Storeys start at the solid's base, so
-ground floors follow terrain. The seed picks one of four wall tones (±8 % hue/value),
-the bay width (0.8–1.3×), one of four pane patterns on apartment, commercial and
-public walls (standard, tall, ribbon, square), an apartment balcony-slab band and the
-glass tint, all faded with the effect weight so far walls keep the distant colour; it
-also varies brightness by ±3 % and sets the night switch-off minute per building.
-Meshes without UV2 keep a per-plane seed and scene-height storeys. Commercial walls
+generated building solid (triangles of one record sharing a vertex): the seed's high
+12 bits are the record seed (`sha256(record ID)`, shared with the distant mesh) and its
+low 12 bits hash the record ID and the solid's smallest vertex. Storeys start at the
+solid's base, so ground floors follow terrain. The record seed picks palette entries
+from `godot/facade_palette.json`, which the distant mesh (mapkit-package `distant.rs`)
+reads too: the wall body (bits 0–2; brick and wood keep their own bodies, concrete
+follows the use) and the roof (bits 3–5; concrete roofs green-painted or grey) at every
+distance, and within the effect distance the pane pattern, the glass tint, the bay
+width (0.8–1.3×) and, on apartment complexes, an accent colour (bits 6–8) on one bay
+column every 5–8 bays and on the base storey. The solid seed varies brightness by ±4 %
+and sets the night switch-off minute. Meshes without UV2 keep a per-plane seed, four
+faded tones and scene-height storeys. Commercial walls
 draw a storefront sign per two bays (85 %) between the shop window and the first floor
 from the shared original atlas `textures/sign_atlas.png` (512 signs of 64×20 px:
 8 category rows of colours, a pictogram and glyphs of an invented script, no font,
 text or external image; `scripts/sign_atlas.py` reproduces it). Signs read left to
-right from outside and glow at night. Roofs, bottoms, imported assets and distant
-meshes are unchanged.
+right from outside and glow at night. Bottoms and imported assets are unchanged.
 
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC

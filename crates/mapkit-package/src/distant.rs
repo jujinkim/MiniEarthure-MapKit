@@ -321,7 +321,12 @@ impl Package {
             let building = self.document.buildings.binary_search_by(|b| b.id.cmp(&triangle.object_id))
                 .ok().map(|i| &self.document.buildings[i]);
             let color = if let Some(building) = building {
-                building_color(&building.material, &building.usage)
+                let [a, b, c] = triangle.vertices;
+                let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+                let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
+                let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+                let roof = length > 0.0 && (n[1] / length).abs() >= 0.5;
+                facade_color(&building.material, &building.usage, facade_record(&triangle.object_id), roof)
             } else if let Ok(i) = self.document.barriers.binary_search_by(|b| b.id.cmp(&triangle.object_id)) {
                 match self.document.barriers[i].kind {
                     mapkit_core::barrier::BarrierKind::Hedge => [72, 100, 71, 255],
@@ -491,6 +496,40 @@ mod tests {
 fn object_seed(map_id: &str, object_id: &str) -> f32 {
     let hash = mapkit_core::sha256(format!("{}/{}", map_id, object_id).as_bytes());
     u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16777215.
+}
+
+/// Record palettes shared with the near facade shader (`godot/facade_palette.json`).
+#[derive(serde::Deserialize)]
+struct FacadePalette {
+    body: BTreeMap<String, Vec<[u8; 3]>>,
+    roof: BTreeMap<String, Vec<[u8; 3]>>,
+}
+
+fn facade_palette() -> &'static FacadePalette {
+    static PALETTE: std::sync::OnceLock<FacadePalette> = std::sync::OnceLock::new();
+    PALETTE.get_or_init(|| serde_json::from_str(include_str!("../../../godot/facade_palette.json")).expect("valid facade palette"))
+}
+
+/// The 12-bit record (site and category) seed of a building, shared with the
+/// packed facade UV2 of near cells (mapkit-godot packed.rs).
+pub fn facade_record(object_id: &str) -> u32 {
+    u32::from_str_radix(&mapkit_core::sha256(object_id.as_bytes())[..3], 16).unwrap()
+}
+
+/// A record's generated wall (body: bits 0..2) or roof (bits 3..5) colour, the
+/// same entries the near facade shader picks.
+pub fn facade_color(material: &str, usage: &str, record: u32, roof: bool) -> [u8; 4] {
+    let palette = facade_palette();
+    let entries = if roof {
+        palette.roof.get(if material == "brick" || material == "wood" { material } else { "concrete" })
+    } else if material == "brick" || material == "wood" {
+        palette.body.get(material)
+    } else {
+        palette.body.get(&format!("concrete:{}", if ["commercial", "industrial", "public"].contains(&usage) { usage } else { "residential" }))
+    };
+    let entries = entries.expect("palette entry");
+    let [r, g, b] = entries[(if roof { record >> 3 } else { record } & 7) as usize];
+    [r, g, b, 255]
 }
 
 /// The twelve generated wall colours of `chunk_renderer.material_color`:

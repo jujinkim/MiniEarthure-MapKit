@@ -103,7 +103,7 @@ fn native_building_reduction_preserves_roofs_courtyards_and_cell_cuts() {
 }
 
 #[test]
-fn native_building_walls_carry_use_colours_and_a_seeded_window_role() {
+fn native_building_walls_carry_record_palettes_and_a_seeded_window_role() {
     use mapkit_core::{Building, MapDocument};
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
     d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear();
@@ -124,7 +124,12 @@ fn native_building_walls_carry_use_colours_and_a_seeded_window_role() {
         let Some(building) = p.document.buildings.iter().find(|b| b.id == triangle.object_id) else { continue };
         let vertex = [0,2,1].map(|i| { let v = triangle.vertices[i]; [v[0] as f32*0.01, v[1] as f32*0.01, -v[2] as f32*0.01] });
         let Some(position) = far.vertices.chunks_exact(3).position(|v| v == vertex) else { continue };
-        let expected = distant::building_color(&building.material, &building.usage);
+        // Walls take the record's body colour, roofs its roof colour (shared palette).
+        let [a, b, c] = triangle.vertices;
+        let (u, v) = ([b[0]-a[0], b[1]-a[1], b[2]-a[2]], [c[0]-a[0], c[1]-a[1], c[2]-a[2]]);
+        let n = [(u[1]*v[2]-u[2]*v[1]) as f64, (u[2]*v[0]-u[0]*v[2]) as f64, (u[0]*v[1]-u[1]*v[0]) as f64];
+        let roof = (n[1] / (n[0]*n[0]+n[1]*n[1]+n[2]*n[2]).sqrt()).abs() >= 0.5;
+        let expected = distant::facade_color(&building.material, &building.usage, distant::facade_record(&building.id), roof);
         assert_eq!(far.colors[position*3], expected, "{} {} triangle {index}", building.material, building.usage);
         let light = far.light_data[position*3];
         assert_eq!(light[1], 3., "native walls use the distant building role");
@@ -138,4 +143,30 @@ fn native_building_walls_carry_use_colours_and_a_seeded_window_role() {
     assert_eq!(colours.len(), kinds.len(), "material/use pairs are distinct colours");
     assert_eq!(distant::building_color("concrete","residential"), [212,202,184,255]);
     assert_eq!(distant::building_color("brick","commercial"), [174,130,115,255]);
+}
+
+#[test]
+fn record_palettes_follow_the_shared_table_and_seed_bits() {
+    let table: serde_json::Value = serde_json::from_str(include_str!("../../../godot/facade_palette.json")).unwrap();
+    let entry = |path: &[&str], index: u32| -> [u8; 4] {
+        let mut value = &table;
+        for key in path { value = &value[*key]; }
+        let rgb = &value[index as usize];
+        [rgb[0].as_u64().unwrap() as u8, rgb[1].as_u64().unwrap() as u8, rgb[2].as_u64().unwrap() as u8, 255]
+    };
+    for record in [0u32, 7, 8, 63, 0x5a5, 4095] {
+        assert_eq!(distant::facade_color("concrete", "residential", record, false), entry(&["body", "concrete:residential"], record & 7));
+        assert_eq!(distant::facade_color("concrete", "commercial", record, false), entry(&["body", "concrete:commercial"], record & 7));
+        assert_eq!(distant::facade_color("concrete", "school", record, false), entry(&["body", "concrete:residential"], record & 7), "other uses read as residential");
+        assert_eq!(distant::facade_color("brick", "public", record, false), entry(&["body", "brick"], record & 7), "brick keeps its own bodies");
+        assert_eq!(distant::facade_color("concrete", "industrial", record, true), entry(&["roof", "concrete"], (record >> 3) & 7));
+        assert_eq!(distant::facade_color("wood", "residential", record, true), entry(&["roof", "wood"], (record >> 3) & 7));
+    }
+    let record = distant::facade_record("import-x-building-1");
+    assert!(record < 4096, "a 12-bit record seed");
+    assert_eq!(record, distant::facade_record("import-x-building-1"), "stable per record ID");
+    for list in ["accent"] { assert_eq!(table[list].as_array().unwrap().len(), 8); }
+    for (_, rows) in table["body"].as_object().unwrap().iter().chain(table["roof"].as_object().unwrap().iter()) {
+        assert_eq!(rows.as_array().unwrap().len(), 8, "eight entries per palette");
+    }
 }

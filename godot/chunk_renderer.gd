@@ -7,6 +7,7 @@ const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 const BUILDING_BASE := {"brick": Color("b46c50"), "wood": Color("997347"), "concrete": Color("b7b8b0")}
 const BUILDING_TINT := {"residential": Color("e8d6bd"), "commercial": Color("9fb4c4"), "industrial": Color("8b8f93"), "public": Color("d9c89a")}
 const URBAN_SURFACE := preload("./urban_surface.gdshader")
+const FACADE_PALETTE := preload("./facade_palette.json")
 const PLAN := preload("./render_memory.gd")
 const QUALITY := preload("./display_quality.gd")
 const INSTANCES := preload("./render_instances.gd")
@@ -538,6 +539,30 @@ static func bind_facade(material: Material, key: String, presentation: Dictionar
 	material.set_shader_parameter("facade_kind", kind)
 	material.set_shader_parameter("floor_pitch", float(presentation.get("facade_floor_cm", 300)) / 100.0)
 	material.set_shader_parameter("lighting_role", 1)
+	var palette := facade_palette(key)
+	material.set_shader_parameter("facade_body", palette.body)
+	material.set_shader_parameter("facade_roof", palette.roof)
+	material.set_shader_parameter("facade_accent", palette.accent)
+	material.set_shader_parameter("facade_palette", true)
+
+## Record palettes of a generated building key (sRGB 0..1), the same entries the
+## distant mesh uses (`facade_palette.json`, mapkit-package distant.rs).
+static var _facade_palettes := {}
+static func facade_palette(key: String) -> Dictionary:
+	if _facade_palettes.has(key): return _facade_palettes[key]
+	var fields := key.split(":")
+	var table: Dictionary = FACADE_PALETTE.data
+	var brick_or_wood := fields[0] in ["brick", "wood"]
+	var usage: String = fields[1] if fields.size() > 1 and fields[1] in ["commercial", "industrial", "public"] else "residential"
+	var unit := func(rows: Array) -> PackedVector3Array:
+		var out := PackedVector3Array()
+		for rgb: Array in rows: out.append(Vector3(float(rgb[0]), float(rgb[1]), float(rgb[2])) / 255.0)
+		return out
+	var palette := {"body": unit.call(table.body[fields[0] if brick_or_wood else "concrete:" + usage]),
+		"roof": unit.call(table.roof[fields[0] if brick_or_wood else "concrete"]), "accent": unit.call(table.accent)}
+	palette.make_read_only()
+	_facade_palettes[key] = palette
+	return palette
 
 ## Authored climate changes static ground colour only, never surface traction.
 static func ground_color(key: String, presentation: Dictionary) -> Color:

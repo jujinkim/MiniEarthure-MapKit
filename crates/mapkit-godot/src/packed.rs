@@ -163,7 +163,9 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
             }
         }
     }
-    // The seed hashes the record ID and the solid's smallest vertex.
+    // The seed's high 12 bits are the record's palette seed (shared with the
+    // distant mesh, mapkit-package distant.rs); the low 12 bits hash the record
+    // ID and the solid's smallest vertex.
     let mut smallest = BTreeMap::<usize, ([i64; 3], i64)>::new();
     for (t, triangle) in chunk.triangles.iter().enumerate() {
         if !buildings.contains(&object_indices[t]) { continue; }
@@ -179,7 +181,9 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
             let root = find(&mut parent, t);
             let seed = *values.entry(root).or_insert_with(|| {
                 let digest = mapkit_core::sha256(format!("{}|{:?}", triangle.object_id, smallest[&root].0).as_bytes());
-                u32::from_str_radix(&digest[..6], 16).unwrap() as f32 / 16_777_215.0
+                let solid = u32::from_str_radix(&digest[..3], 16).unwrap();
+                let record = mapkit_package::distant::facade_record(&triangle.object_id);
+                ((record << 12) | solid) as f32 / 16_777_216.0
             });
             let base = smallest[&root].1 as f32 * (mapkit_core::WORLD_SCALE as f32 / 100.0);
             Vector2::new(seed, FACADE_BASE_OFFSET + base)
