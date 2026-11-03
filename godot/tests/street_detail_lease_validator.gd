@@ -33,6 +33,21 @@ func run() -> void:
 			shared[mesh.mesh] = true
 			shared[mesh.material_override] = true
 	check(not shared.is_empty() and CHUNKS._details.size() == shared.size(), "both cells reuse one cached mesh and material per detail key")
+	# City trees: one shadow-casting canopy above the 140 cm trunk, 0.85–1.15×;
+	# shrubs and canopies vary by identity among three shared variants.
+	var canopies := {}
+	var shrubs := {}
+	for index in 24:
+		var tree := CHUNKS._street_detail("builtin:city_tree", {"id": "tree-%d" % index, "position": [0, 0, 0], "quarter_turns": 0})
+		var crown: MeshInstance3D = tree.get_child(0)
+		var scale := crown.basis.get_scale().x
+		check(tree.get_child_count() == 1 and crown.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_ON and scale >= 0.849 and scale <= 1.151, "a city tree draws one scaled shadow-casting canopy")
+		check(crown.position.y - crown.mesh.height * scale * 0.5 <= 1.40, "the canopy covers the trunk top")
+		canopies[crown.mesh] = true
+		var shrub := CHUNKS._street_detail("builtin:shrub", {"id": "shrub-%d" % index, "position": [0, 0, 0], "quarter_turns": 0})
+		shrubs[shrub.get_child(0).mesh] = true
+		tree.free(); shrub.free()
+	check(canopies.size() == 3 and shrubs.size() == 3, "three canopy and three shrub variants")
 	check(leases.all(func(lease): return not lease.retired()), "a live cell keeps its lease")
 	world.get_child(0).free()
 	for frame in 2: await process_frame

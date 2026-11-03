@@ -307,7 +307,7 @@ impl Package {
         }
         for object in objects {
             checkpoint()?;
-            if object.asset_id == "builtin:tree"
+            if matches!(object.asset_id.as_str(), "builtin:tree" | "builtin:city_tree")
                 || self.document.asset(&object.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
                 omitted.insert(object.id.as_str());
@@ -388,6 +388,17 @@ impl Package {
                         max: [1.84, 6.8, 1.84],
                         color: [72, 100, 71, 255], role:0,
                     },
+                    object.position,
+                    object.quarter_turns, object.yaw_offset_mdeg, 0.,
+                );
+                continue;
+            }
+            if object.asset_id == "builtin:city_tree" {
+                // The renderer's city canopies (variants up to 1.15 m radius,
+                // about 1.3–3.1 m) and the trunk stay one distant box.
+                add_box(
+                    &mut result,
+                    &Proxy { min: [-1.1, 0.0, -1.1], max: [1.1, 3.0, 1.1], color: [72, 100, 71, 255], role: 0 },
                     object.position,
                     object.quarter_turns, object.yaw_offset_mdeg, 0.,
                 );

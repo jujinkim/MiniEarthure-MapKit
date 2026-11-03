@@ -210,7 +210,11 @@ earlier documents keep their bytes, world hashes and generated geometry.
   cycle locally (green 6 s, yellow 2 s, red 8 s, odd quarter turns half a cycle
   apart, never synced); solid `builtin:bus_shelter`, `builtin:subway_entrance`,
   `builtin:station_sign`; display-only `builtin:bench` and `builtin:shrub` (no
-  collision, 80/70 cm square footprints).
+  collision, 80/70 cm square footprints); `builtin:city_tree` (a solid 14 cm
+  trunk 140 cm tall under one of three renderer canopies, 0.85–1.15× by identity,
+  120 cm square footprint), also allowed as a zone tree with a radius of 120..200 cm.
+- Zone trees stand on unpainted terrain or on painted grass or dirt; other paint,
+  roads, water and buildings keep refusing them.
 - `MapDocument.play_area` (optional, absent = the whole `bounds` rectangle): up to
   16 simple outer rings `[[x,y],...]` of 3..512 in-bounds vertices (`E_PLAY_AREA`
   otherwise). It is world metadata: it changes no generated cell, and the regional

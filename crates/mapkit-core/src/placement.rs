@@ -7,6 +7,9 @@ pub const SCRATCH_BYTES: u64 = 16 * 1024 * 1024;
 pub const MAX_WORK: usize = 8_000_000; // About 11,000 dense 1:8 city buildings.
 pub const MAX_REPEATED: usize = 20_000;
 const TREE_RADIUS: i64 = 200; // encloses the common renderer's 184 cm canopy
+/// City trees in proportion to 1:3 city maps (about 9 m tall at that scale):
+/// a 14 cm trunk 140 cm tall under renderer canopies within this radius.
+pub const CITY_TREE_RADIUS: i64 = 120;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -326,6 +329,7 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
     let proxy = |center, size_cm| CollisionBox { center, size_cm };
     match id {
         "builtin:tree" => Some(vec![proxy([0, 200, 0], [40, 400, 40])]),
+        "builtin:city_tree" => Some(vec![proxy([0, 70, 0], [14, 140, 14])]),
         "builtin:fence" => Some(vec![proxy([0, 60, 0], [200, 120, 12])]),
         "builtin:streetlight" => Some(vec![
             proxy([0, 250, 0], [20, 500, 20]),
@@ -379,7 +383,11 @@ pub(crate) fn detail_radius(id: &str) -> Option<i64> {
     match id { "builtin:bench" => Some(40), "builtin:shrub" => Some(35), _ => None }
 }
 pub(crate) fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
-    if let Some(radius) = if p.asset_id == "builtin:tree" { Some(TREE_RADIUS) } else { detail_radius(&p.asset_id) } {
+    if let Some(radius) = match p.asset_id.as_str() {
+        "builtin:tree" => Some(TREE_RADIUS),
+        "builtin:city_tree" => Some(CITY_TREE_RADIUS),
+        _ => detail_radius(&p.asset_id),
+    } {
         return rectangle(
             [p.position[0] - radius, p.position[2] - radius],
             [p.position[0] + radius, p.position[2] + radius],
@@ -849,9 +857,9 @@ fn emit_placement(
     let owner = d.cell_at(xy(p.position)) == Some(cell);
     let asset = d.assets.binary_search_by(|a| a.id.cmp(&p.asset_id)).ok().map(|i| &d.assets[i]);
     // Match distant_from_generated's omission exactly: authored GLBs in every
-    // touched cell, generated GLBs and builtin trees only in their anchor cell.
+    // touched cell, generated GLBs and builtin (city) trees only in their anchor cell.
     let omit_proxy = b.distant && ((asset.is_some_and(|a| a.path.ends_with(".glb"))
-        && (authored || owner)) || (p.asset_id == "builtin:tree" && owner));
+        && (authored || owner)) || (matches!(p.asset_id.as_str(), "builtin:tree" | "builtin:city_tree") && owner));
     if !omit_proxy {
         let saved = b.bounds.clone();
         if unclipped {
@@ -1069,9 +1077,24 @@ fn vegetation(
                 if blocked {
                     continue;
                 }
+                // Vegetation stands on unpainted terrain or on painted grass or
+                // dirt ground (city parks, lawns and forests), never on roads,
+                // water or other paint.
+                let mut surface = "terrain";
+                let at = Bounds { min: c.p, max: c.p };
+                for i in prepared.paint(d).query(&at, work)? {
+                    let area = &d.surface_areas[i];
+                    if point_in_polygon(c.p, &area.polygon) {
+                        surface = if matches!(area.surface, Surface::Grass | Surface::Dirt) { area.id.as_str() } else { "" };
+                        break;
+                    }
+                }
+                if surface.is_empty() {
+                    continue;
+                }
                 let Ok(position) = b.chunk.spawn(&SpawnRequest {
                     position_cm: c.p,
-                    surface_id: "terrain".into(),
+                    surface_id: surface.into(),
                 }) else {
                     continue;
                 };

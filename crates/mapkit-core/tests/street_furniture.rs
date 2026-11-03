@@ -53,3 +53,32 @@ fn city_street_furniture_is_builtin_with_solid_and_display_only_parts() {
     plain.traffic = None;
     assert!(!String::from_utf8(canonical(&plain).unwrap()).unwrap().contains("traffic"), "absent convention keeps bytes");
 }
+
+#[test]
+fn city_trees_have_a_proportionate_trunk_footprint_and_zone_use() {
+    let mut d = doc();
+    d.placements = vec![place("tree", "builtin:city_tree", 800, 800, 0)];
+    d.validate().unwrap();
+    let chunk = generate(GenerationInput { document: &d, cell: Cell { x: 0, y: 0 }, heightgrid: None, max_triangles: 200_000 }).unwrap();
+    let trunk: Vec<_> = chunk.triangles.iter().filter(|t| t.object_id == "tree").collect();
+    assert!(!trunk.is_empty(), "a solid trunk");
+    assert_eq!(trunk.iter().flat_map(|t| t.vertices).map(|v| v[1]).max(), Some(140), "140 cm trunk");
+    assert_eq!(trunk.iter().flat_map(|t| t.vertices).map(|v| v[0]).max(), Some(807), "14 cm wide");
+    let mut crowded = d.clone();
+    crowded.placements.push(place("tree-2", "builtin:city_tree", 1030, 800, 0));
+    assert!(crowded.validate().is_err(), "120 cm footprints 230 cm apart overlap");
+    crowded.placements[1].position[0] = 1050;
+    crowded.validate().unwrap();
+    // A forest zone may grow city trees within a footprint of at least 120 cm.
+    let mut forest = doc();
+    forest.zones = vec![Zone { id: "wood".into(), polygon: vec![[400, 400], [2800, 400], [2800, 2800], [400, 2800]], kind: ZoneKind::Forest,
+        spacing_cm: 300, density_per_mille: 1000, exclusions: vec![],
+        tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: 120, clearance_cm: 30 }) }];
+    forest.validate().unwrap();
+    let chunk = generate(GenerationInput { document: &forest, cell: Cell { x: 0, y: 0 }, heightgrid: None, max_triangles: 200_000 }).unwrap();
+    assert!(!chunk.objects.is_empty() && chunk.objects.iter().all(|o| o.asset_id == "builtin:city_tree"));
+    let cost = PreparedMap::new(forest.clone()).unwrap().estimate(Cell { x: 0, y: 0 }, 500_000).unwrap();
+    assert!(cost.triangles >= chunk.triangles.len() as u64 && cost.objects >= chunk.objects.len() as u64);
+    forest.zones[0].tree.as_mut().unwrap().radius_cm = 100;
+    assert!(forest.validate().is_err(), "a smaller footprint than the city tree is refused");
+}

@@ -376,3 +376,35 @@ fn prepared_source_index_preserves_order_hash_and_boundary_occupancy() {
         assert_eq!(old.solids,new.solids);
     }
 }
+
+#[test]
+fn zone_trees_grow_on_painted_grass_and_dirt_but_not_other_paint() {
+    let base = || {
+        let mut d = document();
+        d.nodes.clear(); d.roads.clear(); d.buildings.clear();
+        d.placements.clear(); d.repetitions.clear();
+        d.zones.truncate(1);
+        let zone = &mut d.zones[0];
+        zone.kind = ZoneKind::Forest;
+        zone.polygon = vec![[3000, 3000], [7000, 3000], [7000, 7000], [3000, 7000]];
+        zone.exclusions.clear();
+        zone.spacing_cm = 400;
+        zone.density_per_mille = 1000;
+        d
+    };
+    let bare = generated(&base(), Cell { x: 0, y: 0 }).chunk.objects;
+    assert!(!bare.is_empty(), "the forest grows on terrain");
+    for (surface, grows) in [(Surface::Grass, true), (Surface::Dirt, true), (Surface::Asphalt, false), (Surface::Concrete, false)] {
+        let mut d = base();
+        d.surface_areas = vec![SurfaceArea { id: "park".into(), polygon: vec![[2000, 2000], [8000, 2000], [8000, 8000], [2000, 8000]], surface }];
+        let objects = generated(&d, Cell { x: 0, y: 0 }).chunk.objects;
+        if grows {
+            assert_eq!(objects.len(), bare.len(), "{surface:?} paint keeps every tree");
+            assert!(objects.iter().zip(&bare).all(|(a, b)| a.id == b.id && a.position[0] == b.position[0] && a.position[2] == b.position[2]));
+        } else {
+            assert!(objects.is_empty(), "{surface:?} paint grows no tree");
+        }
+        let cost = estimate_generation(&d, Cell { x: 0, y: 0 }, 500_000).unwrap();
+        assert!(cost.objects >= objects.len() as u64);
+    }
+}

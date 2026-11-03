@@ -9,7 +9,11 @@ imported models are preserved; new default worlds carry new content-addressed GL
 
 `scripts/richer_assets.py --textures --racing` creates separate shared tiles under
 `godot/textures/racing` at 128/256/512px. Broad tonal variation replaces small grain,
-dirt and repair noise. The original tiles remain available as source artifacts.
+dirt and repair noise; grass, earth and leaf keep a faint grain of their own (lawn
+blades, soil crumbs, leaf veins) within the same bounds. The original tiles remain
+available as source artifacts. Generated grass ground (`lawn`) adds world-space lush
+and dry patches (about 10 m) at every distance and clumps, blades and clover within
+the effect distance.
 The shader bounds variation to 88–112% of the authored colour and reduces relief.
 Low retains the same base colours; medium adds roughness/AO and high adds restrained
 normals. Detail fades continuously at 32–48m to the authored mean colour.

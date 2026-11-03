@@ -128,6 +128,7 @@ func _finish_surface(result: ShaderMaterial, kind: String, defer_quality := fals
 	if not defer_quality:
 		preload("./display_quality.gd").apply_material(result,preload("./display_quality.gd").active())
 	result.set_shader_parameter("terrain_surface",kind in ["grass","earth"])
+	result.set_shader_parameter("lawn",kind == "grass")
 	if kind.begins_with("water_"):
 		result.set_shader_parameter("water_kind",1 if kind == "water_flow" else 2)
 		result.set_meta("mapkit_water",true)

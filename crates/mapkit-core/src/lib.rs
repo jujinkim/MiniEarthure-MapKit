@@ -890,6 +890,14 @@ impl MapDocument {
         }
         for z in &self.zones {
             let Some(tree) = &z.tree else { continue };
+            // City trees are the one builtin zone tree: its trunk stays inside
+            // any footprint of at least its radius.
+            if tree.asset_id == "builtin:city_tree" {
+                if !(placement::CITY_TREE_RADIUS..=200).contains(&i64::from(tree.radius_cm)) || tree.clearance_cm > 100_000 {
+                    return Err(error("E_ASSET", "invalid zone tree asset or footprint"));
+                }
+                continue;
+            }
             let Some(asset) = self.assets.iter().find(|a| a.id == tree.asset_id) else {
                 return Err(error(
                     "E_ASSET",

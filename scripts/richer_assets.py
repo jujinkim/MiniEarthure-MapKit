@@ -228,6 +228,11 @@ def textures(destination, racing=False):
                 if racing:
                     # Broad, quiet tonal blocks; no dirt, scratches or aggregate.
                     light=.65+broad*.035+strata*.008-seam*.025
+                    # Natural ground keeps its own fine structure (lawn blades and
+                    # clumps, soil crumbs, leaf veins) so the kinds differ.
+                    if kind=='grass':light+=noise*.014+aggregate*.010+math.sin(u*.9+math.sin(v*.21)*2)*.004
+                    elif kind=='earth':light+=noise*.012+aggregate*.014
+                    elif kind=='leaf':light+=noise*.012+grain*.010
                     rough=.52 if kind=='metal' else .86
                     heights[-1]=.5+broad*.012-seam*.008
                 base.append((light,rough))

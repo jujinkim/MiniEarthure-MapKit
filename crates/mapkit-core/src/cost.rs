@@ -281,7 +281,10 @@ pub(crate) fn estimate_validated(
         // rotated proxy box straddles the map edge by a centimetre.
         candidates = candidates.min(300_000);
         cost.objects = cost.objects.saturating_add(candidates);
-        if let Some(tree) = &zone.tree {
+        if let Some(boxes) = zone.tree.as_ref().and_then(|t| crate::placement::builtin(&t.asset_id)) {
+            cost.occupied_solids = cost.occupied_solids.saturating_add(candidates.saturating_mul(boxes.len() as u64));
+            add(candidates.saturating_mul(boxes.len() as u64 * 12), (zone.id.len() + 42).max(zone.tree.as_ref().map_or(0, |t| t.asset_id.len())));
+        } else if let Some(tree) = &zone.tree {
             let asset = d.assets.iter().find(|a| a.id == tree.asset_id).unwrap();
             cost.occupied_solids = cost.occupied_solids.saturating_add(
                 candidates

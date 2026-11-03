@@ -25,6 +25,8 @@ uniform int water_kind = 0; // 1 flowing, 2 still; authored vertex colours encod
 uniform bool vegetation = false;
 uniform float wind_strength = 0.5;
 uniform bool terrain_surface = false;
+// Grass ground: broad lush/dry patches, mown clumps and fine blades in world space.
+uniform bool lawn = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform float roughness = 0.85;
 uniform float metallic = 0.0;
@@ -55,6 +57,11 @@ varying float seed;
 varying float solid_seed;
 varying float solid_base;
 float facade_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
+float lawn_noise(vec2 p) {
+    vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
+    float a=facade_hash(i), b=facade_hash(i+vec2(1.0,0.0)), c=facade_hash(i+vec2(0.0,1.0)), d=facade_hash(i+vec2(1.0,1.0));
+    return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
+}
 vec3 facade_linear(vec3 c, bool srgb_output) { return srgb_output ? c : mix(c/12.92,pow((c+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),c)); }
 void vertex() {
     UV=UV*uv_scale.xy+uv_offset.xy;
@@ -193,6 +200,20 @@ void fragment() {
     if(terrain_surface || (distant && UV.y < -0.5)) {
         float broad=sin(world_position.x*0.055+sin(world_position.z*0.037))*cos(world_position.z*0.063);
         color*=0.96+0.06*broad;
+        if(lawn && !distant) {
+            // Lush and dry patches (~10 m), clumps (~1.5 m) and blades; the broad
+            // patches stay at every distance, finer grain fades with effect weight.
+            vec2 g=world_position.xz;
+            float patches=lawn_noise(g*0.09)*0.65+lawn_noise(g*0.23+7.3)*0.35;
+            color*=mix(vec3(0.86,0.90,0.84),vec3(1.10,1.08,1.02),patches);
+            float dry=smoothstep(0.60,0.82,lawn_noise(g*0.05+19.1));
+            color=mix(color,color*vec3(1.16,1.08,0.78),dry*0.55);
+            float clumps=lawn_noise(g*0.7+3.1);
+            float blades=lawn_noise(g*5.3)*0.6+lawn_noise(g*11.0+1.7)*0.4;
+            color*=mix(1.0,0.90+0.12*clumps+0.08*blades,effect_weight);
+            float clover=smoothstep(0.78,0.92,lawn_noise(g*1.7+11.0));
+            color=mix(color,color*vec3(0.82,0.94,0.80),clover*0.5*effect_weight);
+        }
         float rock=1.0-smoothstep(0.70,0.94,world_normal.y);
         color=mix(color,vec3(0.40,0.37,0.30),rock*0.55);
         float shore=1.0-smoothstep(0.15,0.85,world_position.y);

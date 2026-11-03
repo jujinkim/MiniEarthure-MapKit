@@ -22,10 +22,17 @@ static var _phase_usec: Dictionary = {}
 static var _phase_peak_usec: Dictionary = {}
 
 const BUILTINS := ["builtin:tree", "builtin:fence", "builtin:streetlight", "builtin:signal_h", "builtin:signal_v",
-	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub"]
+	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub", "builtin:city_tree"]
+## City tree canopies over the 140 cm trunk (radius, height in metres): round,
+## tall and broad, each scaled 0.85–1.15 and turned by the object identity.
+const CITY_CANOPIES := [Vector2(0.95, 1.7), Vector2(0.75, 2.2), Vector2(1.10, 1.5)]
+const CITY_LEAVES := ["4b6b43", "5a7a3c", "3e6446"]
+## Shrubs: three sizes and greens chosen by the object identity.
+const SHRUBS := [Vector2(0.32, 0.42), Vector2(0.42, 0.50), Vector2(0.26, 0.36)]
+const SHRUB_LEAVES := ["4f7a45", "5d8040", "3f6b43"]
 ## Display-only detail meshes drawn by the renderer: signal heads on their poles,
 ## benches and shrubs (no collision). Meshes and materials are shared.
-const STREET_DETAILS := {"builtin:signal_h": true, "builtin:signal_v": true, "builtin:bench": true, "builtin:shrub": true}
+const STREET_DETAILS := {"builtin:signal_h": true, "builtin:signal_v": true, "builtin:bench": true, "builtin:shrub": true, "builtin:city_tree": true}
 ## Signal lamps cycle green 6 s, yellow 2 s, red 8 s; cross approaches (odd
 ## quarter turns) run half a cycle apart. Local display only, never synced.
 const SIGNAL_SHADER := """shader_type spatial;
@@ -69,21 +76,32 @@ static func _detail_resource(key: String) -> Resource:
 			paint.metallic = 0.6
 			paint.roughness = 0.4
 			value = paint
-		"bench_seat":
-			var box := BoxMesh.new()
-			box.size = Vector3(0.6, 0.05, 0.18)
-			value = box
-		"shrub":
-			var sphere := SphereMesh.new()
-			sphere.radius = 0.32
-			sphere.height = 0.42
-			sphere.radial_segments = 8
-			sphere.rings = 4
-			value = sphere
-		"wood", "leaf":
+		"bench":
+			# Seat, backrest and two side legs in one shared mesh.
+			var tool := SurfaceTool.new()
+			for part: Array in [[Vector3(0.6, 0.05, 0.18), Vector3(0.0, 0.18, 0.0)], [Vector3(0.6, 0.15, 0.03), Vector3(0.0, 0.29, -0.08)],
+					[Vector3(0.04, 0.17, 0.16), Vector3(-0.26, 0.085, 0.0)], [Vector3(0.04, 0.17, 0.16), Vector3(0.26, 0.085, 0.0)]]:
+				var box := BoxMesh.new()
+				box.size = part[0]
+				tool.append_from(box, 0, Transform3D(Basis(), part[1]))
+			value = tool.commit()
+		"wood":
 			var paint := StandardMaterial3D.new()
-			paint.albedo_color = Color("8a6a46") if key == "wood" else Color("4f7a45")
+			paint.albedo_color = Color("8a6a46")
 			paint.roughness = 0.9
+			value = paint
+		_ when key.begins_with("shrub_") or key.begins_with("canopy_"):
+			var shape: Vector2 = (SHRUBS if key.begins_with("shrub_") else CITY_CANOPIES)[int(key.get_slice("_", 1))]
+			var sphere := SphereMesh.new()
+			sphere.radius = shape.x
+			sphere.height = shape.y
+			sphere.radial_segments = 8 if key.begins_with("shrub_") else 12
+			sphere.rings = 4 if key.begins_with("shrub_") else 6
+			value = sphere
+		_ when key.begins_with("leaf_") or key.begins_with("crown_"):
+			var paint := StandardMaterial3D.new()
+			paint.albedo_color = Color((SHRUB_LEAVES if key.begins_with("leaf_") else CITY_LEAVES)[int(key.get_slice("_", 1))])
+			paint.roughness = 0.95
 			value = paint
 		_:
 			var shader := Shader.new()
@@ -118,9 +136,24 @@ static func _street_detail(id: String, object: Dictionary) -> Node3D:
 			anchor.add_child(_detail_mesh("arm", "metal", Vector3(0.7, 2.14, 0.0)))
 			anchor.add_child(_detail_mesh("head", lamp, Vector3(1.32, 2.06, 0.0)))
 		"builtin:signal_v": anchor.add_child(_detail_mesh("head", lamp, Vector3(0.0, 1.85, -0.09), Basis(Vector3.BACK, PI / 2.0)))
-		"builtin:bench": anchor.add_child(_detail_mesh("bench_seat", "wood", Vector3(0.0, 0.18, 0.0)))
-		_: anchor.add_child(_detail_mesh("shrub", "leaf", Vector3(0.0, 0.2, 0.0)))
+		"builtin:bench": anchor.add_child(_detail_mesh("bench", "wood", Vector3.ZERO))
+		"builtin:city_tree":
+			var pick := _identity_unit(object.id)
+			var variant := int(pick * 3.0) % 3
+			var scale := 0.85 + 0.3 * fmod(pick * 7.0, 1.0)
+			var shape: Vector2 = CITY_CANOPIES[variant]
+			var crown := _detail_mesh("canopy_%d" % variant, "crown_%d" % variant, Vector3(0.0, 1.30 + shape.y * scale * 0.5, 0.0), Basis(Vector3.UP, TAU * fmod(pick * 13.0, 1.0)).scaled(Vector3.ONE * scale))
+			crown.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			anchor.add_child(crown)
+		_:
+			var pick := _identity_unit(object.id)
+			var variant := int(pick * 3.0) % 3
+			anchor.add_child(_detail_mesh("shrub_%d" % variant, "leaf_%d" % variant, Vector3(0.0, SHRUBS[variant].y * 0.48, 0.0), Basis(Vector3.UP, TAU * fmod(pick * 5.0, 1.0))))
 	return anchor
+
+## Stable display-only value in [0, 1) from an object identity.
+static func _identity_unit(id: Variant) -> float:
+	return float(str(id).sha256_text().substr(0, 6).hex_to_int()) / 16777216.0
 
 static func scene_position(value: Array) -> Vector3:
 	return Vector3(float(value[0]), float(value[1]), -float(value[2])) * 0.01
@@ -508,7 +541,7 @@ static func fail(job: Dictionary, code: String, message: String) -> bool:
 
 static func material_color(key: String) -> Color:
 	if key.begins_with("builtin:"):
-		return {"builtin:tree": Color("745138"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63"),
+		return {"builtin:tree": Color("745138"), "builtin:city_tree": Color("6b4c36"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63"),
 			"builtin:signal_h": Color("4a5055"), "builtin:signal_v": Color("4a5055"), "builtin:bus_shelter": Color("7aa0b8"),
 			"builtin:subway_entrance": Color("3f6fa8"), "builtin:station_sign": Color("2f7fd0")}.get(key, Color.GRAY)
 	if key.begins_with("barrier:"):
@@ -721,7 +754,7 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
-	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,key.get_slice(":",0))
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,key.get_slice(":",0))
 
 static func occluding_surface(key: String) -> bool:
 	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])
