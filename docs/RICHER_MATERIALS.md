@@ -72,16 +72,25 @@ Generated building walls (material keys `brick|wood|concrete:usage`) bind one of
 base colours (the material base blended towards the use tint, concrete 0.6, brick and
 wood 0.3) and the record palettes of their key. `bind_facade` gives those bindings a facade
 kind (concrete residential = apartment bands and balcony slabs, brick/wood residential =
-house, commercial = shopfront glass on the lowest storey and a curtain-wall grid above,
-industrial = panel ribs with sparse high windows, public = tall windows with stone
-courses), the night-window role and a floor pitch of 3 m ÷ the map scale 1:D that
+house, commercial = a shop storey 1.5 floors tall and a curtain-wall grid of whole
+storeys above, industrial = panel ribs with sparse high windows, public = tall windows
+with stone courses), the night-window role and a floor pitch of 3 m ÷ the map scale 1:D that
 presentation publishes as `facade_floor_cm` (300 when no OSM layer records a scale).
 Panes and bands are drawn procedurally from world position on vertical faces within the
-quality effect distance. Packed chunks carry UV2 (seed, 1000 + base metres) on every
-generated building solid (triangles of one record sharing a vertex): the seed's high
-12 bits are the record seed (`sha256(record ID)`, shared with the distant mesh) and its
-low 12 bits hash the record ID and the solid's smallest vertex. Storeys start at the
-solid's base, so ground floors follow terrain. The record seed picks palette entries
+quality effect distance. Packed chunks carry `facade_seeds` (seed, 1000 + base metres)
+and `facade_tops` (one float, 1000 + top metres) on every generated building solid
+(triangles of one record sharing a vertex): the seed's high 12 bits are the record seed
+(`sha256(record ID)`, shared with the distant mesh) and its low 12 bits hash the record
+ID and the solid's smallest vertex; the top is the eaves (the lowest vertex of the
+solid's non-vertical faces above its base, so a gable ridge does not count), else the
+highest vertex. Facade batches bind the seed as UV2 instead of UV (their materials are
+world-space) and commercial ones the top as CUSTOM0.x. Storeys start at the solid's
+base, so ground floors follow terrain. Commercial walls fit whole storeys: a shop
+storey g = 1.5 floors (never taller than the solid), then n = max(1, ⌊(top − base − g)
+/ floor⌋) storeys of (top − base − g) / n, so L ≥ 3 whole levels show the shop storey and
+L − 2 taller storeys; a remainder under 0.75 floors stays a plain parapet, and floor-pitch
+rows continue above the top (gable ends, taller parts of a merged solid). Meshes without
+CUSTOM0 keep one-floor storeys, the shop storey included. The record seed picks palette entries
 from `godot/facade_palette.json`, which the distant mesh (mapkit-package `distant.rs`)
 reads too: the wall body (bits 0–2; brick and wood keep their own bodies, concrete
 follows the use) and the roof (bits 3–5; concrete roofs green-painted or grey) at every
@@ -89,13 +98,19 @@ distance, and within the effect distance the pane pattern, the glass tint, the b
 width (0.8–1.3×) and, on apartment complexes, an accent colour (bits 6–8) on one bay
 column every 5–8 bays and on the base storey. The solid seed varies brightness by ±4 %
 and sets the night switch-off minute. Meshes without UV2 keep a per-plane seed, four
-faded tones and scene-height storeys. Commercial walls
-draw a storefront sign per two bays (85 %) between the shop window and the first floor
-from the shared original atlas `textures/sign_atlas.png` (512 tiles of 64×20 px, each
-sign in the central 56×16 px with edge-repeat gutters, tiles downsampled one by one:
+faded tones and scene-height storeys. The shop storey is split into sign slots of two
+bays; in height fractions of g each slot has a darker stall riser (0–0.08), one door
+0.3 floors wide with a frame (0.08–0.72; left, centre or right by a PCG hash of the slot),
+display windows (0.10–0.68) with two or three mullions per bay, a transom (0.70–0.76), a
+canopy shadow line and a fascia (0.78–0.98). The fascia holds a storefront sign (85 % of
+slots) at the atlas content aspect 56:16, fascia-high, at most 88 % of the slot wide and
+centred, and otherwise shows a plain charcoal, off-white or darker-body panel. Shop
+glass lights at night. Signs come from the shared original atlas
+`textures/sign_atlas.png` (512 tiles of 64×20 px, each sign in the central 56×16 px
+with edge-repeat gutters, tiles downsampled one by one:
 8 category rows of colours, a pictogram and glyphs of an invented script, no font,
 text or external image; `scripts/sign_atlas.py` reproduces it). Signs read left to
-right from outside and glow at night. The solid seed and base are flat varyings and
+right from outside and glow at night. The solid seed, base and height are flat varyings and
 per-slot sign and lit-window choices use an integer (PCG) hash of the 24-bit seed and
 the integer slot or cell, so each choice is constant across its pixels. Signs sample
 with analytic gradients (anisotropic) and fade to one tile colour once a sign texel

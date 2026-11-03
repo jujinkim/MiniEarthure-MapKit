@@ -59,12 +59,53 @@ varying float seed;
 // interpolation error would make per-pixel choices (signs, lit windows) flicker.
 varying flat float solid_seed;
 varying flat float solid_base;
+// Packed commercial solids also carry 1000 + their top (eaves) height in
+// CUSTOM0.x; other meshes read 0 (height -1) and keep floor-pitch storeys.
+varying flat float solid_height;
 float facade_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
 // Integer hash (PCG) for discrete facade choices: exact for the 24-bit packed
 // seed and integer cells, unlike the sine hash above (continuous noise only).
 uint facade_pcg(uint v) { uint s=v*747796405u+2891336453u; uint w=((s>>((s>>28u)+4u))^s)*277803737u; return (w>>22u)^w; }
 uint facade_cell(float v) { return uint(int(v)+1048576); }
 float facade_unit(uint v) { return float(facade_pcg(v)>>8u)/16777216.0; }
+// Commercial storeys (scene metres): (shop storey, upper pitch). With the solid
+// height known, a 1.5-floor shop storey and whole storeys fitted below the top
+// (pitch 0: a remainder under 0.75 floors is a plain parapet; the 0.01 bias keeps
+// exact floor multiples whole despite f32 offsets). Unknown heights keep floor rows.
+vec2 facade_storeys(float height, float pitch) {
+    if(height<=0.0) return vec2(pitch);
+    float ground = min(1.5*pitch,height);
+    float upper = height-ground;
+    return vec2(ground,upper<0.75*pitch ? 0.0 : upper/max(1.0,floor(upper/pitch+0.01)));
+}
+// Commercial storey row at v metres above the base: the shop storey is row 0,
+// fitted storeys reach the top and floor-pitch rows continue above it (gable
+// ends, taller parts of a merged solid).
+float facade_row(float v, vec2 storeys, float height, float pitch) {
+    if(v<storeys.x) return v/storeys.x;
+    if(height<=0.0) return 1.0+(v-storeys.x)/pitch;
+    if(v<height) return storeys.y>0.0 ? 1.0+(v-storeys.x)/storeys.y : 1.0;
+    return 1.0+(storeys.y>0.0 ? round((height-storeys.x)/storeys.y) : 0.0)+(v-height)/pitch;
+}
+// Shop storey part at s metres across a sign slot, w = height/shop storey:
+// 0 pier/wall, 1 stall riser, 2 display glass, 3 door glass, 4 frame or mullion,
+// 5 transom glass, 6 canopy shadow, 7 fascia (the sign band).
+int facade_storefront(float s, float w, float ground, float width, float door, float mullions, float pitch) {
+    if(w>=0.98) return 0;
+    if(w>=0.78) return 7;
+    if(w>=0.765) return 6;
+    float frame = 0.025*pitch;
+    float d = abs(s-door);
+    if(w>=0.08 && w<0.72 && d<0.15*pitch) return (d<0.15*pitch-frame && w<0.72-frame/ground) ? 3 : 4;
+    if(w<0.08) return 1;
+    if(s<0.05*pitch || s>width-0.05*pitch) return 0;
+    if(w>=0.10 && w<0.68) {
+        float pane = width*0.5/(mullions+1.0);
+        return abs(s-round(s/pane)*pane)<0.012*pitch ? 4 : 2;
+    }
+    if(w>=0.70 && w<0.76) return 5;
+    return 4;
+}
 float lawn_noise(vec2 p) {
     vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
     float a=facade_hash(i), b=facade_hash(i+vec2(1.0,0.0)), c=facade_hash(i+vec2(0.0,1.0)), d=facade_hash(i+vec2(1.0,1.0));
@@ -84,6 +125,7 @@ void vertex() {
     seed = distant ? UV.x : (INSTANCE_CUSTOM.a > 0.5 ? INSTANCE_CUSTOM.x : building_seed);
     solid_seed = !distant && facade_kind>0 && UV2.y>0.5 ? UV2.x : -1.0;
     solid_base = solid_seed>=0.0 ? (MODEL_MATRIX * vec4(0.0,UV2.y-1000.0,0.0,1.0)).y : 0.0;
+    solid_height = solid_seed>=0.0 && CUSTOM0.x>500.0 ? (MODEL_MATRIX * vec4(0.0,CUSTOM0.x-1000.0,0.0,1.0)).y-solid_base : -1.0;
 }
 void fragment() {
     vec4 weather = texelFetch(environment_data,ivec2(0,0),0);
@@ -152,7 +194,10 @@ void fragment() {
             float v = world_position.y-solid_base;
             float bay = facade_kind==1 ? 1.3 : (facade_kind==2 ? 1.8 : (facade_kind==3 ? 0.8 : (facade_kind==4 ? 1.0 : 1.5)));
             bay *= facade_record ? 0.8+0.5*float((record>>9)&7)/7.0 : 0.8+0.5*fract(facade_seed*3.17);
-            vec2 cell = vec2(u/(floor_pitch*bay),v/floor_pitch);
+            // Commercial walls: the shop storey is cell row 0, whole storeys above.
+            vec2 storeys = facade_storeys(facade_kind==3 ? solid_height : -1.0,floor_pitch);
+            bool shop = facade_kind==3 && v<storeys.x;
+            vec2 cell = vec2(u/(floor_pitch*bay),facade_kind!=3 ? v/floor_pitch : facade_row(v,storeys,solid_height,floor_pitch));
             vec2 f = fract(cell);
             vec4 pane = facade_kind==1 ? vec4(0.2,0.75,0.3,0.75) : (facade_kind==2 ? vec4(0.3,0.7,0.3,0.7) : (facade_kind==3 ? vec4(0.1,0.9,0.15,0.85) : (facade_kind==4 ? vec4(0.15,0.85,0.6,0.85) : vec4(0.3,0.7,0.2,0.85))));
             // Apartments, offices and public walls: tall, ribbon or square panes.
@@ -171,7 +216,21 @@ void fragment() {
                 color = mix(color,accent,max(column*(1.0-window),base_storey*0.55)*effect_weight);
                 window *= 1.0-base_storey;
             }
-            if(facade_kind==3 && v<floor_pitch) window = step(0.12,f.y)*step(f.y,0.78);
+            uint seed_bits = uint(round(clamp(facade_seed,0.0,1.0)*16777216.0));
+            // Shop storey, per sign slot (one bay pair; seen from outside, slots
+            // read left to right along -u): stall riser, one seeded door,
+            // mullioned display windows, transom, canopy shadow and fascia.
+            // A parapet too short for a storey stays plain.
+            float slot_width = floor_pitch*bay*2.0;
+            float slot = floor(-u/slot_width);
+            float slot_s = fract(-u/slot_width)*slot_width;
+            uint slot_bits = seed_bits^facade_pcg(facade_cell(slot));
+            int shop_part = -1;
+            if(shop) {
+                uint slot_layout = facade_pcg(slot_bits^2654435769u);
+                shop_part = facade_storefront(slot_s,cell.y,storeys.x,slot_width,slot_width*(0.22+0.28*float(slot_layout%3u)),2.0+float((slot_layout>>2u)&1u),floor_pitch);
+                window = (shop_part==2 || shop_part==3 || shop_part==5) ? 1.0 : 0.0;
+            } else if(facade_kind==3 && storeys.y<=0.0 && v<solid_height) window = 0.0;
             if(facade_kind==4) {
                 color *= 1.0-0.08*step(0.85,fract(u/(0.6*floor_pitch)));
                 window *= step(0.5,facade_hash(vec2(floor(cell.x),floor(cell.y)*3.0)));
@@ -180,25 +239,31 @@ void fragment() {
             if(facade_kind==1 && fract(facade_seed*5.3)<0.5) color *= 1.0+0.08*step(f.y,0.1)*step(1.0,cell.y)*effect_weight;
             if(facade_kind==5) color *= 1.0+0.05*step(f.y,0.08)*effect_weight;
             facade_window = window*effect_weight;
-            uint seed_bits = uint(round(clamp(facade_seed,0.0,1.0)*16777216.0));
             facade_lit = step(0.35,facade_unit(seed_bits^facade_pcg(facade_cell(floor(cell.x))^facade_pcg(facade_cell(floor(cell.y))))));
+            // Open shops light their whole front at night.
+            if(shop) facade_lit = 1.0;
             float glass_pick = facade_record ? float((record>>6)&3)/4.0+0.1 : fract(facade_seed*11.1);
             vec3 glass = glass_pick<0.4 ? vec3(0.21,0.25,0.29) : (glass_pick<0.7 ? vec3(0.17,0.24,0.25) : vec3(0.25,0.23,0.21));
             color = mix(color,glass,facade_window*0.85);
             surface_roughness = mix(surface_roughness,0.32,facade_window);
-            // Commercial ground floors: one storefront sign per bay pair, in
-            // the band between the shop window and the first floor.
-            if(signs_enabled && facade_kind==3 && v>0.78*floor_pitch && v<1.08*floor_pitch) {
-                float width = floor_pitch*bay*2.0;
-                // Seen from outside, signs read left to right along -u.
-                float run = -u/width;
-                float slot = floor(run);
-                float along = fract(run);
-                float pick = facade_unit(seed_bits^facade_pcg(facade_cell(slot)));
+            if(shop_part==1) color *= mix(1.0,0.6,effect_weight);
+            else if(shop_part==3) color *= mix(1.0,0.55,effect_weight);
+            else if(shop_part==4) color = mix(color,vec3(0.10,0.105,0.11),effect_weight);
+            else if(shop_part==6) color *= mix(1.0,0.45,effect_weight);
+            else if(shop_part==7) {
+                // Plain fascia panel per slot: charcoal, off-white or a darker body.
+                uint tone = facade_pcg(slot_bits^1013904223u)%3u;
+                color = mix(color,tone==0u ? vec3(0.09,0.10,0.11) : (tone==1u ? vec3(0.72,0.71,0.68) : color*0.7),effect_weight);
+            }
+            // One storefront sign per slot fills the fascia height at the atlas
+            // content aspect (56:16), centred in the slot.
+            if(signs_enabled && shop_part==7) {
+                float pick = facade_unit(slot_bits);
                 if(pick<0.85) {
                     float index = min(floor(pick/0.85*512.0),511.0);
-                    float sign_height = 0.26*floor_pitch;
-                    vec2 local = vec2((along-0.06)/0.88,1.0-(v-0.80*floor_pitch)/sign_height);
+                    float sign_height = 0.20*storeys.x;
+                    float sign_width = min(slot_width*0.88,sign_height*3.5);
+                    vec2 local = vec2((slot_s-(slot_width-sign_width)*0.5)/sign_width,1.0-(v-0.78*storeys.x)/sign_height);
                     if(local.x>0.0 && local.x<1.0 && local.y>0.0 && local.y<1.0) {
                         // Content is the central 56x16 of a 64x20 tile.
                         const vec2 grid = vec2(16.0,32.0);
@@ -209,7 +274,7 @@ void fragment() {
                         // implicit mip selection); far signs settle on one blurred
                         // level instead of crawling.
                         vec3 tangent = normalize(vec3(-n.z,0.0,n.x));
-                        vec2 scale = content/grid*vec2(-1.0/(width*0.88),-1.0/sign_height);
+                        vec2 scale = content/grid*vec2(-1.0/sign_width,-1.0/sign_height);
                         vec2 gx = vec2(dot(position_dx,tangent),position_dx.y)*scale;
                         vec2 gy = vec2(dot(position_dy,tangent),position_dy.y)*scale;
                         vec2 texels = vec2(textureSize(sign_atlas,0));

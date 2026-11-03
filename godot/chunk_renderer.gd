@@ -315,10 +315,13 @@ static func _advance(job: Dictionary) -> bool:
 			arrays.resize(Mesh.ARRAY_MAX)
 			arrays[Mesh.ARRAY_VERTEX] = chunk.scene_vertices.slice(first * 3, offset * 3)
 			arrays[Mesh.ARRAY_NORMAL] = chunk.scene_normals.slice(first * 3, offset * 3)
-			arrays[Mesh.ARRAY_TEX_UV] = chunk.wall_uv.slice(first * 3, offset * 3)
-			if chunk.get("facade_seeds", PackedVector2Array()).size() == chunk.wall_uv.size(): arrays[Mesh.ARRAY_TEX_UV2] = chunk.facade_seeds.slice(first * 3, offset * 3)
+			# Same attributes as worker-prepared batches (render_memory.facade_arrays).
+			var facade: int = PLAN.facade_arrays(key) if chunk.get("facade_seeds", PackedVector2Array()).size() == chunk.wall_uv.size() else 0
+			if facade == 0: arrays[Mesh.ARRAY_TEX_UV] = chunk.wall_uv.slice(first * 3, offset * 3)
+			else: arrays[Mesh.ARRAY_TEX_UV2] = chunk.facade_seeds.slice(first * 3, offset * 3)
+			if facade == 2 and chunk.get("facade_tops", PackedFloat32Array()).size() == chunk.wall_uv.size(): arrays[Mesh.ARRAY_CUSTOM0] = chunk.facade_tops.slice(first * 3, offset * 3)
 			var prepared := ArrayMesh.new()
-			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, FACADE_TOP_FORMAT if arrays[Mesh.ARRAY_CUSTOM0] != null else 0)
 			mesh.mesh = prepared
 			_prepare_batch_occluder(prepared, key, arrays[Mesh.ARRAY_VERTEX])
 		else:
@@ -469,11 +472,12 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = batch.vertices
 	arrays[Mesh.ARRAY_NORMAL] = batch.normals
-	arrays[Mesh.ARRAY_TEX_UV] = batch.uv
+	if not batch.uv.is_empty(): arrays[Mesh.ARRAY_TEX_UV] = batch.uv
 	if not batch.get("uv2", PackedVector2Array()).is_empty(): arrays[Mesh.ARRAY_TEX_UV2] = batch.uv2
+	if not batch.get("custom0", PackedFloat32Array()).is_empty(): arrays[Mesh.ARRAY_CUSTOM0] = batch.custom0
 	var mesh := MeshInstance3D.new()
 	var resource := ArrayMesh.new()
-	resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, FACADE_TOP_FORMAT if arrays[Mesh.ARRAY_CUSTOM0] != null else 0)
 	mesh.mesh = resource
 	var key: String = batch.key
 	_prepare_batch_occluder(resource, key, batch.vertices)
@@ -607,6 +611,10 @@ static func facade_kind(key: String) -> int:
 		"industrial": return 4
 		"public": return 5
 	return 0
+
+## Commercial facade batches carry their solids' offset top (eaves) height in
+## CUSTOM0.x (packed `facade_tops`) so the shop storey and whole storeys fit.
+const FACADE_TOP_FORMAT := Mesh.ARRAY_CUSTOM_R_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 
 ## Floor pitch follows the authored map scale (3 m ÷ D) published by presentation.
 static func bind_facade(material: Material, key: String, presentation: Dictionary) -> void:

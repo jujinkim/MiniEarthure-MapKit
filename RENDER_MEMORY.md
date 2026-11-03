@@ -9,9 +9,12 @@ callers own game admission.
 `render_memory.gd` plans without GPU allocation. `supports_batches` excludes image
 proxies needing individual alpha/order. `prepare_batches` groups opaque faces by
 material and 32 m triangle-bounds-centre bucket, at most 512 triangles, preserving
-geometry/UVs/winding
-and hidden-proxy exclusion. Packed buffers cost 96 bytes/visible triangle plus
-bounded metadata; callers admit source/preparation before worker execution.
+geometry/winding and hidden-proxy exclusion. Batches carry position, normal and
+UV; generated building facade batches carry the solid seed (UV2) instead of UV,
+which their world-space materials never sample, and commercial ones also the
+solid top (CUSTOM0, `facade_arrays`). Packed buffers cost at most 108
+bytes/visible triangle (96 without the solid top) plus bounded metadata; callers
+admit source/preparation before worker execution.
 Check support before using empty batch results.
 
 `estimate` reserves 64 KiB/job (+64 KiB urban), 768 bytes/visible triangle,

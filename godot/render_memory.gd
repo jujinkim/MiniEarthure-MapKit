@@ -16,7 +16,10 @@ static func upper_bound(cost: Dictionary) -> int:
 	return 131072 + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (768 + 12288) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
 
 ## Worker-only opaque surface grouping. Native source/collision order is untouched.
-## 96 bytes per visible triangle fits the existing 128-byte presentation allowance.
+## Position, normal and UV take 96 bytes per visible triangle. Facade batches swap
+## UV, which their world-space materials never sample, for the solid seed (UV2) and,
+## commercial only, the solid top (CUSTOM0): at most 108, within the existing
+## 128-byte presentation allowance.
 static func supports_batches(chunk: Dictionary) -> bool:
 	var presentation: Dictionary = chunk.get("presentation", {})
 	for id: String in presentation.get("proxy_materials", {}).values():
@@ -49,18 +52,32 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 			var normals := PackedVector3Array()
 			var uv := PackedVector2Array()
 			var uv2 := PackedVector2Array()
-			vertices.resize(count); normals.resize(count); uv.resize(count)
+			var custom0 := PackedFloat32Array()
+			vertices.resize(count); normals.resize(count)
 			var source_uv: PackedVector2Array = chunk.wall_uv
 			var seeds: PackedVector2Array = chunk.get("facade_seeds", PackedVector2Array())
-			if seeds.size() == source_uv.size(): uv2.resize(count)
+			var tops: PackedFloat32Array = chunk.get("facade_tops", PackedFloat32Array())
+			var facade: int = facade_arrays(key.get_slice("|",0)) if seeds.size() == source_uv.size() else 0
+			if facade == 0: uv.resize(count)
+			else: uv2.resize(count)
+			if facade == 2 and tops.size() == source_uv.size(): custom0.resize(count)
 			for index in count:
 				var source := int(indices[first + index / 3]) * 3 + index % 3
 				vertices[index] = chunk.scene_vertices[source]
 				normals[index] = chunk.scene_normals[source]
-				uv[index] = source_uv[source]
+				if not uv.is_empty(): uv[index] = source_uv[source]
 				if not uv2.is_empty(): uv2[index] = seeds[source]
-			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv, "uv2": uv2})
+				if not custom0.is_empty(): custom0[index] = tops[source]
+			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv, "uv2": uv2, "custom0": custom0})
 	return result
+
+## Facade arrays a display batch carries: 0 UV only, 1 the solid seed (UV2) for a
+## generated building facade (chunk_renderer.facade_kind > 0), 2 also the solid
+## top (CUSTOM0) for commercial facades, the only reader.
+static func facade_arrays(key: String) -> int:
+	var fields := key.split(":")
+	if fields.size() != 2 or not fields[0] in ["brick","wood","concrete"] or not fields[1] in ["residential","commercial","industrial","public"]: return 0
+	return 2 if fields[1] == "commercial" else 1
 
 static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	if asset_bytes < 0 or asset_bytes > 64 * 1024 * 1024 * 1024: return -1

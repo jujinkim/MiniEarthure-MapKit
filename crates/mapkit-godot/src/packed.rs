@@ -24,6 +24,9 @@ pub struct MapKitPackedGeometry {
     /// building solid (one per connected solid of a record), (0, 0) elsewhere.
     /// The base lets ground-floor facades follow terrain. Display only.
     facade_seeds: PackedVector2Array,
+    /// Per vertex: FACADE_BASE_OFFSET + the solid's top (eaves) height in scene metres
+    /// on a generated building solid, 0 elsewhere, so facades fit whole storeys.
+    facade_tops: PackedFloat32Array,
     prism_vertices: PackedInt64Array,
     prism_indices: PackedInt32Array,
     materials: PackedStringArray,
@@ -105,6 +108,7 @@ impl MapKitPackedGeometry {
             "ground_uv" => &self.ground_uv,
             "wall_uv" => &self.wall_uv,
             "facade_seeds" => &self.facade_seeds,
+            "facade_tops" => &self.facade_tops,
             "building_prism_vertices_cm" => &self.prism_vertices,
             "building_prism_object_indices" => &self.prism_indices,
             "building_materials" => &self.materials,
@@ -146,7 +150,8 @@ pub(super) fn warnings_array(warnings: &[mapkit_core::Warning]) -> VarArray {
 const FACADE_BASE_OFFSET: f32 = 1000.0;
 /// One stable seed per connected building solid: triangles of a building
 /// object that share a vertex form one solid (walls and roof of one part).
-fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &[i32]) -> Vec<Vector2> {
+/// Returns per-vertex seeds (seed, offset base) and offset solid tops (eaves).
+fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &[i32]) -> (Vec<Vector2>, Vec<f32>) {
     let buildings: std::collections::BTreeSet<i32> = prism_indices.iter().copied().collect();
     let mut parent: Vec<usize> = (0..chunk.triangles.len()).collect();
     fn find(parent: &mut [usize], mut i: usize) -> usize {
@@ -166,16 +171,35 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
     // The seed's high 12 bits are the record's palette seed (shared with the
     // distant mesh, mapkit-package distant.rs); the low 12 bits hash the record
     // ID and the solid's smallest vertex.
-    let mut smallest = BTreeMap::<usize, ([i64; 3], i64)>::new();
+    let mut smallest = BTreeMap::<usize, ([i64; 3], i64, i64)>::new();
     for (t, triangle) in chunk.triangles.iter().enumerate() {
         if !buildings.contains(&object_indices[t]) { continue; }
         let root = find(&mut parent, t);
         let low = triangle.vertices.iter().min().copied().unwrap();
         let base = triangle.vertices.iter().map(|v| v[1]).min().unwrap();
-        smallest.entry(root).and_modify(|(v, b)| { if low < *v { *v = low; } *b = (*b).min(base); }).or_insert((low, base));
+        let top = triangle.vertices.iter().map(|v| v[1]).max().unwrap();
+        smallest.entry(root).and_modify(|(v, b, h)| { if low < *v { *v = low; } *b = (*b).min(base); *h = (*h).max(top); }).or_insert((low, base, top));
     }
+    // Storeys end at the eaves: the lowest vertex of the solid's roof faces
+    // (non-vertical faces wholly above its base; bottoms lie at the base), so a
+    // gable ridge does not stretch them. Solids without roof faces keep their top.
+    let mut eaves = BTreeMap::<usize, i64>::new();
+    for (t, triangle) in chunk.triangles.iter().enumerate() {
+        if !buildings.contains(&object_indices[t]) { continue; }
+        let root = find(&mut parent, t);
+        let base = smallest[&root].1;
+        let [a, b, c] = triangle.vertices.map(|v| v.map(|x| x as f64));
+        let (e, f) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+        let n = [e[1] * f[2] - e[2] * f[1], e[2] * f[0] - e[0] * f[2], e[0] * f[1] - e[1] * f[0]];
+        let low = triangle.vertices.iter().map(|v| v[1]).min().unwrap();
+        if 4.0 * n[1] * n[1] > n[0] * n[0] + n[1] * n[1] + n[2] * n[2] && low > base {
+            eaves.entry(root).and_modify(|h| *h = (*h).min(low)).or_insert(low);
+        }
+    }
+    let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
     let mut values = BTreeMap::<usize, f32>::new();
     let mut seeds = Vec::with_capacity(chunk.triangles.len() * 3);
+    let mut tops = Vec::with_capacity(chunk.triangles.len() * 3);
     for (t, triangle) in chunk.triangles.iter().enumerate() {
         let value = if buildings.contains(&object_indices[t]) {
             let root = find(&mut parent, t);
@@ -185,14 +209,16 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
                 let record = mapkit_package::distant::facade_record(&triangle.object_id);
                 ((record << 12) | solid) as f32 / 16_777_216.0
             });
-            let base = smallest[&root].1 as f32 * (mapkit_core::WORLD_SCALE as f32 / 100.0);
-            Vector2::new(seed, FACADE_BASE_OFFSET + base)
+            let (_, base, top) = smallest[&root];
+            let top = eaves.get(&root).copied().unwrap_or(top);
+            (Vector2::new(seed, FACADE_BASE_OFFSET + base as f32 * scale), FACADE_BASE_OFFSET + top as f32 * scale)
         } else {
-            Vector2::ZERO
+            (Vector2::ZERO, 0.0)
         };
-        seeds.extend([value; 3]);
+        seeds.extend([value.0; 3]);
+        tops.extend([value.1; 3]);
     }
-    seeds
+    (seeds, tops)
 }
 
 pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
@@ -281,7 +307,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         materials[id as usize] = prism.material.as_str().into();
         usages[id as usize] = prism.usage.as_str().into();
     }
-    let facade_seeds = facade_seeds(&chunk, &object_indices, &prism_indices);
+    let (facade_seeds, facade_tops) = facade_seeds(&chunk, &object_indices, &prism_indices);
     let mut convex_vertices = vec![];
     let mut convex_offsets = vec![0i32];
     let mut convex_ids = PackedStringArray::new();
@@ -309,6 +335,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
         ground_uv: PackedVector2Array::from(ground_uv.as_slice()),
         wall_uv: PackedVector2Array::from(wall_uv.as_slice()),
         facade_seeds: PackedVector2Array::from(facade_seeds.as_slice()),
+        facade_tops: PackedFloat32Array::from(facade_tops.as_slice()),
         prism_vertices: PackedInt64Array::from(prism_vertices.as_slice()),
         prism_indices: PackedInt32Array::from(prism_indices.as_slice()),
         materials: PackedStringArray::from(materials.as_slice()),
@@ -346,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn facade_seeds_follow_connected_building_solids_and_their_base() {
+    fn facade_seeds_follow_connected_building_solids_their_base_and_top() {
         // Object 0: two solids (one raised); object 1: ground, not a building.
         let triangles = vec![
             triangle("b", [[0, 300, 0], [100, 300, 0], [0, 600, 0]]),
@@ -356,14 +383,51 @@ mod tests {
         ];
         let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
             cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
-        let seeds = facade_seeds(&chunk, &[0, 0, 0, 1], &[0]);
+        let (seeds, tops) = facade_seeds(&chunk, &[0, 0, 0, 1], &[0]);
         assert_eq!(seeds.len(), 12);
+        assert_eq!(tops.len(), 12);
         assert!(seeds[..6].iter().all(|s| *s == seeds[0]), "one seed per connected solid");
         assert_ne!(seeds[0].x, seeds[6].x, "separate solids of a record vary");
         let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
         assert_eq!(seeds[0].y, FACADE_BASE_OFFSET + 300.0 * scale);
         assert_eq!(seeds[6].y, FACADE_BASE_OFFSET + 900.0 * scale);
         assert!(seeds[9..].iter().all(|s| *s == Vector2::ZERO), "non-building triangles carry no seed");
-        assert_eq!(facade_seeds(&chunk, &[0, 0, 0, 1], &[0]), seeds, "stable");
+        assert!(tops[..6].iter().all(|t| *t == FACADE_BASE_OFFSET + 600.0 * scale), "one top per connected solid");
+        assert_eq!(tops[6], FACADE_BASE_OFFSET + 1200.0 * scale, "a raised solid keeps its own top");
+        assert!(tops[9..].iter().all(|t| *t == 0.0), "non-building triangles carry no top");
+        assert_eq!(facade_seeds(&chunk, &[0, 0, 0, 1], &[0]), (seeds, tops), "stable");
+    }
+
+    #[test]
+    fn facade_tops_end_at_the_eaves_of_a_gable() {
+        // A wall and two roof slopes up to a 600 cm ridge.
+        let triangles = vec![
+            triangle("b", [[0, 0, 0], [1000, 0, 0], [0, 400, 0]]),
+            triangle("b", [[0, 400, 0], [1000, 400, 0], [500, 600, 300]]),
+            triangle("b", [[0, 400, 0], [0, 400, 600], [500, 600, 300]]),
+        ];
+        let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
+            cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
+        let (seeds, tops) = facade_seeds(&chunk, &[0, 0, 0], &[0]);
+        let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
+        assert!(seeds.iter().all(|s| *s == seeds[0]) && seeds[0].y == FACADE_BASE_OFFSET);
+        assert!(tops.iter().all(|t| *t == FACADE_BASE_OFFSET + 400.0 * scale), "storeys end at the eaves, not the ridge");
+    }
+
+    #[test]
+    fn facade_tops_end_at_the_eaves_of_a_gable_taller_than_its_walls() {
+        // Walls 0-100 cm, a 225 cm ridge (rise above the wall height) and the
+        // flat bottom face at the base, which is not a roof.
+        let triangles = vec![
+            triangle("b", [[0, 0, 0], [1000, 0, 0], [0, 100, 0]]),
+            triangle("b", [[0, 100, 0], [1000, 100, 0], [500, 225, 300]]),
+            triangle("b", [[0, 100, 0], [500, 225, 300], [0, 100, 600]]),
+            triangle("b", [[0, 0, 0], [0, 0, 600], [1000, 0, 0]]),
+        ];
+        let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
+            cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
+        let (_, tops) = facade_seeds(&chunk, &[0, 0, 0, 0], &[0]);
+        let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
+        assert!(tops.iter().all(|t| *t == FACADE_BASE_OFFSET + 100.0 * scale), "a steep gable still ends storeys at the eaves");
     }
 }
