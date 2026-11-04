@@ -150,8 +150,11 @@ fn planned(expanded: u64, structured: u64, long_strings: u64, tree: u64, pngs: u
     // Keep the first 256 encoded bytes of every string at the structural rate
     // for its node/allocation overhead, plus four retained and eight temporary
     // copies of its tail. Expanded input buffers remain charged separately.
+    // Real-city water basins are prepared once per document and retained with
+    // it; their bound follows the non-string JSON bytes that hold water vertices.
     let structure = structured - long_strings;
-    let retained = expanded * 2 + structure * 40 + long_strings * 4 + metadata + mapkit_core::PREPARATION_CACHE_BYTES + 32 * 1024 * 1024;
+    let retained = expanded * 2 + structure * 40 + long_strings * 4 + metadata + mapkit_core::PREPARATION_CACHE_BYTES + 32 * 1024 * 1024
+        + mapkit_core::water::basin_reserve_bytes(structure);
     // Strict JSON key validation builds one serde_json Value tree; typed parsing
     // and the content hash (a typed clone, its Value and the canonical copy of
     // that Value) overlap with it: at most four trees of the scanned bound

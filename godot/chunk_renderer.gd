@@ -357,6 +357,7 @@ static func _advance(job: Dictionary) -> bool:
 				return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
 			job.materials[key] = material
 		mesh.material_override = job.materials[key]
+		_wet_bank(job, mesh, key)
 		mesh.set_meta("mapkit_occluder", occluding_surface(key))
 		track_resources(job, mesh)
 		job.root.add_child(mesh)
@@ -503,11 +504,23 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 			return fail(job, "E_RENDER_ASSET", "Validated image could not be displayed")
 		job.materials[key] = material
 	mesh.material_override = job.materials[key]
+	_wet_bank(job, mesh, key)
 	mesh.set_meta("mapkit_occluder", occluding_surface(key))
 	track_resources(job, mesh)
 	job.root.add_child(mesh)
 	job.triangle += 1
 	return false
+
+## Earth meshes of a cell with water get its highest water surface (mesh space,
+## metres) so the ground shader darkens the wet bank; real-city basins are earth.
+static func _wet_bank(job: Dictionary, mesh: GeometryInstance3D, key: String) -> void:
+	if key != "dirt": return
+	if not job.has("shore_level"):
+		var level := -100000.0
+		for record: Dictionary in job.water_records:
+			level = maxf(level, float(record.body.surface_cm) * .01)
+		job.shore_level = level
+	if float(job.shore_level) > -10000.0: mesh.set_instance_shader_parameter("shore_level_m", float(job.shore_level))
 
 ## An occluding batch derives its occluder faces from the vertex array it was
 ## built from: reading a just-uploaded surface back waits for the GPU (Metal,

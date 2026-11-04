@@ -14,8 +14,14 @@ geometry or quality-reduced substitute is cached. A working snapshot keeps its
 last validated `PreparedMap` while the composed document is unchanged, so batched
 cell validation validates and prepares it once.
 
+Real-city earth basins ([WATER](WATER.md#real-city-earth-basins)) are built once per
+prepared document on first use and kept with its placements, errors included;
+`PreparedMap::new`/`new_region` and `pack_source` build them up front so a failing
+basin fails the map, never one cell.
+
 Prepared indices are charged by package read planning: an additional eight times
-structured source bytes and 32 MiB for bounded repetition/footprint/index storage.
+structured source bytes and 32 MiB for bounded repetition/footprint/index storage,
+plus `water::basin_reserve_bytes` (at most 8 MiB) for the basins.
 The existing generated-cell estimate cache, output limits and work budgets remain.
 
 `PreparedMap::generate_distant_source(cell, grid, limit)` shares the validated

@@ -1136,6 +1136,9 @@ pub(crate) struct PreparedPlacements {
     pub(crate) junctions: crate::road_plan::SharedJunctions,
     /// [`crate::roads::curb_cm`], read once from the attribution notices.
     curb_cm: i64,
+    /// Built once ([`Self::basins`]) for every estimate and generation; a
+    /// failure is kept too, so every later call reports it without rebuilding.
+    basins: std::sync::OnceLock<Result<crate::water::Basins>>,
 }
 fn exclusion_index(d: &MapDocument) -> crate::bounds_index::BoundsIndex {
     crate::bounds_index::BoundsIndex::new(&crate::roads::sidewalk_exclusions(d).map(|p| aabb(p)).collect::<Vec<_>>())
@@ -1187,12 +1190,18 @@ impl PreparedPlacements {
             roads: crate::bounds_index::BoundsIndex::new(&road_bounds),
             buildings: crate::bounds_index::BoundsIndex::new(&building_bounds), solids, exclusions,
             paint: Default::default(),
-            barriers: crate::barrier::Spans::new(d)?, junctions: Default::default(), curb_cm: crate::roads::curb_cm(d) })
+            barriers: crate::barrier::Spans::new(d)?, junctions: Default::default(), curb_cm: crate::roads::curb_cm(d),
+            basins: Default::default() })
     }
     /// [`crate::roads::paint_index`] of `d`, the document these placements were
     /// prepared from.
     pub(crate) fn paint(&self, d: &MapDocument) -> &crate::bounds_index::BoundsIndex {
         self.paint.get_or_init(|| crate::roads::paint_index(d))
+    }
+    /// [`crate::water::Basins`] of `d`, the document these placements were
+    /// prepared from. Built exactly once: concurrent first callers wait for it.
+    pub(crate) fn basins(&self, d: &MapDocument) -> Result<&crate::water::Basins> {
+        self.basins.get_or_init(|| crate::water::Basins::new(d)).as_ref().map_err(Clone::clone)
     }
 }
 impl PreparedPlacements {

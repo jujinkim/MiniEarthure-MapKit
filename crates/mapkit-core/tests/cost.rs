@@ -1,3 +1,4 @@
+mod support { pub mod basins; }
 use mapkit_core::*;
 fn document() -> MapDocument {
     serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap()
@@ -351,4 +352,72 @@ fn road_style_bound_covers_styled_roads() {
         covered += styled.len();
     }
     assert!(covered > 0);
+}
+
+/// Random real-city water (star ponds at two levels, some touching, with
+/// islands) under roads, fences and paint: the ground estimate counts the basin
+/// lines exactly like generation, flat and on a heightmap, prepared or not,
+/// and the ground stays watertight (no crack, no T-junction).
+#[test]
+fn random_city_basins_stay_within_estimates() {
+    struct Lcg(u64);
+    impl Lcg {
+        fn next(&mut self, n: i64) -> i64 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((self.0 >> 33) % n as u64) as i64
+        }
+    }
+    let mut sunk = 0;
+    for seed in 0..12u64 {
+        let mut rng = Lcg(seed * 7919 + 3);
+        let (mut d, grids) = if seed % 2 == 0 { (support::basins::city(true), Default::default()) } else { support::basins::sloped(true) };
+        d.water_bodies.clear();
+        for k in 0..2 + rng.next(4) {
+            let centre = [300 + rng.next(5800), 300 + rng.next(2600)];
+            let n = 5 + rng.next(30) as usize;
+            let mut angles: Vec<i64> = (0..n).map(|_| rng.next(36_000)).collect();
+            angles.sort();
+            angles.dedup();
+            let radius = 120 + rng.next(900);
+            let polygon: Vec<Point> = angles.iter().map(|&a| {
+                let (r, t) = ((radius / 2 + rng.next(radius / 2 + 1)) as f64, a as f64 / 36_000.0 * std::f64::consts::TAU);
+                [(centre[0] + (r * t.cos()) as i64).clamp(0, 6400), (centre[1] + (r * t.sin()) as i64).clamp(0, 3200)]
+            }).collect();
+            let level = if k % 2 == 0 { -8 } else { -8 - rng.next(40) };
+            let islands = if radius > 600 && k % 3 == 0 {
+                vec![vec![[centre[0] - 40, centre[1] - 40], [centre[0] + 40, centre[1] - 40], [centre[0] + 40, centre[1] + 40], [centre[0] - 40, centre[1] + 40]]]
+            } else { vec![] };
+            d.water_bodies.push(water::WaterBody { id: format!("pond-{k}"), polygon, islands, surface_cm: level,
+                bottom_cm: level - 30 - rng.next(80), flow_cm_s: [0, 0] });
+        }
+        // Touching pieces: a rectangle split along a seam.
+        let (x, y) = (200 + rng.next(4000), 200 + rng.next(2000));
+        for (k, (a, b)) in [(x, x + 700), (x + 700, x + 1300)].into_iter().enumerate() {
+            d.water_bodies.push(water::WaterBody { id: format!("piece-{k}"), polygon: vec![[a, y], [b, y], [b, y + 600], [a, y + 600]],
+                islands: vec![], surface_cm: -8, bottom_cm: -68, flow_cm_s: [0, 0] });
+        }
+        let bodies = std::mem::take(&mut d.water_bodies);
+        for body in bodies {
+            d.water_bodies.push(body);
+            if d.validate().is_err() { d.water_bodies.pop(); }
+        }
+        d.barriers.push(barrier::Barrier { id: "fence-2".into(), kind: barrier::BarrierKind::Wall,
+            line: vec![[rng.next(6000), rng.next(3000)], [rng.next(6000) + 100, rng.next(3000) + 100]], height_cm: 60, thickness_cm: 20 });
+        d.surface_areas.push(SurfaceArea { id: "lawn".into(), surface: Surface::Grass,
+            polygon: vec![[rng.next(3000), rng.next(1500)], [3200 + rng.next(3000), rng.next(1500)], [3200 + rng.next(3000), 1700 + rng.next(1400)], [rng.next(3000), 1700 + rng.next(1400)]] });
+        if d.validate().is_err() { d.barriers.pop(); d.surface_areas.clear(); }
+        assert!(d.water_bodies.len() >= 2, "seed {seed}");
+        let prepared = PreparedMap::new(d.clone()).unwrap();
+        for cell in d.cells() {
+            assert_bound(&d, cell, grids.get(&cell));
+            let cost = prepared.estimate(cell, 500_000).unwrap();
+            let chunk = prepared.generate(cell, grids.get(&cell), 500_000).unwrap();
+            assert!(chunk.triangles.len() as u64 <= cost.triangles, "seed {seed} {cell:?}");
+            sunk += chunk.triangles.iter().filter(|t| t.surface == Surface::Dirt).count();
+            assert!(support::basins::heights(&chunk).values().all(|h| h.len() == 1), "seed {seed} {cell:?} crack");
+            // No T-junction: every interior plan edge has two faces.
+            assert!(support::basins::open_edges(&chunk, &d.cell_bounds(cell).unwrap()).is_empty(), "seed {seed} {cell:?} T-junction");
+        }
+    }
+    assert!(sunk > 0);
 }

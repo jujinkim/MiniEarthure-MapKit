@@ -156,6 +156,14 @@ earlier documents keep their bytes, world hashes and generated geometry.
   (`terrain`, contact class 1): render material, contact surface and distant
   colour. Roads and `surface_areas` keep precedence; the environment
   `ground_color` tint applies to grass only.
+- Terrain under water on real-city OSM maps (an `osm-extract-v1` 1:D notice, no
+  assembled track): generated ground inside water sinks into an earth basin whose
+  faces are `dirt` (IDs, contact class and spawnability unchanged), moving from
+  the shore over `clamp(3 · depth, 90, 240)` cm towards the body bottom, at most
+  depth + 8 cm under the terrain (terrain below the bottom rises to it). Roads,
+  tunnels, barriers, buildings and authored placements keep the terrain under and
+  beside them; other maps generate as before. No document field changes
+  ([WATER](../docs/WATER.md#real-city-earth-basins)).
 - `MapDocument.barriers`: `{id, kind: hedge|fence|wall, line: [[x,y],...],
   height_cm 10..1000, thickness_cm 5..100}`; 2..4096 in-bounds points, consecutive
   points distinct, a repeated first point closes a perimeter. IDs share the object

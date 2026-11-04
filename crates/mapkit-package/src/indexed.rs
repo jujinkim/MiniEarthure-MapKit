@@ -378,7 +378,9 @@ impl<R: Read + Seek> IndexedReader<R> {
             + structured * 40
             + 32 * 1024 * 1024
             + (payloads.len() as u64 + 1) * 4096
-            + mapkit_core::PREPARATION_CACHE_BYTES;
+            + mapkit_core::PREPARATION_CACHE_BYTES
+            // Basins of the region's water, prepared with its source.
+            + mapkit_core::water::basin_reserve_bytes(self.index.records[source].size);
         ReadCost {
             retained_memory_bytes: retained,
             validation_peak_bytes: retained
@@ -995,6 +997,9 @@ pub fn pack_source(
         return Err(error("E_REFERENCE", "source inventory mismatch"));
     }
     validate_course_files(&d, &files)?;
+    // The real-city water basins of the whole map and of every regional source
+    // must build, so no region prepares where the whole map would fail.
+    mapkit_core::water::Basins::new(&d)?;
     validate_assets(&d, &files)?;
     validate_heightmaps(&d, &files)?;
     crate::track_environment::validate(&d,&files)?;
@@ -1065,6 +1070,11 @@ pub fn pack_source(
         let source = region_source(&d, cells)?;
         // Region validation has all existing geometry/ownership/work limits.
         source.validate_source()?;
+        if mapkit_core::water::basins_apply(&source) {
+            let mut prepared = source.clone();
+            prepared.normalize();
+            mapkit_core::water::Basins::new(&prepared)?;
+        }
         let bytes = canonical(&source)?;
         if bytes.len() as u64 > MAX_DOCUMENT_BYTES {
             return Err(error("E_LIMIT", "regional document exceeds profile"));

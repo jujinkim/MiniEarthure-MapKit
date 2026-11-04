@@ -25,6 +25,9 @@ uniform int water_kind = 0; // 1 flowing, 2 still; authored vertex colours encod
 uniform bool vegetation = false;
 uniform float wind_strength = 0.5;
 uniform bool terrain_surface = false;
+// Highest water surface of the cell in mesh space (set per earth mesh by the
+// chunk renderer); below about 15 cm above it the earth reads wet.
+instance uniform float shore_level_m = -100000.0;
 // Grass ground: broad lush/dry patches, mown clumps and fine blades in world space.
 uniform bool lawn = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
@@ -67,6 +70,7 @@ uniform bool signs_enabled = false;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float seed;
+varying float wet_height;
 // Generated building solids carry UV2 (seed, 1000 + base metres); -1 elsewhere.
 // Every vertex of a solid holds the same values, so they are not interpolated:
 // interpolation error would make per-pixel choices (signs, lit windows) flicker.
@@ -155,6 +159,7 @@ void vertex() {
         world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz;
     }
     world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
+    wet_height = VERTEX.y - shore_level_m;
     seed = distant ? UV.x : (INSTANCE_CUSTOM.a > 0.5 ? INSTANCE_CUSTOM.x : building_seed);
     solid_seed = !distant && facade_kind>0 && UV2.y>0.5 ? UV2.x : -1.0;
     solid_base = solid_seed>=0.0 ? (MODEL_MATRIX * vec4(0.0,UV2.y-1000.0,0.0,1.0)).y : 0.0;
@@ -470,6 +475,13 @@ void fragment() {
         float shore=1.0-smoothstep(0.15,0.85,world_position.y);
         color=mix(color,vec3(0.42,0.39,0.29),shore*0.6);
     }
+    // Wet bank: earth under and just above the water line darkens and turns
+    // glossy (near ground only; dry earth keeps its look).
+    float wet_bank = 0.0;
+    if(terrain_surface && !distant && shore_level_m > -10000.0) {
+        wet_bank = 1.0-smoothstep(0.03,0.16,wet_height);
+        color = mix(color,color*vec3(0.56,0.53,0.50),wet_bank);
+    }
     float facing_up = smoothstep(0.35,0.9,world_normal.y);
     float snow_cover = weather.y * facing_up;
     color *= 1.0 - weather.x*0.22;
@@ -478,6 +490,7 @@ void fragment() {
     ALBEDO = color;
     ROUGHNESS = mix(surface_roughness,0.28,weather.x*facing_up);
     ROUGHNESS = mix(ROUGHNESS,0.92,snow_cover);
+    ROUGHNESS = mix(ROUGHNESS,0.34,wet_bank*(1.0-snow_cover));
     float puddle = 0.0;
     if(!distant && effect_weight>0.0 && weather.x>0.2) puddle=puddle_mask(world_position,world_normal.y,weather.x,weather.y)*effect_weight;
     ALBEDO *= 1.0-puddle*0.10;

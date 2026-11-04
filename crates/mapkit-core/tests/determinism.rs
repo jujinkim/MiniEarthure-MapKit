@@ -1,4 +1,5 @@
 mod support {
+    pub mod basins;
     pub mod determinism;
 }
 use mapkit_core::*;
@@ -221,4 +222,32 @@ fn oblique_sloped_road_seams_keep_coverage_height_and_unique_faces() {
         }
     }
     assert!(samples > 1500, "nonempty cm-by-cm bridge seams: {samples}");
+}
+
+/// Basins are prepared once per document on first use. Threads racing to build
+/// them, estimate-first or generate-first orders and repeated preparation all
+/// produce the ground that unprepared generation produces.
+#[test]
+fn prepared_basins_are_identical_across_threads_and_call_orders() {
+    let (d, grids) = support::basins::sloped(true);
+    let expected: Vec<_> = d.cells().into_iter()
+        .map(|cell| generate(support::basins::input(&d, &grids, cell)).unwrap()).collect();
+    for estimate_first in [false, true] {
+        let prepared = PreparedMap::new(d.clone()).unwrap();
+        if estimate_first {
+            for cell in d.cells() { prepared.estimate(cell, 500_000).unwrap(); }
+        }
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..4).map(|k| {
+                let (prepared, d, grids) = (&prepared, &d, &grids);
+                scope.spawn(move || d.cells().into_iter().cycle().skip(k).take(4)
+                    .map(|cell| (cell, prepared.generate(cell, grids.get(&cell), 500_000).unwrap())).collect::<Vec<_>>())
+            }).collect();
+            for handle in handles {
+                for (cell, chunk) in handle.join().unwrap() {
+                    assert_eq!(chunk, expected[cell.x as usize], "{cell:?}");
+                }
+            }
+        });
+    }
 }

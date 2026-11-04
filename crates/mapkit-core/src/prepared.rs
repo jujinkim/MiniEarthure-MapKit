@@ -24,6 +24,14 @@ pub struct PreparedMap {
     region: Option<CellRegion>,
 }
 
+/// Placements plus the real-city water basins, built here so a map whose
+/// basins exceed their allowance fails to prepare (fail closed) instead of
+/// failing every cell later.
+fn prepare_placements(d: &MapDocument) -> Result<crate::placement::PreparedPlacements> {
+    let placements = crate::placement::PreparedPlacements::new(d)?;
+    placements.basins(d).map_err(|mut e| { e.message = format!("water basins: {}", e.message); e })?;
+    Ok(placements)
+}
 impl PreparedMap {
     pub fn new(mut document: MapDocument) -> Result<Self> {
         document.normalize();
@@ -31,7 +39,7 @@ impl PreparedMap {
         Ok(Self {
             assets_by_id: document.assets.iter().enumerate().map(|(i,a)|(a.id.clone(),i)).collect(),
             heights_by_cell: document.heightmaps.iter().enumerate().map(|(i,h)|(h.cell,i)).collect(),
-            placements: crate::placement::PreparedPlacements::new(&document)?,
+            placements: prepare_placements(&document)?,
             document,
             costs: RwLock::new(BTreeMap::new()),
             region: None,
@@ -46,7 +54,7 @@ impl PreparedMap {
         Ok(Self {
             assets_by_id: document.assets.iter().enumerate().map(|(i,a)|(a.id.clone(),i)).collect(),
             heights_by_cell: document.heightmaps.iter().enumerate().map(|(i,h)|(h.cell,i)).collect(),
-            placements: crate::placement::PreparedPlacements::new(&document)?, document, costs: RwLock::new(BTreeMap::new()), region: Some(region) })
+            placements: prepare_placements(&document)?, document, costs: RwLock::new(BTreeMap::new()), region: Some(region) })
     }
     /// Editing must create a new validated snapshot; no mutable source alias exists.
     pub fn asset(&self, id: &str) -> Option<&Asset> {

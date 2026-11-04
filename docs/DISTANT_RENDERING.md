@@ -91,7 +91,9 @@ can count cell resources independently of scene-generated node names.
   limit. Workspace and triangle bounds are charged before allocation.
 - Packed display kind byte: 0 solids, 1 small-prop tail, 2 water. The two UV
   channels carry flow for water and light identity/role for solids. Distant water
-  uses the same quality-selected shader as near water (depth, refraction, flow) and
-  keeps clipped shorelines/islands without physical triangles. Batches split on kind
-  and share at most two job materials within the fixed 64 KiB far overhead.
+  uses the same quality-selected shader as near water (depth tint, shoreline foam
+  band, refraction, flow) and keeps clipped shorelines/islands without physical
+  triangles; distant ground carries the same real-city earth basins as near
+  cells. Batches split on kind and share at most two job materials within the
+  fixed 64 KiB far overhead.
 - Terrain uses the same broad colour variation in near and distant shaders.

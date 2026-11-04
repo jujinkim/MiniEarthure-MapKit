@@ -228,14 +228,124 @@ pub(crate) fn hull(mut points: Vec<Vertex>) -> Vec<Vertex> {
 /// Where a tile's arrangement faces go: emitted as geometry, or only counted
 /// (the cell estimate's pre-run of the same arrangement, without triangulation).
 pub(crate) enum TileSink<'b> {
-    Emit { b: &'b mut Builder, ground: Surface },
+    Emit { b: &'b mut Builder, ground: Surface, basin: Option<&'b BasinEmit<'b>> },
     Count(&'b mut u64),
 }
+/// Emission-only basin heights of one cell: the document's basins, their own
+/// work counter (the road work limit) and vertex and tile-edge caches cleared
+/// per tile.
+pub(crate) struct BasinEmit<'a> {
+    basins: &'a crate::water::Basins,
+    work: std::cell::Cell<usize>,
+    cache: std::cell::RefCell<BTreeMap<(Point, i64), i64>>,
+    edges: std::cell::RefCell<BTreeMap<(Point, Point), EdgeAnchors>>,
+}
+/// (position along a tile edge, sunk height) of each anchor, in edge order.
+type EdgeAnchors = Vec<(i64, i64)>;
+/// `n / d` rounded half away from zero (`d != 0`).
+fn div_round(n: i128, d: i128) -> i64 {
+    let (n, d) = if d < 0 { (-n, -d) } else { (n, d) };
+    (if n >= 0 { (2 * n + d) / (2 * d) } else { -((-2 * n + d) / (2 * d)) }) as i64
+}
+impl<'a> BasinEmit<'a> {
+    pub(crate) fn new(basins: &'a crate::water::Basins) -> Self {
+        Self { basins, work: Default::default(), cache: Default::default(), edges: Default::default() }
+    }
+    pub(crate) fn clear(&self) {
+        self.cache.borrow_mut().clear();
+        self.edges.borrow_mut().clear();
+    }
+    /// Sunk height of a ground vertex of the tile with corners `tile`. Inside a
+    /// tile it is [`crate::water::Basins::height`]. On a tile edge (not a corner)
+    /// a bed vertex follows the edge alone: linear between consecutive anchors,
+    /// the edge's corners and every basin line crossing, each sunk on the edge's
+    /// terrain. Both tiles of an edge (and both cells of a cell edge) compute the
+    /// same anchors and arrange every basin line, so a vertex only one of them
+    /// has (a tile-local plane crossing, a split part's corner) lies on the
+    /// other's straight edge instead of opening a gap.
+    fn vertex_height(&self, p: Point, g: i64, tile: &[Vertex; 4]) -> Result<i64> {
+        let lo = [0, 2].map(|a| tile.iter().map(|v| v[a]).min().unwrap());
+        let hi = [0, 2].map(|a| tile.iter().map(|v| v[a]).max().unwrap());
+        let side = |a: usize| p[a] == lo[a] || p[a] == hi[a];
+        let fixed = match (side(0), side(1)) { (true, false) => 0, (false, true) => 1, _ => return self.height(p, g) };
+        if !self.bed(p)? { return Ok(g); }
+        let along = 1 - fixed;
+        let corner = |s: i64| { let mut c = p; c[along] = s; c };
+        let (c0, c1) = (corner(lo[along]), corner(hi[along]));
+        let terrain = |c: Point| tile.iter().find(|v| [v[0], v[2]] == c).map(|v| v[1]);
+        let (Some(g0), Some(g1)) = (terrain(c0), terrain(c1)) else { return self.height(p, g) };
+        let cached = self.edges.borrow().get(&(c0, c1)).cloned();
+        let anchors = match cached {
+            Some(anchors) => anchors,
+            None => {
+                let anchors = self.anchors(c0, g0, c1, g1, along)?;
+                self.edges.borrow_mut().insert((c0, c1), anchors.clone());
+                anchors
+            }
+        };
+        let s = p[along];
+        let k = anchors.partition_point(|a| a.0 < s);
+        if anchors[k].0 == s { return Ok(anchors[k].1); }
+        let ((s0, h0), (s1, h1)) = (anchors[k - 1], anchors[k]);
+        Ok(h0 + div_round((h1 - h0) as i128 * (s - s0) as i128, (s1 - s0) as i128))
+    }
+    /// Anchors of the tile edge `c0 → c1` (increasing along axis `along`): its
+    /// corners and the rounded crossings of every basin line, with their sunk
+    /// heights on the edge's linear terrain.
+    fn anchors(&self, c0: Point, g0: i64, c1: Point, g1: i64, along: usize) -> Result<Vec<(i64, i64)>> {
+        let fixed = 1 - along;
+        let x = c0[fixed];
+        let (start, end) = (c0[along], c1[along]);
+        let lines = self.charged(|work| self.basins.lines_in(&Bounds { min: c0, max: c1 }, work))?;
+        let mut at = vec![start, end];
+        for (a, b) in lines {
+            if a[fixed] == b[fixed] {
+                if a[fixed] == x { at.extend([a[along], b[along]]); }
+                continue;
+            }
+            if x < a[fixed].min(b[fixed]) || x > a[fixed].max(b[fixed]) { continue; }
+            at.push(a[along] + div_round((x - a[fixed]) as i128 * (b[along] - a[along]) as i128, (b[fixed] - a[fixed]) as i128));
+        }
+        at.retain(|s| (start..=end).contains(s));
+        at.sort_unstable();
+        at.dedup();
+        at.into_iter().map(|s| {
+            let mut q = c0;
+            q[along] = s;
+            let g = g0 + div_round((g1 - g0) as i128 * (s - start) as i128, (end - start) as i128);
+            Ok((s, self.height(q, g)?))
+        }).collect()
+    }
+    /// Runs one basin query on a fresh counter, then charges its work to this
+    /// cell's cumulative basin counter under the road work limit.
+    fn charged<T>(&self, f: impl FnOnce(&mut usize) -> Result<T>) -> Result<T> {
+        let mut spent = 0;
+        let result = f(&mut spent)?;
+        let mut total = self.work.get();
+        tick(&mut total, spent)?;
+        self.work.set(total);
+        Ok(result)
+    }
+    fn height(&self, p: Point, g: i64) -> Result<i64> {
+        if let Some(&h) = self.cache.borrow().get(&(p, g)) {
+            return Ok(h);
+        }
+        let h = self.charged(|work| self.basins.height(p, g, work))?;
+        self.cache.borrow_mut().insert((p, g), h);
+        Ok(h)
+    }
+    fn bed(&self, p: Point) -> Result<bool> {
+        self.charged(|work| self.basins.bed(p, work))
+    }
+}
 // The current arrangement cuts each terrain tile once, before assigning surface identities.
+#[allow(clippy::too_many_arguments)]
 fn ground_tile(
     v: [Vertex; 4],
     patches: &[&Patch],
     paint: &[&SurfaceArea],
+    basin: &[(Point, Point)],
+    basins: &crate::water::Basins,
     track: &[[Vertex;3]],
     cell_bounds: &Bounds,
     sink: &mut TileSink,
@@ -248,7 +358,7 @@ fn ground_tile(
     if (0..2).any(|i| bounds.min[i] >= bounds.max[i]) {
         return Ok(());
     }
-    ground_tile_part(v, bounds, patches, paint, track, sink, work, 0)
+    ground_tile_part(v, bounds, patches, paint, basin, basins, track, sink, work, 0)
 }
 
 /// Upper bound of the ground triangles of a cell without a heightmap or assembled
@@ -260,7 +370,10 @@ fn ground_tile(
 /// Ground faces of the cell's terrain tiles (`spacing`, `side` samples per
 /// edge; one tile on a flat cell). Terrain heights never change the plan-view
 /// arrangement, so heightmap cells count on the flat base.
-pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch], paint: Option<&crate::bounds_index::BoundsIndex>, spacing: i64, side: usize) -> Result<u64> {
+/// `basins` is the prepared [`crate::water::Basins`] of `d`; otherwise built here.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch], paint: Option<&crate::bounds_index::BoundsIndex>,
+    basins: Option<&crate::water::Basins>, spacing: i64, side: usize) -> Result<u64> {
     let fitter = crate::road_design::Fitter::new(d, bounds);
     let height = |x: usize, y: usize| fitter.height(
         [bounds.min[0]+x as i64*spacing,bounds.min[1]+y as i64*spacing],
@@ -273,6 +386,8 @@ pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch
         .map(|p| crate::bounds_index::bounds(&p.v.map(xy))).collect::<Vec<_>>());
     let owned;
     let paint_index = match paint { Some(index) => index, None => { owned = paint_index(d); &owned } };
+    let owned_basins;
+    let basins = match basins { Some(b) => b, None => { owned_basins = crate::water::Basins::new(d)?; &owned_basins } };
     let mut count = 0u64;
     for y in 0..side - 1 {
         for x in 0..side - 1 {
@@ -289,7 +404,8 @@ pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch
                 .map(|i| &patches[i]).collect();
             let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
                 .map(|i| &d.surface_areas[i]).collect();
-            ground_tile(v, &local_patches, &local_paint, &[], bounds, &mut TileSink::Count(&mut count), &mut work)?;
+            let local_basin = basins.lines_in(&tile_bounds, &mut work)?;
+            ground_tile(v, &local_patches, &local_paint, &local_basin, basins, &[], bounds, &mut TileSink::Count(&mut count), &mut work)?;
         }
     }
     Ok(count)
@@ -300,8 +416,8 @@ pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch
 // planes; subdivision never bilinearly invents a different slope or elevation.
 #[allow(clippy::too_many_arguments)]
 fn ground_tile_part(
-    v: [Vertex;4], bounds: Bounds, patches: &[&Patch], paint: &[&SurfaceArea],
-    track: &[[Vertex;3]], sink: &mut TileSink, work: &mut usize, depth: u8,
+    v: [Vertex;4], bounds: Bounds, patches: &[&Patch], paint: &[&SurfaceArea], basin: &[(Point, Point)],
+    basins: &crate::water::Basins, track: &[[Vertex;3]], sink: &mut TileSink, work: &mut usize, depth: u8,
 ) -> Result<()> {
     tick(
         work,
@@ -309,7 +425,8 @@ fn ground_tile_part(
             + paint
                 .iter()
                 .map(|a| a.polygon.len())
-                .sum::<usize>(),
+                .sum::<usize>()
+            + basin.len(),
     )?;
     let terrain = [[v[0], v[1], v[2]], [v[0], v[2], v[3]]];
     let nearby: Vec<_> = patches.iter().copied().filter(|p| hit(&p.v, &bounds, 2)).collect();
@@ -414,10 +531,49 @@ fn ground_tile_part(
             lines.push((area.polygon[i], area.polygon[(i + 1) % area.polygon.len()]));
         }
     }
+    // Basin shores and bank lines partition the plan view like paint: Count and
+    // Emit arrange identical lines; only Emit's vertex heights sink.
+    let basin: Vec<(Point, Point)> = basin.iter().copied()
+        .filter(|(a, b)| (0..2).all(|i| a[i].min(b[i]) - 2 <= bounds.max[i] && a[i].max(b[i]) + 2 >= bounds.min[i]))
+        .collect();
+    lines.extend(basin.iter().copied());
+    // A line ending exactly on this part's boundary leaves no vertex here (its
+    // clip is a point) while the neighbour gets one. Sunk heights are not linear
+    // along the boundary, so where basins may sink a vertex or basin lines end,
+    // every such end (road plan, paint or basin line) also adds the boundary
+    // piece to the corner.
+    if !basin.is_empty() || basins.touches(&bounds)? {
+        let ends: Vec<Point> = lines.iter().flat_map(|&(a, b)| [a, b]).filter(|p| {
+            (0..2).all(|i| bounds.min[i] <= p[i] && p[i] <= bounds.max[i])
+                && !(0..2).all(|i| p[i] == bounds.min[i] || p[i] == bounds.max[i])
+        }).collect();
+        for p in ends {
+            for axis in 0..2 {
+                if p[axis] == bounds.min[axis] || p[axis] == bounds.max[axis] {
+                    let mut corner = p;
+                    corner[1 - axis] = bounds.min[1 - axis];
+                    if corner != p { lines.push((corner, p)); }
+                }
+            }
+        }
+    }
     let arranged = crate::road_arrangement::subdivide(&bounds, &lines, work);
     // A face the triangulator cannot accept (many disjoint islands in one tile)
     // splits exactly like an over-dense arrangement; other tiles are unchanged.
-    let dense = match &arranged {
+    // Basin lines can leave small holes that the hole bridging cannot join;
+    // with basin lines present such a face splits like an over-dense one (Count
+    // and Emit decide it identically, before either sink).
+    let unbridgeable = |rings: &Vec<Vec<Point>>, work: &mut usize| -> Result<bool> {
+        Ok(!basin.is_empty() && rings.len() > 1 && crate::road_arrangement::triangulable(rings)
+            && crate::road_arrangement::triangulate(rings, work).is_err_and(|e| e.code == "E_GEOMETRY"))
+    };
+    let mut blocked = false;
+    if let Ok(shapes) = &arranged {
+        for rings in shapes {
+            if unbridgeable(rings, work)? { blocked = true; break; }
+        }
+    }
+    let dense = blocked || match &arranged {
         Ok(shapes) => shapes.iter().any(|rings| !crate::road_arrangement::triangulable(rings)),
         Err(e) => e.code == "E_BUDGET"
             && matches!(e.message.as_str(), "ground tile arrangement edge limit" | "ground tile intersection limit"),
@@ -433,7 +589,7 @@ fn ground_tile_part(
                     min:[if x==0 {bounds.min[0]} else {mid[0]},if y==0 {bounds.min[1]} else {mid[1]}],
                     max:[if x==0 {mid[0]} else {bounds.max[0]},if y==0 {mid[1]} else {bounds.max[1]}],
                 };
-                ground_tile_part(v,part,&nearby,&paint,track,sink,work,depth+1)?;
+                ground_tile_part(v,part,&nearby,&paint,&basin,basins,track,sink,work,depth+1)?;
             }}
             return Ok(());
         }
@@ -441,7 +597,7 @@ fn ground_tile_part(
         Ok(shapes) => shapes,
         Err(e) => return Err(e),
     };
-    let (b, ground) = match sink {
+    let (b, ground, basin) = match sink {
         TileSink::Count(count) => {
             for rings in &shapes {
                 let k = rings.iter().map(Vec::len).sum::<usize>() as u64;
@@ -453,7 +609,10 @@ fn ground_tile_part(
             }
             return Ok(());
         }
-        TileSink::Emit { b, ground } => (&mut **b, *ground),
+        TileSink::Emit { b, ground, basin } => {
+            let near = match basin { Some(e) => e.basins.touches(&bounds)?, None => false };
+            (&mut **b, *ground, basin.filter(|_| near))
+        }
     };
     // Centroid classification needs only patches whose integer bounds contain
     // the centroid. Preserve source priority by the index's ordered results.
@@ -564,8 +723,14 @@ fn ground_tile_part(
                 && (on_plane(face,center_point)[1]-on_plane(&t,center_point)[1]).abs()<=50) {
                 selected=None;
             }
-            if let Some((surface, id)) = selected {
-                b.triangle(triangle.map(|p|designed.map_or_else(||height(p),|plane|designed_plane(&plane,[p[0],0,p[1]]))), surface, id, true)?;
+            if let Some((mut surface, id)) = selected {
+                let mut vertices = triangle.map(|p|designed.map_or_else(||height(p),|plane|designed_plane(&plane,[p[0],0,p[1]])));
+                // Ground (never road) faces sink into a basin; bed faces are earth.
+                if let (false, Some(basin)) = (road, basin) {
+                    for p in &mut vertices { p[1] = basin.vertex_height([p[0], p[2]], p[1], &v)?; }
+                    if basin.bed([center[0].div_euclid(3), center[1].div_euclid(3)])? { surface = Surface::Dirt; }
+                }
+                b.triangle(vertices, surface, id, true)?;
             }
         }
     }
@@ -584,8 +749,12 @@ pub(crate) fn generate(
     b: &mut Builder,
     paint: Option<&crate::bounds_index::BoundsIndex>,
     junctions: Option<&crate::road_plan::SharedJunctions>,
+    basins: Option<&crate::water::Basins>,
 ) -> Result<()> {
     let (patches, walls) = crate::road_plan::surface_plan(d, bounds, junctions)?;
+    let owned_basins;
+    let basins = match basins { Some(b) => b, None => { owned_basins = crate::water::Basins::new(d)?; &owned_basins } };
+    let basin_emit = BasinEmit::new(basins);
     let (source_spacing,source_side)=(spacing,side);
     let spacing=if d.assembled_track.as_ref().is_some_and(|a|a.terrain_integration()) {spacing.min(200)} else {spacing};
     let side=d.cell_size_cm as usize/spacing as usize+1;
@@ -624,7 +793,10 @@ pub(crate) fn generate(
                 .map(|i| &patches[i]).collect();
             let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
                 .map(|i| &d.surface_areas[i]).collect();
-            ground_tile(v, &local_patches, &local_paint, &track, &cell_bounds, &mut TileSink::Emit { b, ground: ground_surface }, &mut work)?;
+            let local_basin = basins.lines_in(&tile_bounds, &mut work)?;
+            basin_emit.clear();
+            ground_tile(v, &local_patches, &local_paint, &local_basin, basins, &track, &cell_bounds,
+                &mut TileSink::Emit { b, ground: ground_surface, basin: basins.is_active().then_some(&basin_emit) }, &mut work)?;
         }
     }
     for patch in &patches {

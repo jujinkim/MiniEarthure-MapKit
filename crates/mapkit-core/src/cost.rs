@@ -128,7 +128,8 @@ pub(crate) fn estimate_validated(
     if flat {
         let (patches, walls) = plan.as_ref().unwrap();
         let (tile, tiles) = if descriptor.is_some() { (spacing, side as usize) } else { (d.cell_size_cm as i64, 2) };
-        ground = crate::roads::estimate_ground(d, &area, patches, prepared.map(|p| p.paint(d)), tile, tiles)?;
+        let basins = prepared.map(|p| p.basins(d)).transpose()?;
+        ground = crate::roads::estimate_ground(d, &area, patches, prepared.map(|p| p.paint(d)), basins, tile, tiles)?;
         add(ground, 7);
         // Structural decks (plus a tunnel ceiling) and portal walls are emitted
         // whole and clipped to the cell afterwards.

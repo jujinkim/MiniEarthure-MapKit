@@ -415,8 +415,9 @@ fn generate_validated(
         }
     }
     if d.assembled_track.as_ref().is_none_or(|a| a.terrain_integration()) {
+        let basins = placements.map(|p| p.basins(d)).transpose()?;
         crate::roads::generate(d, &bounds, input.heightgrid, spacing, side, &mut b, placements.map(|p| p.paint(d)),
-            placements.map(|p| &p.junctions)).map_err(|mut e| {
+            placements.map(|p| &p.junctions), basins).map_err(|mut e| {
             e.message = format!("ground surfaces: {}", e.message); e
         })?;
     }

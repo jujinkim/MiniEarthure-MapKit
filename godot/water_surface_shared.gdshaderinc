@@ -23,21 +23,25 @@ void fragment() {
     vec2 wave = vec2(cos(p.x*2.4+TIME*.7), sin(p.y*2.8-TIME*.6))*.028;
     if(quality_level>0) wave += vec2(sin(p.y*5.1+p.x*1.3-TIME),cos(p.x*4.7-p.y*1.8+TIME*.9))*.010;
     NORMAL = normalize(NORMAL+(VIEW_MATRIX*vec4(wave.x,0.0,wave.y,0.0)).xyz);
-    float deep = 1.0-exp(-thickness*.6);
-    vec3 color = mix(vec3(.18,.36,.34),vec3(.045,.16,.20),deep);
-    float fresnel = pow(1.0-clamp(dot(NORMAL,VIEW),0.0,1.0),5.0);
+    // Real-city water lies over an earth basin: shallow water reads as silt over
+    // the bed, deeper water turns teal within about a metre of view depth.
+    float deep = 1.0-exp(-thickness*2.2);
+    vec3 color = mix(vec3(.30,.30,.22),vec3(.045,.16,.20),deep);
+    // A soft fresnel rim instead of a hard sky edge.
+    float fresnel = pow(1.0-clamp(dot(NORMAL,VIEW),0.0,1.0),4.0);
     SPECULAR = .55;
     ROUGHNESS = .24;
     METALLIC = .12;
-    color = mix(color,vec3(.39,.48,.54),fresnel*.4);
+    color = mix(color,vec3(.42,.50,.55),fresnel*.45);
 #ifdef WATER_REFRACTION
     vec2 offset = wave*.018*smoothstep(.05,.8,thickness);
     vec2 refracted = clamp(SCREEN_UV+offset,vec2(.001),vec2(.999));
     // Foreground silhouettes must not bleed into the water.
     if(scene_depth(refracted, INV_PROJECTION_MATRIX)+VERTEX.z>0.0) color = mix(textureLod(screen_texture,refracted,0.0).rgb,color,.82);
 #endif
-    float foam = 1.0-smoothstep(.03,.38,thickness);
+    // Foam only in a narrow band where the surface meets the bank.
+    float foam = 1.0-smoothstep(.01,.10,thickness);
     if(quality_level>0) foam *= .6+.4*sin(p.x*12.0+sin(p.y*9.0)+TIME*1.6);
-    ALBEDO = mix(color,vec3(.76,.81,.76),foam*.55);
-    ALPHA = mix(.58,.92,deep)+fresnel*.05;
+    ALBEDO = mix(color,vec3(.76,.81,.76),foam*.5);
+    ALPHA = clamp(mix(.42,.90,deep)+fresnel*.08,0.0,1.0);
 }
