@@ -170,3 +170,58 @@ fn record_palettes_follow_the_shared_table_and_seed_bits() {
         assert_eq!(rows.as_array().unwrap().len(), 8, "eight entries per palette");
     }
 }
+
+#[test]
+fn city_trees_become_bounded_silhouettes() {
+    use mapkit_core::{MapDocument, Zone, ZoneKind, ZoneTree};
+    let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+    d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear();
+    d.bounds.max = [25600, 25600]; d.cell_size_cm = 12800;
+    for (index, kind) in [ZoneKind::Forest, ZoneKind::Orchard].into_iter().enumerate() {
+        let x = 1000 + index as i64 * 12000;
+        d.zones.push(Zone { id: format!("park-{index}"), polygon: vec![[x, 1000], [x + 11000, 1000], [x + 11000, 23000], [x, 23000]],
+            kind, spacing_cm: 700, density_per_mille: 750, exclusions: vec![],
+            tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: 120, clearance_cm: 30 }) });
+    }
+    let p = read_bytes(&pack_bytes(d, Default::default()).unwrap()).unwrap();
+    let mut trees = 0;
+    for cell in p.document.cells() {
+        let chunk = p.generate(cell, 500_000).unwrap();
+        let count = chunk.objects.iter().filter(|o| o.asset_id == "builtin:city_tree").count();
+        trees += count;
+        let far = p.generate_distant(cell).unwrap();
+        let bound = p.distant_triangle_bound(cell).unwrap();
+        assert!(far.vertices.len() as u64 <= bound * 3, "{cell:?}: {} > {bound}", far.vertices.len() / 3);
+        // The 12-triangle collision trunk is omitted; each tree adds one
+        // 24-triangle silhouette, which the trunk and the per-object allowance
+        // of the bound cover.
+        for tree in chunk.objects.iter().filter(|o| o.asset_id == "builtin:city_tree") {
+            assert_eq!(chunk.triangles.iter().filter(|t| t.object_id == tree.id).count(), 12, "{}", tree.id);
+        }
+        let solids = chunk.triangles.iter().filter(|t| !chunk.objects.iter().any(|o| o.id == t.object_id)).count();
+        assert_eq!(far.vertices.len() / 3, solids + count * 24, "{cell:?}");
+    }
+    assert!(trees > 100, "fixture zones plant trees: {trees}");
+}
+
+/// `MAPKIT_DISTANT_BOUND_MEMAP=<package> cargo test -p mapkit-package --test distant -- --ignored`
+/// checks every cell of a real package: the distant mesh stays within its
+/// admission bound (city-tree silhouettes included).
+#[test]
+#[ignore = "needs a local package path"]
+fn real_package_distant_meshes_stay_within_their_bounds() {
+    let path = std::env::var("MAPKIT_DISTANT_BOUND_MEMAP").expect("MAPKIT_DISTANT_BOUND_MEMAP");
+    let p = read_bytes(&std::fs::read(path).unwrap()).unwrap();
+    let (mut actual, mut bound, mut trees, mut tightest) = (0u64, 0u64, 0usize, f64::MAX);
+    for cell in p.document.cells() {
+        let far = p.generate_distant(cell).unwrap();
+        let limit = p.distant_triangle_bound(cell).unwrap();
+        let triangles = far.vertices.len() as u64 / 3;
+        assert!(triangles <= limit, "{cell:?}: {triangles} > {limit}");
+        actual += triangles;
+        bound += limit;
+        if limit > 0 { tightest = tightest.min((limit - triangles) as f64 / limit as f64); }
+        trees += p.generate(cell, 500_000).map_or(0, |c| c.objects.iter().filter(|o| o.asset_id == "builtin:city_tree").count());
+    }
+    println!("cells {} far triangles {actual} bound {bound} city trees {trees} smallest headroom {:.1}%", p.document.cells().len(), tightest * 100.);
+}

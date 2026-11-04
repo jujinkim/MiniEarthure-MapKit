@@ -366,6 +366,63 @@ def facade_textures(destination):
             target.mkdir(exist_ok=True)
             image.resize((resolution,resolution),Image.Resampling.LANCZOS).save(target/(kind+'.png'),compress_level=9)
 
+# Leaf cluster atlas for the display-only vegetation cards (vegetation_meshes.gd):
+# 2x2 cells of 128px, each one twig cluster of overlapping pointed leaves filling
+# an irregular disc. Data, not colour: R leaf luminance (opaque mean 0.65), G
+# yellowing 0..1, B 0, A coverage. Transparent texels carry the mean leaf value so
+# mipmaps never darken card edges. Supersampled 4x, so leaf edges are anti-aliased
+# in alpha; the shader tints, lights and alpha-tests it.
+LEAF_ATLAS='vegetation/leaf_atlas.png'
+
+def leaf_atlas(destination):
+    size=256;cell=128;ss=4;big=size*ss;span=cell*ss
+    lum=[0.0]*(big*big);yel=[0.0]*(big*big);cover=bytearray(big*big)
+    for index in range(4):
+        rng=random.Random(9100+index);ox=(index%2)*span;oy=(index//2)*span
+        cx=ox+span*.5;cy=oy+span*.5;leaves=64+index*4
+        lobes=[rng.uniform(.80,1.0) for _ in range(5)];turn=rng.uniform(0,math.tau)
+        for leaf in range(leaves):
+            # Leaves radiate from the cluster centre over an irregular disc
+            # (five soft lobes), inner leaves drawn first and shorter.
+            angle=rng.uniform(0,math.tau);t=(leaf+rng.random())/leaves
+            lobe=lobes[int(((angle+turn)%math.tau)/math.tau*5)%5]
+            reach=math.sqrt(t)*.34*lobe*span
+            bx=cx+math.cos(angle)*reach;by=cy+math.sin(angle)*reach
+            length=rng.uniform(.14,.20)*span*(.8+.35*t);width=length*rng.uniform(.36,.48)
+            tilt=angle+rng.uniform(-.8,.8);ca=math.cos(tilt);sa=math.sin(tilt)
+            tone=rng.uniform(.50,.88);yellow=max(0.0,rng.uniform(-1.2,1.0));ridge=rng.uniform(.80,.90)
+            r=int(length+2)
+            for py in range(max(oy+2,int(by-r)),min(oy+span-2,int(by+r))):
+                row=py*big
+                for px in range(max(ox+2,int(bx-r)),min(ox+span-2,int(bx+r))):
+                    u=(px-bx)*ca+(py-by)*sa;v=-(px-bx)*sa+(py-by)*ca
+                    t2=u/length
+                    if t2<0 or t2>1:continue
+                    # Pointed ovate outline, widest at 40% of the blade.
+                    half=width*.5*math.sin(math.pi*t2**.8)
+                    if abs(v)>half:continue
+                    k=row+px;edge=1.0-abs(v)/max(half,1e-3)
+                    lum[k]=tone*(.78+.22*min(1.0,edge*3))*(ridge if abs(v)<width*.035 else 1.0)*(.88+.12*t2)
+                    yel[k]=yellow;cover[k]=1
+    pixels=[];total=0.0;count=0;cells=[]
+    for y in range(size):
+        for x in range(size):
+            c=0;l=0.0;g=0.0
+            for dy in range(ss):
+                row=(y*ss+dy)*big+x*ss
+                for dx in range(ss):
+                    if cover[row+dx]:c+=1;l+=lum[row+dx];g+=yel[row+dx]
+            cells.append((c,l,g))
+            if c:total+=l/c;count+=1
+    mean=total/count
+    for c,l,g in cells:
+        a=c/(ss*ss)
+        light=(l/c)*.65/mean if c else .65
+        pixels.append((round(max(0,min(1,light))*255),round(max(0,min(1,g/c if c else 0))*255),0,round(a*255)))
+    image=Image.new('RGBA',(size,size));image.putdata(pixels)
+    target=destination/LEAF_ATLAS;target.parent.mkdir(parents=True,exist_ok=True)
+    image.save(target,compress_level=9)
+
 def create(destination):
     destination.mkdir(parents=True,exist_ok=False);(destination/'.gdignore').write_text('')
     (destination/'assets').mkdir();assets=[];hashes={}
@@ -376,7 +433,8 @@ def create(destination):
     (destination/'library.json').write_text(json.dumps(dict(version=1,assets=assets,sha256=hashes,license='MIT'),indent=2)+'\n')
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');p.add_argument('--racing',action='store_true');p.add_argument('--facade',action='store_true');a=p.parse_args()
-    if a.textures and a.facade:facade_textures(a.destination)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');p.add_argument('--racing',action='store_true');p.add_argument('--facade',action='store_true');p.add_argument('--leaves',action='store_true');a=p.parse_args()
+    if a.textures and a.leaves:leaf_atlas(a.destination)
+    elif a.textures and a.facade:facade_textures(a.destination)
     elif a.textures:textures(a.destination,a.racing)
     else:create(a.destination)

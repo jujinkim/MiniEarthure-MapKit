@@ -10,6 +10,11 @@ const CONTEXT_BYTES := ENVIRONMENT.MEMORY_BYTES
 # LOD indices overlap. Independent of asset content and material bindings.
 const TREE_CANOPY_KEY := "builtin:tree:canopy"
 const TREE_CANOPY_BYTES := 131072
+# Park vegetation meshes, materials and leaf atlas (vegetation_meshes.gd), one
+# set per cache shared by every cell's city trees, shrubs and grass tufts.
+const VEGETATION := preload("./vegetation_meshes.gd")
+const VEGETATION_KEY := "builtin:vegetation"
+const VEGETATION_BYTES := VEGETATION.SHARED_BYTES
 var reserve: Callable
 var limit_bytes := 128 * 1024 * 1024 # Shared resources; still charged to consumer admission.
 var entries: Dictionary = {}
@@ -111,6 +116,32 @@ func _claim(key: String, amount: int, stage: String) -> String:
 	if reserve.is_valid() and lease == null: return ""
 	entries[key] = {"pins": 1, "bytes": amount, "lease": lease, "template": null, "materials": {}, "stage":stage, "pending":[], "failed":false, "last_used": Time.get_ticks_msec()}
 	return key
+
+func claim_vegetation() -> String:
+	return _claim(VEGETATION_KEY,VEGETATION_BYTES,"vegetation")
+
+## One part (atlas, materials or one mesh) per admitted call.
+func prepare_vegetation(key: String) -> bool:
+	if closed or not entries.has(key): return true
+	var item: Dictionary = entries[key]
+	if item.stage == "done": return true
+	var started := Time.get_ticks_usec()
+	if not item.has("vegetation_job"):
+		# Materials read weather from the shared context when one exists.
+		item.vegetation_job = VEGETATION.begin(_environment if not _environment_pending else null)
+	var phase := "vegetation_"+str(VEGETATION.STEPS[mini(int(item.vegetation_job.step),VEGETATION.STEPS.size()-1)])
+	if VEGETATION.advance(item.vegetation_job,item.lease):
+		item.vegetation = item.vegetation_job.result
+		item.erase("vegetation_job")
+		item.stage = "done"
+	var elapsed := Time.get_ticks_usec()-started
+	preparation_usec[phase] = int(preparation_usec.get(phase,0))+elapsed
+	preparation_peak_usec[phase] = maxi(int(preparation_peak_usec.get(phase,0)),elapsed)
+	return item.stage == "done"
+
+func vegetation(key: String) -> Dictionary:
+	if closed or not entries.has(key) or entries[key].stage != "done": return {}
+	return entries[key].get("vegetation",{})
 
 static func tree_canopy_source() -> SphereMesh:
 	var shape := SphereMesh.new()
@@ -325,6 +356,8 @@ func _evict(key: String) -> void:
 	item.erase("styling")
 	item.erase("lod_job")
 	item.erase("mesh")
+	item.erase("vegetation")
+	item.erase("vegetation_job")
 	item.erase("occluder_arrays")
 	item.erase("light_binding")
 	item.erase("light_roles")

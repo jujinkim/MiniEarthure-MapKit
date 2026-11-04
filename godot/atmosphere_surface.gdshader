@@ -185,7 +185,8 @@ void fragment() {
     if(vertex_tinted && !distant) color *= COLOR.rgb;
     if(textured) color *= texture(albedo_texture,UV).rgb;
     float view_distance=length(VERTEX);
-    // Screen derivatives in uniform control flow, for the facade sign lookup.
+    // Screen derivatives in uniform control flow, for the facade sign lookup
+    // and the lawn relief fade.
     vec3 position_dx=dFdx(world_position);
     vec3 position_dy=dFdy(world_position);
     float effect_weight=surface_effect_weight(view_distance);
@@ -469,6 +470,20 @@ void fragment() {
             color*=mix(1.0,0.90+0.12*clumps+0.08*blades,effect_weight);
             float clover=smoothstep(0.78,0.92,lawn_noise(g*1.7+11.0));
             color=mix(color,color*vec3(0.82,0.94,0.80),clover*0.5*effect_weight);
+            // Lawn relief: the fine blade noise gradient tilts the normal a little
+            // near the camera and settles flat by 30 m, and wherever a pixel
+            // spans a third of the 11/m octave's period or more (grazing views
+            // from a car camera), so it never aliases into shimmer.
+            vec2 lawn_footprint=(abs(position_dx.xz)+abs(position_dy.xz))*11.0;
+            float lawn_relief=0.025*(1.0-smoothstep(8.0,30.0,view_distance))*(1.0-smoothstep(0.3,0.6,max(lawn_footprint.x,lawn_footprint.y)))*effect_weight;
+            if(detail_quality>0 && lawn_relief>0.0) {
+                vec2 gx=g+vec2(0.04,0.0), gz=g+vec2(0.0,0.04);
+                float hx=lawn_noise(gx*5.3)*0.6+lawn_noise(gx*11.0+1.7)*0.4;
+                float hz=lawn_noise(gz*5.3)*0.6+lawn_noise(gz*11.0+1.7)*0.4;
+                vec2 slope=vec2(hx-blades,hz-blades)/0.04;
+                NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(-slope.x*lawn_relief,0.0,-slope.y*lawn_relief,0.0)).xyz);
+                color*=1.0-0.05*(1.0-blades)*lawn_relief/0.025;
+            }
         }
         float rock=1.0-smoothstep(0.70,0.94,world_normal.y);
         color=mix(color,vec3(0.40,0.37,0.30),rock*0.55);

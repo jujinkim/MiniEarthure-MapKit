@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from PIL import Image
-from richer_assets import FACADE_TILES,create,facade_textures,textures,unpack,water_mesh
+from richer_assets import FACADE_TILES,LEAF_ATLAS,create,facade_textures,leaf_atlas,textures,unpack,water_mesh
 
 ROOT=Path(__file__).resolve().parents[1]
 class RicherAssets(unittest.TestCase):
@@ -52,6 +52,23 @@ class RicherAssets(unittest.TestCase):
                             values=list(image.getchannel(channel).getdata())
                             self.assertGreater(max(values)-min(values),40,tile)
                             self.assertAlmostEqual(sum(values)/len(values)/255,.5,delta=.01)
+
+    def test_leaf_atlas_reproduces_as_data_channels(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            leaf_atlas(Path(tmp))
+            produced=Path(tmp)/LEAF_ATLAS
+            self.assertEqual(produced.read_bytes(),(ROOT/'godot/textures'/LEAF_ATLAS).read_bytes())
+            with Image.open(produced) as image:
+                self.assertEqual((image.size,image.mode),((256,256),'RGBA'))
+                alpha=list(image.getchannel('A').getdata())
+                light=[l for l,a in zip(image.getchannel('R').getdata(),alpha) if a==255]
+                # Clusters cover about a third of each cell; opaque luminance is centred on 0.65.
+                self.assertGreater(sum(a>127 for a in alpha)/len(alpha),.25)
+                self.assertLess(sum(a>127 for a in alpha)/len(alpha),.5)
+                self.assertAlmostEqual(sum(light)/len(light)/255,.65,delta=.03)
+                self.assertEqual(set(image.getchannel('B').getdata()),{0})
+                # Transparent texels carry the mean leaf value (no dark mip fringes).
+                self.assertEqual({l for l,a in zip(image.getchannel('R').getdata(),alpha) if a==0},{round(.65*255)})
 
     def test_common_library_and_tiles_reproduce_without_embedded_bitmaps(self):
         with tempfile.TemporaryDirectory() as tmp:

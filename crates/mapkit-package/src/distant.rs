@@ -14,6 +14,21 @@ pub struct DistantMesh {
     pub decoration: Vec<u8>,
 }
 
+/// City trees of the near renderer (map-kit godot/vegetation_meshes.gd `TREES`):
+/// canopy base, canopy height and silhouette radius in metres at scale 1 (the
+/// near crowns reach at most 1.2 m at the largest scale, the 120 cm placement
+/// footprint). A tree's variant, scale (0.85-1.15) and yaw come from its object
+/// identity exactly as in chunk_renderer.gd `vegetation_placement`, so the
+/// silhouette matches the near tree it replaces.
+const CITY_TREES: [[f32; 3]; 3] = [[1.5, 2.3, 0.95], [1.45, 2.9, 0.85], [1.7, 1.8, 1.0]];
+/// One distant city tree: a three-sided trunk (6 triangles), a hexagonal crown
+/// frustum (12) and a hexagonal cone over it (6). The full generation's 12
+/// trunk-box triangles of the tree, which the distant generation omits, plus the
+/// per-object `maximum` (>= 12) in `distant_triangle_bound` cover it, so the
+/// bound needs no city-tree term.
+const CITY_TREE_TRIANGLES: u64 = 24;
+const _: () = assert!(CITY_TREE_TRIANGLES <= 12 + 12);
+
 #[derive(Clone, Debug)]
 struct Proxy {
     min: [f32; 3],
@@ -394,14 +409,7 @@ impl Package {
                 continue;
             }
             if object.asset_id == "builtin:city_tree" {
-                // The renderer's city canopies (variants up to 1.15 m radius,
-                // about 1.3–3.1 m) and the trunk stay one distant box.
-                add_box(
-                    &mut result,
-                    &Proxy { min: [-1.1, 0.0, -1.1], max: [1.1, 3.0, 1.1], color: [72, 100, 71, 255], role: 0 },
-                    object.position,
-                    object.quarter_turns, object.yaw_offset_mdeg, 0.,
-                );
+                add_city_tree(&mut result, &object.id, object.position);
                 continue;
             }
             let Some(asset) = self.document.asset(&object.asset_id).filter(|a| a.path.ends_with(".glb"))
@@ -451,6 +459,46 @@ impl Package {
     }
 }
 
+/// Trunk, crown frustum and crown cone of a city tree in scene metres. Flat
+/// sRGB colours like the other proxies: bark, a darker lower crown (shaded
+/// underside) and a lighter top.
+fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3]) {
+    let hash = mapkit_core::sha256(object_id.as_bytes());
+    let pick = u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16_777_216.;
+    let [base, height, radius] = CITY_TREES[(pick * 3.) as usize % 3];
+    let scale = 0.85 + 0.3 * (pick * 7.).fract();
+    let yaw = std::f32::consts::TAU * (pick * 13.).fract();
+    let origin = [position[0] as f32 * 0.01, position[1] as f32 * 0.01, -position[2] as f32 * 0.01];
+    let ring = |sides: usize, r: f32, y: f32| -> Vec<[f32; 3]> {
+        (0..sides).map(|k| {
+            let a = yaw + std::f32::consts::TAU * (k as f32 + 0.5) / sides as f32;
+            [origin[0] + a.cos() * r * scale, origin[1] + y * scale, origin[2] + a.sin() * r * scale]
+        }).collect()
+    };
+    let mut triangle = |points: [[f32; 3]; 3], color: [u8; 4]| {
+        for p in points {
+            output.vertices.push(p);
+            output.colors.push(color);
+            output.light_data.push([0., 0.]);
+            output.decoration.push(0);
+        }
+    };
+    // Side quads between two rings, or a cone to one apex; (b - a) x (c - a)
+    // faces outward.
+    let mut band = |lower: &[[f32; 3]], upper: &[[f32; 3]], color: [u8; 4]| {
+        let n = lower.len();
+        for k in 0..n {
+            let j = (k + 1) % n;
+            if upper.len() == n { triangle([lower[k], upper[k], upper[j]], color); }
+            triangle([lower[k], upper[j % upper.len()], lower[j]], color);
+        }
+    };
+    band(&ring(3, 0.16, -0.1), &ring(3, 0.12, base + 0.3), [90, 68, 51, 255]);
+    let middle = ring(6, radius, base + height * 0.5);
+    band(&ring(6, radius * 0.55, base + height * 0.05), &middle, [62, 90, 58, 255]);
+    band(&middle, &[[origin[0], origin[1] + (base + height) * scale, origin[2]]], [80, 110, 70, 255]);
+}
+
 fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_turns: u8, yaw_offset_mdeg: i32, seed: f32) {
     let points: [[f32; 3]; 8] = std::array::from_fn(|i| {
         let p = std::array::from_fn(|a| {
@@ -482,6 +530,34 @@ fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn city_tree_is_a_trunk_frustum_and_cone_matching_the_near_tree() {
+        for id in ["tree-a", "tree-b", "tree-c", "zone-1:4:7"] {
+            let mut mesh = DistantMesh::default();
+            add_city_tree(&mut mesh, id, [1000, 200, -3000]);
+            assert_eq!(mesh.vertices.len() as u64, CITY_TREE_TRIANGLES * 3);
+            assert_eq!(mesh.colors.len(), mesh.vertices.len());
+            assert!(mesh.decoration.iter().all(|&d| d == 0) && mesh.light_data.iter().all(|l| *l == [0., 0.]));
+            let hash = mapkit_core::sha256(id.as_bytes());
+            let pick = u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16_777_216.;
+            let [base, height, radius] = CITY_TREES[(pick * 3.) as usize % 3];
+            let scale = 0.85 + 0.3 * (pick * 7.).fract();
+            let top = mesh.vertices.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+            let low = mesh.vertices.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
+            assert!((top - (2. + (base + height) * scale)).abs() < 1e-4 && (low - (2. - 0.1 * scale)).abs() < 1e-4);
+            let reach = mesh.vertices.iter().map(|p| (p[0] - 10.).hypot(p[2] - 30.)).fold(0f32, f32::max);
+            assert!((reach - radius * scale).abs() < 1e-4);
+            // Every face points away from the tree axis or up (outward winding).
+            for t in mesh.vertices.chunks(3) {
+                let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
+                let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
+                let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+                let c = [(t[0][0] + t[1][0] + t[2][0]) / 3. - 10., (t[0][2] + t[1][2] + t[2][2]) / 3. - 30.];
+                assert!(n[0] * c[0] + n[2] * c[1] > 0. || n[1] > 0., "{id}: inward face");
+            }
+        }
+    }
+
     #[test]
     fn proxy_keeps_visual_height_and_scene_rotation() {
         let mut mesh = DistantMesh::default();

@@ -13,7 +13,12 @@ generated objects and neighbouring-cell proxies keep their existing ownership ru
 hash, archive or collision-query API. Ground, roads and native building geometry retain
 original coordinates and boundaries. GLB collision proxies are omitted and
 replaced by coloured bounds grouped per scene mesh/material, including node and
-placement transforms. Built-in trees use a canopy volume. No collision or full
+placement transforms. Built-in trees use a canopy volume; a city tree is a
+three-sided trunk under a hexagonal crown frustum and cone (24 triangles: darker
+lower, lighter upper crown) sized, scaled and turned by its object identity like
+the near renderer's variant (`vegetation_meshes.gd`). Its omitted 12-triangle
+collision trunk and the per-object allowance cover it, so the triangle bound is
+unchanged. No collision or full
 GLB/texture instance is produced. The traversal is iterative. Building material lookup uses normalized ID order;
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.

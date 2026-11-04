@@ -196,6 +196,86 @@ deferred GLB bindings activate later. Keep source retirement and wall/thread-CPU
 timing in the same call, compare output/lifetimes, and distinguish settled from
 completion-time reservations. See [timing controls](RENDER_DIAGNOSTICS.md#attachment-upload-isolation).
 
+## Park vegetation
+
+City trees (`builtin:city_tree`) and shrubs (`builtin:shrub`) are display-only
+procedural meshes (`godot/vegetation_meshes.gd`); no Kenney or external asset is
+used. Three tree variants (round, columnar, spreading; canopy base 1.45–1.7 m,
+crown 1.8–2.9 m tall) are chosen, scaled 0.85–1.15 and turned by the object
+identity. Every crown vertex (hull, cards, the low-tier hull) reaches at most
+1.2 m from the trunk at the largest scale, inside the 120 cm placement footprint
+(`CITY_TREE_RADIUS`), so crowns never reach into facades, fences or lanes the
+generator keeps clear; shrubs stay within the former 42 cm. Each tree or shrub has
+three meshes:
+
+- `body`: a tapered eight-sided trunk with a root flare whose inscribed radius
+  keeps the 14×140×14 cm collision box hidden at every scale, two or three
+  branches forking at 1.1–1.4 m and climbing out under the crown's lifted
+  underside, and the crown's inner hull (an icosphere pushed out to 80 % of the
+  union of five or six jittered lobes, 320 triangles) in a dark gap colour with
+  vertex ambient occlusion, about 480 triangles in all.
+- `cards`: 150–174 alpha-scissor leaf cards just outside that hull, forming the
+  silhouette (300–348 triangles).
+- `far`: an 80-triangle hull at the full crown and a plain six-sided trunk.
+
+Shrubs have an 80-triangle body hull, 26–38 cards and an 80-triangle far hull.
+Cards sample the original 2×2 leaf-cluster atlas
+`godot/textures/vegetation/leaf_atlas.png` (`scripts/richer_assets.py --textures
+--leaves`, data channels: luminance, yellowing, coverage); the body projects the
+same atlas on its hull as a leafy pattern. On low (no cards) the body's hull grows
+back to the full crown in the vertex shader and takes the far hull's brightness,
+so close trees keep their lobed crowns and visible branches.
+
+`godot/vegetation_leaf.gdshaderinc` has three variants (body, cards, grass), each
+a preloaded shader (`vegetation_leaf`, `vegetation_leaf_cards`, `vegetation_grass`)
+bound once by a warm-up material when the renderer scripts load, so its
+compilation never falls into a streaming step. Wind
+sways vertices by a weight measured from the canopy base (0 on trunks, 10 cm at the
+crown top at full strength) with coherent gusts; a card flutters 8 mm as one piece
+with its own phase, blade tips 12 mm. The phase and a hue/brightness-varied leaf
+tint come from `INSTANCE_CUSTOM`. Leaves back-light warm green, darken when wet and
+take snow on upward faces from the environment pixels; sky-facing cards keep their
+yellowing and back-light low. Card alpha keeps its coverage with the mip level and
+fades cards seen within 27° of edge-on (gone within 12°). The Client renders without MSAA, so
+scissor edges stay pixel-stepped; nothing here relies on alpha-to-coverage.
+
+A cell instances trees and shrubs per kind, variant and 32 m square: one admitted
+step plans each placement, then each group attaches a body, a cards and a far
+MultiMesh with custom data. Display quality measures every range to a group's
+centre and adds its 23 m half diagonal, so a plant within `vegetation_near`
+(24/32/48 m, shrubs 0.6×) always draws its near meshes. Body and cards hand over
+to the far mesh at that distance with 6 m of margin, a dithered crossfade on
+Forward+ and hysteresis on Mobile (which does not fade). Low draws bodies without
+cards. Far trees have no end range, like the canopies they replace, so every tree
+of a loaded cell keeps a crown; far shrubs end at the decoration distance. Tree
+shadows follow `vegetation_shadows`: none on low, bodies and far crowns on medium,
+also cards on high; shrubs and grass cast none. The meshes, three materials and
+the atlas are one shared set per resource cache (`claim_vegetation`, 2 MiB, built
+one part per admitted step: the atlas, each material, each mesh); cells without a
+cache build a process-lifetime set the same way, and standalone previews draw
+single body and cards nodes.
+
+Grass tufts (24 curved blades in a 0.2 m clump) are scattered by
+`godot/grass_scatter.gd` on a cell's grass ground triangles (steep banks excluded)
+after its objects: density is the lower of 0.9/m² and the cap over the grass area,
+and every position, size, yaw, tint and flower is an integer hash of the cell and
+the triangle's centimetre vertices, so batching and step boundaries never move a
+tuft. Flowers (white, yellow or violet heads tilted 50° to face eye height) cluster
+in a fifth of the 4 m world squares (40 % of tufts there, 2 % elsewhere). Each tuft
+joins the group of its own 32 m square. The cap follows the tier of the cache
+textures (`grass_cap`: 0/1,500/4,000), which adaptive quality keeps at the user's
+ceiling, so a GPU-pressure dip only hides grass (`grass_distance` 0/24/40 m) and
+never leaves cells loaded meanwhile bare. Area and scatter steps stop at 1,024
+triangles, or 256 triangles or 256 tufts, or 1.5 ms of wall time; each group
+attaches in its own step. Tufts follow the lawn's lush/dry patches, shrink into the
+ground over the last 10 m and are released with the cell; polar ground and cells
+with under 32 m² of grass have none. The lawn itself tilts its normal by the fine
+blade noise gradient within 30 m, fading wherever a pixel spans a third of the
+finest octave's period, so grazing views do not shimmer. Renderer diagnostics
+report the shared build as `vegetation_preparation` (cache stages
+`vegetation_<part>`), scatter as `grass_scatter` and group attachment as
+`instance_upload`.
+
 ## Display quality
 
 `godot/display_quality.gd` provides `profile(level)`, `active()`, and
@@ -203,7 +283,8 @@ completion-time reservations. See [timing controls](RENDER_DIAGNOSTICS.md#attach
 combined vehicle particle slots, 48/96/160m directional shadows, 4/6/8 selected
 local lights, and progressively stronger water. Sky quality selects one, two or three cloud
 noise layers with a high cloud veil and sun halo above low. Leaf-only wind is
-disabled on low and uses bounded 7 cm motion on medium/high; trunks and collision
+disabled on low and uses bounded 7 cm motion on medium/high (park vegetation: see
+above, half strength on medium); trunks and collision
 remain fixed. These fields update live along with surface material detail. Client owns preferences and
 automatic adaptation. Profiles never enter map files or authoritative race state.
 Profiles also expose a 96/128/160 m full-detail distance for consumers; Runtime
@@ -220,7 +301,7 @@ cosmetic ripple alters buoyancy, water entry or surface height.
 `surface_style_validator` compares generated/imported/distant swatches at every
 quality tier, including daylight, night and snow, Low tile visibility and mean
 luminance at detail/distance transitions. `test_richer_assets.py` reproduces
-library bytes and the racing, original and facade texture tiers. `facade_validator`
+library bytes and the racing, original, facade and leaf texture tiers. `facade_validator`
 checks the finish slots, the curtain-wall rule, the metallic cap, known PCG answers
 and the per-record pick against a GDScript mirror of the hash (shares within 3% of
 the weights over all 4096 records); rendered, it compares the shader's own pick on a
@@ -229,6 +310,13 @@ the effect distance (within 15%) and identical far walls. Render `generated_mate
 GPU uniforms and pixels before corrective quality updates, with prepared/unbatched
 geometry, cancellation and last-borrower retirement. Its optional
 `MAPKIT_SKIP_PIXEL_COMPARISON=1` explicitly skips only pixel comparison.
+`vegetation_scatter_validator` checks grass determinism across batch splits, the
+per-tier caps (none on low or polar ground) and their reservations, bounded steps,
+the texture-tier grass cap, tree/shrub body, card and far ranges and shadows per
+tier, trunk coverage of the collision box, crown reach inside the placement
+footprint, visible branches, a refused shared set (fails cells with trees, skips
+grass) and the release of every lease; `street_detail_lease_validator` covers
+single-node trees/shrubs and the group MultiMeshes.
 `tree_canopy_validator`, `richer_material_validator` and
 `display_quality_validator` cover leaf/imported bindings, bitmap retention,
 independent materials, denied admission, quality changes during preparation,

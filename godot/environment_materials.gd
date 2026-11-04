@@ -189,6 +189,12 @@ func bind_facade_tiles(material: ShaderMaterial) -> void:
 	material.set_shader_parameter("facade_tiles",facades)
 	material.set_shader_parameter("facade_tiles_enabled",true)
 
+## Park vegetation materials (vegetation_meshes.gd) read wet/snow weather from
+## the context's environment pixels.
+func bind_vegetation(material: ShaderMaterial) -> void:
+	material.set_shader_parameter("environment_data",texture)
+	material.set_shader_parameter("environment_enabled",true)
+
 ## Commercial generated facades draw storefront signs from the shared atlas.
 func bind_signs(material: ShaderMaterial) -> void:
 	if signs == null: return
