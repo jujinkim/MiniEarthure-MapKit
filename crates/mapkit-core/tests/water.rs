@@ -73,7 +73,7 @@ fn city_basins_sink_an_earth_bed_with_watertight_unsunk_shores() {
         assert!(report.counts.road_keep_outs > 0 && report.counts.barrier_keep_outs > 0 && report.trimmed_components == 2, "{report:?}");
         assert!(report.retained_bytes <= report.limit_bytes && report.limit_bytes <= water::MAX_BASIN_BYTES);
         let mut deepest = i64::MAX;
-        let mut earth = 0;
+        let (mut earth, mut beyond) = (0, 0);
         for (cell, c) in chunks(&d, &grids) {
             let bounds = d.cell_bounds(cell).unwrap();
             let spacing = if grids.is_empty() { 3200 } else { 400 };
@@ -83,13 +83,16 @@ fn city_basins_sink_an_earth_bed_with_watertight_unsunk_shores() {
                 assert_eq!(h.len(), 1, "{cell:?} crack at {p:?}: {h:?}");
                 let (h, ground) = (h[0], g(p));
                 let wet: Vec<_> = d.water_bodies.iter().filter(|b| b.contains_horizontal(p)).collect();
-                // Between the terrain and the bed of its water, at most depth plus
-                // freeboard under the terrain.
-                assert!(h <= ground.max(BOTTOM) && h >= ground.min(BOTTOM) && h >= ground - (SURFACE - BOTTOM + 8), "{p:?} {h} {ground}");
+                // Between the terrain and the bed of its water, at most the bank
+                // fall over the basin reach under the terrain.
+                assert!(h <= ground.max(BOTTOM) && h >= ground.min(BOTTOM) && h >= ground - REACH_FALL, "{p:?} {h} {ground}");
                 if wet.is_empty() || d.water_bodies.iter().any(|b| on_ring(p, &b.polygon) && !b.id.starts_with("pond")) {
                     assert_eq!(h, ground, "dry or shore vertex {p:?} sank");
                 }
-                deepest = deepest.min(h - BOTTOM.max(ground - (SURFACE - BOTTOM + 8)));
+                deepest = deepest.min(h - BOTTOM.max(ground - REACH_FALL));
+                // Terrain more than depth plus freeboard above the bottom keeps
+                // falling past the bank width.
+                if ground - BOTTOM > SURFACE - BOTTOM + 8 && h < ground - (SURFACE - BOTTOM + 8) { beyond += 1; }
             }
             // Pond shores away from the seam keep the terrain height.
             for t in ground(&c) {
@@ -123,10 +126,11 @@ fn city_basins_sink_an_earth_bed_with_watertight_unsunk_shores() {
                 assert!(c.spawn(&centre).is_err() && flat.spawn(&centre).is_ok(), "the pond bed is submerged");
             }
         }
-        // The pond centre reaches its bed, or depth plus freeboard under higher
-        // terrain: the bank is wide but not the pond.
+        // The pond centre reaches its bed: the bank keeps the flat-map slope
+        // under higher terrain instead of leaving a dry bed above the water.
         assert_eq!(deepest, 0);
         assert!(earth > 0);
+        assert_eq!(beyond > 0, !grids.is_empty(), "{beyond}");
     }
 }
 
@@ -245,7 +249,69 @@ fn region_sources_match_full_generation_beyond_their_margins() {
     }
 }
 
-/// `g − min(g − bottom, depth + 8) · min(d, w) / w` for a document whose only
+/// Largest sink under the terrain: the 68 cm bank fall per 180 cm over the
+/// basin reach.
+const REACH_FALL: i64 = (SURFACE - BOTTOM + 8) * water::BASIN_REACH_CM / 180;
+
+/// A wide lake on terrain far above its water: banks keep falling past the
+/// bank width up to the basin reach, so a vertex's height depends on shores and
+/// keep-outs in other cells, which every cell's regional source keeps.
+#[test]
+fn basin_reach_crosses_cells_and_regional_sources_keep_it() {
+    let mut d = city(true);
+    d.bounds = Bounds { min: [0, 0], max: [19200, 6400] };
+    d.barriers.clear();
+    d.water_bodies = vec![water::WaterBody { id: "lake".into(), polygon: vec![[1000, 800], [18000, 800], [18000, 5600], [1000, 5600]],
+        islands: vec![], surface_cm: SURFACE, bottom_cm: BOTTOM, flow_cm_s: [0, 0] }];
+    d.nodes = serde_json::from_value(serde_json::json!([
+        {"id": "shore", "position": [9000, 0, 6200], "level": 0},
+        {"id": "end", "position": [9000, 0, 3300], "level": 0}])).unwrap();
+    // A pier wholly in cell 2 (x below 9600) whose keep-out lies within the
+    // basin reach of cell 3's ground.
+    d.roads = serde_json::from_value(serde_json::json!([{"id": "pier", "from": "shore", "to": "end",
+        "points": [[9000, 0, 6200], [9000, 0, 3300]], "widths_cm": [300], "surfaces": ["asphalt"],
+        "kind": "ground", "clearance_cm": null, "sidewalk_cm": 0}])).unwrap();
+    d.heightmaps = d.cells().into_iter().map(|cell| Heightmap { cell, path: format!("h{}-{}.png", cell.x, cell.y),
+        spacing_cm: 400, offset_cm: 0, step_cm: 1, source_accuracy_cm: None }).collect();
+    d.validate().unwrap();
+    // Terrain 3 to 5 m above the water: the bank reaches the bottom only
+    // where it lies within the reach's fall above it.
+    let grids: BTreeMap<Cell, HeightGrid> = d.cells().into_iter().map(|cell| {
+        let heights = (0..9i64).flat_map(|j| (0..9i64).map(move |i| {
+            let (x, y) = (cell.x as i64 * 3200 + i * 400, cell.y as i64 * 3200 + j * 400);
+            300 + x / 100 + ((x * 7 + y * 3) % 17)
+        })).collect();
+        (cell, HeightGrid { side: 9, heights_cm: heights })
+    }).collect();
+    let mut pierless = d.clone();
+    pierless.roads.clear();
+    pierless.nodes.clear();
+    let (mut reached, mut bottomed) = (0, 0);
+    for cell in d.cells() {
+        let bounds = d.cell_bounds(cell).unwrap();
+        let full = generate(input(&d, &grids, cell)).unwrap();
+        let local = region_source(&d, CellRegion { min: cell, end: Cell { x: cell.x + 1, y: cell.y + 1 } }).unwrap();
+        assert_eq!(generate(input(&local, &grids, cell)).unwrap(), full, "{cell:?}");
+        assert!(heights(&full).values().all(|h| h.len() == 1), "{cell:?} crack");
+        assert!(open_edges(&full, &bounds).is_empty(), "{cell:?}");
+        for (p, h) in heights(&full) {
+            let g = terrain_height(&bounds, 400, 9, grids.get(&cell), d.terrain_base_cm, p);
+            if g - h[0] == REACH_FALL { reached += 1; }
+            if h[0] == BOTTOM { bottomed += 1; }
+            assert!(h[0] >= BOTTOM && g - h[0] <= REACH_FALL, "{p:?} {h:?} {g}");
+        }
+        if cell.x == 3 {
+            // The pier in cell 2 shapes cell 3's bank.
+            let without = heights(&generate(input(&pierless, &grids, cell)).unwrap());
+            let moved = heights(&full).iter().filter(|(p, h)| without.get(*p).is_some_and(|o| o != *h)).count();
+            assert!(moved > 0, "{cell:?}");
+        }
+    }
+    assert!(reached > 0 && bottomed > 0, "{reached} {bottomed}");
+}
+
+/// `g − min(g − bottom, (depth + 8) · min(d, reach) / w)` (terrain above the
+/// bottom) or `g − (g − bottom) · min(d, w) / w` for a document whose only
 /// shores are its water outlines.
 fn expected_height(body: &water::WaterBody, p: Point, g: i64) -> i64 {
     if !body.contains_horizontal(p) { return g; }
@@ -257,16 +323,16 @@ fn expected_height(body: &water::WaterBody, p: Point, g: i64) -> i64 {
         let (len, dot) = (dx * dx + dy * dy, px * dx + py * dy);
         if dot <= 0 { px * px + py * py } else if dot >= len { (px - dx).pow(2) + (py - dy).pow(2) } else { (px * dy - py * dx).pow(2) / len }
     }).min().unwrap() as u128;
-    let depth = (d2.isqrt() as i64).min(w);
-    let sink = (g - body.bottom_cm).min(body.surface_cm - body.bottom_cm + 8);
-    g - (sink as i128 * depth as i128 / w as i128) as i64
+    let (d, rise, fall) = (d2.isqrt() as i64, g - body.bottom_cm, body.surface_cm - body.bottom_cm + 8);
+    if rise <= 0 { return g - rise * d.min(w) / w; }
+    g - rise.min(fall * d.min(water::BASIN_REACH_CM) / w)
 }
 
 /// A detailed 512-vertex lake in a 128 m cell: basin heights cost a bounded
 /// amount per vertex (not per lake vertex), generation stays within the
 /// runtime work limits and the estimate, and every height follows the bank rule
-/// (terrain far above the bed sinks depth plus freeboard; terrain below the
-/// bottom rises to it).
+/// (terrain far above the bed keeps falling at the bank slope to the bottom,
+/// at most over the basin reach; terrain below the bottom rises to it).
 #[test]
 fn detailed_lakes_generate_within_runtime_limits_and_follow_the_bank_rule() {
     let mut d = city(true);
@@ -284,10 +350,13 @@ fn detailed_lakes_generate_within_runtime_limits_and_follow_the_bank_rule() {
         let side = 12800 / spacing + 1;
         let mut grid = d.clone();
         grid.heightmaps = vec![Heightmap { cell, path: "h.png".into(), spacing_cm: spacing as u32, offset_cm: 0, step_cm: 1, source_accuracy_cm: None }];
-        // A ridge 2 m above the bed and a hole below the bottom inside the lake.
+        // A ridge 2 m above the bed, a hill 8 m above it more than the basin
+        // reach from the shore and a hole below the bottom inside the lake.
         let samples: Vec<i64> = (0..side).flat_map(|j| (0..side).map(move |i| {
             let (x, y) = (i * spacing, j * spacing);
-            if (x - 4000).abs() < 1200 && (y - 6400).abs() < 1200 { -300 } else { (x / 50 + y / 90) % 40 + if x > 8000 { 200 } else { 0 } }
+            if (x - 4000).abs() < 1200 && (y - 6400).abs() < 1200 { -300 }
+            else if (x - 7400).abs() < 800 && (y - 6400).abs() < 800 { 800 }
+            else { (x / 50 + y / 90) % 40 + if x > 8000 { 200 } else { 0 } }
         })).collect();
         let grids = BTreeMap::from([(cell, HeightGrid { side: side as usize, heights_cm: samples })]);
         let prepared = PreparedMap::new(grid.clone()).unwrap();
@@ -296,7 +365,7 @@ fn detailed_lakes_generate_within_runtime_limits_and_follow_the_bank_rule() {
         assert!(chunk.triangles.len() as u64 <= cost.triangles);
         assert_eq!(generate(input(&grid, &grids, cell)).unwrap(), chunk);
         let bounds = grid.cell_bounds(cell).unwrap();
-        let (mut raised, mut capped, mut edge, mut off) = (0, 0, 0, 0i64);
+        let (mut raised, mut beyond, mut reached, mut edge, mut off) = (0, 0, 0, 0, 0i64);
         for (p, h) in heights(&chunk) {
             assert_eq!(h.len(), 1, "crack at {p:?}");
             let g = terrain_height(&bounds, spacing, side as usize, grids.get(&cell), grid.terrain_base_cm, p);
@@ -308,14 +377,17 @@ fn detailed_lakes_generate_within_runtime_limits_and_follow_the_bank_rule() {
                 edge += 1;
                 off = off.max((h[0] - expected).abs());
                 assert!((h[0] - expected).abs() <= 2 && h[0] >= g.min(BOTTOM) - 1 && h[0] <= g.max(BOTTOM) + 1
-                    && h[0] >= g - (SURFACE - BOTTOM + 8) - 1, "{spacing} {p:?} terrain {g}: {} vs {expected}", h[0]);
+                    && h[0] >= g - REACH_FALL - 1, "{spacing} {p:?} terrain {g}: {} vs {expected}", h[0]);
             } else {
                 assert_eq!(h[0], expected, "{spacing} {p:?} terrain {g}");
             }
             if h[0] > g { raised += 1; }
-            if g - h[0] == SURFACE - BOTTOM + 8 && h[0] > BOTTOM { capped += 1; }
+            // Past the bank width under terrain more than depth plus freeboard
+            // above the bottom: the old cap would have left these dry.
+            if g - h[0] > SURFACE - BOTTOM + 8 { beyond += 1; }
+            if g - h[0] == REACH_FALL && h[0] > BOTTOM { reached += 1; }
         }
-        assert!(raised > 0 && capped > 0 && edge > 0, "{raised} {capped} {edge}");
+        assert!(raised > 0 && beyond > 0 && reached > 0 && edge > 0, "{raised} {beyond} {reached} {edge}");
         println!("{spacing}: {edge} tile-edge bed vertices, at most {off} cm from the vertex rule");
         assert!(open_edges(&chunk, &bounds).is_empty());
     }

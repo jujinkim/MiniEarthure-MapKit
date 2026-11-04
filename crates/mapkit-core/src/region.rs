@@ -142,7 +142,7 @@ impl<'a> RegionSourcePlan<'a> {
             document,
             placements,
             roads,
-            margin: maximum_spacing.max(501) + 1000,
+            margin: maximum_spacing.max(MIN_SOURCE_SPACING_CM) + 1000,
             prune,
             road_margin: if use_local {
                 crate::roads::width_influence_margin(maximum_width) + 1000 + document.roads.iter().filter_map(|r|r.design.as_ref()).map(|d|i64::from(d.shoulder_cm)).max().unwrap_or(0)
@@ -194,9 +194,18 @@ fn competition_margin(d: &MapDocument) -> i64 {
         })
         .max()
         .unwrap_or(0)
-        .max(501)
+        .max(MIN_SOURCE_SPACING_CM)
         + 1000
 }
+
+/// Regional sources keep water, buildings and placements at least
+/// `MIN_SOURCE_SPACING_CM + 1000` (1501 cm) around their cells. Earth basin heights
+/// rely on it: a vertex measures shores and keep-out pieces up to
+/// [`crate::water::BASIN_REACH_CM`] away, and a kept keep-out piece spans one
+/// basin grid square within one bank width of a body's bounds.
+const MIN_SOURCE_SPACING_CM: i64 = 501;
+const _: () = assert!(MIN_SOURCE_SPACING_CM + 1000 > crate::water::BASIN_REACH_CM
+    && MIN_SOURCE_SPACING_CM + 1000 >= crate::water::BASIN_GRID_CM + crate::water::BASIN_MAX_BANK_CM + 2);
 
 fn can_prune(d: &MapDocument) -> bool {
     d.repetitions.is_empty() && d.surface_attachments.is_empty()

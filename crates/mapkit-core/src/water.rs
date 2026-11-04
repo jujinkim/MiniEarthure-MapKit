@@ -137,20 +137,31 @@ pub(crate) fn generate(d: &MapDocument, area: &Bounds) -> Result<Vec<WaterCell>>
 // buildings and placements within their margin), prepared and unprepared
 // generation and every cell see identical ground:
 // - a vertex height depends only on the water bodies containing it and on
-//   shore and keep-out edges within one bank width of it;
+//   shore and keep-out edges within [`BASIN_REACH_CM`] of it;
 // - water shores and bank loops belong to one body each, and a keep-out
 //   boundary piece lies in one basin grid square and exists only within one
-//   bank width of the bounds of a body that keep-out overlaps.
+//   bank width of the bounds of a body that keep-out overlaps;
+// - a keep-out piece can be a vertex's nearest edge only where it lies in
+//   water: from a vertex in water the way to a dry point crosses a shore,
+//   which is no farther. Water within the reach of a cell's vertices lies in
+//   the cell's regional source, and a keep-out crossing it is wet there too,
+//   so the source keeps every piece a vertex can measure.
 
 /// Bank width bounds: `w = clamp(3 · (surface − bottom), 90, 240)` map cm.
 pub const BASIN_MIN_BANK_CM: i64 = 90;
 pub const BASIN_MAX_BANK_CM: i64 = 240;
-/// A bank sinks the ground at most the body's depth plus this freeboard (the
-/// flat-import surface lies 8 cm under the ground): the flat-map bank slope.
+/// A bank falls the body's depth plus this freeboard per bank width (the
+/// flat-import surface lies 8 cm under the ground): the flat-map bank slope,
+/// about 21° for the 60 cm import depth.
 pub const BASIN_FREEBOARD_CM: i64 = 8;
+/// Shore distance up to which a bank keeps falling at the flat-map slope
+/// towards the bottom under terrain high above the water. Regional sources keep
+/// water at least 1501 cm around their cells, more than this reach.
+pub const BASIN_REACH_CM: i64 = 1200;
 /// Keep-out boundaries split where they cross a multiple of this grid in x or
 /// y. Regional sources keep water at least 1501 cm around their cells, more
-/// than one grid square plus one bank width.
+/// than one grid square plus one bank width, so a kept piece meeting a cell
+/// belongs to water the cell's source keeps.
 pub const BASIN_GRID_CM: i64 = 1024;
 /// Hard cap of basin bytes for one document, construction included; larger
 /// water fails map preparation with `E_BUDGET` rather than exceeding admission.
@@ -629,9 +640,12 @@ impl Basins {
                 }).sum::<f64>();
             }
             let reach = if perimeter > 0.0 { libm::floor(2.0 * area / perimeter) as i64 } else { i64::MAX };
-            // Heights fall linearly with shore distance, so one closed loop at the
-            // bank width bounds the flat bed. A body narrower than two banks
-            // gets one loop at 2/5 of its mean width, near its middle.
+            // One closed loop at the bank width, where flat-map banks (terrain
+            // depth + freeboard above the bottom) meet the bed; past it a bank
+            // under higher terrain keeps falling on the terrain tile vertices
+            // only, so the plan view stays independent of terrain. A body
+            // narrower than two banks gets one loop at 2/5 of its mean width,
+            // near its middle.
             let r = if 2 * w < reach { w } else { reach * 2 / 5 };
             if r <= 0 { continue; }
             for (k, ring) in std::iter::once(&body.polygon).chain(&body.islands).enumerate() {
@@ -809,19 +823,28 @@ impl Basins {
         Ok((best.isqrt() as i64).min(cap))
     }
     /// The basin height of a generated ground vertex at `p` whose terrain height
-    /// is `g`, `d` its shore distance and `w` the bank width:
-    /// `g − min(g − bottom, depth + freeboard) · min(d, w) / w`. Beyond the bank
-    /// the ground lies on the bottom, or `depth + freeboard` under higher
-    /// terrain; terrain below the bottom rises to it. Shore, keep-out and dry
-    /// vertices keep `g`. A function of the vertex alone, so faces sharing it
-    /// never crack.
+    /// is `g`, `d` its shore distance, `w` the bank width and `k = depth +
+    /// freeboard` the bank fall per bank width: terrain above the bottom moves to
+    /// `g − min(g − bottom, k · min(d, reach) / w)`, a bank at the flat-map slope
+    /// down to the bottom (within `w` where the terrain lies `k` above the
+    /// bottom, as on flat imports; farther under higher terrain, at most `k ·
+    /// reach / w` under it); terrain at or below the bottom rises to it,
+    /// `g − (g − bottom) · min(d, w) / w`. Shore, keep-out and dry vertices keep
+    /// `g`. A function of the vertex alone, so faces sharing it never crack.
     pub(crate) fn height(&self, p: Point, g: i64, work: &mut usize) -> Result<i64> {
         let Some((surface, bottom)) = self.level(p, work)? else { return Ok(g) };
         let w = bank_cm(surface, bottom);
-        let depth = self.depth(p, w, work)?;
-        if depth == 0 { return Ok(g); }
-        let sink = (g - bottom).min(surface - bottom + BASIN_FREEBOARD_CM);
-        Ok(g - (sink as i128 * depth as i128 / w as i128) as i64)
+        let rise = g - bottom;
+        if rise <= 0 {
+            let depth = self.depth(p, w, work)?;
+            return Ok(g - (rise as i128 * depth as i128 / w as i128) as i64);
+        }
+        let fall = surface - bottom + BASIN_FREEBOARD_CM;
+        // The bank meets the bottom `rise · w / fall` from the shore: no farther
+        // edge can change the height, so the shore query stops there.
+        let reach = (rise as i128 * w as i128 + fall as i128 - 1) / fall as i128;
+        let depth = self.depth(p, reach.min(BASIN_REACH_CM as i128) as i64, work)?;
+        Ok(g - rise.min((fall as i128 * depth as i128 / w as i128) as i64))
     }
     /// Whether ground at `p` lies in a basin bed (an earth face).
     pub(crate) fn bed(&self, p: Point, work: &mut usize) -> Result<bool> {
