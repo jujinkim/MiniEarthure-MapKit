@@ -1,6 +1,6 @@
 extends SceneTree
-## Generated street details (signals, benches, shrubs) share process-lifetime
-## meshes and materials. A cell's display lease must retire with its nodes.
+## Generated street details (single-node shrubs and city trees) share
+## process-lifetime meshes and materials. A cell's display lease must retire with its nodes.
 const CHUNKS := preload("../chunk_renderer.gd")
 const QUALITY := preload("../display_quality.gd")
 class Lease extends RefCounted:
@@ -35,15 +35,11 @@ func run() -> void:
 			shared[mesh.material_override] = true
 	var vegetation: Dictionary = CHUNKS.VEGETATION.shared()
 	var shared_vegetation := {}
-	for kind in ["tree_body", "tree_cards", "tree_far", "shrub_body", "shrub_cards", "shrub_far"]:
-		for mesh: Mesh in vegetation[kind]: shared_vegetation[mesh] = true
-	var details := 0
-	for resource: Object in shared:
-		if resource == null: continue
-		details += int(not shared_vegetation.has(resource))
+	for plant in CHUNKS.VEGETATION.PLANTS:
+		for part in CHUNKS.VEGETATION.KINDS:
+			for mesh: Mesh in vegetation[plant + "_" + part]: shared_vegetation[mesh] = true
 	# Vegetation nodes carry their materials on the shared mesh surfaces.
-	check(not shared.is_empty() and CHUNKS._details.size() == details, "both cells reuse one cached mesh and material per detail key")
-	check(shared.keys().all(func(value): return value == null or shared_vegetation.has(value) or CHUNKS._details.values().has(value)), "street details borrow only cached detail and vegetation resources")
+	check(not shared.is_empty() and shared.keys().all(func(value): return value == null or shared_vegetation.has(value)), "street details borrow only shared vegetation resources")
 	# City trees: a near body (trunk, branches, crown hull) and its leaf cards
 	# rooted at the object, 0.85–1.15×, shadows by tier; shrubs and trees vary
 	# by identity among three shared variants.
@@ -76,15 +72,22 @@ func run() -> void:
 	for index in 40: objects.append({"id": "tree-%d" % index, "asset_id": "builtin:city_tree", "position": [index * 300, 0, 0], "quarter_turns": 0})
 	for index in 10: objects.append({"id": "shrub-%d" % index, "asset_id": "builtin:shrub", "position": [index * 300, 0, 400], "quarter_turns": 0})
 	objects.append({"id": "bench", "asset_id": "builtin:bench", "position": [0, 0, 900], "quarter_turns": 0})
-	var job := {"lease": cell_lease, "root": cell, "chunk": {"objects": objects}, "vegetation": vegetation}
+	# Park-zone trees (every fourth) have the 200 cm footprint the native
+	# presentation lists; the others keep 120 cm street crowns.
+	var radii := {}
+	for index in range(0, 40, 4): radii["tree-%d" % index] = 200
+	var job := {"lease": cell_lease, "root": cell, "chunk": {"objects": objects, "presentation": {"city_tree_radii": radii}}, "vegetation": vegetation}
 	for object: Dictionary in objects:
 		if CHUNKS.VEGETATION_IDS.has(object.asset_id): CHUNKS._plan_vegetation(job, object)
 	var expected_groups: int = job.vegetation_plan.size()
 	while not job.vegetation_plan.is_empty(): CHUNKS._attach_vegetation_group(job)
 	var groups: Array = cell.find_children("*", "MultiMeshInstance3D", false, false)
 	var drawn := {"tree": 0, "shrub": 0}
+	var wide := 0
 	for group: MultiMeshInstance3D in groups:
-		if group.get_meta("mapkit_vegetation_lod") == "body": drawn[group.get_meta("mapkit_vegetation_kind")] += group.multimesh.instance_count
+		if group.get_meta("mapkit_vegetation_lod") == "body":
+			drawn[group.get_meta("mapkit_vegetation_kind")] += group.multimesh.instance_count
+			if vegetation.wide_body.has(group.multimesh.mesh): wide += group.multimesh.instance_count
 		check(group.multimesh.use_custom_data and group.get_meta("mapkit_decoration", false) and group.get_meta("mapkit_static_detail", false), "instances carry tint/phase and decoration ranges")
 		# Medium (the default profile): opaque tree crowns cast, cards and shrubs do not.
 		var casts: bool = group.get_meta("mapkit_vegetation_kind") == "tree" and group.get_meta("mapkit_vegetation_lod") != "cards"
@@ -92,13 +95,15 @@ func run() -> void:
 		var aabb := group.get_aabb()
 		check(aabb.size.x <= CHUNKS.VEGETATION_GROUP_METRES + 6.0 and aabb.size.z <= CHUNKS.VEGETATION_GROUP_METRES + 6.0, "a group spans one 32 m square plus its crowns")
 	check(groups.size() == expected_groups * 3 and drawn.tree == 40 and drawn.shrub == 10, "40 trees and 10 shrubs in body/cards/far groups: %d groups, %s" % [groups.size(), drawn])
+	check(wide == 10, "the ten 200 cm zone trees draw wide park crowns: %d" % wide)
 	# Headless rendering keeps no instance buffers: compare the shared placement
 	# with the node path's tree instead.
-	var first: Dictionary = CHUNKS.city_canopy_transform(objects[1])
-	var single := CHUNKS._street_detail("builtin:city_tree", objects[1])
-	var crown: MeshInstance3D = single.get_child(0)
-	check(vegetation.tree_body[first.variant] == crown.mesh and (single.transform * crown.transform).is_equal_approx(first.transform), "instances and nodes place the same tree")
-	single.free()
+	for radius in [0, 200]:
+		var first: Dictionary = CHUNKS.city_canopy_transform(objects[1], radius)
+		var single := CHUNKS._street_detail("builtin:city_tree", objects[1], radius)
+		var crown: MeshInstance3D = single.get_child(0)
+		check(vegetation[first.mesh + "_body"][first.variant] == crown.mesh and first.mesh == ("wide" if radius == 200 else "tree") and (single.transform * crown.transform).is_equal_approx(first.transform), "instances and nodes place the same %d cm tree" % radius)
+		single.free()
 	cell_lease.seal()
 	cell.free()
 	for frame in 2: await process_frame

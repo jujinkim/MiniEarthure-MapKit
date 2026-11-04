@@ -1,7 +1,8 @@
 extends RefCounted
 ## Display-only park vegetation, built procedurally (no external assets): three
-## city-tree variants, three shrub sizes and one grass tuft with optional flower
-## heads. Every array comes from integer hashes, so builds are identical.
+## city-tree variants, three wide park-tree variants and three shrub sizes.
+## Every array comes from integer hashes, so builds are identical. (Lawn grass
+## is the camera-local grass_field.gd.)
 ##
 ## A tree or shrub has three meshes: `body` (a tapered trunk with root flare
 ## and two or three branches forking below the crown, plus the crown's dark
@@ -12,10 +13,12 @@ extends RefCounted
 ## `cards_hidden`), so close trees stay lobed without cards.
 ##
 ## Collision is unchanged: the 14 x 140 x 14 cm trunk box (placement.rs) stays
-## inside the trunk at every instance scale (0.85-1.15). The horizontal reach
-## of every crown vertex at the largest scale stays inside the generated
-## footprint (CITY_TREE_RADIUS 120 cm for trees; the baseline 42 cm for shrubs),
-## so crowns never reach into facades, fences or lanes the placement keeps clear.
+## inside the trunk at every instance scale. The horizontal reach of every crown
+## vertex at the largest scale, plus its largest wind sway, stays inside the
+## tree's placement footprint (the 120 cm CITY_TREE_RADIUS of street trees, the
+## zone's declared radius up to 200 cm for park trees, see tree_set; the
+## baseline 42 cm for shrubs), so crowns never reach into facades, fences or
+## lanes the placement keeps clear.
 ##
 ## begin()/advance() build one part per call for admitted streaming steps
 ## (render_resource_cache.prepare_vegetation); step_shared() advances a
@@ -23,8 +26,9 @@ extends RefCounted
 
 const SHADER := preload("./vegetation_leaf.gdshader")
 ## Preloaded and bound once when the renderer scripts load (_warm), so their
-## compilation never falls into an admitted streaming step.
-const SHADERS := {"body": SHADER, "cards": preload("./vegetation_leaf_cards.gdshader"), "grass": preload("./vegetation_grass.gdshader")}
+## compilation never falls into an admitted streaming step (grass_field.gd
+## warms the grass shader the same way).
+const SHADERS := {"body": SHADER, "cards": preload("./vegetation_leaf_cards.gdshader")}
 static var _warm_materials: Array = _warm()
 
 static func _warm() -> Array:
@@ -42,36 +46,58 @@ const LEAF_ATLAS := "textures/vegetation/leaf_atlas.png"
 ## silhouette (mapkit-package distant.rs CITY_TREES).
 const TREES := [Vector3(1.5, 2.3, 1.0), Vector3(1.45, 2.9, 0.8), Vector3(1.7, 1.8, 1.15)]
 const TREE_SCALE := Vector2(0.85, 1.15)
-## Largest horizontal reach of a tree at scale 1: 120 cm at the largest scale.
-const TREE_REACH := 1.2 / 1.15
+## Wide park trees for a 200 cm footprint, at scale 1 (metres): canopy base,
+## canopy height, crown radius (round, oval, spreading). Thirteen lobes (a
+## core, rings of seven and four, a top lobe) under 300-324 square leaf cards spread evenly over the whole envelope
+## make a full, broad canopy on a short trunk; the reach fit barely squeezes
+## them, so spreading stays the widest and flattest and oval the narrowest.
+## Mirrored by the distant silhouette (distant.rs WIDE_CITY_TREES).
+const WIDE_TREES := [Vector3(1.65, 3.25, 1.5), Vector3(1.6, 3.4, 1.38), Vector3(1.75, 3.0, 1.5)]
+const WIDE_SCALE := Vector2(0.95, 1.1)
+## Footprints from this radius (cm) grow wide trees scaled by radius / 200;
+## smaller ones the street variants scaled by radius / 120 (tree_set).
+const WIDE_FROM_CM := 160
+## Wind sway (vegetation_leaf.gdshaderinc): a vertex of sway weight w moves at
+## most w x SWAY_PEAK x TREE_SWAY sideways at full vegetation_motion (the
+## shader's peak bend), a leaf card another w x FLUTTER (its 8 mm flutter).
+const TREE_SWAY := 0.10
+const SWAY_PEAK := 1.2
+const FLUTTER := 0.0114
 ## Leaf colours (sRGB) of the tree variants; placements vary hue and brightness.
 const TREE_LEAVES := ["4f7a3a", "3f6c40", "5d7d36"]
 ## Shrubs: radius, height (metres) and sRGB leaf colour of the three sizes.
 const SHRUBS := [Vector2(0.36, 0.58), Vector2(0.40, 0.72), Vector2(0.31, 0.46)]
 const SHRUB_SCALE := Vector2(0.9, 1.1)
-const SHRUB_REACH := 0.42 / 1.1
 const SHRUB_LEAVES := ["4d7a40", "5a7f3c", "3f6b43"]
 const BARK := "5a4433"
 ## The near hull sits at this share of the crown so cards stand outside it.
 const SHELL := 0.8
-## Memory allowance of one shared set (render_resource_cache): about 9,000
-## vertices at <= 56 B in CPU arrays and GPU buffers, three materials (the
-## shaders are process-lifetime script constants), and the
-## 256 px RGBA leaf atlas with mipmaps as decoded image and texture (350 KiB
-## each), with build overlap. Measured arrays stay below half of it.
+## Memory allowance of one shared set (render_resource_cache): 8,292
+## vertices at <= 56 B and 21,108 indices at 4 B, counted in CPU arrays and GPU
+## buffers (1,097,568 B measured, vegetation_scatter_validator), the 256 px RGBA
+## leaf atlas with mipmaps as decoded image and texture (350 KiB each), and
+## 128 KiB for the two materials (the shaders are process-lifetime script
+## constants) and one mesh's build arrays.
 const SHARED_BYTES := 2 * 1024 * 1024
 const KINDS := ["body", "cards", "far"]
+## MultiMesh floats per instance of the tree and shrub groups (chunk_renderer):
+## 3x4 transform and the custom colour.
+const FLOATS := 16
+## Mesh sets: street trees, wide park trees, shrubs.
+const PLANTS := ["tree", "wide", "shrub"]
 static var STEPS: PackedStringArray = _steps()
 static var _shared: Dictionary = {}
 static var _shared_job: Dictionary = {}
 static var _crowns: Dictionary = {}
+static var _shapes: Dictionary = {}
 
 static func _steps() -> PackedStringArray:
-	var result := PackedStringArray(["atlas", "material_body", "material_cards", "material_grass"])
-	for plant in ["tree", "shrub"]:
-		for part in KINDS:
+	var result := PackedStringArray(["atlas", "material_body", "material_cards"])
+	for plant in PLANTS:
+		# Each variant's lobes and hulls (shape) and its cards and fit (crown)
+		# are steps of their own before its meshes.
+		for part in ["shape", "crown"] + KINDS:
 			for variant in 3: result.append("%s_%s_%d" % [plant, part, variant])
-	result.append("grass")
 	return result
 
 class Builder:
@@ -113,6 +139,31 @@ static func unit(a: int, b := 0, c := 0) -> float:
 static func linear(srgb: String) -> Color:
 	return Color(srgb).srgb_to_linear()
 
+## Mesh set and size of a city tree with a placement footprint of `radius_cm`
+## (120..200, CITY_TREE_RADIUS for street trees): the instance scale is
+## `factor` times the span, so its widest crown vertex reaches the radius at
+## the span's top and never past it.
+static func tree_set(radius_cm: int) -> Dictionary:
+	var radius := clampi(radius_cm, 120, 200)
+	if radius >= WIDE_FROM_CM: return {"plant": "wide", "factor": float(radius) / 200.0, "span": WIDE_SCALE}
+	return {"plant": "tree", "factor": float(radius) / 120.0, "span": TREE_SCALE}
+
+## Largest horizontal reach (metres, at scale 1) of a crown vertex of a mesh
+## set that sways up to `sway_m` sideways: at the span's top the vertex plus its
+## sway stays inside the footprint for every radius the set serves (street
+## trees 120 cm, wide trees 160-200 cm via tree_set, shrubs 42 cm), so wind
+## never pushes leaves into facades the placement keeps clear.
+static func reach_limit(plant: String, sway_m := 0.0) -> float:
+	match plant:
+		"wide": return 2.0 / WIDE_SCALE.y * (1.0 - sway_m * 100.0 / float(WIDE_FROM_CM))
+		"tree": return (1.2 - sway_m) / TREE_SCALE.y
+	return (0.42 - sway_m) / SHRUB_SCALE.y
+
+## Largest sideways wind sway (metres) of a vertex at mesh height `y`
+## (shrubs sway at 40 % of the weight, see plant()).
+static func sway_reach(y: float, base: float, height: float, tree: bool, card: bool) -> float:
+	return sway(y, base, height) * (1.0 if tree else 0.4) * (SWAY_PEAK * TREE_SWAY + (FLUTTER if card else 0.0))
+
 ## Instance data of a tree or shrub placement: leaf tint (linear) varied in
 ## hue and brightness, and the wind phase (INSTANCE_CUSTOM.a = 1 + phase).
 static func leaf_custom(srgb: String, pick: float) -> Color:
@@ -126,7 +177,7 @@ static func leaf_custom(srgb: String, pick: float) -> Color:
 
 static func begin(context: RefCounted = null) -> Dictionary:
 	var result := {"materials": {}}
-	for plant in ["tree", "shrub"]:
+	for plant in PLANTS:
 		for part in KINDS: result[plant + "_" + part] = []
 	return {"step": 0, "context": context, "result": result, "atlas": null}
 
@@ -144,14 +195,15 @@ static func advance(job: Dictionary, lease: RefCounted = null) -> bool:
 		var made := material(kind, job.atlas, job.context)
 		result.materials[kind] = made
 		if lease != null: lease.track(made)
-		if kind == "grass": job.atlas = null
+		if kind == "cards": job.atlas = null
+	elif step.get_slice("_", 1) == "shape":
+		_shapes[step.get_slice("_", 0) + "_" + step.get_slice("_", 2)] = shape(step.get_slice("_", 0), int(step.get_slice("_", 2)))
+	elif step.get_slice("_", 1) == "crown":
+		crown(step.get_slice("_", 0), int(step.get_slice("_", 2)))
 	else:
-		var mesh: ArrayMesh
-		if step == "grass": mesh = grass(result.materials)
-		else: mesh = plant(step.get_slice("_", 0), step.get_slice("_", 1), int(step.get_slice("_", 2)), result.materials)
+		var mesh := plant(step.get_slice("_", 0), step.get_slice("_", 1), int(step.get_slice("_", 2)), result.materials)
 		if lease != null: lease.track(mesh)
-		if step == "grass": result.grass = mesh
-		else: result[step.get_slice("_", 0) + "_" + step.get_slice("_", 1)].append(mesh)
+		result[step.get_slice("_", 0) + "_" + step.get_slice("_", 1)].append(mesh)
 	job.step += 1
 	if job.step < STEPS.size(): return false
 	job.erase("context")
@@ -191,7 +243,7 @@ static func material(kind: String, atlas: Texture2D, context: RefCounted = null)
 	if atlas != null:
 		result.set_shader_parameter("leaf_atlas", atlas)
 		result.set_shader_parameter("leaf_pattern", atlas)
-	result.set_shader_parameter("sway_metres", 0.05 if kind == "grass" else 0.10)
+	result.set_shader_parameter("sway_metres", TREE_SWAY)
 	if context != null and context.has_method("bind_vegetation"): context.bind_vegetation(result)
 	result.set_meta("mapkit_vegetation_shader", kind)
 	result.set_meta("mapkit_vegetation", true)
@@ -246,6 +298,27 @@ static func lobes(seed: int, base: float, height: float, radius: float, count: i
 		result.append([Vector3(cos(angle) * out, y, sin(angle) * out), Vector3(r, v, r)])
 	return result
 
+## Lobes of a wide park crown: the core, a lower ring of seven broad lobes
+## that sets the width, an upper ring of four that rounds the shoulders and a
+## top lobe, so the canopy reads as a full cloud of foliage.
+static func wide_lobes(seed: int, base: float, height: float, radius: float, spread: float) -> Array:
+	var result := [[Vector3(0.0, base + height * 0.5, 0.0), Vector3(radius * 0.68, height * 0.4, radius * 0.68)]]
+	var turn := unit(seed, 1) * TAU
+	for ring in 2:
+		var count := 7 if ring == 0 else 4
+		for i in count:
+			var k := ring * 8 + i
+			var angle := turn + TAU * (float(i) + 0.5 * ring) / float(count) + (unit(seed, k, 2) - 0.5) * 0.5
+			var out := spread * radius * ((0.5 + 0.12 * unit(seed, k, 3)) if ring == 0 else (0.3 + 0.1 * unit(seed, k, 3)))
+			var y := base + height * ((0.36 + 0.1 * unit(seed, k, 4)) if ring == 0 else (0.62 + 0.08 * unit(seed, k, 4)))
+			var r := radius * ((0.44 + 0.08 * unit(seed, k, 5)) if ring == 0 else (0.42 + 0.06 * unit(seed, k, 5)))
+			var v := height * ((0.24 + 0.05 * unit(seed, k, 6)) if ring == 0 else (0.25 + 0.04 * unit(seed, k, 6)))
+			y = clampf(y, base + v * 0.9, base + height - v)
+			result.append([Vector3(cos(angle) * out, y, sin(angle) * out), Vector3(r, v, r)])
+	var top_v := height * 0.26
+	result.append([Vector3(0.0, base + height - top_v, 0.0), Vector3(radius * 0.5, top_v, radius * 0.5)])
+	return result
+
 ## Sway weight measured from the canopy base: 0 on the trunk, 1 at the top.
 static func sway(y: float, base: float, height: float) -> float:
 	return pow(clampf((y - base + 0.3) / (height + 0.3), 0.0, 1.0), 1.3)
@@ -266,33 +339,50 @@ static func _hull(seed: int, crown: Array, detail: int, share: float, lift: floa
 	var points := PackedVector3Array()
 	for v in unit_points.size():
 		var direction := unit_points[v]
-		var reach := 0.0
-		for lobe: Array in crown:
-			# Far intersection of the ray origin + direction * t with the ellipsoid.
-			var radii: Vector3 = lobe[1]
-			var q: Vector3 = (origin - (lobe[0] as Vector3)) / radii
-			var e := direction / radii
-			var a := e.dot(e)
-			var b := 2.0 * q.dot(e)
-			var c := q.dot(q) - 1.0
-			var disc := b * b - 4.0 * a * c
-			if disc >= 0.0: reach = maxf(reach, (-b + sqrt(disc)) / (2.0 * a))
-		var p := origin + direction * reach * share * (0.95 + 0.1 * unit(seed, v, 7))
+		var p := origin + direction * _reach(crown, origin, direction) * share * (0.95 + 0.1 * unit(seed, v, 7))
 		p.y = maxf(p.y, lerpf(origin.y, lift, share))
 		points.append(p)
 	return points
 
+## Distance from `origin` along `direction` to the far surface of the lobe union.
+static func _reach(crown: Array, origin: Vector3, direction: Vector3) -> float:
+	var reach := 0.0
+	for lobe: Array in crown:
+		# Far intersection of the ray origin + direction * t with the ellipsoid.
+		var radii: Vector3 = lobe[1]
+		var q: Vector3 = (origin - (lobe[0] as Vector3)) / radii
+		var e := direction / radii
+		var a := e.dot(e)
+		var b := 2.0 * q.dot(e)
+		var c := q.dot(q) - 1.0
+		var disc := b * b - 4.0 * a * c
+		if disc >= 0.0: reach = maxf(reach, (-b + sqrt(disc)) / (2.0 * a))
+	return reach
+
 ## Leaf cards: [corners, normal, atlas cell, phase] on the lobe surfaces just
 ## outside the near hull, facing outward with a random tilt and roll.
-static func _card_list(seed: int, crown: Array, count: int, size: float, base: float, height: float, radius: float) -> Array:
+## A wide crown (`envelope`) puts every card on the lobe union's outer surface
+## along a direction from the core; the directions follow a jittered golden
+## spiral from the underside up to the crown's top (even coverage of equal
+## areas), so its many overlapping lobes stay covered without dark gaps.
+static func _card_list(seed: int, crown: Array, count: int, size: float, base: float, height: float, radius: float, envelope := false) -> Array:
 	var centre := Vector3(0.0, base + height * 0.5, 0.0)
 	var extent := Vector3(radius, height * 0.5, radius)
 	var cards := []
 	for card in count:
-		# A point on the crown's outer surface: up to four tries for one that
-		# no other lobe covers, biased to the sides and underside the camera sees.
+		# A point on the crown's outer surface, biased to the sides and
+		# underside the camera sees: on the envelope, or on a lobe with up to
+		# four tries for one that no other lobe covers.
 		var p := Vector3.ZERO
-		for attempt in 4:
+		if envelope:
+			var origin: Vector3 = crown[0][0]
+			var z := lerpf(-0.8, 0.96, (float(card) + unit(seed, card, 12)) / float(count))
+			var angle := float(card) * 2.3999632 + (unit(seed, card, 13) - 0.5) * 0.8
+			var direction := Vector3(cos(angle) * sqrt(1.0 - z * z), z, sin(angle) * sqrt(1.0 - z * z))
+			p = origin + direction * _reach(crown, origin, direction) * (0.9 + 0.12 * unit(seed, card, 14))
+			# Wide crowns hang lower around the branches.
+			p.y = maxf(p.y, base + height * 0.06 + size * 0.25)
+		for attempt in (0 if envelope else 4):
 			var lobe_index := int(unit(seed, card * 4 + attempt, 11) * crown.size()) % crown.size()
 			var lobe: Array = crown[lobe_index]
 			var z := lerpf(-0.85, 0.75, unit(seed, card * 4 + attempt, 12))
@@ -319,40 +409,85 @@ static func _card_list(seed: int, crown: Array, count: int, size: float, base: f
 		cards.append([corners, normal, Vector2(float(card % 2), float((card / 2) % 2)) * 0.5, unit(seed, card, 21)])
 	return cards
 
-## Shape of one tree or shrub variant, cached per process (pure function of
-## the constants): lobes, near and far hull points and leaf cards, squeezed
-## horizontally so no vertex reaches past the kind's reach limit.
+## Shape of one tree or shrub variant (a pure function of the constants):
+## lobes, near and far hull points and leaf cards, squeezed horizontally so no
+## vertex plus its wind sway reaches past the set's limit (reach_limit). Wide
+## crowns keep their cards square: the fit moves card centres, and only the
+## cards still over the limit shrink about their centres. Cached while the
+## variant's three parts build (plant() releases it after `far`); STEPS
+## builds the lobes and hulls (`shape`) and the cards with the fit (`crown`)
+## in separate steps.
 static func crown(plant: String, variant: int) -> Dictionary:
 	var key := "%s_%d" % [plant, variant]
 	if _crowns.has(key): return _crowns[key]
-	var tree := plant == "tree"
+	var data: Dictionary = _shapes.get(key, {})
+	_shapes.erase(key)
+	if data.is_empty(): data = shape(plant, variant)
+	return _leaves(plant, variant, data)
+
+## Lobes and unsqueezed hulls of a variant, kept for its `crown` step.
+static func shape(plant: String, variant: int) -> Dictionary:
+	var tree := plant != "shrub"
+	var wide := plant == "wide"
 	var base: float
 	var height: float
 	var radius: float
 	var lobe_list: Array
 	var seed: int
-	if tree:
-		var shape: Vector3 = TREES[variant]
-		base = shape.x; height = shape.y; radius = shape.z
+	if wide:
+		var form: Vector3 = WIDE_TREES[variant]
+		base = form.x; height = form.y; radius = form.z
+		seed = 401 + variant
+		lobe_list = wide_lobes(seed, base, height, radius, 1.12 if variant == 2 else (0.9 if variant == 1 else 1.0))
+	elif tree:
+		var form: Vector3 = TREES[variant]
+		base = form.x; height = form.y; radius = form.z
 		seed = 101 + variant
 		lobe_list = lobes(seed, base, height, radius, 6 if variant > 0 else 5, 1.15 if variant == 2 else (0.7 if variant == 1 else 1.0))
 	else:
-		var shape: Vector2 = SHRUBS[variant]
-		base = -0.08; height = shape.y + 0.08; radius = shape.x
+		var form: Vector2 = SHRUBS[variant]
+		base = -0.08; height = form.y + 0.08; radius = form.x
 		seed = 201 + variant
 		lobe_list = lobes(seed, base, height, radius, 4 if variant < 2 else 3, 1.1)
 	var lift := base + height * 0.08 if tree else base
+	# The wide far hull stands out to the leaf cards' mean silhouette.
 	var data := {"base": base, "height": height, "radius": radius, "seed": seed, "lobes": lobe_list,
-		"body": _hull(seed, lobe_list, 2 if tree else 1, SHELL, lift), "far": _hull(seed, lobe_list, 1, 0.98, lift),
-		"cards": _card_list(seed, lobe_list, (150 + 12 * variant) if tree else (26 + 6 * variant), 0.58 if tree else 0.22, base, height, radius)}
-	# Horizontal fit: the widest vertex of the full crown (far hull, the shell
-	# grown back on low, or a card corner) at the reach limit.
-	var widest := 0.0
-	for p in data.far: widest = maxf(widest, Vector2(p.x, p.z).length())
-	for p in data.body: widest = maxf(widest, Vector2(p.x, p.z).length() / SHELL)
+		"body": _hull(seed, lobe_list, 2 if tree else 1, SHELL, lift), "far": _hull(seed, lobe_list, 1, 1.12 if wide else 0.98, lift)}
+	return data
+
+## Leaf cards of a shaped variant and the horizontal fit of the whole crown.
+static func _leaves(plant: String, variant: int, data: Dictionary) -> Dictionary:
+	var key := "%s_%d" % [plant, variant]
+	var tree := plant != "shrub"
+	var wide := plant == "wide"
+	var base: float = data.base
+	var height: float = data.height
+	var radius: float = data.radius
+	var lobe_list: Array = data.lobes
+	var card_size := 0.7 if wide else (0.58 if tree else 0.22)
+	data["cards"] = _card_list(data.seed, lobe_list, (300 + 12 * variant) if wide else ((150 + 12 * variant) if tree else (26 + 6 * variant)), card_size, base, height, radius, wide)
+	# Horizontal fit: every vertex of the full crown (far hull, the shell as
+	# drawn with wind and grown back on low without it, the card corners, or
+	# for wide crowns the card centres plus a quarter card) inside its limit.
+	# Points inside `safe` (the limit under the largest possible sway) cannot
+	# lower the fit and skip the exact test.
+	var safe := reach_limit(plant, (1.0 if tree else 0.4) * (SWAY_PEAK * TREE_SWAY + FLUTTER))
+	var still := reach_limit(plant)
+	var fit := 1.0
+	for p in data.far:
+		if Vector2(p.x, p.z).length() * fit > safe: fit = minf(fit, _fit(plant, p, sway_reach(p.y, base, height, tree, false)))
+	for p in data.body:
+		if Vector2(p.x, p.z).length() * fit > safe: fit = minf(fit, _fit(plant, p, sway_reach(p.y, base, height, tree, false)))
+		if Vector2(p.x, p.z).length() / SHELL * fit > still: fit = still * SHELL / Vector2(p.x, p.z).length()
 	for card: Array in data.cards:
-		for p in card[0] as PackedVector3Array: widest = maxf(widest, Vector2(p.x, p.z).length())
-	var fit := minf(1.0, (TREE_REACH if tree else SHRUB_REACH) / widest)
+		var corners: PackedVector3Array = card[0]
+		if wide:
+			var centre := (corners[0] + corners[2]) * 0.5
+			var r := Vector2(centre.x, centre.z).length() + card_size * 0.25
+			if r * fit > safe: fit = minf(fit, reach_limit(plant, sway_reach(centre.y, base, height, tree, true)) / r)
+		else:
+			for p in corners:
+				if Vector2(p.x, p.z).length() * fit > safe: fit = minf(fit, _fit(plant, p, sway_reach(p.y, base, height, tree, true)))
 	var squeeze := Vector3(fit, 1.0, fit)
 	for hull in ["body", "far"]:
 		var points: PackedVector3Array = data[hull]
@@ -360,7 +495,22 @@ static func crown(plant: String, variant: int) -> Dictionary:
 		data[hull] = points
 	for card: Array in data.cards:
 		var corners: PackedVector3Array = card[0]
-		for i in 4: corners[i] *= squeeze
+		if not wide:
+			for i in 4: corners[i] *= squeeze
+			card[0] = corners
+			continue
+		var centre := (corners[0] + corners[2]) * 0.5
+		var moved := centre * squeeze
+		var shrink := 1.0
+		while shrink > 0.0:
+			var inside := true
+			for i in 4:
+				var q := moved + (corners[i] - centre) * shrink
+				var r := Vector2(q.x, q.z).length()
+				if r > safe and r > reach_limit(plant, sway_reach(q.y, base, height, tree, true)): inside = false
+			if inside: break
+			shrink = maxf(0.0, shrink - 0.05)
+		for i in 4: corners[i] = moved + (corners[i] - centre) * shrink
 		card[0] = corners
 	for lobe: Array in lobe_list:
 		lobe[0] = (lobe[0] as Vector3) * squeeze
@@ -369,6 +519,11 @@ static func crown(plant: String, variant: int) -> Dictionary:
 	data.fit = fit
 	_crowns[key] = data
 	return data
+
+## Largest squeeze that keeps point `p` (with `sway_m` of wind) inside the limit.
+static func _fit(plant: String, p: Vector3, sway_m: float) -> float:
+	var r := Vector2(p.x, p.z).length()
+	return reach_limit(plant, sway_m) / r if r > 0.001 else 1.0
 
 ## Hull surface from points: averaged face normals bent toward the crown
 ## centre's ellipsoid normal, vertex AO. The near shell (under the cards) is
@@ -452,12 +607,26 @@ static func _tube(builder: Builder, seed: int, points: Array, radii: Array, side
 ## smallest instance scale (0.85) stays >= 0.10 m up to 1.7 m, so the 14 cm
 ## collision box (half diagonal 0.099 m) never shows through below 1.4 m.
 const TRUNK := [Vector2(-0.12, 0.26), Vector2(0.06, 0.19), Vector2(0.35, 0.15), Vector2(1.0, 0.135), Vector2(1.7, 0.128)]
+## Wide park trunk: the inscribed radius times the smallest wide scale (0.95 x
+## 160 / 200) stays >= 0.11 m up to 2.2 m (the 1.4 m box at that scale reaches
+## 1.85 m of mesh height), on into the crown above the canopy base.
+const WIDE_TRUNK := [Vector2(-0.12, 0.34), Vector2(0.06, 0.25), Vector2(0.4, 0.2), Vector2(1.2, 0.178), Vector2(2.2, 0.162)]
 ## Lowest mesh height of a branch fork (below the crown's lifted underside).
 const FORK := 1.12
+const WIDE_FORK := 1.4
+
+## Trunk rings and smallest instance scale of a tree mesh set.
+static func trunk(plant: String) -> Array:
+	return WIDE_TRUNK if plant == "wide" else TRUNK
+
+static func smallest_scale(plant: String) -> float:
+	if plant == "wide": return WIDE_SCALE.x * float(WIDE_FROM_CM) / 200.0
+	return TREE_SCALE.x if plant == "tree" else SHRUB_SCALE.x
 
 static func plant(kind: String, part: String, variant: int, materials: Dictionary) -> ArrayMesh:
 	var data := crown(kind, variant)
-	var tree := kind == "tree"
+	var tree := kind != "shrub"
+	var wide := kind == "wide"
 	var base: float = data.base
 	var height: float = data.height
 	var seed: int = data.seed
@@ -471,85 +640,41 @@ static func plant(kind: String, part: String, variant: int, materials: Dictionar
 			if tree:
 				var points := []
 				var radii := []
-				for ring: Vector2 in TRUNK:
+				for ring: Vector2 in trunk(kind):
 					points.append(Vector3(0.0, ring.x, 0.0)); radii.append(ring.y)
-				points.append(Vector3(0.0, base + height * 0.45, 0.0)); radii.append(0.07)
-				points.append(Vector3(0.0, base + height * 0.75, 0.0)); radii.append(0.035)
+				points.append(Vector3(0.0, base + height * 0.45, 0.0)); radii.append(0.1 if wide else 0.07)
+				points.append(Vector3(0.0, base + height * 0.75, 0.0)); radii.append(0.05 if wide else 0.035)
 				_tube(builder, seed, points, radii, 8, bark, true, base, height)
 				# Branches fork below the crown and climb out under its lifted
-				# underside into the side lobes.
-				for b in (2 if variant == 1 else 3):
-					var lobe: Array = data.lobes[1 + b]
-					var start := Vector3(0.0, FORK + 0.13 * float(b), 0.0)
+				# underside into the side lobes (wide trees: every other lobe of
+				# the lower ring).
+				# Wide crowns open a broad fork: the branches end in the lower
+				# ring's lobe centres (over half the crown radius out), rising
+				# from a fork just above the collision box.
+				var thick := 1.45 if wide else 1.0
+				for b in (4 if wide else (2 if variant == 1 else 3)):
+					var lobe: Array = data.lobes[1 + (b * 2 if wide else b)]
+					var start := Vector3(0.0, (WIDE_FORK if wide else FORK) + (0.08 if wide else 0.13) * float(b), 0.0)
 					var target: Vector3 = lobe[0]
-					var end := Vector3(target.x * 0.8, base + height * 0.3, target.z * 0.8)
-					var middle := Vector3(target.x * 0.55, lerpf(start.y, end.y, 0.4), target.z * 0.55)
-					_tube(builder, seed * 7 + b, [start, middle, end], [0.07, 0.05, 0.025], 5, bark, false, base, height)
+					var reach := 1.0 if wide else 0.8
+					var end := Vector3(target.x * reach, base + height * (0.34 if wide else 0.3), target.z * reach)
+					var out := 0.6 if wide else 0.55
+					var middle := Vector3(target.x * out, lerpf(start.y, end.y, 0.35 if wide else 0.4), target.z * out)
+					_tube(builder, seed * 7 + b, [start, middle, end], [0.07 * thick, 0.05 * thick, 0.025 * thick], 5, bark, false, base, height)
 			_crown_surface(builder, data, data.body, 2 if tree else 1, sway_scale, true)
 			builder.commit(mesh, materials.get("body"))
 		"cards":
 			_cards(builder, data, sway_scale)
 			builder.commit(mesh, materials.get("cards"))
 		_:
-			if tree:
+			if wide:
+				_tube(builder, seed, [Vector3(0.0, -0.1, 0.0), Vector3(0.0, base - 0.2, 0.0), Vector3(0.0, base + 0.4, 0.0)], [0.22, 0.18, 0.13], 6, bark, false, base, height)
+			elif tree:
 				_tube(builder, seed, [Vector3(0.0, -0.1, 0.0), Vector3(0.0, 1.7, 0.0), Vector3(0.0, base + 0.3, 0.0)], [0.17, 0.145, 0.1], 6, bark, false, base, height)
 			_crown_surface(builder, data, data.far, 1, sway_scale, false)
 			builder.commit(mesh, materials.get("body"))
-	mesh.resource_name = "mk_%s_%s_%d" % ["city_tree" if tree else "shrub", part, variant]
-	return mesh
-
-## Grass tuft: twenty-four curved blades in a compact 0.2 m clump (three
-## triangles each) and two tilted flower heads on the tallest stems, collapsed
-## unless the instance carries a flower. Blades are tinted by the instance and
-## the lawn patches; their roots match the lawn underneath.
-const GRASS_BLADES := 24
-static func grass(materials: Dictionary) -> ArrayMesh:
-	var builder := Builder.new()
-	var seed := 301
-	for blade in GRASS_BLADES:
-		var angle := unit(seed, blade, 1) * TAU
-		var root := Vector3(cos(angle), 0.0, sin(angle)) * 0.2 * sqrt(unit(seed, blade, 2))
-		var tall := blade >= GRASS_BLADES - 2
-		var length := 0.2 if tall else 0.06 + 0.1 * unit(seed, blade, 3)
-		var lean_angle := angle + (unit(seed, blade, 4) - 0.5) * 1.2
-		var lean := Vector3(cos(lean_angle), 0.0, sin(lean_angle)) * (0.03 if tall else 0.03 + 0.06 * unit(seed, blade, 5))
-		var facing := unit(seed, blade, 6) * TAU
-		var side := Vector3(cos(facing), 0.0, sin(facing))
-		var normal := side.cross(Vector3.UP).normalized().lerp(Vector3.UP, 0.6).normalized()
-		var width := 0.01 if tall else 0.018
-		var shade := 0.92 + 0.1 * unit(seed, blade, 7)
-		var rows := [[0.0, width, 0.82], [0.55, width * 0.7, 0.95], [1.0, 0.0, 1.08]]
-		var first := builder.vertices.size()
-		for row: Array in rows:
-			var t: float = row[0]
-			var centre := root + Vector3(0.0, length * t, 0.0) + lean * t * t
-			var half: float = row[1] * 0.5
-			var c: float = row[2] * shade
-			var weights := Vector2(t * t, 0.5 * t)
-			if half > 0.0:
-				builder.add(centre - side * half, normal, Color(c, c, c, 1.0), Vector2.ZERO, weights)
-				builder.add(centre + side * half, normal, Color(c, c, c, 1.0), Vector2.ZERO, weights)
-			else:
-				builder.add(centre, normal, Color(c, c, c, 1.0), Vector2.ZERO, weights)
-		builder.triangle(first, first + 1, first + 3)
-		builder.triangle(first, first + 3, first + 2)
-		builder.triangle(first + 2, first + 3, first + 4)
-		if tall:
-			# Five-petal head tilted 50 degrees toward the stem's lean, so it
-			# shows its face from eye height (UV2.y = -1 marks petals: flower
-			# colour, no flutter).
-			var tip := root + Vector3(0.0, length + 0.01, 0.0) + lean
-			var facing_out := Vector3(cos(lean_angle), 0.0, sin(lean_angle))
-			var up := Vector3.UP.rotated(facing_out.cross(Vector3.UP).normalized(), -deg_to_rad(50.0))
-			var across := facing_out.cross(Vector3.UP).normalized()
-			var along := up.cross(across).normalized()
-			var centre_index := builder.add(tip + up * 0.008, up, Color(0.95, 0.9, 0.55, 0.0), Vector2.ZERO, Vector2(1.0, -1.0))
-			for petal in 5:
-				var a := TAU * float(petal) / 5.0 + angle
-				builder.add(tip + (across * cos(a) + along * sin(a)) * 0.045, up, Color(1.0, 1.0, 1.0, 0.0), Vector2.ZERO, Vector2(1.0, -1.0))
-			for petal in 5:
-				builder.triangle(centre_index, centre_index + 1 + (petal + 1) % 5, centre_index + 1 + petal)
-	var mesh := ArrayMesh.new()
-	builder.commit(mesh, materials.get("grass"))
-	mesh.resource_name = "mk_grass_tuft"
+	mesh.resource_name = "mk_%s_%s_%d" % [("park_tree" if wide else "city_tree") if tree else "shrub", part, variant]
+	# `far` is the variant's last part (STEPS): its shape is not kept for the
+	# process lifetime (a later build recomputes it identically).
+	if part == "far": _crowns.erase("%s_%d" % [kind, variant])
 	return mesh

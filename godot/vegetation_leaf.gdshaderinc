@@ -1,9 +1,9 @@
-// Display-only park vegetation (vegetation_meshes.gd), shared by three
+// Display-only park vegetation (vegetation_meshes.gd), shared by two
 // variants: vegetation_leaf.gdshader (the opaque body: trunks, branches and the
-// crown hull), vegetation_leaf_cards.gdshader (alpha-scissor LEAF_CARDS) and
-// vegetation_grass.gdshader (GRASS tufts). Separate preloaded shaders compile
-// when the renderer scripts load, never in a streaming step.
-#if defined(LEAF_CARDS) || defined(GRASS)
+// crown hull) and vegetation_leaf_cards.gdshader (alpha-scissor LEAF_CARDS).
+// Separate preloaded shaders compile when the renderer scripts load, never in
+// a streaming step. (Grass is the grass field's own vegetation_grass.gdshader.)
+#ifdef LEAF_CARDS
 render_mode cull_disabled;
 #else
 render_mode cull_back;
@@ -17,54 +17,33 @@ uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform bool environment_enabled = false;
 // Display quality vegetation_motion (0 on low).
 uniform float wind_strength = 0.5;
-// Sway of a weight-1 vertex (canopy top, blade tip) in metres at full strength.
+// Sway of a weight-1 vertex (canopy top) in metres at full strength.
 uniform float sway_metres = 0.07;
 // Leaf colour (linear) of a placement without instance data (single-node path).
 uniform vec3 default_tint = vec3(0.105,0.185,0.075);
-// Grass tufts shrink into the ground between these camera distances (metres).
-uniform float grass_fade_start = 30.0;
-uniform float grass_fade_end = 40.0;
 // Low quality draws no leaf cards: the body's near hull (UV.y > 0, the dark
 // gap colour under the cards) grows back to the full crown around (0, UV.x, 0)
 // and takes the far hull's brightness.
 uniform bool cards_hidden = false;
 varying vec3 tint;
 varying vec3 world_position;
-varying float flower_kind;
-
-// Same sine hash and value noise as atmosphere_surface (facade_hash,
-// lawn_noise): tufts follow the lawn's lush and dry patches.
-float vegetation_hash(vec2 v) { return fract(sin(dot(v,vec2(12.9898,78.233)))*43758.5453); }
-float lawn_noise(vec2 p) {
-    vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
-    float a=vegetation_hash(i), b=vegetation_hash(i+vec2(1.0,0.0)), c=vegetation_hash(i+vec2(0.0,1.0)), d=vegetation_hash(i+vec2(1.0,1.0));
-    return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
-}
 
 void vertex() {
-    // INSTANCE_CUSTOM: rgb leaf/grass tint (linear), a = 1 + kind + phase where
-    // kind is a grass flower colour (0 none) and phase in [0,1). Zero = no data.
+    // INSTANCE_CUSTOM: rgb leaf tint (linear), a = 1 + phase with phase in
+    // [0,1). Zero = no data.
     bool has_custom = INSTANCE_CUSTOM.a >= 1.0;
     float phase = has_custom ? fract(INSTANCE_CUSTOM.a)*6.2831853 : 0.0;
     tint = has_custom ? INSTANCE_CUSTOM.rgb : default_tint;
-    flower_kind = has_custom ? floor(INSTANCE_CUSTOM.a)-1.0 : 0.0;
     vec3 origin = MODEL_MATRIX[3].xyz;
     mat3 basis = mat3(MODEL_MATRIX);
     float scale2 = max(dot(basis[0],basis[0]),1e-6);
-#ifdef GRASS
-    // Flower heads (UV2.y < 0) collapse unless the instance carries a flower.
-    if(UV2.y < -0.5 && flower_kind < 0.5) VERTEX = vec3(0.0);
-    // Shrink toward the instance origin with distance: no pop at the range end.
-    float keep = 1.0-smoothstep(grass_fade_start,grass_fade_end,distance(origin,INV_VIEW_MATRIX[3].xyz));
-    VERTEX *= keep;
-#endif
-#if !defined(LEAF_CARDS) && !defined(GRASS)
+#ifndef LEAF_CARDS
     if(cards_hidden && UV.y > 0.0) VERTEX = vec3(0.0,UV.x,0.0)+(VERTEX-vec3(0.0,UV.x,0.0))*UV.y;
 #endif
     if(wind_strength > 0.0) {
         // Coherent gusts along one world direction, offset per placement;
         // UV2.x is the sway weight measured from the canopy base (0 on the
-        // trunk), UV2.y a flutter weight for cards and blade tips.
+        // trunk), UV2.y a flutter weight for cards.
         float t = TIME;
         float gust = 0.55+0.45*sin(t*0.37+dot(origin.xz,vec2(0.021,0.013)));
         float bend = (sin(t*1.25+phase+dot(origin.xz,vec2(0.09,0.05)))*0.6+sin(t*2.3+phase*1.7)*0.25+0.35)*gust;
@@ -73,9 +52,6 @@ void vertex() {
         // A card flutters as one piece (UV2.y = 1 + its phase): no stretching.
         float card = fract(UV2.y)*6.2831853+phase;
         offset += vec3(sin(t*2.1+card),0.4*sin(t*1.7+card*1.3),cos(t*2.4+card))*0.008*UV2.x;
-#elif defined(GRASS)
-        float flutter = max(UV2.y,0.0);
-        offset += vec3(sin(t*3.1+VERTEX.x*3.1+phase),0.0,cos(t*3.6+VERTEX.z*2.9+phase))*flutter*0.012;
 #endif
         // World offset to model space (rotation and uniform scale only).
         VERTEX += transpose(basis)*(offset*wind_strength)/scale2;
@@ -102,7 +78,7 @@ void fragment() {
     yellowing = texel.g;
 #endif
     vec3 world_normal = normalize((INV_VIEW_MATRIX*vec4(NORMAL,0.0)).xyz);
-#if !defined(LEAF_CARDS) && !defined(GRASS)
+#ifndef LEAF_CARDS
     // Leaf lobes: a triplanar leaf pattern breaks the facets into clusters
     // with darker gaps; it settles to its mean with the mipmaps far away.
     if(leaf > 0.5) {
@@ -115,20 +91,8 @@ void fragment() {
     }
 #endif
     vec3 leaf_color = tint;
-#ifdef GRASS
-    // Same broad lush/dry patches as the lawn shader under the tuft.
-    vec2 g = world_position.xz;
-    float broad = sin(g.x*0.055+sin(g.y*0.037))*cos(g.y*0.063);
-    float patches = lawn_noise(g*0.09)*0.65+lawn_noise(g*0.23+7.3)*0.35;
-    leaf_color *= (0.96+0.06*broad)*mix(vec3(0.86,0.90,0.84),vec3(1.10,1.08,1.02),patches);
-    float dry = smoothstep(0.60,0.82,lawn_noise(g*0.05+19.1));
-    leaf_color = mix(leaf_color,leaf_color*vec3(1.16,1.08,0.78),dry*0.55);
-    // Petals (COLOR.a 0) take the flower colour of the instance.
-    vec3 petals = flower_kind < 1.5 ? vec3(0.86,0.85,0.80) : (flower_kind < 2.5 ? vec3(0.95,0.72,0.10) : vec3(0.52,0.36,0.78));
-    if(UV2.y < -0.5) albedo *= petals;
-#endif
-#if defined(LEAF_CARDS) || defined(GRASS)
-    // Two-sided cards and blades keep their bent (outward) normal on both sides.
+#ifdef LEAF_CARDS
+    // Two-sided cards keep their bent (outward) normal on both sides.
     if(!FRONT_FACING) { NORMAL = -NORMAL; world_normal = -world_normal; }
 #endif
     float sky = 0.0;
@@ -137,7 +101,7 @@ void fragment() {
     // yellowing and back-light low so tops are not washed out.
     sky = smoothstep(0.3,0.9,world_normal.y);
     yellowing *= 1.0-0.7*sky;
-#elif !defined(GRASS)
+#else
     // The low tier's grown hull is the whole crown: far-hull brightness.
     if(cards_hidden && UV.y > 0.0) albedo *= 1.4;
 #endif

@@ -17,10 +17,17 @@ pub struct DistantMesh {
 /// City trees of the near renderer (map-kit godot/vegetation_meshes.gd `TREES`):
 /// canopy base, canopy height and silhouette radius in metres at scale 1 (the
 /// near crowns reach at most 1.2 m at the largest scale, the 120 cm placement
-/// footprint). A tree's variant, scale (0.85-1.15) and yaw come from its object
-/// identity exactly as in chunk_renderer.gd `vegetation_placement`, so the
-/// silhouette matches the near tree it replaces.
+/// footprint). A tree's variant, scale and yaw come from its object identity
+/// and footprint radius exactly as in chunk_renderer.gd `vegetation_placement`
+/// and vegetation_meshes.gd `tree_set`, so the silhouette matches the near
+/// tree it replaces.
 const CITY_TREES: [[f32; 3]; 3] = [[1.5, 2.3, 0.95], [1.45, 2.9, 0.85], [1.7, 1.8, 1.0]];
+/// Wide park trees (vegetation_meshes.gd `WIDE_TREES`) of zone footprints from
+/// `WIDE_FROM_CM`: canopy base and height to the near crown's top, and a
+/// hexagon whose mean radius matches the near crown's mean silhouette (between
+/// its leaf cards and far hull), at most 2.0 m at the largest scale.
+const WIDE_CITY_TREES: [[f32; 3]; 3] = [[1.65, 3.47, 1.73], [1.6, 3.57, 1.53], [1.75, 3.18, 1.74]];
+const WIDE_FROM_CM: i64 = 160;
 /// One distant city tree: a three-sided trunk (6 triangles), a hexagonal crown
 /// frustum (12) and a hexagonal cone over it (6). The full generation's 12
 /// trunk-box triangles of the tree, which the distant generation omits, plus the
@@ -393,6 +400,7 @@ impl Package {
         }
         let mut templates = BTreeMap::new();
         let mut silhouettes = BTreeMap::new();
+        let mut city_radii = None;
         for object in objects {
             checkpoint()?;
             if object.asset_id == "builtin:tree" {
@@ -409,7 +417,8 @@ impl Package {
                 continue;
             }
             if object.asset_id == "builtin:city_tree" {
-                add_city_tree(&mut result, &object.id, object.position);
+                let radii = city_radii.get_or_insert_with(|| mapkit_core::city_tree_zone_radii(&self.document));
+                add_city_tree(&mut result, &object.id, object.position, mapkit_core::city_tree_radius(radii, &object.id));
                 continue;
             }
             let Some(asset) = self.document.asset(&object.asset_id).filter(|a| a.path.ends_with(".glb"))
@@ -459,14 +468,28 @@ impl Package {
     }
 }
 
-/// Trunk, crown frustum and crown cone of a city tree in scene metres. Flat
-/// sRGB colours like the other proxies: bark, a darker lower crown (shaded
-/// underside) and a lighter top.
-fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3]) {
+/// Shapes, size factor, scale span and trunk radii (foot, crown) of the city
+/// tree set for a placement footprint of `radius_cm` (vegetation_meshes.gd
+/// `tree_set`): wide park trees scaled by radius / 200 from `WIDE_FROM_CM`,
+/// else the street trees scaled by radius / 120.
+fn city_tree_set(radius_cm: i64) -> (&'static [[f32; 3]; 3], f32, [f32; 2], [f32; 2]) {
+    let radius = radius_cm.clamp(120, 200);
+    if radius >= WIDE_FROM_CM {
+        (&WIDE_CITY_TREES, radius as f32 / 200., [0.95, 1.1], [0.22, 0.15])
+    } else {
+        (&CITY_TREES, radius as f32 / 120., [0.85, 1.15], [0.16, 0.12])
+    }
+}
+
+/// Trunk, crown frustum and crown cone of a city tree with a placement
+/// footprint of `radius_cm` in scene metres. Flat sRGB colours like the other
+/// proxies: bark, a darker lower crown (shaded underside) and a lighter top.
+fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3], radius_cm: i64) {
     let hash = mapkit_core::sha256(object_id.as_bytes());
     let pick = u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16_777_216.;
-    let [base, height, radius] = CITY_TREES[(pick * 3.) as usize % 3];
-    let scale = 0.85 + 0.3 * (pick * 7.).fract();
+    let (shapes, factor, span, trunk) = city_tree_set(radius_cm);
+    let [base, height, radius] = shapes[(pick * 3.) as usize % 3];
+    let scale = factor * (span[0] + (span[1] - span[0]) * (pick * 7.).fract());
     let yaw = std::f32::consts::TAU * (pick * 13.).fract();
     let origin = [position[0] as f32 * 0.01, position[1] as f32 * 0.01, -position[2] as f32 * 0.01];
     let ring = |sides: usize, r: f32, y: f32| -> Vec<[f32; 3]> {
@@ -493,7 +516,7 @@ fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3]) 
             triangle([lower[k], upper[j % upper.len()], lower[j]], color);
         }
     };
-    band(&ring(3, 0.16, -0.1), &ring(3, 0.12, base + 0.3), [90, 68, 51, 255]);
+    band(&ring(3, trunk[0], -0.1), &ring(3, trunk[1], base + 0.3), [90, 68, 51, 255]);
     let middle = ring(6, radius, base + height * 0.5);
     band(&ring(6, radius * 0.55, base + height * 0.05), &middle, [62, 90, 58, 255]);
     band(&middle, &[[origin[0], origin[1] + (base + height) * scale, origin[2]]], [80, 110, 70, 255]);
@@ -532,21 +555,32 @@ mod tests {
     use super::*;
     #[test]
     fn city_tree_is_a_trunk_frustum_and_cone_matching_the_near_tree() {
-        for id in ["tree-a", "tree-b", "tree-c", "zone-1:4:7"] {
+        for (id, footprint) in [("tree-a", 120), ("tree-b", 120), ("tree-c", 140), ("zone-1:4:7", 120),
+            ("park-1:4:7", 200), ("park-1:5:7", 200), ("park-1:6:7", 200), ("park-1:4:8", 170)] {
             let mut mesh = DistantMesh::default();
-            add_city_tree(&mut mesh, id, [1000, 200, -3000]);
+            add_city_tree(&mut mesh, id, [1000, 200, -3000], footprint);
             assert_eq!(mesh.vertices.len() as u64, CITY_TREE_TRIANGLES * 3);
             assert_eq!(mesh.colors.len(), mesh.vertices.len());
             assert!(mesh.decoration.iter().all(|&d| d == 0) && mesh.light_data.iter().all(|l| *l == [0., 0.]));
             let hash = mapkit_core::sha256(id.as_bytes());
             let pick = u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16_777_216.;
-            let [base, height, radius] = CITY_TREES[(pick * 3.) as usize % 3];
-            let scale = 0.85 + 0.3 * (pick * 7.).fract();
+            let (shapes, factor, span) = if footprint >= WIDE_FROM_CM {
+                (WIDE_CITY_TREES, footprint as f32 / 200., [0.95, 1.1])
+            } else {
+                (CITY_TREES, footprint as f32 / 120., [0.85, 1.15])
+            };
+            let [base, height, radius] = shapes[(pick * 3.) as usize % 3];
+            let scale = factor * (span[0] + (span[1] - span[0]) * (pick * 7.).fract());
             let top = mesh.vertices.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
             let low = mesh.vertices.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
             assert!((top - (2. + (base + height) * scale)).abs() < 1e-4 && (low - (2. - 0.1 * scale)).abs() < 1e-4);
             let reach = mesh.vertices.iter().map(|p| (p[0] - 10.).hypot(p[2] - 30.)).fold(0f32, f32::max);
             assert!((reach - radius * scale).abs() < 1e-4);
+            // The silhouette stays inside the placement footprint at every scale.
+            assert!(radius * factor * span[1] <= footprint as f32 / 100., "{id}: {reach} m of {footprint} cm");
+            if footprint == 200 {
+                assert!(reach >= 1.4 && top - 2. >= 4.6, "{id}: a wide park silhouette ({reach} m, {} m tall)", top - 2.);
+            }
             // Every face points away from the tree axis or up (outward winding).
             for t in mesh.vertices.chunks(3) {
                 let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];

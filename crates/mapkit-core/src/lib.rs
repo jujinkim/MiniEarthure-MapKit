@@ -750,18 +750,7 @@ impl MapDocument {
         // aliases before generation; never repair IDs or depend on cell order.
         let zone_ids: BTreeSet<_> = self.zones.iter().map(|z| z.id.as_str()).collect();
         for id in &ids {
-            let generated = id
-                .rsplit_once(':')
-                .and_then(|(prefix, y)| {
-                    let (zone, x) = prefix.rsplit_once(':')?;
-                    let canonical_index = |value: &str| {
-                        value
-                            .parse::<i64>()
-                            .is_ok_and(|index| index.to_string() == value)
-                    };
-                    Some(zone_ids.contains(zone) && canonical_index(x) && canonical_index(y))
-                })
-                .unwrap_or(false);
+            let generated = generated_zone_id(id).is_some_and(|zone| zone_ids.contains(zone));
             if id.as_str() == "terrain" || generated {
                 return Err(error(
                     "E_ID",
@@ -1237,8 +1226,34 @@ mod road_paint;
 pub use road_paint::{RoadPaint, RoadPaintSegment};
 mod road_safety;
 mod urban;
-pub use placement::BuildingPrism;
+pub use placement::{BuildingPrism, CITY_TREE_RADIUS};
 
+/// Zone of a generated vegetation identity `{zone}:{x}:{y}` (canonical lattice
+/// integers, placement.rs), else None. Validation rejects any authored identity
+/// of that form whose zone exists, so the prefix names the zone that grew it.
+pub fn generated_zone_id(id: &str) -> Option<&str> {
+    let (prefix, y) = id.rsplit_once(':')?;
+    let (zone, x) = prefix.rsplit_once(':')?;
+    let canonical = |value: &str| value.parse::<i64>().is_ok_and(|index| index.to_string() == value);
+    (canonical(x) && canonical(y)).then_some(zone)
+}
+/// Declared footprint radius (cm) of every vegetation zone growing
+/// `builtin:city_tree`, by zone identity (validated 120..=200).
+pub fn city_tree_zone_radii(d: &MapDocument) -> BTreeMap<&str, i64> {
+    d.zones
+        .iter()
+        .filter_map(|z| z.tree.as_ref().filter(|t| t.asset_id == "builtin:city_tree").map(|t| (z.id.as_str(), i64::from(t.radius_cm))))
+        .collect()
+}
+/// Placement footprint radius (cm) of a `builtin:city_tree` object: a zone tree
+/// takes its zone's declared radius (`radii` from `city_tree_zone_radii`), a
+/// street or authored city tree `CITY_TREE_RADIUS`. Display only: renderers keep
+/// every crown inside it, as placement keeps that square clear.
+pub fn city_tree_radius(radii: &BTreeMap<&str, i64>, object_id: &str) -> i64 {
+    generated_zone_id(object_id)
+        .and_then(|zone| radii.get(zone).copied())
+        .unwrap_or(placement::CITY_TREE_RADIUS)
+}
 /// Exact piecewise planar height of the immutable input grid, including seams.
 /// The authored OSM map scale 1:D (1–8) that an `osm-extract-v1` layer records
 /// in its attribution notice (`authored_units.source_denominator`), if any.

@@ -15,8 +15,11 @@ original coordinates and boundaries. GLB collision proxies are omitted and
 replaced by coloured bounds grouped per scene mesh/material, including node and
 placement transforms. Built-in trees use a canopy volume; a city tree is a
 three-sided trunk under a hexagonal crown frustum and cone (24 triangles: darker
-lower, lighter upper crown) sized, scaled and turned by its object identity like
-the near renderer's variant (`vegetation_meshes.gd`). Its omitted 12-triangle
+lower, lighter upper crown) sized, scaled and turned by its object identity and
+footprint radius like the near renderer's variant (`vegetation_meshes.gd`
+`tree_set`: a zone tree takes its zone's radius, found from the `{zone}:{x}:{y}`
+identity, so park zones with 200 cm footprints show wide park crowns up to 1.91 m
+from the trunk, the hexagon's mean radius matching the near crown's). Its omitted 12-triangle
 collision trunk and the per-object allowance cover it, so the triangle bound is
 unchanged. No collision or full
 GLB/texture instance is produced. The traversal is iterative. Building material lookup uses normalized ID order;

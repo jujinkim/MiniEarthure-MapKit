@@ -30,6 +30,11 @@ uniform bool terrain_surface = false;
 instance uniform float shore_level_m = -100000.0;
 // Grass ground: broad lush/dry patches, mown clumps and fine blades in world space.
 uniform bool lawn = false;
+// Reach of the grass field's blades and the shade under them, set by the
+// field on its cells' lawn materials (grass_field.gd; 0 while it shows none):
+// the lawn darkens toward the camera as the blades' shade.
+uniform float grass_field_distance = 0.0;
+uniform float grass_field_shade = 0.0;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform float roughness = 0.85;
 uniform float metallic = 0.0;
@@ -470,6 +475,10 @@ void fragment() {
             color*=mix(1.0,0.90+0.12*clumps+0.08*blades,effect_weight);
             float clover=smoothstep(0.78,0.92,lawn_noise(g*1.7+11.0));
             color=mix(color,color*vec3(0.82,0.94,0.80),clover*0.5*effect_weight);
+            // Shade between the grass field's blades (grass_field.gd): full
+            // near the camera, gone where the blades have thinned out, and
+            // none on banks too steep for blades (grass_scatter.ground).
+            if(grass_field_distance>0.0) color*=1.0-grass_field_shade*smoothstep(0.55,0.65,world_normal.y)*(1.0-smoothstep(grass_field_distance*0.45,grass_field_distance,view_distance));
             // Lawn relief: the fine blade noise gradient tilts the normal a little
             // near the camera and settles flat by 30 m, and wherever a pixel
             // spans a third of the 11/m octave's period or more (grazing views

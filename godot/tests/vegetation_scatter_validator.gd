@@ -1,12 +1,12 @@
 extends SceneTree
-## Park vegetation (vegetation_meshes.gd, grass_scatter.gd, chunk_renderer):
-## deterministic grass scatter with per-tier caps and bounded steps, no grass on
-## low or polar ground, tier-sized grass reservations, tree/shrub body, card and
+## Park vegetation (vegetation_meshes.gd, chunk_renderer; the grass field has
+## grass_field_validator): reservations equal to the estimate (less unused
+## grass on low and polar ground), tree/shrub body, card and
 ## far ranges and shadows per tier, collision trunk coverage, crown reach
-## inside the placement footprint, visible branches, and release of every cell
-## and shared reservation.
+## inside every placement footprint (street 120 cm, park zones up to 200 cm),
+## visible branches, the shared set's memory, and release of every cell and
+## shared reservation.
 const RENDER := preload("../chunk_renderer.gd")
-const GRASS := preload("../grass_scatter.gd")
 const VEGETATION := preload("../vegetation_meshes.gd")
 const QUALITY := preload("../display_quality.gd")
 const CACHE := preload("../render_resource_cache.gd")
@@ -31,7 +31,6 @@ func check(ok: bool, label: String) -> void:
 func _initialize() -> void: run.call_deferred()
 
 func run() -> void:
-	scatter()
 	meshes()
 	await renderer()
 	QUALITY.current = {}
@@ -48,57 +47,6 @@ func ground(offset := Vector3.ZERO) -> PackedVector3Array:
 	points.append_array([offset + Vector3(0, 0, 4), offset + Vector3(4, 0, 4), offset + Vector3(0, 6, 4)])
 	return points
 
-func run_scatter(parts: Array, cap: int) -> Dictionary:
-	var state := GRASS.begin(parts, Vector2i(3, -2), cap, Color(0.2, 0.3, 0.1))
-	var steps := 0
-	var before := 0
-	while not GRASS.advance(state):
-		steps += 1
-		check(state.emitted - before <= GRASS.SCATTER_INSTANCES, "one step emits at most %d tufts" % GRASS.SCATTER_INSTANCES)
-		before = state.emitted
-	var groups := []
-	while true:
-		var group := GRASS.take_group(state)
-		if group.is_empty(): break
-		groups.append(group)
-	return {"state": state, "steps": steps, "groups": groups}
-
-func scatter() -> void:
-	var points := ground()
-	var high := run_scatter([points], 4000)
-	print("grass scatter: %d steps, peak step %d usec" % [high.steps, high.state.peak_usec])
-	check(int(high.state.peak_usec) < 8000, "one scatter step stays within a frame work budget: %d usec" % high.state.peak_usec)
-	var again := run_scatter([points], 4000)
-	var count := 0
-	var flowers := 0
-	for group: Dictionary in high.groups:
-		count += int(group.count)
-		var buffer: PackedFloat32Array = group.buffer
-		for i in group.count:
-			var o := Vector3(buffer[i * 16 + 3], buffer[i * 16 + 7], buffer[i * 16 + 11])
-			check(o.x >= 0.0 and o.x <= 64.0 and o.z <= 0.0 and o.z >= -64.0 and is_equal_approx(o.y, -0.02), "tufts lie on ground triangles, not the steep bank: %s" % o)
-			var cell := Vector2i(floori(o.x / GRASS.BUCKET_METRES), floori(o.z / GRASS.BUCKET_METRES))
-			check(cell == group.group, "a group holds only its own 32 m square")
-			check(buffer[i * 16 + 15] >= 1.0, "every tuft carries instance data")
-			flowers += int(buffer[i * 16 + 15] >= 2.0)
-	# 4,096 m2 at 0.9 tufts per m2 stays under the high cap.
-	check(count > 3400 and count < 3900, "density bound below the cap: %d" % count)
-	check(flowers > count / 25 and flowers < count / 5, "about one tuft in ten carries a flower, in patches: %d" % flowers)
-	check(high.steps > 8, "scatter spans bounded steps: %d" % high.steps)
-	check(high.groups.map(func(g): return g.buffer) == again.groups.map(func(g): return g.buffer), "identical input gives identical tufts")
-	# Splitting the triangles into other parts (batches) changes nothing.
-	var split := [points.slice(0, 3000), points.slice(3000)]
-	check(run_scatter(split, 4000).groups.map(func(g): return g.buffer) == high.groups.map(func(g): return g.buffer), "batch boundaries do not move tufts")
-	for cap in [0, 1500]:
-		var limited := run_scatter([points], cap)
-		var total := 0
-		for group: Dictionary in limited.groups: total += int(group.count)
-		check(total <= cap and total >= cap * 0.9, "cap %d holds: %d" % [cap, total])
-	check(run_scatter([points], 999999).state.cap == RENDER.PLAN.GRASS_INSTANCES, "the memory plan bounds every cap")
-	var moved := run_scatter([ground(Vector3(64, 0, 0))], 4000)
-	check(moved.groups.map(func(g): return g.buffer) != high.groups.map(func(g): return g.buffer), "other triangles scatter differently")
-	check(VEGETATION.hash32(-5) == VEGETATION.hash32(-5) and VEGETATION.hash32(1) != VEGETATION.hash32(2) and VEGETATION.unit(7, 3, 1) == VEGETATION.unit(7, 3, 1), "integer hash is stable")
-
 func meshes() -> void:
 	var first: Dictionary = VEGETATION.begin()
 	var steps := 0
@@ -114,63 +62,128 @@ func meshes() -> void:
 	var second: Dictionary = VEGETATION.begin()
 	while not VEGETATION.advance(second): pass
 	check(steps + 1 == VEGETATION.STEPS.size() and steps > 20, "the shared set builds one part per step: %d" % steps)
-	for kind in ["tree_body", "tree_cards", "tree_far", "shrub_body", "shrub_cards", "shrub_far"]:
+	# Crown shapes are build scratch, released with each variant's last part.
+	check(VEGETATION._crowns.is_empty() and VEGETATION._shapes.is_empty(), "no crown shapes outlive the build: %d" % (VEGETATION._crowns.size() + VEGETATION._shapes.size()))
+	var vertex_count := 0
+	var index_count := 0
+	for plant in VEGETATION.PLANTS:
+		for part in VEGETATION.KINDS:
+			var kind: String = plant + "_" + part
+			for variant in 3:
+				var a: ArrayMesh = first.result[kind][variant]
+				var b: ArrayMesh = second.result[kind][variant]
+				check(a.get_surface_count() == 1 and a.surface_get_arrays(0) == b.surface_get_arrays(0), "%s %d builds identically" % [kind, variant])
+				vertex_count += a.surface_get_array_len(0)
+				index_count += a.surface_get_array_index_len(0)
+	# Shared set memory: CPU arrays and GPU buffers (56 B per vertex: position,
+	# normal, colour, two UVs; 4 B per index), the leaf atlas as decoded image
+	# and mipmapped texture (2 x 350 KiB) and 128 KiB for the two materials
+	# and one mesh's build arrays stay inside SHARED_BYTES.
+	var mesh_bytes := 2 * (vertex_count * 56 + index_count * 4)
+	print("shared vegetation set: %d vertices, %d indices, %d B arrays of %d B" % [vertex_count, index_count, mesh_bytes, VEGETATION.SHARED_BYTES])
+	check(mesh_bytes + 2 * 350 * 1024 + 131072 <= VEGETATION.SHARED_BYTES, "the shared set's meshes and atlas fit its allowance: %d B" % mesh_bytes)
+	# Every vertex at the largest scale plus its largest wind sway (high tier:
+	# SWAY_PEAK x TREE_SWAY x its weight, cards another FLUTTER) stays inside
+	# the placement footprint (street trees CITY_TREE_RADIUS 120 cm, zone trees
+	# their declared 120-200 cm via tree_set; shrubs the baseline 42 cm); the
+	# body's shell grown back to the full crown on low, where nothing sways.
+	var reaches := {}
+	for plant in VEGETATION.PLANTS:
 		for variant in 3:
-			var a: ArrayMesh = first.result[kind][variant]
-			var b: ArrayMesh = second.result[kind][variant]
-			check(a.get_surface_count() == 1 and a.surface_get_arrays(0) == b.surface_get_arrays(0), "%s %d builds identically" % [kind, variant])
-	for plant in ["tree", "shrub"]:
-		# Every vertex at the largest scale stays inside the placement footprint
-		# (CITY_TREE_RADIUS 120 cm; shrubs the baseline 42 cm), the body's
-		# shell also grown back to the full crown as on low.
-		var limit := 1.2 if plant == "tree" else 0.42
-		var largest: float = (VEGETATION.TREE_SCALE if plant == "tree" else VEGETATION.SHRUB_SCALE).y
-		for variant in 3:
-			var widest := 0.0
+			var points := PackedVector2Array() # (horizontal reach at scale 1, sway metres)
 			for part in VEGETATION.KINDS:
 				var arrays: Array = (first.result[plant + "_" + part][variant] as ArrayMesh).surface_get_arrays(0)
 				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var marks: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+				var weights: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
 				for i in vertices.size():
 					var p := vertices[i]
-					if part == "body" and marks[i].y > 0.0: p = Vector3(0.0, marks[i].x, 0.0) + (p - Vector3(0.0, marks[i].x, 0.0)) * marks[i].y
-					widest = maxf(widest, Vector2(p.x, p.z).length() * largest)
-			check(widest <= limit + 0.001 and widest >= limit * 0.85, "%s %d reaches %.3f m of %.2f m" % [plant, variant, widest, limit])
+					points.append(Vector2(Vector2(p.x, p.z).length(), weights[i].x * (VEGETATION.SWAY_PEAK * VEGETATION.TREE_SWAY + (VEGETATION.FLUTTER if part == "cards" else 0.0))))
+					if part == "body" and marks[i].y > 0.0:
+						p = Vector3(0.0, marks[i].x, 0.0) + (p - Vector3(0.0, marks[i].x, 0.0)) * marks[i].y
+						points.append(Vector2(Vector2(p.x, p.z).length(), 0.0))
+			reaches["%s_%d" % [plant, variant]] = points
+	var reach_at := func(key: String, largest: float) -> float:
+		var reach := 0.0
+		for point: Vector2 in reaches[key]: reach = maxf(reach, point.x * largest + point.y)
+		return reach
+	var widest := {}
+	for key: String in reaches:
+		widest[key] = 0.0
+		for point: Vector2 in reaches[key]: widest[key] = maxf(widest[key], point.x)
 	for variant in 3:
-		var body: ArrayMesh = first.result.tree_body[variant]
-		var cards: ArrayMesh = first.result.tree_cards[variant]
-		var triangles := body.surface_get_array_index_len(0) / 3
-		var card_triangles := cards.surface_get_array_index_len(0) / 3
-		check(triangles >= 400 and triangles <= 600 and card_triangles >= 240 and card_triangles <= 400, "near tree %d: trunk, branches and hull (%d) plus leaf cards (%d)" % [variant, triangles, card_triangles])
-		var far: ArrayMesh = first.result.tree_far[variant]
-		check(far.surface_get_array_index_len(0) / 3 <= 120, "far tree %d is coarse" % variant)
-		var arrays: Array = body.surface_get_arrays(0)
-		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
-		var marks: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
-		# The 14 cm collision box (half diagonal 0.099 m) stays inside the trunk
-		# up to 1.4 m at the smallest scale: every trunk ring (bark, COLOR.a 0)
-		# up to the first one above 1.4 / 0.85 m, between which the tube is linear.
-		var narrowest := INF
-		var underside := INF
-		var top := 0.0
-		for ring: Vector2 in VEGETATION.TRUNK:
-			if top < 1.4 / 0.85: top = ring.x
-		for i in vertices.size():
-			if marks[i].y > 0.0: underside = minf(underside, vertices[i].y)
-			if colors[i].a > 0.5 or vertices[i].y > top + 0.001 or vertices[i].y < 0.0: continue
-			if not VEGETATION.TRUNK.any(func(ring): return absf(ring.x - vertices[i].y) < 0.0005): continue
-			narrowest = minf(narrowest, Vector2(vertices[i].x, vertices[i].z).length() * cos(PI / 8.0) * 0.85)
-		check(narrowest >= 0.099, "trunk %d covers the collision box: %.3f m" % [variant, narrowest])
-		# Branches fork below the crown's underside: some bark away from the
-		# trunk axis lies under the hull.
-		var forks := 0
-		for i in vertices.size():
-			if colors[i].a < 0.5 and vertices[i].y < underside - 0.2 and Vector2(vertices[i].x, vertices[i].z).length() > 0.2: forks += 1
-		check(forks >= 10, "tree %d shows branches under its crown: %d vertices" % [variant, forks])
-	var grass: ArrayMesh = first.result.grass
-	check(grass.surface_get_array_index_len(0) / 3 <= 90, "grass tuft stays small")
-	for kind in ["body", "cards", "grass"]:
+		var shrub: float = reach_at.call("shrub_%d" % variant, VEGETATION.SHRUB_SCALE.y)
+		check(shrub <= 0.421 and shrub >= 0.42 * 0.85, "shrub %d reaches %.3f m of 0.42 m" % [variant, shrub])
+	for radius in [120, 140, 159, 160, 180, 200]:
+		var set: Dictionary = VEGETATION.tree_set(radius)
+		check(set.plant == ("wide" if radius >= VEGETATION.WIDE_FROM_CM else "tree"), "a %d cm footprint grows %s trees" % [radius, set.plant])
+		var largest: float = float(set.factor) * (set.span as Vector2).y
+		for variant in 3:
+			var reach: float = reach_at.call("%s_%d" % [set.plant, variant], largest)
+			# Oval park crowns are narrower by design.
+			var least := 0.75 if set.plant == "wide" and variant == 1 else 0.85
+			check(reach <= radius / 100.0 + 0.001 and reach >= radius / 100.0 * least, "%s %d at %d cm reaches %.3f m with sway" % [set.plant, variant, radius, reach])
+	# Wide crowns are barely squeezed (distinct widths) and keep square cards.
+	for variant in 3:
+		var shape: Dictionary = VEGETATION.crown("wide", variant)
+		check(shape.fit >= 0.9, "wide %d keeps its shape: fit %.3f" % [variant, shape.fit])
+		var corners: PackedVector3Array = (first.result.wide_cards[variant] as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var skewed := 0
+		for c in range(0, corners.size(), 4):
+			var a := (corners[c + 1] - corners[c]).length()
+			var b := (corners[c + 3] - corners[c]).length()
+			if absf(a - b) > 0.01 * maxf(a, b) + 0.0001: skewed += 1
+		check(skewed == 0, "wide %d leaf cards stay square: %d skewed" % [variant, skewed])
+	var sizes := []
+	for plant in ["tree", "wide"]:
+		var limits: Array = [400, 600, 240, 400] if plant == "tree" else [480, 560, 560, 700]
+		for variant in 3:
+			var body: ArrayMesh = first.result[plant + "_body"][variant]
+			var cards: ArrayMesh = first.result[plant + "_cards"][variant]
+			var triangles := body.surface_get_array_index_len(0) / 3
+			var card_triangles := cards.surface_get_array_index_len(0) / 3
+			check(triangles >= limits[0] and triangles <= limits[1] and card_triangles >= limits[2] and card_triangles <= limits[3], "near %s %d: trunk, branches and hull (%d) plus leaf cards (%d)" % [plant, variant, triangles, card_triangles])
+			var far: ArrayMesh = first.result[plant + "_far"][variant]
+			check(far.surface_get_array_index_len(0) / 3 <= 120, "far %s %d is coarse" % [plant, variant])
+			var arrays: Array = body.surface_get_arrays(0)
+			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+			var marks: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+			# The 14 cm collision box (half diagonal 0.099 m) stays inside the
+			# trunk up to 1.4 m at the set's smallest scale: every trunk ring
+			# (bark, COLOR.a 0) up to the first one above 1.4 m / that scale,
+			# between which the tube is linear.
+			var smallest := VEGETATION.smallest_scale(plant)
+			var rings: Array = VEGETATION.trunk(plant)
+			var narrowest := INF
+			var underside := INF
+			var top := 0.0
+			for ring: Vector2 in rings:
+				if top < 1.4 / smallest: top = ring.x
+			check(top >= 1.4 / smallest, "%s trunk rings reach above the box at the smallest scale" % plant)
+			for i in vertices.size():
+				if marks[i].y > 0.0: underside = minf(underside, vertices[i].y)
+				if colors[i].a > 0.5 or vertices[i].y > top + 0.001 or vertices[i].y < 0.0: continue
+				if not rings.any(func(ring): return absf(ring.x - vertices[i].y) < 0.0005): continue
+				narrowest = minf(narrowest, Vector2(vertices[i].x, vertices[i].z).length() * cos(PI / 8.0) * smallest)
+			check(narrowest >= 0.099, "%s trunk %d covers the collision box: %.3f m" % [plant, variant, narrowest])
+			# Branches fork below the crown's underside: some bark away from the
+			# trunk axis lies under the hull.
+			var forks := 0
+			for i in vertices.size():
+				if colors[i].a < 0.5 and vertices[i].y < underside - 0.2 and Vector2(vertices[i].x, vertices[i].z).length() > 0.2: forks += 1
+			check(forks >= 10, "%s %d shows branches under its crown: %d vertices" % [plant, variant, forks])
+			var aabb := body.get_aabb().merge(cards.get_aabb())
+			sizes.append("%s %d: %.2f m wide, %.2f m tall at scale 1, %d+%d triangles" % [plant, variant, 2.0 * widest["%s_%d" % [plant, variant]], aabb.end.y, triangles, card_triangles])
+			if plant == "wide":
+				# Park crowns: about 4.7-5.7 m tall over the wide span at a 200 cm
+				# footprint, the leafy crown (cards) no taller than 1.1 x its width.
+				var tall := aabb.end.y
+				check(tall * VEGETATION.WIDE_SCALE.x >= 4.6 and tall * VEGETATION.WIDE_SCALE.y <= 7.2, "wide %d is %.2f-%.2f m tall" % [variant, tall * VEGETATION.WIDE_SCALE.x, tall * VEGETATION.WIDE_SCALE.y])
+				var across: float = 2.0 * widest["wide_%d" % variant]
+				check(cards.get_aabb().size.y <= 1.1 * across, "wide %d crown is %.2f m tall, %.2f m wide" % [variant, cards.get_aabb().size.y, across])
+	print("tree sizes: ", "; ".join(sizes))
+	for kind in ["body", "cards"]:
 		var material: ShaderMaterial = first.result.materials[kind]
 		check(material.get_meta("mapkit_vegetation_shader", "") == kind, "%s material opts into vegetation quality" % kind)
 		for level in 3:
@@ -186,9 +199,12 @@ func fixture(polar := false) -> Dictionary:
 		for k in 3:
 			chunk.scene_normals.append(Vector3.UP)
 			chunk.wall_uv.append(Vector2.ZERO)
-	if polar: chunk.presentation = {"environment_json": JSON.stringify({"climate": "polar"})}
+	chunk.presentation = {"city_tree_radii": {}}
+	if polar: chunk.presentation.environment_json = JSON.stringify({"climate": "polar"})
 	for i in 12:
 		chunk.objects.append({"id": "tree-%d" % i, "asset_id": "builtin:city_tree", "position": [i * 500, 0, i * 300], "quarter_turns": 0})
+		# Half are park-zone trees with the widest footprint.
+		if i % 2 == 0: chunk.presentation.city_tree_radii["tree-%d" % i] = 200
 	for i in 6:
 		chunk.objects.append({"id": "shrub-%d" % i, "asset_id": "builtin:shrub", "position": [i * 400, 0, 2000], "quarter_turns": 1})
 	chunk.render_batches = RENDER.PLAN.prepare_batches(chunk)
@@ -197,7 +213,6 @@ func fixture(polar := false) -> Dictionary:
 func renderer() -> void:
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
 	cache.quality_profile = QUALITY.profile(1)
-	var counts := {}
 	for polar in [false, true]:
 		for level in 3:
 			QUALITY.current = QUALITY.profile(level)
@@ -205,56 +220,51 @@ func renderer() -> void:
 			root.add_child(parent)
 			var chunk := fixture(polar)
 			var planned := RENDER.PLAN.estimate(chunk, 0)
-			check(planned >= RENDER.PLAN.GRASS_CELL_BYTES and RENDER.PLAN.upper_bound({"triangles": chunk.triangles.size(), "objects": chunk.objects.size()}) >= planned, "grass cells estimate the grass allowance within the upper bound")
-			var cap: int = 0 if polar else int(QUALITY.profile(level).grass_instances)
+			check(RENDER.PLAN.upper_bound({"triangles": chunk.triangles.size(), "objects": chunk.objects.size()}) >= planned, "the estimate stays within the upper bound")
 			var lease := Lease.new(planned)
 			var reserved := [0]
 			var job := RENDER.begin(chunk, parent, record_reservation.bind(reserved, lease), planned, cache)
-			check(reserved[0] == (planned if cap > 0 else planned - RENDER.PLAN.GRASS_CELL_BYTES), "tier %d polar %s reserves grass only when it builds some: %d of %d" % [level, polar, reserved[0], planned])
+			# A cell growing no grass (low, polar) returns its grass reservation.
+			var unused := RENDER.PLAN.grass_bytes(RENDER.PLAN.batch_grass_triangles(chunk)) if level == 0 or polar else 0
+			check(reserved[0] == planned - unused, "tier %d polar %s reserves the estimate less unused grass: %d of %d" % [level, polar, reserved[0], planned])
 			var steps := 0
 			while not RENDER.advance(job): steps += 1
 			check(job.error.is_empty(), "attachment completes: %s" % job.error)
-			var grass := 0
 			var trees := {"body": 0, "cards": 0, "far": 0}
+			var wide := 0
 			var value := QUALITY.profile(level)
 			for node: Node in parent.find_children("Vegetation_*", "MultiMeshInstance3D", true, false):
 				var lod: String = node.get_meta("mapkit_vegetation_lod")
 				var kind: String = node.get_meta("mapkit_vegetation_kind")
 				var near := float(value.vegetation_near) * (0.6 if kind == "shrub" else 1.0) + QUALITY.GROUP_REACH
-				if lod == "grass": grass += node.multimesh.instance_count
-				elif kind == "tree": trees[lod] += node.multimesh.instance_count
+				if kind == "tree":
+					trees[lod] += node.multimesh.instance_count
+					if lod == "body" and str(node.multimesh.mesh.resource_name).begins_with("mk_park_tree_"): wide += node.multimesh.instance_count
 				check(node.get_meta("mapkit_decoration", false) and node.multimesh.use_custom_data, "vegetation nodes carry decoration ranges and instance data")
 				if lod in ["body", "cards"]:
 					check(node.visible == (lod == "body" or level > 0) and is_equal_approx(node.visibility_range_end, near), "near range per tier covers the whole group")
 				if lod == "far":
 					check(is_equal_approx(node.visibility_range_begin, near) and node.visibility_range_end == (float(value.decoration_distance) if kind == "shrub" else 0.0), "far begins where near ends; far trees keep their crowns")
-				if lod == "grass": check(node.visible and node.visibility_range_end > float(value.grass_distance), "grass range per tier")
-				var shadows: bool = kind == "tree" and lod != "grass" and level >= (2 if lod == "cards" else 1)
+				var shadows: bool = kind == "tree" and level >= (2 if lod == "cards" else 1)
 				check(node.cast_shadow == (GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF), "%s %s shadows on tier %d" % [kind, lod, level])
-			counts[[polar, level]] = grass
 			check(trees.body == 12 and trees.cards == 12 and trees.far == 12, "every tree has body, cards and far instances: %s" % trees)
-			check(grass <= cap and (cap == 0 or grass >= mini(cap, 3400) * 0.9), "tier %d polar %s holds %d tufts (cap %d)" % [level, polar, grass, cap])
+			check(wide == 6, "zone trees with a 200 cm footprint draw wide park crowns: %d" % wide)
 			check(job.root.get_meta("mapkit_render_root", false) and steps > 20, "vegetation work spans admitted steps: %d" % steps)
 			# Live tier changes reach existing vegetation nodes.
 			QUALITY.apply_tree(job.root, QUALITY.profile(0))
 			for node: Node in parent.find_children("Vegetation_*", "MultiMeshInstance3D", true, false):
 				var lod: String = node.get_meta("mapkit_vegetation_lod")
-				if lod in ["cards", "grass"]: check(not node.visible, "low hides cards and grass")
+				if lod == "cards": check(not node.visible, "low hides cards")
 				elif lod == "body": check(node.visible and node.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "low keeps near bodies without shadows")
 			RENDER.cancel(job)
 			parent.queue_free()
 			for _frame in 4: await process_frame
 			check(lease.retired(), "the cell lease retires with its vegetation nodes")
-	check(counts[[false, 0]] == 0 and counts[[false, 1]] > 0 and counts[[false, 2]] > counts[[false, 1]], "no grass on low, more on high: %s" % counts)
-	# GPU pressure lowers effects but keeps the ceiling's texture tier: cells
-	# loaded meanwhile build the ceiling's grass, hidden until quality returns.
-	var pressured := QUALITY.profile(0)
-	pressured.texture_size = QUALITY.profile(2).texture_size
-	check(QUALITY.grass_cap(pressured) == 4000 and QUALITY.grass_cap(QUALITY.profile(1)) == 1500 and QUALITY.grass_cap(QUALITY.profile(0)) == 0, "grass builds at the cache texture tier")
 	cache.shutdown()
 	for _frame in 4: await process_frame
 	check(cache.bytes() == 0, "shared vegetation retires after its last cell")
-	# A refused shared reservation skips grass but fails a cell with trees.
+	# A refused shared reservation fails a cell with trees; a cell of grass
+	# ground alone never claims it.
 	var denied := CACHE.new(func(bytes): return null if bytes == CACHE.VEGETATION_BYTES else Lease.new(bytes))
 	QUALITY.current = QUALITY.profile(2)
 	var parent := Node3D.new()
@@ -267,7 +277,7 @@ func renderer() -> void:
 	chunk.render_batches = RENDER.PLAN.prepare_batches(chunk)
 	job = RENDER.begin(chunk, parent, func(bytes): return Lease.new(bytes), RENDER.PLAN.estimate(chunk, 0), denied)
 	while not RENDER.advance(job): pass
-	check(job.error.is_empty() and parent.find_children("Vegetation_*", "MultiMeshInstance3D", true, false).is_empty(), "denied vegetation skips optional grass: %s" % job.error)
+	check(job.error.is_empty() and parent.find_children("Vegetation_*", "MultiMeshInstance3D", true, false).is_empty(), "denied vegetation leaves a cell without plants untouched: %s" % job.error)
 	RENDER.cancel(job)
 	parent.queue_free()
 	denied.shutdown()

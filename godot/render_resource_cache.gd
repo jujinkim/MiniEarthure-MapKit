@@ -15,6 +15,9 @@ const TREE_CANOPY_BYTES := 131072
 const VEGETATION := preload("./vegetation_meshes.gd")
 const VEGETATION_KEY := "builtin:vegetation"
 const VEGETATION_BYTES := VEGETATION.SHARED_BYTES
+# Camera-local grass field (grass_field.gd): one per cache at the cache's
+# texture tier, pinned by every registered grass cell.
+const GRASS_FIELD := preload("./grass_field.gd")
 var reserve: Callable
 var limit_bytes := 128 * 1024 * 1024 # Shared resources; still charged to consumer admission.
 var entries: Dictionary = {}
@@ -120,6 +123,19 @@ func _claim(key: String, amount: int, stage: String) -> String:
 func claim_vegetation() -> String:
 	return _claim(VEGETATION_KEY,VEGETATION_BYTES,"vegetation")
 
+## The cache's grass field with one more pin (release(GRASS_FIELD.KEY) per
+## call), or null on low or when its fixed memory is refused.
+func grass_field() -> RefCounted:
+	var tier := GRASS_FIELD.grass_level(quality_profile)
+	if tier <= 0: return null
+	var key := _claim(GRASS_FIELD.KEY,GRASS_FIELD.memory_bytes(tier),"grass_field")
+	if key.is_empty(): return null
+	var item: Dictionary = entries[key]
+	if not item.has("grass_field"):
+		item.grass_field = GRASS_FIELD.new(tier,item.lease,self)
+		item.stage = "done"
+	return item.grass_field
+
 ## One part (atlas, materials or one mesh) per admitted call.
 func prepare_vegetation(key: String) -> bool:
 	if closed or not entries.has(key): return true
@@ -142,6 +158,37 @@ func prepare_vegetation(key: String) -> bool:
 func vegetation(key: String) -> Dictionary:
 	if closed or not entries.has(key) or entries[key].stage != "done": return {}
 	return entries[key].get("vegetation",{})
+
+## Generic shared display-only mesh set (street_furniture_meshes.gd,
+## street_signal_meshes.gd, transit_meshes.gd): claimed under its own key and
+## allowance, built by `build` (a static func(state: Dictionary, lease,
+## context) -> bool) one part per admitted call until it leaves the set in
+## state.result. The environment context is the
+## one present at the first call; preparation time is reported per
+## state.phase.
+func claim_mesh_set(key: String, amount: int) -> String:
+	return _claim(key,amount,"mesh_set")
+
+func prepare_mesh_set(key: String, build: Callable) -> bool:
+	if closed or not entries.has(key): return true
+	var item: Dictionary = entries[key]
+	if item.stage == "done": return true
+	var started := Time.get_ticks_usec()
+	if not item.has("mesh_set_state"): item.mesh_set_state = {"context": _environment if not _environment_pending else null}
+	var state: Dictionary = item.mesh_set_state
+	if build.call(state,item.lease,state.context):
+		item.mesh_set = state.result
+		item.erase("mesh_set_state")
+		item.stage = "done"
+	var phase := str(state.get("phase","mesh_set"))
+	var elapsed := Time.get_ticks_usec()-started
+	preparation_usec[phase] = int(preparation_usec.get(phase,0))+elapsed
+	preparation_peak_usec[phase] = maxi(int(preparation_peak_usec.get(phase,0)),elapsed)
+	return item.stage == "done"
+
+func mesh_set(key: String) -> Dictionary:
+	if closed or not entries.has(key) or entries[key].stage != "done": return {}
+	return entries[key].get("mesh_set",{})
 
 static func tree_canopy_source() -> SphereMesh:
 	var shape := SphereMesh.new()
@@ -358,6 +405,10 @@ func _evict(key: String) -> void:
 	item.erase("mesh")
 	item.erase("vegetation")
 	item.erase("vegetation_job")
+	item.erase("mesh_set")
+	item.erase("mesh_set_state")
+	if item.has("grass_field"): item.grass_field.close()
+	item.erase("grass_field")
 	item.erase("occluder_arrays")
 	item.erase("light_binding")
 	item.erase("light_roles")

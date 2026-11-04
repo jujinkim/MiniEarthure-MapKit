@@ -12,11 +12,16 @@ static func profile(level: int) -> Dictionary:
 		"occlusion":level > 0, "light_count":[4,6,8][level], "sky_radiance":[32,64,128][level],
 		# Park vegetation: near trees and shrubs (body, and leaf cards from
 		# medium) within vegetation_near of the camera (shrubs 0.6x), the coarse
-		# far mesh beyond; shadows 0 none, 1 opaque crowns, 2 also cards; grass
-		# tufts per cell (built at the cache texture tier, see grass_cap) and
-		# their visible distance. No cards or grass on low.
+		# far mesh beyond; shadows 0 none, 1 opaque crowns, 2 also cards; the
+		# reach of the grass field's blades (grass_field.gd, rings at the cache
+		# texture tier, see grass_level). No cards or grass on low.
 		"vegetation_near":[24.0,32.0,48.0][level], "vegetation_cards":level > 0, "vegetation_shadows":level,
-		"grass_instances":[0,1500,4000][level], "grass_distance":[0.0,24.0,40.0][level]}
+		"grass_distance":[0.0,24.0,40.0][level],
+		# Street furniture: the detailed mesh within <kind>_near for
+		# streetlights and benches (only as far as their small parts stay
+		# resolvable), furniture_near for the other kinds (none on low), the
+		# simple mesh beyond.
+		"furniture_near":[0.0,32.0,48.0][level], "streetlight_near":[0.0,20.0,32.0][level], "bench_near":[0.0,12.0,20.0][level]}
 
 static func active() -> Dictionary:
 	return profile(1) if current.is_empty() else current.duplicate()
@@ -39,6 +44,7 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 	if node is GeometryInstance3D:
 		node.lod_bias = float(value.lod_bias)
 		if node.has_meta("mapkit_vegetation_lod"): apply_vegetation(node, value)
+		elif node.has_meta("mapkit_furniture_lod"): apply_furniture(node, value)
 		elif node.get_meta("mapkit_decoration",false):
 			node.visibility_range_end = float(value.decoration_distance)
 			node.visibility_range_end_margin = 8.0
@@ -53,7 +59,7 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 
 ## Ranges are measured to a group's bounds centre and a group is a 32 m
 ## square (half diagonal 22.6 m): every range adds GROUP_REACH, so a plant
-## within vegetation_near (or a tuft within grass_distance) of the camera
+## within vegetation_near of the camera
 ## always draws its near mesh. Near and far meshes hand over at the same
 ## distance with VEGETATION_MARGIN, a dithered crossfade on Forward+ and
 ## hysteresis elsewhere (Mobile and Compatibility do not fade). Far trees keep
@@ -65,9 +71,9 @@ static func apply_vegetation(node: GeometryInstance3D, value: Dictionary) -> voi
 	var kind: String = node.get_meta("mapkit_vegetation_kind","")
 	var near := float(value.get("vegetation_near",32.0)) * (0.6 if kind == "shrub" else 1.0) + GROUP_REACH
 	var shadows := int(value.get("vegetation_shadows",1)) if kind == "tree" else 0
-	var fade := GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF if RenderingServer.get_current_rendering_method() == "forward_plus" else GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+	var fade := range_fade(RenderingServer.get_current_rendering_method())
 	var lod := str(node.get_meta("mapkit_vegetation_lod"))
-	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows >= (2 if lod == "cards" else 1) and lod != "grass" else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows >= (2 if lod == "cards" else 1) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	match lod:
 		"body", "cards":
 			node.visible = lod == "body" or bool(value.get("vegetation_cards",true))
@@ -81,28 +87,68 @@ static func apply_vegetation(node: GeometryInstance3D, value: Dictionary) -> voi
 			node.visibility_range_fade_mode = fade
 			node.visibility_range_end = float(value.decoration_distance) if kind == "shrub" else 0.0
 			node.visibility_range_end_margin = 8.0 if kind == "shrub" else 0.0
-		_:
-			var grass := float(value.get("grass_distance",0.0))
-			node.visible = grass > 0.0
-			node.visibility_range_end = maxf(grass, 1.0) + GROUP_REACH
-			node.visibility_range_end_margin = 0.0
 
-## Grass tufts a newly attached cell builds: the cap of the tier its cache
-## textures were loaded at (texture_size, which adaptive quality keeps at the
-## user's ceiling), so a GPU-pressure dip only shortens grass_distance and
-## never leaves cells loaded during it bare once quality recovers.
-static func grass_cap(value: Dictionary) -> int:
+## Street furniture groups: streetlights and benches (street_furniture_meshes.gd,
+## 16 m squares) show the near mesh within <kind>_near + FURNITURE_REACH, other
+## kinds (32 m squares) within furniture_near + GROUP_REACH; the far mesh
+## beyond (from 0 on low, where no near mesh draws). Far benches end at
+## decoration_distance; far streetlights stay drawn, like the proxy faces they
+## replace. Streetlights cast shadows from medium (none on low, like park
+## trees), near benches on high, other kinds on every tier.
+const FURNITURE_REACH := 11.5
+## Near/far handover: a dithered crossfade on Forward+, hysteresis on Mobile
+## and Compatibility (no fade there).
+static func range_fade(method: String) -> GeometryInstance3D.VisibilityRangeFadeMode:
+	return GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF if method == "forward_plus" else GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
+
+static func apply_furniture(node: GeometryInstance3D, value: Dictionary) -> void:
+	var kind := str(node.get_meta("mapkit_furniture_kind",""))
+	var own := kind == "streetlight" or kind == "bench"
+	var near := float(value.get(kind + "_near" if own else "furniture_near",32.0))
+	var reach := near + (FURNITURE_REACH if own else GROUP_REACH) if near > 0.0 else 0.0
+	var bench := kind == "bench"
+	var far := str(node.get_meta("mapkit_furniture_lod")) == "far"
+	node.visibility_range_fade_mode = range_fade(RenderingServer.get_current_rendering_method())
+	var shadows := true
+	if kind == "streetlight": shadows = int(value.level) >= 1
+	elif bench: shadows = not far and int(value.level) >= 2
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Bus shelter glass panes (street_signal_meshes.gd): one node per group,
+	# drawn at every distance on every tier, casting no shadows.
+	if node.get_meta("mapkit_furniture_glass",false):
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		node.visible = true
+		node.visibility_range_begin = 0.0
+		node.visibility_range_begin_margin = 0.0
+		node.visibility_range_end = 0.0
+		node.visibility_range_end_margin = 0.0
+		return
+	if far:
+		node.visible = true
+		node.visibility_range_begin = reach
+		node.visibility_range_begin_margin = VEGETATION_MARGIN if reach > 0.0 else 0.0
+		node.visibility_range_end = float(value.decoration_distance) if bench else 0.0
+		node.visibility_range_end_margin = 8.0 if bench else 0.0
+	else:
+		node.visible = reach > 0.0
+		node.visibility_range_begin = 0.0
+		node.visibility_range_end = maxf(reach, 1.0)
+		node.visibility_range_end_margin = VEGETATION_MARGIN
+
+## Grass field tier (grass_field.gd: window, rings and memory): the tier its
+## cache textures were loaded at (texture_size, which adaptive quality keeps
+## at the user's ceiling), 0 on low. A GPU-pressure dip only lowers the live
+## rings and grass_distance; cells loaded during it keep their grass. The
+## field itself sets the lawn shade under its blades (grass_field_distance).
+static func grass_level(value: Dictionary) -> int:
 	var level := [128,256,512].find(int(value.get("texture_size",0)))
-	return int(profile(level if level >= 0 else int(value.get("level",1))).grass_instances)
+	return level if level >= 0 else clampi(int(value.get("level",1)),0,2)
 
 static func apply_material(material: Material, value: Dictionary) -> void:
 	if not material is ShaderMaterial: return
 	if material.has_meta("mapkit_vegetation_shader"):
 		material.set_shader_parameter("wind_strength",float(value.vegetation_motion))
 		material.set_shader_parameter("cards_hidden",not bool(value.get("vegetation_cards",true)))
-		var grass := float(value.get("grass_distance",0.0))
-		material.set_shader_parameter("grass_fade_start",maxf(grass-10.0,0.0))
-		material.set_shader_parameter("grass_fade_end",maxf(grass,0.01))
 		return
 	if material.get_meta("mapkit_surface",false):
 		material.set_shader_parameter("detail_quality",int(value.material_detail))

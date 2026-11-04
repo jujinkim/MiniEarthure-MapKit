@@ -82,3 +82,32 @@ fn city_trees_have_a_proportionate_trunk_footprint_and_zone_use() {
     forest.zones[0].tree.as_mut().unwrap().radius_cm = 100;
     assert!(forest.validate().is_err(), "a smaller footprint than the city tree is refused");
 }
+
+#[test]
+fn city_tree_radius_follows_the_zone_that_grew_it() {
+    let mut d = doc();
+    d.placements = vec![place("tree", "builtin:city_tree", 800, 800, 0)];
+    d.zones = vec![Zone { id: "park:west".into(), polygon: vec![[1200, 200], [3000, 200], [3000, 3000], [1200, 3000]], kind: ZoneKind::Forest,
+        spacing_cm: 500, density_per_mille: 1000, exclusions: vec![],
+        tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: 200, clearance_cm: 30 }) }];
+    d.placements[0].position = [500, 0, 500];
+    d.validate().unwrap();
+    let radii = mapkit_core::city_tree_zone_radii(&d);
+    assert_eq!(radii.len(), 1);
+    assert_eq!(mapkit_core::generated_zone_id("park:west:3:-4"), Some("park:west"), "zone ids may hold colons");
+    assert_eq!(mapkit_core::city_tree_radius(&radii, "park:west:3:-4"), 200);
+    for street in ["tree", "park:west:03:4", "park:west:x:4", "park:east:3:4", "3:4"] {
+        assert_eq!(mapkit_core::city_tree_radius(&radii, street), mapkit_core::CITY_TREE_RADIUS, "{street}");
+    }
+    let chunk = generate(GenerationInput { document: &d, cell: Cell { x: 0, y: 0 }, heightgrid: None, max_triangles: 200_000 }).unwrap();
+    let trees: Vec<_> = chunk.objects.iter().filter(|o| o.asset_id == "builtin:city_tree").collect();
+    assert!(trees.len() > 2, "the zone grows trees: {}", trees.len());
+    for tree in trees {
+        let expected = if tree.id == "tree" { 120 } else { 200 };
+        assert_eq!(mapkit_core::city_tree_radius(&radii, &tree.id), expected, "{}", tree.id);
+    }
+    // An authored identity of the generated form is refused, so it never
+    // borrows a zone radius.
+    d.placements[0].id = "park:west:9:9".into();
+    assert!(d.validate().is_err());
+}

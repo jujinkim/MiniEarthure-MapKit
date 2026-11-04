@@ -200,23 +200,46 @@ completion-time reservations. See [timing controls](RENDER_DIAGNOSTICS.md#attach
 
 City trees (`builtin:city_tree`) and shrubs (`builtin:shrub`) are display-only
 procedural meshes (`godot/vegetation_meshes.gd`); no Kenney or external asset is
-used. Three tree variants (round, columnar, spreading; canopy base 1.45–1.7 m,
-crown 1.8–2.9 m tall) are chosen, scaled 0.85–1.15 and turned by the object
-identity. Every crown vertex (hull, cards, the low-tier hull) reaches at most
-1.2 m from the trunk at the largest scale, inside the 120 cm placement footprint
-(`CITY_TREE_RADIUS`), so crowns never reach into facades, fences or lanes the
-generator keeps clear; shrubs stay within the former 42 cm. Each tree or shrub has
-three meshes:
+used. A city tree's crown fits its placement footprint: street and authored city
+trees have the 120 cm `CITY_TREE_RADIUS`; a zone tree has its zone's declared
+radius (120–200 cm, the city importer uses 200), which the native presentation
+lists per cell (`city_tree_radii`: object id → radius, only above 120 cm; display
+only, at most one entry per object inside its 64 KiB display share). Without that
+list (older native builds, standalone previews) every city tree is 120 cm.
+`vegetation_meshes.tree_set` picks the mesh set and size:
+
+- Street trees (footprints below 160 cm): three variants (round, columnar,
+  spreading; canopy base 1.45–1.7 m, crown 1.8–2.9 m tall), scaled 0.85–1.15
+  times radius/120: about 1.7–2.3 m wide and 3–5 m tall at 120 cm.
+- Wide park trees (footprints from 160 cm): three broad variants (round, oval,
+  spreading; canopy base 1.6–1.75 m, crown 3.0–3.4 m tall, thirteen lobes: a
+  core, rings of seven and four and a top lobe), scaled 0.95–1.1 times
+  radius/200: 3.1–3.9 m wide (spreading widest, oval narrowest) and 4.7–5.7 m
+  tall at 200 cm, the leafy crown about as tall as it is wide and hanging low
+  around a short trunk.
+
+Chosen, scaled and turned by the object identity, every crown vertex (hull,
+cards, the low-tier hull) plus its largest wind sway (see below; 12 cm times its
+sway weight on high, cards 1.1 cm more) reaches at most the footprint radius from
+the trunk at the largest scale, so crowns never reach into facades, fences or
+lanes the generator keeps clear; shrubs stay within the former 42 cm. The fit
+barely squeezes the wide crowns (at least 0.9), keeps their cards square and only
+shrinks the few cards at the limit. Each tree or shrub has three meshes:
 
 - `body`: a tapered eight-sided trunk with a root flare whose inscribed radius
-  keeps the 14×140×14 cm collision box hidden at every scale, two or three
-  branches forking at 1.1–1.4 m and climbing out under the crown's lifted
-  underside, and the crown's inner hull (an icosphere pushed out to 80 % of the
-  union of five or six jittered lobes, 320 triangles) in a dark gap colour with
-  vertex ambient occlusion, about 480 triangles in all.
+  keeps the 14×140×14 cm collision box hidden at every scale (wide trees: a
+  thicker trunk, at their smallest scale 0.95 × 160/200), two or three branches
+  forking at 1.1–1.4 m (wide trees four from 1.4–1.65 m, a broad fork ending in
+  the lower lobe ring over half the crown radius out) and climbing out under the
+  crown's lifted underside, and the crown's inner hull (an icosphere pushed out
+  to 80 % of the union of the jittered lobes, 320 triangles) in a dark gap colour
+  with vertex ambient occlusion, about 480 triangles in all (wide 496).
 - `cards`: 150–174 alpha-scissor leaf cards just outside that hull, forming the
-  silhouette (300–348 triangles).
-- `far`: an 80-triangle hull at the full crown and a plain six-sided trunk.
+  silhouette (300–348 triangles). Wide trees carry 300–324 larger square cards
+  on a jittered golden spiral over the whole lobe envelope (underside to top), so
+  their many lobes stay evenly covered (600–648 triangles).
+- `far`: an 80-triangle hull at the full crown (wide trees: out to the cards'
+  mean silhouette, 112 % of the lobe union) and a plain six-sided trunk.
 
 Shrubs have an 80-triangle body hull, 26–38 cards and an 80-triangle far hull.
 Cards sample the original 2×2 leaf-cluster atlas
@@ -226,20 +249,21 @@ same atlas on its hull as a leafy pattern. On low (no cards) the body's hull gro
 back to the full crown in the vertex shader and takes the far hull's brightness,
 so close trees keep their lobed crowns and visible branches.
 
-`godot/vegetation_leaf.gdshaderinc` has three variants (body, cards, grass), each
-a preloaded shader (`vegetation_leaf`, `vegetation_leaf_cards`, `vegetation_grass`)
+`godot/vegetation_leaf.gdshaderinc` has two variants (body, cards), each
+a preloaded shader (`vegetation_leaf`, `vegetation_leaf_cards`; the grass field's
+`vegetation_grass` is its own shader)
 bound once by a warm-up material when the renderer scripts load, so its
 compilation never falls into a streaming step. Wind
 sways vertices by a weight measured from the canopy base (0 on trunks, 10 cm at the
 crown top at full strength) with coherent gusts; a card flutters 8 mm as one piece
-with its own phase, blade tips 12 mm. The phase and a hue/brightness-varied leaf
+with its own phase. The phase and a hue/brightness-varied leaf
 tint come from `INSTANCE_CUSTOM`. Leaves back-light warm green, darken when wet and
 take snow on upward faces from the environment pixels; sky-facing cards keep their
 yellowing and back-light low. Card alpha keeps its coverage with the mip level and
 fades cards seen within 27° of edge-on (gone within 12°). The Client renders without MSAA, so
 scissor edges stay pixel-stepped; nothing here relies on alpha-to-coverage.
 
-A cell instances trees and shrubs per kind, variant and 32 m square: one admitted
+A cell instances trees and shrubs per mesh set, variant and 32 m square: one admitted
 step plans each placement, then each group attaches a body, a cards and a far
 MultiMesh with custom data. Display quality measures every range to a group's
 centre and adds its 23 m half diagonal, so a plant within `vegetation_near`
@@ -249,32 +273,269 @@ Forward+ and hysteresis on Mobile (which does not fade). Low draws bodies withou
 cards. Far trees have no end range, like the canopies they replace, so every tree
 of a loaded cell keeps a crown; far shrubs end at the decoration distance. Tree
 shadows follow `vegetation_shadows`: none on low, bodies and far crowns on medium,
-also cards on high; shrubs and grass cast none. The meshes, three materials and
-the atlas are one shared set per resource cache (`claim_vegetation`, 2 MiB, built
-one part per admitted step: the atlas, each material, each mesh); cells without a
-cache build a process-lifetime set the same way, and standalone previews draw
-single body and cards nodes.
+also cards on high; shrubs and the grass field cast none. The meshes, two
+materials and the atlas are one shared set per resource cache (`claim_vegetation`,
+2 MiB: about 8,300 vertices and 21,100 indices counted in CPU arrays and GPU
+buffers, 1.10 MB,
+plus the atlas as image and texture and the materials; built
+one part per admitted step: the atlas, each material, each variant's lobes and
+hulls, its cards and fit, each mesh; a variant's shape is released after its last
+mesh); cells without a
+cache (standalone previews) build a process-lifetime set the same way and
+instance it in the same groups.
 
-Grass tufts (24 curved blades in a 0.2 m clump) are scattered by
-`godot/grass_scatter.gd` on a cell's grass ground triangles (steep banks excluded)
-after its objects: density is the lower of 0.9/m² and the cap over the grass area,
-and every position, size, yaw, tint and flower is an integer hash of the cell and
-the triangle's centimetre vertices, so batching and step boundaries never move a
-tuft. Flowers (white, yellow or violet heads tilted 50° to face eye height) cluster
-in a fifth of the 4 m world squares (40 % of tufts there, 2 % elsewhere). Each tuft
-joins the group of its own 32 m square. The cap follows the tier of the cache
-textures (`grass_cap`: 0/1,500/4,000), which adaptive quality keeps at the user's
-ceiling, so a GPU-pressure dip only hides grass (`grass_distance` 0/24/40 m) and
-never leaves cells loaded meanwhile bare. Area and scatter steps stop at 1,024
-triangles, or 256 triangles or 256 tufts, or 1.5 ms of wall time; each group
-attaches in its own step. Tufts follow the lawn's lush/dry patches, shrink into the
-ground over the last 10 m and are released with the cell; polar ground and cells
-with under 32 m² of grass have none. The lawn itself tilts its normal by the fine
-blade noise gradient within 30 m, fading wherever a pixel spans a third of the
-finest octave's period, so grazing views do not shimmer. Renderer diagnostics
-report the shared build as `vegetation_preparation` (cache stages
-`vegetation_<part>`), scatter as `grass_scatter` and group attachment as
-`instance_upload`.
+Grass is one camera-local field per resource cache (`godot/grass_field.gd`,
+`vegetation_grass.gdshader`) at fixed memory, however many cells are loaded.
+Three rings of tiles (1, 2 and 4 m) surround the camera, each one MultiMesh per
+quadrant of a shared tile mesh (twelve draws at most). A tile slot is a grass
+card: an upright quad (four vertices) whose columns each hold at most one
+curved, tapered blade the fragment shader draws analytically (its offset,
+height, lean, width and shade from one hash of the card and column; pixels
+between blades are discarded, a blade stays at least about a pixel wide). The
+vertex shader places every card from integer hashes of its world tile and slot
+(root, yaw, width, height), so blades are anchored to the world and never swim;
+beyond 2 m a card turns up to half way toward the camera, so none is seen
+edge-on, and each ring snaps to its own tile grid, leading the camera by its
+last frame's travel. Rings hand over by 3D camera distance (medium 4.5–6,
+11–14 and 19–24 m; high 5–6.5, 13–17 and 32–40 m, `grass_distance`) and every
+ring thins its cards as 1 / distance past the distance where its full density
+meets one projected blade cover (cards/m² × width × mean height × blade share
+× distance / 1.5 m: 0.9 on medium, 1.3 on high), so the carpet stays even
+across handovers and fills the ground in front of a chase camera. Cards per m²
+and columns: medium 64 × 12 (24 cm cards), 18 × 10 (40 cm) and 5.5 × 8 (80 cm),
+high 80 × 12, 22 × 12 (48 cm) and 6.25 × 10 (1 m); 15 % of the columns hold no
+blade. Roots darken into the lawn, tips lighten, and every blade takes the
+lawn's lush/dry patches with a gentle density, height and hue variation by
+clumps. Flower slots (stem and five-petal head tilted 50° toward the camera's
+side, white, yellow or violet with a warm centre) bloom in a fifth of the 4 m
+world squares (0.35/m² there, 0.012/m² elsewhere) on the 1 and 2 m rings. With
+every quadrant drawn the rings hold 552 tile instances and 169,588 vertices on
+medium, 900 and 336,112 on high. Blades stand only on grass ground:
+a toroidal `Texture2DArray` of 8 m blocks (32 × 32 texels of 0.25 m, R32F; 8 × 8
+blocks on medium, 12 × 12 on high, always reaching `grass_distance` + 4 m) holds
+the grass ground height under each texel centre or EMPTY, and a card needs half
+the bilinear weight of its four texels on grass, at their height (exact on a
+plane, within 3 cm at an 11° crease); each card end stands on the ground under
+it and an end over no grass folds back to the root, so blades never reach over
+a road or water. Roads, sidewalks, paths, earth basins, water, steep banks and
+slivers have no grass ground triangle, so no blade.
+Each cell indexes its grass batches by 8 m block after its objects
+(`godot/grass_scatter.gd`, 1,024 triangles or 1.5 ms per admitted step, no copy
+of the batch arrays) and registers them with its lawn material; the field
+rebuilds the blocks of its window nearest first within 1 ms per frame counted
+with the window's layer clears (a block too large for one frame resumes the
+next, 16 triangles between time checks), uploads each as one 4 KiB layer,
+rebuilds the blocks of a cell shown, hidden or released, and hides a quadrant no
+grass block reaches, so streets cost nothing. A teleport clears every grass
+layer of the old window in one frame (at most 64 / 144 4 KiB uploads). The tier
+is the cache texture tier (`grass_level`), which adaptive quality keeps at the
+user's ceiling: a GPU-pressure dip lowers the live rings and their reach, and a
+raised quality never reaches past the field tier's window; low and polar ground
+have none. While it draws, the field darkens its cells' lawn under the blades
+(`grass_field_distance`, `grass_field_shade`: 16 % on medium, 18 % on high,
+none on banks steeper than its blades allow), fading out where they end, and
+clears the shade when it shows no blades. The lawn itself tilts its normal by
+the fine blade noise gradient within 30 m, fading wherever a pixel spans a third
+of the finest octave's period, so grazing views do not shimmer. Renderer
+diagnostics report the shared build as `vegetation_preparation` (cache stages
+`vegetation_<part>`), group attachment as `instance_upload` and the grass
+index as `grass_index`.
+
+## Street furniture
+
+Builtin streetlights and benches are procedural display meshes
+(`godot/street_furniture_meshes.gd`), each a detailed `near` and a simple `far`
+mesh sharing three materials of the environment surface shader: painted metal
+(`metal` tile, roughness 0.55), wood (`wood` tile; the grain is baked into
+vertex colours, see below) and the lamp lens (`lighting_role` 2: a pale neutral
+diffuser by day, a white glow from sunset like authored bulbs; no extra lights).
+
+- Streetlight (912 triangles; far 100): a square base that fills the 20 cm pole
+  box at car height to within 5 mm (plinth plate, skirt, access door with lock,
+  number plate, cornice), a tapered transition and collar, a tapered round
+  shaft to 4.84 m, a hub and two curved arms, each with a slim lofted luminaire
+  and its lens underneath. Every vertex stays inside the unchanged collision
+  boxes (pole 20×500×20 cm, head 80×25×40 cm at 5 m); the heads reach 39.5 cm.
+  The renderer no longer draws the streetlight's generated proxy faces
+  (`render_memory.hidden_objects`: owner objects and, for clipped faces in a
+  neighbour cell, the proxy materials); collision, occluders and lamp
+  bindings never read them.
+- Bench (1,336 triangles; far 48): 0.6 m wide inside the 40 cm footprint, four
+  bevelled seat and three backrest slats with gaps, painted cast side frames
+  (legs, feet, seat rail, reclined back support, armrest) and a rear stretcher.
+  Each slat carries its grain in the mesh, so it reads at any orientation:
+  three lengthwise streaks on its wide faces (±10 % tint, slight warmth
+  shift), darker last 4 cm and end grain, and a per-slat tint.
+
+A cell instances them per kind and 16 m square as near and far MultiMeshes after
+its objects; each node lists its instances' object ids (`mapkit_object_ids`),
+which the map editor's 3D pick tests. The near mesh draws only while its small
+parts stay resolvable: `streetlight_near` none/20/32 m and `bench_near`
+none/12/20 m plus the 11.5 m group reach (`FURNITURE_REACH`); low draws only
+the far mesh. Near and far cross-fade on Forward+ and hand over by hysteresis on
+Mobile and Compatibility. Far benches end at the decoration distance, far
+streetlights stay drawn like the faces they replace; streetlights cast shadows
+from medium (none on low, like park trees), near benches on high. The set is
+one claim per resource cache (`render_resource_cache.claim_mesh_set`, 640 KiB:
+about 4,100 vertices and 7,200 indices in CPU arrays and GPU buffers, 0.51 MB,
+plus materials and build arrays), taken when the cell begins (before any
+upload) and built one material or mesh per admitted step
+(`furniture_preparation`, cache stages `furniture_<part>`). Refused, it fails a cell with streetlights at once, as they
+would lose their only visible body; a cell with only benches skips them. Each
+placement adds 48 B to two instance buffers and its id to the group's id list
+inside its 64 KiB object share. Cells without a cache build a process-lifetime
+set. `street_furniture_validator` checks the envelopes, the base fill, slats,
+gaps and grain, tier variants, ranges, shadows and fade modes, hidden faces
+with untouched collision triangles (also packed chunks), instance placement
+against the proxy boxes and the glTF anchor convention, object ids, memory,
+refusal, release and (rendered) the lens by night and day.
+
+## Transit entrances and station signs
+
+Builtin subway entrances and station signs are procedural display meshes
+(`godot/transit_meshes.gd`), each a detailed `near` and a simple `far` mesh
+sharing four materials: painted steel (`metal` tile, roughness 0.5), stone
+cladding (`stone` tile, vertex-tinted courses and joints), a vertex-tinted glow
+(`lighting_role` 2: lit sign inlays, light strips and the stair tunnel's
+interior, emissive from sunset at 0.9 × their colour; no extra lights) and one
+translucent standard glass material. The pictogram (a train front on a
+line-colour badge), the name bars and the teal line colour are original
+geometry and colours, not any operator's logo, typeface or line scheme; no
+texture is added. Both face local −z, the side the city importer turns toward
+the nearest road (`osm_furniture.py`).
+
+- Subway entrance (1,754 triangles; far 182) inside the unchanged 80×110×120 cm
+  collision box: stone-clad side and back parapets with a dark base course,
+  joints and coping on a closed stone slab 7 cm high (`FLOOR`: nothing inside
+  the parapets lies lower, so ground relief under the footprint — at most
+  6.5–7.1 cm on the Seoul cards — stays hidden; walls, the front riser and
+  the plinths reach 6 cm below the foot so a downhill side shows no gap); two
+  5.3 cm flood-guard steps up to a landing and three shallow steps down to
+  the well floor, all with yellow nosings; then the stair's fake depth above
+  the unbroken ground: the well floor and inner walls darkening from the
+  landing (about 0.62 × tread) to at most 0.05 linear before the tunnel
+  mouth, four receding nosings fading out, a dark stone hood over the rear
+  block and a tunnel whose ceiling slopes down into black. Six steel posts,
+  beams, gutters and five arch ribs carry a translucent barrel-vault roof and
+  side and back glass; stainless side and centre handrails pitch down toward
+  the mouth. The front sign band carries the lit pictogram, name bars, a line
+  badge and a line-colour stripe. By night the landing, steps and nosings
+  glow softly (glow surface, so the same tints by day), lamp strips run under
+  both copings and a luminaire under the ridge, and a lamp inside the mouth
+  lights the tunnel faintly (0.07 linear at the mouth, black 25 cm inside).
+  Lit inlays, joints and nosings stand at least 2.5 mm (`LAYER`) off the
+  face behind them. The far mesh keeps the slab, steps, darkening well, hood,
+  mouth, band and the translucent glass.
+- Station sign (516 triangles; far 60) inside the 24×180×24 cm box: a stone
+  plinth, a bevelled steel pylon with a lit line stripe and front and back
+  name plates of abstract text bars, and a four-sided light box (pictogram,
+  dark name bars and line stripe on a backlit panel at 0.62 × white, so it
+  glows without clipping) under a cap.
+
+The renderer no longer draws their generated proxy faces
+(`render_memory.hidden_objects`, the street furniture mechanism); collision and
+occluders never read them. A cell instances them per kind and 32 m square as
+near and far MultiMeshes after its objects with the street furniture range
+policy for solid kinds (`furniture_near`; low draws only the far mesh, the far
+mesh stays drawn like the faces it replaces, shadows on every tier). The set is
+one claim per resource cache (`render_resource_cache.claim_mesh_set`, 768 KiB:
+about 4,500 vertices and 7,500 indices in CPU arrays and GPU buffers, 0.57 MB,
+plus materials and build arrays), taken when the cell begins and built one
+material or mesh per admitted step (`transit_preparation`, cache stages
+`transit_<part>`); a refused set fails the cell before it uploads anything, as
+its entrances and signs would lose their only visible body. Each node lists
+its instances' object ids (`mapkit_object_ids`, editor picking); each
+placement adds 48 B to two instance buffers and its id to the group's id list
+inside its 64 KiB object share. Cells without a cache build a process-lifetime
+set.
+`transit_detail_validator` checks the envelopes, the steps, the slab floor,
+the well and tunnel shading, the lit faces, tier variants and ranges, hidden
+faces with untouched collision triangles, memory, refusal before upload,
+release and (rendered) the sign panel, landing, well and tunnel by night and day and 12 %
+sloping ground never showing inside the well. Distant cells keep the native
+proxy boxes in the distant concrete colour (`distant.rs`, `Surface::Concrete`),
+close to the far mesh's stone.
+
+## Traffic signals and bus shelters
+
+Builtin traffic signals (`signal_h`, `signal_v`) and bus shelters are
+procedural display meshes (`godot/street_signal_meshes.gd`, built with the
+street furniture builder and shapes), each a detailed `near` and a simple `far`
+mesh sharing four materials: painted metal (the street furniture paint),
+vertex-tinted signs (`lighting_role` 2: posters, the timetable, the fascia name
+strip and the route plate glow at 0.9 × their colour from sunset), the signal
+lens shader and one translucent standard glass material. Local +x points over
+the road. The importer turns local −z toward the approaching traffic under
+right-hand driving and toward the junction under left-hand driving, so every
+head is lit on both faces with red at the arm-tip (road-centre) end or on top:
+drivers see a lit face, red toward the road centre, under either convention.
+
+- Signals (`signal_h` 1,484 triangles, far 112; `signal_v` 1,284, far 124): a
+  bolted square base plate, flange and tapered round pole with a cap and a
+  yellow push-button box, all inside the unchanged 8×220×8 cm pole box; a
+  pedestrian signal (stop and walk figures under hoods) facing across the road
+  at 0.85–1.0 m. `signal_h` adds a tapered mast arm with a collar, tie rod and
+  end cap, and under it at 1.32 m a horizontal head; `signal_v` a vertical head at 1.85 m held by brackets above
+  and below it. A head is a bevelled housing with three domed lenses and a
+  hood over each lens on both faces (the hoods toward the pole of a vertical
+  head are half as long and stay 7 mm clear of it) and a black mid-plane
+  backplate whose light border is a ring of bars beside it. Far heads draw
+  8-sided lenses. The lens shader keeps the cycle (green 6 s, amber 2 s, red
+  8 s, local and never synced); odd quarter turns run half a cycle apart: the
+  nearest quarter turn of the instance yaw, a yaw exactly halfway going to the
+  next one (the threshold lies 0.0005° early, between whole millidegrees), so
+  the quarter turns decide within the importer's ±45° offsets and the heading
+  decides for larger editor offsets. Instance custom data would carry the
+  phase exactly but drops instanced vertex tints on Compatibility. A lit lens
+  glows at 0.75–0.9 × a hue pre-compensated for ACES without glow (green
+  0, 0.55, 0.30; amber 1, 0.25, 0; red 1, 0, 0) with little albedo, so
+  sunlight does not wash it toward white; an unlit one is dark tinted glass;
+  the walk figure shows while the approach is red, blinking for its last 2 s.
+  Lens roles travel in UV and UV2: vertex colours read by a custom shader were
+  unreliable on instanced meshes on Forward+ and Compatibility.
+- Bus shelter (1,306 triangles plus 16 glass; far 172): steel front, rear and
+  bay posts on base plates, beams and rafters, a roof deck sloping from 0.96 m
+  at the front to 0.94 m at a rear gutter behind a blue fascia with a white
+  name strip and logo, glass in two back bays and two half-depth side screens
+  crossed by a frosted band at 0.47–0.50 m (the panes stop at it), an
+  advertising lightbox (poster on both faces) in the third bay, a timetable
+  panel on rails to its bay posts, a route plate hanging at the front corner,
+  and a four-slat perforated steel bench cantilevered from two legs (the far
+  mesh: a seat slab on two legs). Every vertex stays inside the proxies'
+  160×97×50 cm envelope, and posts, roof and back wall stand where their
+  collision boxes are. The bench, the side screens and their mid posts have no
+  collision box: a car driven into the shelter can overlap the bench before it
+  meets the back wall, and a car corner can reach into the 40 cm side gaps.
+- Printed faces (posters, the timetable, the route plate, the fascia strip,
+  the pedestrian signal front) are tiled coplanar faces closing open boxes or
+  framed by coplanar rings (`compose`, `framed`), never layers stacked a
+  fraction of a millimetre over another face, which flicker in a 24-bit depth
+  buffer at street distances. Lens rims stand 1.5 mm off their housings.
+
+The renderer no longer draws their generated proxy faces
+(`render_memory.hidden_objects`, the street furniture mechanism); collision and
+occluders never read them. A cell instances them per kind and 32 m square as
+near and far MultiMeshes after its objects with the street furniture range
+policy for solid kinds (`furniture_near`; low draws only the far mesh, the far
+mesh stays drawn like the faces it replaces, shadows on every tier); shelter
+glass is one node per group, drawn at every distance on every tier, and never
+casts shadows (`mapkit_furniture_glass`, tagged far for editor picking). The
+set is one claim per resource cache (`render_resource_cache.claim_mesh_set`,
+960 KiB: about 7,100 vertices and 13,500 indices in CPU arrays and GPU
+buffers, 0.90 MB, plus materials, the lens shader and build arrays), claimed
+as the cell begins (`chunk_renderer.begin`, before any upload) and built one
+material or mesh per admitted step (`signal_preparation`, cache stages
+`signals_<part>`); a refused set fails the cell before it uploads anything.
+Each placement adds 48 B to each of its instance buffers and its id to the
+group's id list (`mapkit_object_ids`, editor picking) inside its 64 KiB object
+share. Cells without a cache build a process-lifetime set.
+`street_signal_validator` checks the pole box (everything below 0.6 m), head
+positions, lens layout on both faces and visors clear of the pole, the shelter
+envelope and boxes, tier variants, ranges and glass, the phase rule for
+quarter turns and offsets, hidden faces with untouched collision triangles,
+memory, refusal before upload, release and (rendered) two planned heads at
+44° and 45° in one frame, instanced paint tints and the poster by night and
+day. Distant cells keep the native proxy boxes.
 
 ## Display quality
 
@@ -310,12 +571,20 @@ the effect distance (within 15%) and identical far walls. Render `generated_mate
 GPU uniforms and pixels before corrective quality updates, with prepared/unbatched
 geometry, cancellation and last-borrower retirement. Its optional
 `MAPKIT_SKIP_PIXEL_COMPARISON=1` explicitly skips only pixel comparison.
-`vegetation_scatter_validator` checks grass determinism across batch splits, the
-per-tier caps (none on low or polar ground) and their reservations, bounded steps,
-the texture-tier grass cap, tree/shrub body, card and far ranges and shadows per
+`grass_field_validator` checks bounded index steps identical across batch
+splits, exact plane heights and no grass share over a road strip, steep bank or
+sliver, crease error, ring coverage, vertex bounds and an even blade cover
+across handovers per tier, a medium field under high quality keeping its
+medium reach, the field inside its fixed claim, bounded steady frames while
+crossing blocks, a teleport leaving no other block's grass, reservations equal
+to the estimate less unused grass on low and polar ground, the lawn shade only
+while blades draw, a GPU-pressure dip, hidden and released cells, a refused
+field and, rendered, no blade over a road strip and blades standing on a 19°
+slope.
+`vegetation_scatter_validator` checks reservations, tree/shrub body, card and far ranges and shadows per
 tier, trunk coverage of the collision box, crown reach inside the placement
-footprint, visible branches, a refused shared set (fails cells with trees, skips
-grass) and the release of every lease; `street_detail_lease_validator` covers
+footprint, visible branches, a refused shared set (fails cells with trees,
+leaves cells without plants untouched) and the release of every lease; `street_detail_lease_validator` covers
 single-node trees/shrubs and the group MultiMeshes.
 `tree_canopy_validator`, `richer_material_validator` and
 `display_quality_validator` cover leaf/imported bindings, bitmap retention,

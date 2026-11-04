@@ -1,48 +1,73 @@
 extends RefCounted
-## Display-only grass tufts and small flowers on a cell's grass ground triangles.
-## Deterministic: every value is an integer hash of the cell and the triangle's
-## centimetre vertices (flower patches: of the tuft's 4 m world square), so
-## batching order, step boundaries and frame timing never change the result.
-## Density is the lower of DENSITY and cap / grass area, so a cell never holds
-## more than `cap` tufts (display_quality grass_cap: 0/1500/4000); the near
-## renderer shows them within grass_distance (24/40 m) and shrinks them into
-## the ground before that range ends. Work is split into steps bounded by
-## count and by STEP_USEC of wall time.
+## Grass ground of one cell for the camera-local grass field (grass_field.gd).
+## The cell's grass batches (PackedVector3Array triangle lists in scene metres,
+## the same arrays its ground meshes were built from) are indexed by the
+## field's 8 m world blocks: `refs` lists (part << 16 | triangle) per block in
+## compressed rows (`offsets`), so the field rasterizes one block from only the
+## triangles that reach it. Steep banks and slivers keep the lawn shader alone.
+## Nothing is copied: the record shares the batch arrays. Work is split into
+## steps bounded by count and by STEP_USEC of wall time.
 
-const VEGETATION := preload("./vegetation_meshes.gd")
 const PLAN := preload("./render_memory.gd")
-## Most tufts per square metre of grass.
-const DENSITY := 0.9
-## Group (one MultiMesh) size; each tuft joins the group of its own position,
-## so a group never leaves its 32 m square.
-const BUCKET_METRES := 32.0
-## Groups per cell: a tuft of a further group is dropped (cells up to 224 m
-## square never reach it).
-const MAX_GROUPS := PLAN.GRASS_GROUPS
-## Cells with less grass keep the lawn shader alone (and claim no shared set).
-const MIN_AREA := 32.0
-## Flowers cluster: a fifth of the 4 m squares are flower patches where 40 %
-## of tufts carry a head (white, yellow or violet); elsewhere 2 %.
-const FLOWER_PATCH_METRES := 4.0
-const FLOWER_PATCHES := 0.2
-const FLOWER_IN_PATCH := 0.4
-const FLOWER_ELSEWHERE := 0.02
-## Bounded work per admitted step: counts, and wall time checked every
-## TIME_CHECK tufts or triangles.
-const AREA_STEP := 1024
-const SCATTER_TRIANGLES := 256
-const SCATTER_INSTANCES := 256
+const BLOCK_METRES := PLAN.GRASS_BLOCK_METRES
+## Triangles per admitted step, wall time checked every TIME_CHECK triangles.
+const STEP_TRIANGLES := 1024
 const STEP_USEC := 1500
-const TIME_CHECK := 16
-## Per-instance MultiMesh floats: 3x4 transform and the custom colour.
-const FLOATS := 16
+const TIME_CHECK := 32
+## Batches hold at most 512 triangles (render_memory.TRIANGLES_PER_BATCH).
+const PART_SHIFT := 16
 
 ## `parts` is an Array of PackedVector3Array triangle lists (scene metres).
-static func begin(parts: Array, cell: Vector2i, cap: int, tint: Color) -> Dictionary:
-	var state := {"parts": parts, "cell": cell, "cap": clampi(cap, 0, PLAN.GRASS_INSTANCES), "tint": tint, "stage": "area", "part": 0, "triangle": 0,
-		"area": 0.0, "density": 0.0, "instance": 0, "count": -1, "key": 0, "emitted": 0, "groups": {}, "order": [], "peak_usec": 0}
-	_settle(state)
-	return state
+static func begin(parts: Array) -> Dictionary:
+	var kept: Array = []
+	for part: PackedVector3Array in parts:
+		if part.size() >= 3 and part.size() / 3 < (1 << PART_SHIFT): kept.append(part)
+	return {"parts": kept, "stage": "bounds", "part": 0, "triangle": 0, "low": Vector2(INF, INF), "high": -Vector2(INF, INF),
+		"origin": Vector2i.ZERO, "size": Vector2i.ZERO, "counts": PackedInt32Array(), "offsets": PackedInt32Array(), "refs": PackedInt32Array(),
+		"cursor": PackedInt32Array(), "peak_usec": 0, "steps": 0}
+
+## Ground grass only: steep banks and slivers keep the lawn shader alone.
+static func ground(a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var normal := (b - a).cross(c - a)
+	var length := normal.length()
+	return length > 1e-3 and absf(normal.y) / length >= 0.6
+
+## Block of a coordinate range's low and high end. A triangle ending on a
+## block border reaches no texel centre of the next block (EDGE inside).
+const EDGE := 0.001
+static func low_block(value: float) -> int: return floori((value + EDGE) / BLOCK_METRES)
+static func high_block(value: float) -> int: return floori((value - EDGE) / BLOCK_METRES)
+
+## Inclusive block range [low, high] of the triangle's horizontal bounds.
+static func block_range(a: Vector3, b: Vector3, c: Vector3) -> Rect2i:
+	var low := Vector2i(low_block(minf(a.x, minf(b.x, c.x))), low_block(minf(a.z, minf(b.z, c.z))))
+	var high := Vector2i(high_block(maxf(a.x, maxf(b.x, c.x))), high_block(maxf(a.z, maxf(b.z, c.z))))
+	return Rect2i(low, (high - low).max(Vector2i.ZERO))
+
+## Horizontal x extent (min, max) of the triangle's slice with z0 <= z <= z1:
+## every edge clipped to the band (the slice is their convex hull).
+static func row_extent(a: Vector3, b: Vector3, c: Vector3, z0: float, z1: float) -> Vector2:
+	var low := INF
+	var high := -INF
+	for edge in [[a, b], [b, c], [c, a]]:
+		var p: Vector3 = edge[0]
+		var q: Vector3 = edge[1]
+		var t0 := 0.0
+		var t1 := 1.0
+		var dz := q.z - p.z
+		if absf(dz) < 1e-9:
+			if p.z < z0 or p.z > z1: continue
+		else:
+			var u0 := (z0 - p.z) / dz
+			var u1 := (z1 - p.z) / dz
+			t0 = maxf(t0, minf(u0, u1))
+			t1 = minf(t1, maxf(u0, u1))
+			if t0 > t1: continue
+		var x0 := p.x + (q.x - p.x) * t0
+		var x1 := p.x + (q.x - p.x) * t1
+		low = minf(low, minf(x0, x1))
+		high = maxf(high, maxf(x0, x1))
+	return Vector2(low, high)
 
 ## Moves past parts without a whole triangle left; false when every part is consumed.
 static func _settle(state: Dictionary) -> bool:
@@ -51,126 +76,83 @@ static func _settle(state: Dictionary) -> bool:
 		state.triangle = 0
 	return state.part < state.parts.size()
 
-## Ground grass only: steep banks and slivers keep the lawn shader alone.
-static func _area(a: Vector3, b: Vector3, c: Vector3) -> float:
-	var normal := (b - a).cross(c - a)
-	var length := normal.length()
-	return length * 0.5 if length > 1e-6 and absf(normal.y) / length >= 0.6 else 0.0
-
-static func _key(cell: Vector2i, a: Vector3, b: Vector3, c: Vector3) -> int:
-	var h := VEGETATION.hash32(cell.x * 73856093 ^ VEGETATION.hash32(cell.y * 19349663))
-	for p: Vector3 in [a, b, c]:
-		h = VEGETATION.hash32(h ^ VEGETATION.hash32(roundi(p.x * 100.0) * 83492791 ^ roundi(p.z * 100.0) * 2654435761))
-	return h
-
-## Next value of a hash chain in [0, 1).
-static func _next_unit(chain: Array) -> float:
-	chain[0] = VEGETATION.hash32(int(chain[0]) + 0x632be5ab)
-	return float(int(chain[0]) & 0xffffff) / 16777216.0
-
-## One bounded step; true when `groups` holds the final tufts.
+## One bounded step; true when the record is complete (record()).
 static func advance(state: Dictionary) -> bool:
 	if state.stage == "done": return true
 	var started := Time.get_ticks_usec()
-	var finished := _area_step(state, started) if state.stage == "area" else _scatter_step(state, started)
-	state.peak_usec = maxi(int(state.peak_usec), Time.get_ticks_usec() - started)
-	return finished
-
-static func _area_step(state: Dictionary, started: int) -> bool:
 	var steps := 0
-	var area: float = state.area
-	while _settle(state) and steps < AREA_STEP:
+	while _settle(state) and steps < STEP_TRIANGLES:
 		if steps % TIME_CHECK == TIME_CHECK - 1 and Time.get_ticks_usec() - started > STEP_USEC: break
-		var part: PackedVector3Array = state.parts[state.part]
-		var i: int = state.triangle * 3
-		area += _area(part[i], part[i + 1], part[i + 2])
-		state.triangle += 1
-		steps += 1
-	state.area = area
-	if _settle(state): return false
-	state.density = minf(DENSITY, float(state.cap) / area) if area >= MIN_AREA else 0.0
-	state.part = 0
-	state.triangle = 0
-	_settle(state)
-	state.stage = "scatter" if state.density > 0.0 and state.cap > 0 else "done"
-	if state.stage == "done": state.parts = []
-	return state.stage == "done"
-
-static func _scatter_step(state: Dictionary, started: int) -> bool:
-	var triangles := 0
-	var emitted := 0
-	var tint: Color = state.tint
-	var fresh := {} # group -> PackedFloat32Array of this step
-	var chain := [0]
-	while _settle(state) and triangles < SCATTER_TRIANGLES and emitted < SCATTER_INSTANCES and state.emitted < state.cap:
-		if (triangles + emitted) % TIME_CHECK == TIME_CHECK - 1 and Time.get_ticks_usec() - started > STEP_USEC: break
 		var part: PackedVector3Array = state.parts[state.part]
 		var t: int = state.triangle * 3
 		var a := part[t]
 		var b := part[t + 1]
 		var c := part[t + 2]
-		if state.count < 0:
-			state.key = _key(state.cell, a, b, c)
-			chain[0] = state.key
-			state.count = floori(_area(a, b, c) * state.density + _next_unit(chain))
-			state.instance = 0
-		var key: int = state.key
-		while state.instance < state.count and emitted < SCATTER_INSTANCES and state.emitted < state.cap:
-			if emitted % TIME_CHECK == TIME_CHECK - 1 and Time.get_ticks_usec() - started > STEP_USEC: break
-			var i: int = state.instance
-			chain[0] = VEGETATION.hash32(key ^ (i + 1) * 0x9e3779b1)
-			var r1 := _next_unit(chain)
-			var r2 := _next_unit(chain)
-			if r1 + r2 > 1.0: r1 = 1.0 - r1; r2 = 1.0 - r2
-			var p := a + (b - a) * r1 + (c - a) * r2 + Vector3(0.0, -0.02, 0.0)
-			var yaw := _next_unit(chain) * TAU
-			var scale := 0.75 + 0.6 * _next_unit(chain)
-			var tall := scale * (0.85 + 0.3 * _next_unit(chain))
-			var pick := _next_unit(chain)
-			var colour := _next_unit(chain)
-			var bright := 0.82 + 0.3 * _next_unit(chain)
-			var phase := _next_unit(chain)
-			state.instance += 1
-			state.emitted += 1
-			emitted += 1
-			var group := Vector2i(floori(p.x / BUCKET_METRES), floori(p.z / BUCKET_METRES))
-			if not state.groups.has(group):
-				if state.groups.size() >= MAX_GROUPS: continue
-				state.groups[group] = []
-				state.order.append(group)
-			var patch := VEGETATION.hash32(floori(p.x / FLOWER_PATCH_METRES) * 73856093 ^ floori(p.z / FLOWER_PATCH_METRES) * 19349663)
-			var share := FLOWER_IN_PATCH if float(patch & 0xffff) / 65536.0 < FLOWER_PATCHES else FLOWER_ELSEWHERE
-			var flower := (1 + int(colour * 3.0) % 3) if pick < share else 0
-			var cosine := cos(yaw) * scale
-			var sine := sin(yaw) * scale
-			if not fresh.has(group): fresh[group] = PackedFloat32Array()
-			var values: PackedFloat32Array = fresh[group]
-			var n := values.size()
-			values.resize(n + FLOATS)
-			# Basis(UP, yaw) scaled (scale, tall, scale), rows of the 3x4 transform.
-			values[n] = cosine; values[n + 1] = 0.0; values[n + 2] = sine; values[n + 3] = p.x
-			values[n + 4] = 0.0; values[n + 5] = tall; values[n + 6] = 0.0; values[n + 7] = p.y
-			values[n + 8] = -sine; values[n + 9] = 0.0; values[n + 10] = cosine; values[n + 11] = p.z
-			values[n + 12] = tint.r * bright; values[n + 13] = tint.g * bright; values[n + 14] = tint.b * bright
-			values[n + 15] = 1.0 + float(flower) + phase * 0.999
-			fresh[group] = values
-		if state.instance >= state.count:
-			state.count = -1
-			state.triangle += 1
-			triangles += 1
-		else: break
-	for group: Vector2i in fresh: (state.groups[group] as Array).append(fresh[group])
-	if _settle(state) and state.emitted < state.cap: return false
-	state.stage = "done"
-	state.parts = []
-	return true
+		if ground(a, b, c):
+			match state.stage:
+				"bounds":
+					state.low = Vector2(minf(state.low.x, minf(a.x, minf(b.x, c.x))), minf(state.low.y, minf(a.z, minf(b.z, c.z))))
+					state.high = Vector2(maxf(state.high.x, maxf(a.x, maxf(b.x, c.x))), maxf(state.high.y, maxf(a.z, maxf(b.z, c.z))))
+				"count", "fill":
+					var span := block_range(a, b, c)
+					var ref: int = (int(state.part) << PART_SHIFT) | int(state.triangle)
+					for z in range(span.position.y, span.end.y + 1):
+						# Only the blocks the triangle's slice of this block row reaches.
+						var extent := row_extent(a, b, c, z * BLOCK_METRES, (z + 1) * BLOCK_METRES)
+						if extent.x > extent.y: continue
+						for x in range(maxi(span.position.x, low_block(extent.x)), mini(span.end.x, high_block(extent.y)) + 1):
+							var index: int = (z - state.origin.y) * state.size.x + (x - state.origin.x)
+							if state.stage == "count": state.counts[index] += 1
+							else:
+								state.refs[state.cursor[index]] = ref
+								state.cursor[index] += 1
+		state.triangle += 1
+		steps += 1
+	state.steps += 1
+	if _settle(state):
+		state.peak_usec = maxi(int(state.peak_usec), Time.get_ticks_usec() - started)
+		return false
+	match state.stage:
+		"bounds":
+			if state.low.x > state.high.x: _finish(state)
+			else:
+				state.origin = Vector2i(low_block(state.low.x), low_block(state.low.y))
+				state.size = (Vector2i(high_block(state.high.x), high_block(state.high.y)) - state.origin).max(Vector2i.ZERO) + Vector2i.ONE
+				state.counts.resize(state.size.x * state.size.y)
+				state.counts.fill(0)
+				state.stage = "count"
+		"count":
+			# Compressed rows: offsets[i]..offsets[i + 1] are block i's refs.
+			var offsets := PackedInt32Array()
+			offsets.resize(state.counts.size() + 1)
+			var total := 0
+			for i in state.counts.size():
+				offsets[i] = total
+				total += state.counts[i]
+			offsets[state.counts.size()] = total
+			state.offsets = offsets
+			state.cursor = offsets.slice(0, state.counts.size())
+			state.counts = PackedInt32Array()
+			state.refs.resize(total)
+			state.stage = "fill"
+		"fill": _finish(state)
+	state.part = 0
+	state.triangle = 0
+	state.peak_usec = maxi(int(state.peak_usec), Time.get_ticks_usec() - started)
+	return state.stage == "done"
 
-## Takes the next finished group: {"buffer": PackedFloat32Array, "count": int}
-## or {} when none is left.
-static func take_group(state: Dictionary) -> Dictionary:
-	if state.order.is_empty(): return {}
-	var group: Vector2i = state.order.pop_front()
-	var buffer := PackedFloat32Array()
-	for values: PackedFloat32Array in state.groups[group]: buffer.append_array(values)
-	state.groups.erase(group)
-	return {"buffer": buffer, "count": buffer.size() / FLOATS, "group": group}
+static func _finish(state: Dictionary) -> void:
+	state.stage = "done"
+	state.cursor = PackedInt32Array()
+	if state.refs.is_empty(): state.parts = []
+
+## The finished record ({} when the cell has no ground grass): parts, origin
+## and size (8 m blocks), offsets and refs.
+static func record(state: Dictionary) -> Dictionary:
+	if state.stage != "done" or state.refs.is_empty(): return {}
+	return {"parts": state.parts, "origin": state.origin, "size": state.size, "offsets": state.offsets, "refs": state.refs}
+
+## Bytes a record holds beyond the shared batch arrays it references.
+static func record_bytes(value: Dictionary) -> int:
+	if value.is_empty(): return 0
+	return (value.offsets as PackedInt32Array).size() * 4 + (value.refs as PackedInt32Array).size() * 4

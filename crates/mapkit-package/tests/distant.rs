@@ -177,14 +177,15 @@ fn city_trees_become_bounded_silhouettes() {
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
     d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear();
     d.bounds.max = [25600, 25600]; d.cell_size_cm = 12800;
+    // A street-size zone and a park zone with the widest city-tree footprint.
     for (index, kind) in [ZoneKind::Forest, ZoneKind::Orchard].into_iter().enumerate() {
         let x = 1000 + index as i64 * 12000;
         d.zones.push(Zone { id: format!("park-{index}"), polygon: vec![[x, 1000], [x + 11000, 1000], [x + 11000, 23000], [x, 23000]],
             kind, spacing_cm: 700, density_per_mille: 750, exclusions: vec![],
-            tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: 120, clearance_cm: 30 }) });
+            tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: [120, 200][index], clearance_cm: 30 }) });
     }
     let p = read_bytes(&pack_bytes(d, Default::default()).unwrap()).unwrap();
-    let mut trees = 0;
+    let (mut trees, mut wide) = (0, 0);
     for cell in p.document.cells() {
         let chunk = p.generate(cell, 500_000).unwrap();
         let count = chunk.objects.iter().filter(|o| o.asset_id == "builtin:city_tree").count();
@@ -200,8 +201,15 @@ fn city_trees_become_bounded_silhouettes() {
         }
         let solids = chunk.triangles.iter().filter(|t| !chunk.objects.iter().any(|o| o.id == t.object_id)).count();
         assert_eq!(far.vertices.len() / 3, solids + count * 24, "{cell:?}");
+        // Each silhouette stays inside its footprint; park-zone crowns are wide.
+        for tree in chunk.objects.iter().filter(|o| o.asset_id == "builtin:city_tree") {
+            let at = [tree.position[0] as f32 * 0.01, -tree.position[2] as f32 * 0.01];
+            let reach = far.vertices.iter().map(|p| (p[0] - at[0]).hypot(p[2] - at[1])).filter(|&r| r < 3.).fold(0f32, f32::max);
+            let footprint = if tree.id.starts_with("park-1:") { wide += 1; 2.0 } else { 1.2 };
+            assert!(reach <= footprint + 1e-3 && reach >= footprint * 0.6, "{}: {reach} m of {footprint} m", tree.id);
+        }
     }
-    assert!(trees > 100, "fixture zones plant trees: {trees}");
+    assert!(trees > 100 && wide > 30, "fixture zones plant trees: {trees}, {wide} wide");
 }
 
 /// `MAPKIT_DISTANT_BOUND_MEMAP=<package> cargo test -p mapkit-package --test distant -- --ignored`

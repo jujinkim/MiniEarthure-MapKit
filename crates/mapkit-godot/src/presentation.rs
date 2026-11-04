@@ -306,12 +306,42 @@ fn decorate_inner(
     }
     presentation.set("map_id", document.map_id.as_str());
     presentation.set("facade_floor_cm", facade_floor_cm(document));
+    presentation.set("city_tree_radii", &city_tree_radii(document, &objects)?);
     let cell=chunk.get("cell").unwrap().to::<VarDictionary>();
     let bounds=document.cell_bounds(mapkit_core::Cell{x:cell.get("x").unwrap().to::<i32>(),y:cell.get("y").unwrap().to::<i32>()})?;
     presentation.set("cell_bounds_json",serde_json::to_string(&bounds).unwrap().as_str());
     chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);
     Ok(data)
+}
+
+/// Footprint radius (cm) of each city tree of the chunk whose zone declares a
+/// wider footprint than `CITY_TREE_RADIUS` (object id -> radius); the renderer
+/// sizes those crowns to it and every other city tree to 120 cm. Display only,
+/// at most one entry per generated object, inside that object's display share.
+fn city_tree_radii(document: &mapkit_core::MapDocument, objects: &Array<VarDictionary>) -> Result<VarDictionary> {
+    let mut ids = Vec::new();
+    for o in objects.iter_shared() {
+        mapkit_core::cancellation::checkpoint()?;
+        if o.get("asset_id").unwrap().to::<GString>() == "builtin:city_tree" {
+            ids.push(o.get("id").unwrap().to::<GString>().to_string());
+        }
+    }
+    let mut result = VarDictionary::new();
+    for (id, radius) in wide_city_trees(document, ids.iter().map(String::as_str)) {
+        result.set(id, radius);
+    }
+    Ok(result)
+}
+/// City trees (by object id) whose footprint radius is not `CITY_TREE_RADIUS`.
+fn wide_city_trees<'a>(document: &mapkit_core::MapDocument, ids: impl Iterator<Item = &'a str>) -> Vec<(&'a str, i64)> {
+    let mut zones = None;
+    ids.filter_map(|id| {
+        let radii = zones.get_or_insert_with(|| mapkit_core::city_tree_zone_radii(document));
+        let radius = mapkit_core::city_tree_radius(radii, id);
+        (radius != mapkit_core::CITY_TREE_RADIUS).then_some((id, radius))
+    })
+    .collect()
 }
 
 pub(crate) fn environment_cost(d: &mapkit_core::MapDocument) -> u64 {
@@ -331,6 +361,25 @@ pub(crate) fn facade_floor_cm(document: &mapkit_core::MapDocument) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wide_city_trees_name_the_zone_trees_with_a_wider_footprint() {
+        let mut d: mapkit_core::MapDocument =
+            serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+        let zone = |id: &str, asset: &str, radius: u32| mapkit_core::Zone {
+            id: id.into(), polygon: vec![[0, 0], [1000, 0], [1000, 1000]], kind: mapkit_core::ZoneKind::Forest,
+            spacing_cm: 500, density_per_mille: 500, exclusions: vec![],
+            tree: Some(mapkit_core::ZoneTree { asset_id: asset.into(), radius_cm: radius, clearance_cm: 30 }) };
+        d.zones = vec![zone("park", "builtin:city_tree", 200), zone("lawn", "builtin:city_tree", 120), zone("wood", "oak", 180)];
+        let ids = ["park:1:2", "lawn:1:2", "wood:1:2", "street-tree", "park:01:2"];
+        assert_eq!(super::wide_city_trees(&d, ids.into_iter()), vec![("park:1:2", 200)],
+            "only zone trees above 120 cm are listed; custom zone assets, street trees and non-lattice ids are not");
+        assert!(super::wide_city_trees(&d, std::iter::empty()).is_empty());
+        // chunk_renderer.gd city_tree_radius reads decorate_inner's key with
+        // String ids and int radii; a renamed key would silently draw every
+        // crown at 120 cm.
+        let renderer = include_str!("../../../godot/chunk_renderer.gd");
+        assert!(renderer.contains(r#"get("city_tree_radii", {})"#) && renderer.contains("radii.get(str(object.id), 120)"));
+    }
     #[test]
     fn facade_floor_follows_the_recorded_map_scale() {
         let mut d: mapkit_core::MapDocument =

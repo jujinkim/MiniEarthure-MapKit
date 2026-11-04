@@ -14,6 +14,11 @@ const QUALITY := preload("./display_quality.gd")
 const INSTANCES := preload("./render_instances.gd")
 const VEGETATION := preload("./vegetation_meshes.gd")
 const GRASS := preload("./grass_scatter.gd")
+const GRASS_FIELD := preload("./grass_field.gd")
+const FURNITURE := preload("./street_furniture_meshes.gd")
+const SIGNALS := preload("./street_signal_meshes.gd")
+## Subway entrances and station signs: transit_meshes.gd groups (TRANSIT.KINDS).
+const TRANSIT := preload("./transit_meshes.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 # Triple the lit ground width at the same mounting height (tan of the cone angle).
 const STREETLIGHT_SPREAD := 3.0
@@ -26,115 +31,39 @@ static var _phase_peak_usec: Dictionary = {}
 
 const BUILTINS := ["builtin:tree", "builtin:fence", "builtin:streetlight", "builtin:signal_h", "builtin:signal_v",
 	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub", "builtin:city_tree"]
-## City trees (three variants over the 140 cm collision trunk, scaled 0.85–1.15)
+## City trees (three street variants over the 140 cm collision trunk, scaled
+## 0.85–1.15, or three wide park variants for zone footprints of 160–200 cm)
 ## and shrubs (three sizes) are display-only vegetation_meshes.gd meshes chosen
-## and turned by the object identity; a cell instances them per variant and
-## 32 m group with near (cards, branches) and far (coarse lobes) MultiMeshes.
+## and turned by the object identity; a cell instances them per mesh set,
+## variant and 32 m group with near (cards, branches) and far (coarse lobes)
+## MultiMeshes.
 const VEGETATION_IDS := {"builtin:city_tree": "tree", "builtin:shrub": "shrub"}
 const VEGETATION_KEY := "builtin:vegetation"
 const VEGETATION_GROUP_METRES := 32.0
-## Display-only detail meshes drawn by the renderer: signal heads on their poles,
-## benches and shrubs (no collision). Meshes and materials are shared.
-const STREET_DETAILS := {"builtin:signal_h": true, "builtin:signal_v": true, "builtin:bench": true, "builtin:shrub": true, "builtin:city_tree": true}
-## Signal lamps cycle green 6 s, yellow 2 s, red 8 s; cross approaches (odd
-## quarter turns) run half a cycle apart. Local display only, never synced.
-const SIGNAL_SHADER := """shader_type spatial;
-render_mode cull_back;
-uniform float phase = 0.0;
-varying vec3 local;
-void vertex() { local = VERTEX; }
-void fragment() {
-	float t = fract(TIME / 16.0 + phase) * 16.0;
-	float lamp = local.x;
-	vec3 body = vec3(0.08, 0.08, 0.09);
-	vec3 lit = vec3(0.0);
-	bool face = abs(NORMAL.z) > 0.5;
-	if (face) {
-		if (lamp < -0.07 && t >= 8.0) lit = vec3(1.0, 0.12, 0.08);
-		else if (lamp > 0.07 && t < 6.0) lit = vec3(0.1, 1.0, 0.35);
-		else if (abs(lamp) <= 0.07 && t >= 6.0 && t < 8.0) lit = vec3(1.0, 0.78, 0.1);
-	}
-	ALBEDO = body + lit * 0.2;
-	EMISSION = lit * 2.5;
-	ROUGHNESS = 0.6;
-}
-"""
-static var _details := {}
+## Generated details the renderer draws as display-only instance groups
+## (collision stays the generated boxes): city trees and shrubs (VEGETATION_IDS, vegetation groups),
+## streetlights and benches (street_furniture_meshes.gd, FURNITURE.KINDS),
+## traffic signals and bus shelters (street_signal_meshes.gd, SIGNALS.KINDS),
+## subway entrances and station signs (transit_meshes.gd, TRANSIT.KINDS).
+## `_street_detail` builds one city tree or shrub as single nodes for the lease
+## and placement checks of tests/street_detail_lease_validator.gd only.
+const STREET_DETAILS := {"builtin:shrub": true, "builtin:city_tree": true}
 
-static func _detail_resource(key: String) -> Resource:
-	if _details.has(key): return _details[key]
-	var value: Resource
-	match key:
-		"head":
-			var box := BoxMesh.new()
-			box.size = Vector3(0.45, 0.14, 0.10)
-			value = box
-		"arm":
-			var box := BoxMesh.new()
-			box.size = Vector3(1.4, 0.06, 0.06)
-			value = box
-		"metal":
-			var paint := StandardMaterial3D.new()
-			paint.albedo_color = Color("4a5055")
-			paint.metallic = 0.6
-			paint.roughness = 0.4
-			value = paint
-		"bench":
-			# Seat, backrest and two side legs in one shared mesh.
-			var tool := SurfaceTool.new()
-			for part: Array in [[Vector3(0.6, 0.05, 0.18), Vector3(0.0, 0.18, 0.0)], [Vector3(0.6, 0.15, 0.03), Vector3(0.0, 0.29, -0.08)],
-					[Vector3(0.04, 0.17, 0.16), Vector3(-0.26, 0.085, 0.0)], [Vector3(0.04, 0.17, 0.16), Vector3(0.26, 0.085, 0.0)]]:
-				var box := BoxMesh.new()
-				box.size = part[0]
-				tool.append_from(box, 0, Transform3D(Basis(), part[1]))
-			value = tool.commit()
-		"wood":
-			var paint := StandardMaterial3D.new()
-			paint.albedo_color = Color("8a6a46")
-			paint.roughness = 0.9
-			value = paint
-		_:
-			var shader := Shader.new()
-			shader.code = SIGNAL_SHADER
-			var lights := ShaderMaterial.new()
-			lights.shader = shader
-			lights.set_shader_parameter("phase", 0.5 if key == "signal_odd" else 0.0)
-			value = lights
-	_details[key] = value
-	return value
-
-static func _detail_mesh(mesh_key: String, material_key: String, at: Vector3, basis := Basis()) -> MeshInstance3D:
-	var mesh := MeshInstance3D.new()
-	mesh.mesh = _detail_resource(mesh_key)
-	mesh.material_override = _detail_resource(material_key)
-	mesh.transform = Transform3D(basis, at)
-	mesh.set_meta("mapkit_decoration", true)
-	mesh.set_meta("mapkit_static_detail", true)
-	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	return mesh
-
-static func _street_detail(id: String, object: Dictionary) -> Node3D:
+static func _street_detail(id: String, object: Dictionary, radius_cm := 0) -> Node3D:
 	var anchor := Node3D.new()
 	anchor.set_meta("mapkit_asset_id", id)
 	anchor.set_meta("mapkit_object_id", str(object.id))
 	anchor.position = scene_position(object.position)
-	var turns := int(object.quarter_turns)
-	anchor.rotation.y = float(turns) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0)
-	var lamp := "signal_odd" if turns % 2 == 1 else "signal_even"
+	anchor.rotation.y = float(int(object.quarter_turns)) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0)
 	match id:
-		"builtin:signal_h":
-			anchor.add_child(_detail_mesh("arm", "metal", Vector3(0.7, 2.14, 0.0)))
-			anchor.add_child(_detail_mesh("head", lamp, Vector3(1.32, 2.06, 0.0)))
-		"builtin:signal_v": anchor.add_child(_detail_mesh("head", lamp, Vector3(0.0, 1.85, -0.09), Basis(Vector3.BACK, PI / 2.0)))
-		"builtin:bench": anchor.add_child(_detail_mesh("bench", "wood", Vector3.ZERO))
 		_:
-			# Single-node city tree or shrub (standalone previews): the near body
-			# and cards, the instance path's placement and ranges, and the
-			# material's default leaf tint.
-			var placement := vegetation_placement(object, id)
+			# Single-node city tree or shrub (validator helper; cells instance
+			# them): the near body and cards, the instance path's placement and
+			# ranges, and the material's default leaf tint.
+			var placement := vegetation_placement(object, id, radius_cm)
 			var meshes := VEGETATION.shared()
 			for part in ["body", "cards"]:
-				var mesh: ArrayMesh = meshes[placement.kind + "_" + part][placement.variant]
+				var mesh: ArrayMesh = meshes[placement.mesh + "_" + part][placement.variant]
 				if mesh.get_surface_count() == 0: continue
 				var plant := MeshInstance3D.new()
 				plant.name = "Vegetation_" + part
@@ -148,42 +77,54 @@ static func _street_detail(id: String, object: Dictionary) -> Node3D:
 				anchor.add_child(plant)
 	return anchor
 
-## Display placement of a city tree or shrub from its object identity: kind,
-## variant, scene transform (origin at the trunk foot) and the instance data
-## (leaf tint and wind phase). Collision is the generated trunk box only.
-static func vegetation_placement(object: Dictionary, id := "") -> Dictionary:
+## Display placement of a city tree or shrub from its object identity: kind
+## (tree or shrub), mesh set (vegetation_meshes PLANTS), variant, scene
+## transform (origin at the trunk foot) and the instance data (leaf tint and
+## wind phase). A city tree's crown fits its placement footprint `radius_cm`
+## (0: CITY_TREE_RADIUS 120 cm; vegetation_meshes.tree_set). Collision is the
+## generated trunk box only.
+static func vegetation_placement(object: Dictionary, id := "", radius_cm := 0) -> Dictionary:
 	var pick := _identity_unit(object.id)
 	var variant := int(pick * 3.0) % 3
 	var tree := (id if not id.is_empty() else str(object.get("asset_id", "builtin:city_tree"))) == "builtin:city_tree"
-	var span: Vector2 = VEGETATION.TREE_SCALE if tree else VEGETATION.SHRUB_SCALE
-	var scale := span.x + (span.y - span.x) * fmod(pick * (7.0 if tree else 11.0), 1.0)
+	var set := VEGETATION.tree_set(radius_cm if radius_cm > 0 else 120) if tree else {"plant": "shrub", "factor": 1.0, "span": VEGETATION.SHRUB_SCALE}
+	var span: Vector2 = set.span
+	var scale: float = float(set.factor) * (span.x + (span.y - span.x) * fmod(pick * (7.0 if tree else 11.0), 1.0))
 	var basis := Basis(Vector3.UP, TAU * fmod(pick * (13.0 if tree else 5.0), 1.0)).scaled(Vector3.ONE * scale)
 	var leaves: String = (VEGETATION.TREE_LEAVES if tree else VEGETATION.SHRUB_LEAVES)[variant]
-	return {"kind": "tree" if tree else "shrub", "variant": variant, "transform": Transform3D(basis, scene_position(object.position)),
+	return {"kind": "tree" if tree else "shrub", "mesh": set.plant, "variant": variant, "transform": Transform3D(basis, scene_position(object.position)),
 		"custom": VEGETATION.leaf_custom(leaves, pick)}
 
-## Variant and scene transform of a city tree (shared with `_street_detail`).
-static func city_canopy_transform(object: Dictionary) -> Dictionary:
-	var placement := vegetation_placement(object, "builtin:city_tree")
-	return {"variant": placement.variant, "transform": placement.transform}
+## Placement footprint radius (cm) of a cell's city tree: the native
+## presentation lists zone trees wider than 120 cm (`city_tree_radii`, object
+## id -> radius); every other city tree, and any chunk without that list, 120.
+static func city_tree_radius(chunk: Dictionary, object: Dictionary) -> int:
+	var radii: Variant = chunk.get("presentation", {}).get("city_tree_radii", {})
+	return int(radii.get(str(object.id), 120)) if radii is Dictionary else 120
+
+## Mesh set, variant and scene transform of a city tree (shared with `_street_detail`).
+static func city_canopy_transform(object: Dictionary, radius_cm := 0) -> Dictionary:
+	var placement := vegetation_placement(object, "builtin:city_tree", radius_cm)
+	return {"mesh": placement.mesh, "variant": placement.variant, "transform": placement.transform}
 
 ## One admitted step per city tree or shrub: its instance joins the cell's
-## group of its kind, variant and 32 m square (body, cards and far MultiMeshes
-## per group, attached one group per step after the object pass).
+## group of its mesh set, variant and 32 m square (body, cards and far
+## MultiMeshes per group, attached one group per step after the object pass).
 static func _plan_vegetation(job: Dictionary, object: Dictionary) -> void:
-	var placement := vegetation_placement(object)
+	var tree := str(object.get("asset_id", "")) == "builtin:city_tree"
+	var placement := vegetation_placement(object, "", city_tree_radius(job.get("chunk", {}), object) if tree else 0)
 	var transform: Transform3D = placement.transform
 	var origin := transform.origin
-	var key := "%s/%d/%d,%d" % [placement.kind, placement.variant, floori(origin.x / VEGETATION_GROUP_METRES), floori(origin.z / VEGETATION_GROUP_METRES)]
+	var key := "%s/%d/%d,%d" % [placement.mesh, placement.variant, floori(origin.x / VEGETATION_GROUP_METRES), floori(origin.z / VEGETATION_GROUP_METRES)]
 	if not job.has("vegetation_plan"): job.vegetation_plan = {}
-	if not job.vegetation_plan.has(key): job.vegetation_plan[key] = {"kind": placement.kind, "variant": placement.variant, "parts": []}
+	if not job.vegetation_plan.has(key): job.vegetation_plan[key] = {"kind": placement.kind, "mesh": placement.mesh, "variant": placement.variant, "parts": []}
 	var b := transform.basis
 	var c: Color = placement.custom
 	job.vegetation_plan[key].parts.append(PackedFloat32Array([b.x.x, b.y.x, b.z.x, origin.x, b.x.y, b.y.y, b.z.y, origin.y, b.x.z, b.y.z, b.z.z, origin.z, c.r, c.g, c.b, c.a]))
 
 ## Shared vegetation meshes for this job: 1 ready, 0 another step is needed,
-## -1 refused (fails the cell unless optional, as for grass).
-static func _vegetation_ready(job: Dictionary, optional: bool) -> int:
+## -1 refused (the cell fails).
+static func _vegetation_ready(job: Dictionary) -> int:
 	if job.has("vegetation"): return 1
 	job.last_phase = "vegetation_preparation"
 	if job.get("resources") == null:
@@ -195,19 +136,19 @@ static func _vegetation_ready(job: Dictionary, optional: bool) -> int:
 	if not job.claims.has(VEGETATION_KEY):
 		var key: String = job.resources.claim_vegetation()
 		if key.is_empty():
-			if not optional: fail(job, "E_MEMORY_BUDGET", "Shared vegetation exceeds memory allowance")
+			fail(job, "E_MEMORY_BUDGET", "Shared vegetation exceeds memory allowance")
 			return -1
 		job.claims[VEGETATION_KEY] = key
 	if job.resources.prepare_vegetation(job.claims[VEGETATION_KEY]):
 		var meshes: Dictionary = job.resources.vegetation(job.claims[VEGETATION_KEY])
 		if meshes.is_empty():
-			if not optional: fail(job, "E_RENDER_ASSET", "Shared vegetation is unavailable")
+			fail(job, "E_RENDER_ASSET", "Shared vegetation is unavailable")
 			return -1
 		job.vegetation = meshes
 	return 0
 
 ## One MultiMesh of shared vegetation; display quality sets its range and
-## shadows (`mapkit_vegetation_lod`: body, cards, far or grass). The cell lease
+## shadows (`mapkit_vegetation_lod`: body, cards or far). The cell lease
 ## carries the node and instance buffer only: meshes and materials belong to
 ## the shared set. A mesh without surfaces (no leaf atlas) adds nothing.
 static func _vegetation_node(job: Dictionary, mesh: Mesh, buffer: PackedFloat32Array, lod: String, kind: String, quality: Dictionary) -> void:
@@ -216,12 +157,12 @@ static func _vegetation_node(job: Dictionary, mesh: Mesh, buffer: PackedFloat32A
 	multi.transform_format = MultiMesh.TRANSFORM_3D
 	multi.use_custom_data = true
 	multi.mesh = mesh
-	multi.instance_count = buffer.size() / GRASS.FLOATS
+	multi.instance_count = buffer.size() / VEGETATION.FLOATS
 	multi.buffer = buffer
 	var node := MultiMeshInstance3D.new()
 	node.name = "Vegetation_%s_%s_%d" % [kind, lod, job.root.get_child_count()]
 	node.multimesh = multi
-	# Wind moves leaves and blade tips a few centimetres past the mesh bounds.
+	# Wind moves leaves a few centimetres past the mesh bounds.
 	node.extra_cull_margin = 0.3
 	node.set_meta("mapkit_static_detail", true)
 	node.set_meta("mapkit_decoration", true)
@@ -241,38 +182,33 @@ static func _attach_vegetation_group(job: Dictionary) -> void:
 	for part: PackedFloat32Array in group.parts: buffer.append_array(part)
 	var quality := QUALITY.active()
 	var meshes: Dictionary = job.vegetation
-	for part in VEGETATION.KINDS: _vegetation_node(job, meshes[group.kind + "_" + part][group.variant], buffer, part, group.kind, quality)
+	for part in VEGETATION.KINDS: _vegetation_node(job, meshes[group.mesh + "_" + part][group.variant], buffer, part, group.kind, quality)
 
-## Grass tufts after the objects: scatter in bounded steps, then one group per
-## step. Returns whether this call did work.
+## Grass ground after the objects: index the grass batches in bounded steps,
+## then register them with the camera-local grass field (`grass_cell`,
+## released by cancel). A refused field skips grass. Returns whether this
+## call did work.
 static func _grass_step(job: Dictionary) -> bool:
 	if job.get("grass_done", false): return false
 	if not job.has("grass"):
 		var parts: Array = job.get("grass_parts", [])
-		if parts.is_empty() or int(job.get("grass_cap", 0)) <= 0:
+		if parts.is_empty() or int(job.get("grass_level", 0)) <= 0:
 			job.grass_done = true
 			job.erase("grass_parts")
 			return false
-		job.last_phase = "grass_scatter"
-		job.grass = GRASS.begin(parts, Vector2i(int(job.chunk.cell.x), int(job.chunk.cell.y)), int(job.grass_cap), job.grass_tint)
+		job.last_phase = "grass_index"
+		job.grass = GRASS.begin(parts)
 		job.erase("grass_parts")
 		return true
-	job.last_phase = "grass_scatter"
+	job.last_phase = "grass_index"
 	if not GRASS.advance(job.grass): return true
-	if job.grass.order.is_empty():
-		job.grass_done = true
-		job.erase("grass")
-		return true
-	# The shared set is claimed only when tufts exist; refusal skips grass.
-	var ready := _vegetation_ready(job, true)
-	if ready < 0:
-		job.grass_done = true
-		job.erase("grass")
-		return true
-	if ready == 0: return true
-	var group := GRASS.take_group(job.grass)
-	job.last_phase = "instance_upload"
-	_vegetation_node(job, job.vegetation.grass, group.buffer, "grass", "grass", QUALITY.active())
+	job.grass_done = true
+	var record := GRASS.record(job.grass)
+	job.erase("grass")
+	var cell: RefCounted = GRASS_FIELD.register(record, job.root, job.get("resources"), job.grass_tint, job.materials.get("grass")) if not record.is_empty() else null
+	if cell != null:
+		job.grass_cell = cell
+		if job.get("lease") != null: job.lease.track(cell)
 	return true
 
 ## Stable display-only value in [0, 1) from an object identity.
@@ -288,15 +224,18 @@ static func scene_position(value: Array) -> Vector3:
 static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callable(), planned_bytes: int = 0, resources: RefCounted = null) -> Dictionary:
 	var view := DATA.view(chunk)
 	var shared := PLAN.shared_bytes(view) if resources != null else 0
-	# Grass tufts follow the cache texture tier at attachment (display_quality
-	# grass_cap); polar ground keeps none. The worker estimate charges the high
-	# cap to grass cells; a cell building no grass (low, polar) does not
-	# reserve it. Medium keeps the whole charge: the Client pins a cell's
-	# lease to its estimate there. Callers passing their own smaller planned
-	# bytes (previews) never included it.
+	# Grass blades follow the grass field tier at attachment (display_quality
+	# grass_level: the cache texture tier); low and polar ground keep none.
+	# The worker estimate (no display tier) holds the cell's grass reservation
+	# (render_memory.grass_bytes); a cell registering no grass returns it when
+	# its prepared batches count the grass triangles (an unbatched cell keeps
+	# it: counting would need a main-thread triangle pass here). Medium and
+	# high keep the whole estimate: the Client pins a cell's lease to it there.
 	var climate: Variant = JSON.parse_string(str(view.get("presentation", {}).get("environment_json", "{}")))
-	var grass_cap := QUALITY.grass_cap(QUALITY.active()) if not (climate is Dictionary and str(climate.get("climate", "")) == "polar") else 0
-	if grass_cap == 0 and planned_bytes - shared >= PLAN.GRASS_CELL_BYTES + 65536 and PLAN.has_grass(view): planned_bytes -= PLAN.GRASS_CELL_BYTES
+	var grass_level := QUALITY.grass_level(QUALITY.active()) if not (climate is Dictionary and str(climate.get("climate", "")) == "polar") else 0
+	if grass_level == 0:
+		var unused := PLAN.grass_bytes(PLAN.batch_grass_triangles(view))
+		if unused > 0 and planned_bytes - shared >= unused + 65536: planned_bytes -= unused
 	# Older validated recipes have no per-asset immutable sharing metadata.
 	# Keep their complete per-job reservation and local importer ownership.
 	if resources != null and shared == 0 and not view.get("presentation", {}).get("assets", {}).is_empty():
@@ -316,7 +255,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 	root.name = "MapCell_%s_%s" % [chunk.cell.x, chunk.cell.y]
 	parent.add_child(root)
 	var job := {"root": root, "chunk": view, "lease": lease, "grass_parts": [], "display_lease": lease, "grind": 0, "grind_records": preload("./grind_geometry.gd").records(view), "triangle": 0, "water": 0, "water_face": 0, "water_records": preload("./water_query.gd").records(view), "object": 0, "done": false, "cancelled": false, "materials": {}, "asset_materials": {}, "templates": {}, "error": {}, "resources": resources, "claims": {}, "instances": {}, "counts": {}, "borrowed_materials": {}, "steps": 0, "peak_step_usec": 0}
-	job.grass_cap = grass_cap
+	job.grass_level = grass_level
 	job.grass_tint = ground_color("grass", view.get("presentation", {})).srgb_to_linear() * Color(0.92, 1.0, 0.86)
 	if resources != null:
 		resources.environment_profile = preload("./environment_profile.gd").defaults()
@@ -349,6 +288,18 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 				var group := _object_group(object)
 				job.counts[group] = int(job.counts.get(group, 0)) + 1
 		job.lamp_bindings = _lamp_bindings(resources.environment_profile,lamp_assets)
+		# Street furniture claims its shared set before any upload.
+		if not FURNITURE.claim(job, view.objects):
+			fail(job,"E_MEMORY_BUDGET","Shared street furniture exceeds memory allowance")
+			return job
+		# Traffic signals and bus shelters likewise.
+		if not SIGNALS.claim(job, view.objects):
+			fail(job,"E_MEMORY_BUDGET","Shared signals and shelters exceed memory allowance")
+			return job
+		# Subway entrances and station signs likewise.
+		if not TRANSIT.claim(job, view.objects):
+			fail(job,"E_MEMORY_BUDGET","Shared transit details exceed memory allowance")
+			return job
 	return job
 
 static func advance(job: Dictionary) -> bool:
@@ -393,7 +344,8 @@ static func _advance(job: Dictionary) -> bool:
 		offset = DATA.count(chunk)
 	if offset < DATA.count(chunk):
 		var skipped := 0
-		while offset < DATA.count(chunk) and DATA.object_id(chunk, offset) in presentation.get("hidden_proxies", PackedStringArray()) and skipped < TRIANGLES_PER_BATCH:
+		if not job.has("hidden_objects"): job.hidden_objects = PLAN.hidden_objects(chunk)
+		while offset < DATA.count(chunk) and DATA.object_id(chunk, offset) in job.hidden_objects and skipped < TRIANGLES_PER_BATCH:
 			offset += 1
 			skipped += 1
 		if skipped > 0:
@@ -402,7 +354,7 @@ static func _advance(job: Dictionary) -> bool:
 		var key := display_material_key(chunk, offset)
 		var end := mini(offset + TRIANGLES_PER_BATCH, DATA.count(chunk))
 		var first := offset
-		while offset < end and display_material_key(chunk, offset) == key and not DATA.object_id(chunk, offset) in presentation.get("hidden_proxies", PackedStringArray()):
+		while offset < end and display_material_key(chunk, offset) == key and not DATA.object_id(chunk, offset) in job.hidden_objects:
 			offset += 1
 		var mesh := MeshInstance3D.new()
 		if chunk.has("scene_vertices"):
@@ -415,7 +367,7 @@ static func _advance(job: Dictionary) -> bool:
 			if facade == 0: arrays[Mesh.ARRAY_TEX_UV] = chunk.wall_uv.slice(first * 3, offset * 3)
 			else: arrays[Mesh.ARRAY_TEX_UV2] = chunk.facade_seeds.slice(first * 3, offset * 3)
 			if facade == 2 and chunk.get("facade_tops", PackedFloat32Array()).size() == chunk.wall_uv.size(): arrays[Mesh.ARRAY_CUSTOM0] = chunk.facade_tops.slice(first * 3, offset * 3)
-			if key == "grass" and int(job.get("grass_cap", 0)) > 0: job.grass_parts.append(arrays[Mesh.ARRAY_VERTEX])
+			if key == "grass" and int(job.get("grass_level", 0)) > 0: job.grass_parts.append(arrays[Mesh.ARRAY_VERTEX])
 			var prepared := ArrayMesh.new()
 			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, FACADE_TOP_FORMAT if arrays[Mesh.ARRAY_CUSTOM0] != null else 0)
 			mesh.mesh = prepared
@@ -530,18 +482,38 @@ static func _advance(job: Dictionary) -> bool:
 				continue
 			if id not in BUILTINS:
 				return fail(job, "E_RENDER_ASSET", "Unknown built-in asset")
+			if FURNITURE.KINDS.has(id):
+				var furnished := FURNITURE.ready(job)
+				if furnished == -3: continue
+				if furnished < 0: return fail(job, "E_RENDER_ASSET", "Shared street furniture is unavailable")
+				if furnished == 0:
+					job.object -= 1
+					return false
+				FURNITURE.plan(job, object)
+				continue
+			if SIGNALS.KINDS.has(id):
+				var signalled := SIGNALS.ready(job)
+				if signalled < 0: return fail(job, "E_RENDER_ASSET", "Shared signals and shelters are unavailable")
+				if signalled == 0:
+					job.object -= 1
+					return false
+				SIGNALS.plan(job, object)
+				continue
+			if TRANSIT.KINDS.has(id):
+				var transit := TRANSIT.ready(job)
+				if transit < 0: return fail(job, "E_RENDER_ASSET", "Shared transit details are unavailable")
+				if transit == 0:
+					job.object -= 1
+					return false
+				TRANSIT.plan(job, object)
+				continue
 			if VEGETATION_IDS.has(id):
-				var ready := _vegetation_ready(job, false)
+				var ready := _vegetation_ready(job)
 				if ready < 0: return true
 				if ready == 0:
 					job.object -= 1
 					return false
 				_plan_vegetation(job, object)
-				continue
-			if STREET_DETAILS.has(id):
-				var detail := _street_detail(id, object)
-				track_resources(job, detail)
-				job.root.add_child(detail)
 				continue
 			if id != "builtin:tree": continue
 			var canopy_mesh: Mesh
@@ -564,6 +536,15 @@ static func _advance(job: Dictionary) -> bool:
 			canopy.material_override = _leaf_material(job, true)
 			track_resources(job, canopy, job.get("resources") != null)
 			job.root.add_child(canopy)
+	elif not job.get("furniture_plan", {}).is_empty():
+		job.last_phase = "instance_upload"
+		FURNITURE.attach_group(job)
+	elif not job.get("signal_plan", {}).is_empty():
+		job.last_phase = "instance_upload"
+		SIGNALS.attach_group(job)
+	elif not job.get("transit_plan", {}).is_empty():
+		job.last_phase = "instance_upload"
+		TRANSIT.attach_group(job)
 	elif not job.get("vegetation_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		_attach_vegetation_group(job)
@@ -586,7 +567,7 @@ static func _prepared_batch(job: Dictionary, batch: Dictionary) -> bool:
 	resource.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, FACADE_TOP_FORMAT if arrays[Mesh.ARRAY_CUSTOM0] != null else 0)
 	mesh.mesh = resource
 	var key: String = batch.key
-	if key == "grass" and int(job.get("grass_cap", 0)) > 0: job.grass_parts.append(batch.vertices)
+	if key == "grass" and int(job.get("grass_level", 0)) > 0: job.grass_parts.append(batch.vertices)
 	_prepare_batch_occluder(resource, key, batch.vertices)
 	if not job.materials.has(key):
 		var presentation: Dictionary = job.chunk.get("presentation", {})
@@ -696,7 +677,7 @@ static func dispose(job: Dictionary) -> void:
 	job.chunk = {}
 	job.erase("lamp_bindings")
 	job.erase("urban_shader")
-	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts"]: job.erase(key)
+	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "hidden_objects"]: job.erase(key)
 	if job.get("lease") != null:
 		job.lease.seal()
 		job.lease = null
@@ -813,6 +794,9 @@ static func ground_color(key: String, presentation: Dictionary) -> Color:
 static func cancel(job: Dictionary) -> void:
 	var started := Time.get_ticks_usec()
 	job.cancelled = true
+	if job.has("grass_cell"):
+		job.grass_cell.release()
+		job.erase("grass_cell")
 	dispose(job)
 	if is_instance_valid(job.root) and not job.root.is_queued_for_deletion():
 		var parent: Node = job.root.get_parent()

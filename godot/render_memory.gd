@@ -3,31 +3,75 @@ extends RefCounted
 const DATA := preload("./chunk_data.gd")
 const TRIANGLES_PER_BATCH := 512
 const SPATIAL_METRES := 32.0
-## Park grass tufts of one cell with grass ground (chunk_renderer, grass_scatter.gd):
-## per tuft 64 B in the GPU instance buffer plus the same transient CPU copy,
-## and at most 64 MultiMesh groups at 8 KiB (node, server instance and buffer
-## record). The worker estimate has no display tier, so it charges the high
-## cap (4,000) to every cell that can grow grass; chunk_renderer.begin drops
-## the charge where the cell builds none (low tier, polar ground).
-const GRASS_INSTANCES := 4000
-const GRASS_GROUPS := 64
-const GRASS_CELL_BYTES := GRASS_INSTANCES * 128 + GRASS_GROUPS * 8192
+## Grass ground of one cell for the camera-local grass field (chunk_renderer,
+## grass_scatter.gd, grass_field.gd; the field's own fixed memory is one
+## shared claim per resource cache). A cell with grass ground keeps its grass
+## batch arrays (36 B per triangle, shared, no copy) and their 8 m block index
+## (up to three 4 B refs per triangle) while it is registered: 48 B per grass
+## triangle plus GRASS_CELL_BYTES for the index rows, the large-triangle refs
+## and the record. The worker estimate has no display tier: every estimate
+## holds it, and a cell registering no grass (low, polar ground) returns it at
+## attachment when its prepared batches count the grass triangles
+## (batch_grass_triangles).
+const GRASS_BLOCK_METRES := 8.0
+const GRASS_TRIANGLE_BYTES := 48
+const GRASS_CELL_BYTES := 32768
 ## City trees and shrubs need no extra allowance: each placement adds 64 B to
 ## the body, cards and far instance buffers (and a transient copy) and at most
-## one group of three nodes and MultiMeshes (< 24 KiB), inside its 65,536 B
+## one group of three nodes and MultiMeshes (< 24 KiB), and a wide zone tree
+## its presentation `city_tree_radii` entry (< 1 KiB), inside its 65,536 B
 ## object share.
 
-## Whether a cell can build grass tufts: any grass ground triangle or grass
-## material override. A superset of the triangles the renderer scatters on, so
-## the estimate and the reservation in begin() agree without a triangle pass.
-static func has_grass(chunk: Dictionary) -> bool:
+## Streetlights and benches need no extra allowance either: each placement
+## adds 48 B to its group's near and far instance buffers (and a transient
+## copy), its object id to the group's shared id list (< 1 KiB) and at most
+## one group (16 m square) of two nodes and MultiMeshes (< 16 KiB) inside its
+## object share; the meshes are one shared set per resource cache
+## (street_furniture_meshes.SHARED_BYTES).
+## Traffic signals and bus shelters likewise: 48 B per placement in each of
+## their near and far buffers (a shelter also its glass buffer), its id in
+## the group's id list, at most one group of up to three nodes and
+## MultiMeshes (< 32 KiB) per kind and 32 m square inside the object share;
+## one shared set per resource cache (street_signal_meshes.SHARED_BYTES).
+## Subway entrances and station signs likewise: 48 B per placement in each of
+## their near and far buffers, its id in the group's id list, at most one
+## group of two nodes and MultiMeshes (< 16 KiB) per kind and 32 m square
+## inside the object share; one shared set per resource cache
+## (transit_meshes.SHARED_BYTES).
+
+## Object ids whose generated proxy faces are not drawn: the presentation's
+## hidden proxies and every builtin streetlight, which the renderer draws as
+## a street_furniture_meshes.gd lamp inside its unchanged collision boxes, and
+## every traffic signal and bus shelter, drawn as street_signal_meshes.gd
+## signals and shelters standing where their boxes are, and every subway
+## entrance and station sign, drawn as transit_meshes.gd entrances and pylons
+## inside theirs (each owner cell lists the object; a neighbour cell holding
+## clipped faces of it knows it from the proxy materials). Collision,
+## occluders and lamp bindings never read these faces.
+const DRAWN_OVER := ["builtin:streetlight", "builtin:signal_h", "builtin:signal_v", "builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign"]
+static func hidden_objects(chunk: Dictionary) -> Dictionary:
+	var result := {}
 	var presentation: Dictionary = chunk.get("presentation", {})
-	if (presentation.get("road_materials", PackedStringArray()) as PackedStringArray).has("grass"): return true
-	if presentation.get("proxy_materials", {}).values().has("grass"): return true
-	if chunk.has("packed_version"): return chunk.surface_indices.has(DATA.SURFACES.find("grass"))
-	for triangle: Dictionary in chunk.get("triangles", []):
-		if str(triangle.surface) == "grass": return true
-	return false
+	for id: Variant in presentation.get("hidden_proxies", PackedStringArray()): result[str(id)] = true
+	var materials: Dictionary = presentation.get("proxy_materials", {})
+	for id: Variant in materials:
+		if str(materials[id]) in DRAWN_OVER: result[str(id)] = true
+	for object: Dictionary in chunk.get("objects", []):
+		if str(object.get("asset_id", "")) in DRAWN_OVER: result[str(object.id)] = true
+	return result
+
+## Reservation of a cell's grass ground for the grass field: `triangles` are
+## its visible grass-material triangles (estimate counts them).
+static func grass_bytes(triangles: int) -> int:
+	return 0 if triangles <= 0 else GRASS_CELL_BYTES + triangles * GRASS_TRIANGLE_BYTES
+
+## Grass triangles of a chunk's prepared batches (prepare_batches: the same
+## visible grass-material triangles estimate counts), 0 without them.
+static func batch_grass_triangles(chunk: Dictionary) -> int:
+	var total := 0
+	for batch: Dictionary in chunk.get("render_batches", []):
+		if str(batch.get("key", "")) == "grass": total += (batch.vertices as PackedVector3Array).size() / 3
+	return total
 
 static func shared_bytes(chunk: Dictionary) -> int:
 	var total := 0
@@ -38,7 +82,7 @@ static func shared_bytes(chunk: Dictionary) -> int:
 
 ## Admission bound before generation. A material can change on every triangle.
 static func upper_bound(cost: Dictionary) -> int:
-	return 131072 + GRASS_CELL_BYTES + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (768 + 12288) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
+	return 131072 + grass_bytes(int(cost.triangles)) + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (768 + 12288) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
 
 ## Worker-only opaque surface grouping. Native source/collision order is untouched.
 ## Position, normal and UV take 96 bytes per visible triangle. Facade batches swap
@@ -54,7 +98,7 @@ static func supports_batches(chunk: Dictionary) -> bool:
 static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable()) -> Array:
 	if not supports_batches(chunk): return []
 	var groups: Dictionary = {}
-	var hidden: Variant = chunk.get("presentation", {}).get("hidden_proxies", PackedStringArray())
+	var hidden := hidden_objects(chunk)
 	for triangle in DATA.count(chunk):
 		if triangle % TRIANGLES_PER_BATCH == 0 and cancelled.is_valid() and cancelled.call(): return []
 		if DATA.object_id(chunk, triangle) in hidden: continue
@@ -110,14 +154,16 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	var batches := 0
 	var run := 0
 	var previous := ""
-	var hidden: Variant = chunk.get("presentation", {}).get("hidden_proxies", PackedStringArray())
+	var hidden := hidden_objects(chunk)
 	var visible_triangles := 0
+	var grass_triangles := 0
 	for i in DATA.count(chunk):
 		if DATA.object_id(chunk, i) in hidden:
 			run = 0
 			continue
 		var key := material_key(chunk, i)
 		visible_triangles += 1
+		if key == "grass": grass_triangles += 1
 		if run == 0 or run == TRIANGLES_PER_BATCH or key != previous:
 			batches += 1
 			run = 0
@@ -131,7 +177,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
 	var grind_bytes := 0
 	for line: Dictionary in preload("./grind_geometry.gd").records(chunk): grind_bytes += 32768 + line.get("samples",[]).size()*8192
-	return (GRASS_CELL_BYTES if has_grass(chunk) else 0) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	return grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:
