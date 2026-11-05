@@ -154,15 +154,31 @@ fn basins_are_city_only_and_leave_authored_maps_byte_identical() {
 #[test]
 fn basin_levels_bank_widths_and_region_sources_are_local() {
     assert_eq!((water::bank_cm(-8, -68), water::bank_cm(0, -10), water::bank_cm(0, -500)), (180, 90, 240));
-    // Touching pieces at different levels keep a bank between them.
+    // Touching pieces at different levels share a step seam, not a bank: the
+    // ground along it rises only to the upper surface (a lip holding the upper
+    // water, no terrain across the water) and falls from there into the lower
+    // piece at its bank slope.
     let mut stepped = city(true);
     stepped.water_bodies[1].surface_cm -= 20;
     stepped.water_bodies[1].bottom_cm -= 20;
     let report = water::basin_report(&stepped).unwrap();
-    assert_eq!(report.counts.seam_edges, 0);
+    assert_eq!(report.counts.seam_edges, 2);
     let c = generate(input(&stepped, &BTreeMap::new(), Cell { x: 0, y: 0 })).unwrap();
-    let seam: Vec<_> = heights(&c).into_iter().filter(|(p, _)| p[0] == 1600 && p[1] > 400 && p[1] < 2400).collect();
-    assert!(!seam.is_empty() && seam.iter().all(|(_, h)| h == &vec![0]), "{seam:?}");
+    let all = heights(&c);
+    let seam: Vec<_> = all.iter().filter(|(p, _)| p[0] == 1600 && p[1] > 400 && p[1] < 2400).collect();
+    assert!(!seam.is_empty() && seam.iter().all(|(_, h)| h == &&vec![SURFACE]), "{seam:?}");
+    let fall = SURFACE - BOTTOM + 8;
+    let w = water::bank_cm(SURFACE - 20, BOTTOM - 20);
+    for (p, h) in &all {
+        // Far from the outer shores and the fence, the lower piece falls from the lip at its
+        // bank slope, `upper − k · d / w`, to its bed.
+        if !stepped.water_bodies[1].contains_horizontal(*p) || p[0] == 1600 || p[1] < 1100 || p[1] > 1800 { continue; }
+        assert_eq!(h, &vec![(SURFACE - fall * (p[0] - 1600) / w).max(BOTTOM - 20)], "{p:?}");
+    }
+    // Its bed lies under its own surface (20 cm under the flat-import one).
+    assert!(all.iter().any(|(p, h)| p[0] > 1600 && h[0] < SURFACE - 20 - 30));
+    // The upper piece keeps its own bed.
+    assert!(all.iter().any(|(p, h)| p[0] < 1600 && h[0] == BOTTOM));
     // Regional sources, prepared maps and reordered sources generate the same ground.
     for (d, grids) in [(city(true), BTreeMap::new()), sloped(true)] {
         let prepared = PreparedMap::new(d.clone()).unwrap();
@@ -178,6 +194,118 @@ fn basin_levels_bank_widths_and_region_sources_are_local() {
             assert_eq!(generate(input(&local, &grids, cell)).unwrap(), c, "{cell:?}");
         }
     }
+}
+
+/// A narrow body (mean width under two bank widths) falls to its bottom at its
+/// loop, 2/5 of its mean width from the shore, instead of at the flat-map bank
+/// slope: `h = g − min(g − bottom, k · d / max(r, 60))`. A 100 cm stream keeps
+/// the 60 cm bank (about 49°) and stops above its bottom.
+#[test]
+fn narrow_streams_fall_to_their_bed_at_the_loop() {
+    for narrower in [false, true] {
+        let mut d = city(true);
+        if narrower {
+            let stream = d.water_bodies.iter_mut().find(|b| b.id == "stream").unwrap();
+            stream.polygon = vec![[2900, 1400], [6000, 1300], [6000, 1400], [2900, 1500]];
+        }
+        let stream = d.water_bodies.iter().find(|b| b.id == "stream").unwrap().clone();
+        let ring = &stream.polygon;
+        let area = (0..ring.len()).map(|i| ring[i][0] as i128 * ring[(i + 1) % ring.len()][1] as i128
+            - ring[i][1] as i128 * ring[(i + 1) % ring.len()][0] as i128).sum::<i128>().abs() as f64 / 2.0;
+        let perimeter: f64 = (0..ring.len()).map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            (((b[0] - a[0]) as f64).powi(2) + ((b[1] - a[1]) as f64).powi(2)).sqrt()
+        }).sum();
+        let r = (2.0 * area / perimeter).floor() as i64 * 2 / 5;
+        assert!(r > 0 && 2 * r < water::bank_cm(SURFACE, BOTTOM) && (r < water::BASIN_NARROW_BANK_CM) == narrower, "{r}");
+        // Its bank is its loop distance, but no steeper than 68 cm per 60 cm.
+        let w = r.max(water::BASIN_NARROW_BANK_CM);
+        let fall = SURFACE - BOTTOM + 8;
+        let (mut checked, mut bed, mut deepest) = (0, 0, 0);
+        for (cell, c) in chunks(&d, &BTreeMap::new()) {
+            let bounds = d.cell_bounds(cell).unwrap();
+            for (p, h) in heights(&c) {
+                // Away from the road keep-out and the cell's tile edges.
+                if !stream.contains_horizontal(p) || (p[0] - 4800).abs() < 400 || p[0] == bounds.min[0] || p[0] == bounds.max[0] { continue; }
+                let d2 = (0..ring.len()).map(|i| {
+                    let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                    let (dx, dy, px, py) = ((b[0] - a[0]) as i128, (b[1] - a[1]) as i128, (p[0] - a[0]) as i128, (p[1] - a[1]) as i128);
+                    let (len, dot) = (dx * dx + dy * dy, px * dx + py * dy);
+                    if dot <= 0 { px * px + py * py } else if dot >= len { (px - dx).pow(2) + (py - dy).pow(2) } else { (px * dy - py * dx).pow(2) / len }
+                }).min().unwrap() as u128;
+                let depth = d2.isqrt() as i64;
+                assert_eq!(h, vec![-(fall.min(fall * depth / w))], "{p:?} at {depth} cm from the shore");
+                checked += 1;
+                deepest = deepest.max(-h[0]);
+                if h[0] == BOTTOM { bed += 1; }
+            }
+        }
+        assert!(checked > 0 && if narrower { bed == 0 && deepest == fall * r / w } else { bed > 0 }, "{checked} {bed} {deepest}");
+    }
+}
+
+/// A sloped stream cut into stretches with their own levels: seams between
+/// levels are not shores, so no ridge of terrain-height vertices crosses the
+/// water, and each seam holds the upper stretch on a lip at its surface, so no
+/// upper water ends over lower ground; every rule stays local to the cell's
+/// regional source.
+#[test]
+fn stepped_streams_have_no_dams_and_stay_local() {
+    let (mut d, grids) = sloped(true);
+    d.barriers.clear();
+    d.roads.clear();
+    d.nodes.clear();
+    let stretch = |k: i64, surface: i64| water::WaterBody { id: format!("stream-{k}"),
+        polygon: vec![[400 + k * 1400, 1400 + k * 10], [1800 + k * 1400, 1410 + k * 10], [1800 + k * 1400, 1590 + k * 10], [400 + k * 1400, 1580 + k * 10]],
+        islands: vec![], surface_cm: surface, bottom_cm: surface - 60, flow_cm_s: [0, 0] };
+    // The terrain rises east (x / 40): each stretch sits at its own low shore.
+    d.water_bodies = (0..4).map(|k| stretch(k, 10 + k * 35)).collect();
+    d.validate().unwrap();
+    let report = water::basin_report(&d).unwrap();
+    assert_eq!(report.counts.seam_edges, 6, "{report:?}");
+    assert_eq!((report.components, report.sinking_components), (1, 1), "{report:?}");
+    let mut seams = 0;
+    for cell in d.cells() {
+        let bounds = d.cell_bounds(cell).unwrap();
+        let full = generate(input(&d, &grids, cell)).unwrap();
+        let local = region_source(&d, CellRegion { min: cell, end: Cell { x: cell.x + 1, y: cell.y + 1 } }).unwrap();
+        assert_eq!(generate(input(&local, &grids, cell)).unwrap(), full, "{cell:?}");
+        assert!(open_edges(&full, &bounds).is_empty(), "{cell:?}");
+        let g = |p: Point| terrain_height(&bounds, 400, 9, grids.get(&cell), d.terrain_base_cm, p);
+        for (p, h) in heights(&full) {
+            assert_eq!(h.len(), 1, "crack at {p:?}");
+            let wet: Vec<_> = d.water_bodies.iter().filter(|b| b.contains_horizontal(p)).collect();
+            if wet.is_empty() { continue; }
+            // A seam vertex (in two stretches) away from the outer shores lies on
+            // the upper surface: under the terrain (no dam crosses the stream)
+            // and holding the upper water (none ends in the air), also where
+            // the seam lies on the cell's tile edge (x = 3200).
+            let k = (p[0] - 400) / 1400;
+            if wet.len() == 2 && (p[0] - 400) % 1400 == 0 && p[1] >= 1440 + k * 10 && p[1] <= 1550 + k * 10 {
+                seams += 1;
+                let upper = wet.iter().map(|b| b.surface_cm).max().unwrap();
+                assert!(h[0] == upper && h[0] < g(p) - 8, "seam vertex {p:?} at {} under terrain {} and surface {upper}", h[0], g(p));
+            }
+            // Away from the outer shores no ground stands above the water.
+            if p[1] >= 1440 + k * 10 && p[1] <= 1550 + k * 10 {
+                let own = wet.iter().map(|b| b.surface_cm).max().unwrap();
+                assert!(h[0] <= own, "{p:?} at {} over the surface {own}", h[0]);
+            }
+        }
+        // Along every seam the generated ground holds the upper surface.
+        for t in ground(&full) {
+            for e in 0..3 {
+                let (a, b) = (t.vertices[e], t.vertices[(e + 1) % 3]);
+                if a[0] != b[0] || (a[0] - 400) % 1400 != 0 { continue; }
+                let m = [a[0], (a[2] + b[2]) / 2];
+                let wet: Vec<_> = d.water_bodies.iter().filter(|w| w.contains_horizontal(m)).collect();
+                if wet.len() != 2 { continue; }
+                let upper = wet.iter().map(|w| w.surface_cm).max().unwrap();
+                assert!(a[1].min(b[1]) >= upper.min(g(m)), "seam edge {a:?}-{b:?} under the upper surface {upper}");
+            }
+        }
+    }
+    assert!(seams > 0);
 }
 
 /// A wide real-city map: a river cut into import pieces along cell lines, a

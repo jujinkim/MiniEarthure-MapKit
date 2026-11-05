@@ -42,18 +42,33 @@ generated ground sinks into an earth bed under water. Authored
 maps keep byte-identical chunks. Nothing in the document changes; this is
 generation output only (formats stay v1).
 
-- Levels: bodies with equal `surface_cm` and `bottom_cm` act as one water; an
-  edge of one whose midpoint lies in another of the same level is a seam between
-  import pieces, not a shore. Touching bodies of different levels keep a bank
-  between them.
+- Levels: an edge of one body whose midpoint lies in another is a seam between
+  import pieces, not a shore, whatever the two levels. A vertex inside several
+  bodies sinks with the lowest (surface, then bottom, then bank width). Where the
+  surfaces along a seam differ (a stream the Editor cut into stretches with their
+  own levels, a stream entering a lake) the seam is a step whose lip is the
+  higher surface: ground near it rises to the lip (see below), so the upper water
+  ends on earth at its own surface instead of in the air over the lower bed, and
+  no terrain bank (a dirt dam) crosses the water. The lip's earth face, as wide
+  as the step falls at the bank slope, is the visible step.
 - Bank width `w = clamp(3 · (surface − bottom), 90, 240)` map cm (180 for the
-  60 cm import depth). The bed is the body `bottom_cm`.
+  60 cm import depth). A body narrower than two banks (shore width
+  `2 · area / shore length` under `2w`, shore length without seams since water
+  continues across them, at most 5/2 of the mean width `2 · area / perimeter`)
+  uses its loop distance, 2/5 of that width, instead, but at least 60 cm
+  (`BASIN_NARROW_BANK_CM`): a 150 cm stream (a whole stream or one of its
+  stretches) falls its 68 cm to the bed 60 cm from each bank (about 49°) rather
+  than staying about 28 cm deep at the flat-map slope; a 100 cm stream keeps the
+  60 cm bank and stops 45 cm deep at its loop. Every vehicle crossed 60–200 cm
+  channels banked at 49° or less in a short drive check (the Runtime water
+  validator keeps 90 and 150 cm cases); banked at their loop distance, 75–105 cm
+  channels (58–66°) kept one vehicle stuck. The bed is the body `bottom_cm`.
 - A ground vertex at `p` with terrain height `g` inside water of one level and
   outside every keep-out, `d` its whole-cm distance to the nearest shore or
   keep-out edge and `k = surface − bottom + 8` (the bank fall per bank width),
   moves to `h = g − min(g − bottom, k · min(d, 1200) / w)` where the terrain lies
   above the bottom (integer, truncated): a bank at the flat-map slope (68 cm per
-  180 cm, about 21°, so DEM banks stay climbable) that keeps falling past `w`
+  180 cm, about 21°, for bodies at least two banks wide) that keeps falling past `w`
   until it meets the bottom, at most 1200 cm (the basin reach) from the shore,
   i.e. at most 453 cm under the terrain for the import depth. Terrain exactly
   `k` above the bottom (flat imports at their import levels) meets it at `w`
@@ -62,16 +77,22 @@ generation output only (formats stay v1).
   at the same flat-map slope. DEM
   terrain inside the polygon higher above the low water surface keeps falling
   under the water rather than stopping `k` under the terrain as a flat dry bed.
-  Two limits remain: past the bank loop the fall rests on the terrain tile
+  One limit remains: past the bank loop the fall rests on the terrain tile
   vertices only (see Plan view), so a face spanning from the loop to the next
-  tile corner can stay dry above where the rule would put it under; and a
-  narrow body (loop at 2/5 of its mean width, below `w`) never reaches the
-  further fall, so a sloped stream whose terrain lies well above its single
-  lowest-shore level stays a dirt trough with little or no water showing.
+  tile corner can stay dry above where the rule would put it under. A narrow
+  body's terrain must lie within about its bank fall above its level for its
+  middle to stay wet, which is why the Editor's DEM water fit cuts sloped
+  streams into stretches with their own levels.
   Terrain at or below the bottom rises to it,
-  `h = g − (g − bottom) · min(d, w) / w`. Shore, keep-out, mixed-level and dry
-  vertices keep `g`. The shore query stops where the bank meets the bottom, so
-  only vertices under terrain high above the water search the full reach. On a terrain tile edge (not a corner) a
+  `h = g − (g − bottom) · min(d, w) / w`. Within reach of a step seam of a body
+  containing the vertex (`d_s` its distance, `lip` the step's higher surface),
+  ground then rises to `max(h, min(g, lip − k · d_s / w))`: a bank whose top is
+  the lip, never above the terrain or below `h` (ground under the bottom keeps
+  rising only to it). Step seams are plan-view lines, so the lip holds along the
+  whole seam. Shore, keep-out and dry vertices keep
+  `g`. The shore query stops where the bank meets the bottom and the step query
+  where the lip bank falls under `h`, so only vertices under terrain high above
+  the water search the full reach. On a terrain tile edge (not a corner) a
   bed vertex instead lies on the edge's piecewise-linear profile through its
   corners and every basin line crossing (each sunk by the rule above on the edge's
   terrain), within about 1 cm of the rule. Heights are thus a function of the
@@ -97,12 +118,18 @@ generation output only (formats stay v1).
   `region.rs` ties the source margin to the reach and the piece bound). Bridge and elevated decks are not keep-outs; road
   bridges have no piers. Repeated placements and buildings partly in water are
   not lowered.
-- Plan view: water shores outside keep-outs, keep-out pieces and one closed bank
-  loop per ring (every ring edge moved `w` inward, joined at crossings, near
-  mitres or chords) enter the ground arrangement beside the paint lines. A body
-  whose mean width (2 · area / perimeter, seams included, a property of the body
-  alone) is under `2w` gets its loop at 2/5 of that width instead, so narrow
-  streams still sink in the middle. Past the loop the bank's further fall under
+- Plan view: water shores outside keep-outs, keep-out pieces, step seams and one
+  closed bank loop per ring (every shore edge moved `w` inward, every seam of
+  one surface and the upper side of every step kept in place, the lower side of
+  a step moved the loop distance (at most 2/5 of the mean width) inward, joined at
+  crossings, near mitres or chords) enter the ground arrangement beside the paint
+  lines. A body whose shore width (a property of the body alone) is under `2w`
+  gets its loop at 2/5 of that width instead, so narrow streams still sink in the
+  middle. The loop follows a seam where a loop of the joined water would cross
+  it, so a seam on a terrain tile edge (an import cut on a cell line) still gets
+  bed anchors there instead of a terrain-height line across the stream; the
+  loop below a step lies where the lip's bank reaches the bed. The seam's
+  neighbour lies at the edge, so regional sources keep it. Past the loop the bank's further fall under
   higher terrain lies on the terrain tile vertices (400 cm on the shipped DEM
   cards); no extra lines are added, so the plan view, the estimates and the basin
   memory do not depend on terrain. Count and Emit arrange identical lines, so the
@@ -119,17 +146,21 @@ generation output only (formats stay v1).
   most `basin_reserve_bytes` (64 KiB + 800 B per non-string document byte, at
   most 8 MiB; 4,000 B per water ring vertex during construction), which both
   package admission paths charge. Basins retain about 450 B per water ring
-  vertex, so water beyond roughly 13,000 ring vertices (the shipped cards have
-  about 1,600 and 3,100) fails closed: `PreparedMap::new`/`new_region` and
+  vertex, so water beyond roughly 13,000 ring vertices (the DEM cards have about
+  1,600 and 3,100 before the Editor cuts their sloped streams into stretches,
+  about 3,300 and 4,800 after) fails closed: `PreparedMap::new`/`new_region` and
   `pack_source` (whole map and every regional source) return `E_BUDGET` instead
   of failing every cell later.
   Point-in-water tests use an index over ring edges, so per-vertex cost does not
-  grow with a body's vertex count; per-cell vertex heights charge the road work
-  limit. Distant sources share the same ground.
+  grow with a body's vertex count, and only bodies whose own bounds hold the
+  point run it; per-cell vertex heights (step lips included) charge the road
+  work limit. Distant sources share the same ground.
 - Display: the chunk renderer gives each near earth (`dirt`) mesh of a cell with
   water that cell's highest water surface (`shore_level_m` instance uniform), and
   the ground shader darkens earth below about 15 cm above it (×0.56 colour,
-  roughness 0.34) as a wet bank; other ground and distant cells are unchanged.
+  roughness 0.34) as a wet bank; other ground and distant cells are unchanged. In
+  a cell holding several levels (stepped stretches) earth below the highest one
+  darkens too, lips and dry ramps of lower stretches included.
 - `mapkit_core::water::basin_report` reports components (the union of all
   bodies), how many sink, how many a keep-out trims, fully kept-out components and
   keep-out, seam and line counts.

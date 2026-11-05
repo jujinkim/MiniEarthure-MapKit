@@ -138,6 +138,9 @@ pub(crate) fn generate(d: &MapDocument, area: &Bounds) -> Result<Vec<WaterCell>>
 // generation and every cell see identical ground:
 // - a vertex height depends only on the water bodies containing it and on
 //   shore and keep-out edges within [`BASIN_REACH_CM`] of it;
+// - a ring edge is a seam (no shore) when its midpoint lies in another body,
+//   which a regional source keeps with the edge; a seam between surfaces is a
+//   step whose lip (the higher surface) only the bodies along it measure;
 // - water shores and bank loops belong to one body each, and a keep-out
 //   boundary piece lies in one basin grid square and exists only within one
 //   bank width of the bounds of a body that keep-out overlaps;
@@ -150,6 +153,10 @@ pub(crate) fn generate(d: &MapDocument, area: &Bounds) -> Result<Vec<WaterCell>>
 /// Bank width bounds: `w = clamp(3 · (surface − bottom), 90, 240)` map cm.
 pub const BASIN_MIN_BANK_CM: i64 = 90;
 pub const BASIN_MAX_BANK_CM: i64 = 240;
+/// Narrowest bank of a body narrower than two banks (its loop distance, at
+/// least this): 68 cm per 60 cm, about 49°, the steepest channel every vehicle
+/// drove out of in a short crossing check (62° trapped one).
+pub const BASIN_NARROW_BANK_CM: i64 = 60;
 /// A bank falls the body's depth plus this freeboard per bank width (the
 /// flat-import surface lies 8 cm under the ground): the flat-map bank slope,
 /// about 21° for the 60 cm import depth.
@@ -201,6 +208,28 @@ struct RingEdge {
     body: u32,
     ring: u32,
 }
+/// What a water ring edge is: a shore, a seam between water of one surface,
+/// or a step seam on the lower or the highest side of its lip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Seam { Shore, Level, Below, Above }
+/// A step seam of `body`: water on both sides at different surfaces.
+#[derive(Debug, Clone, Copy)]
+struct StepSeam {
+    a: Point,
+    b: Point,
+    body: u32,
+    lip: i64,
+}
+/// What the ground at a point in water sinks to: the lowest body's surface,
+/// bottom and bank width, the bodies containing the point and their highest
+/// step lip.
+struct Level {
+    surface: i64,
+    bottom: i64,
+    bank: i64,
+    lip: i64,
+    bodies: Vec<u32>,
+}
 #[derive(Debug, Clone, Copy, Default)]
 struct RingHit {
     boundary: bool,
@@ -220,6 +249,16 @@ pub struct Basins {
     body_bounds: Vec<Bounds>,
     /// Surface and bottom of every body.
     levels: Vec<(i64, i64)>,
+    /// Bank width of every body: [`bank_cm`], or its loop distance (2/5 of its
+    /// shore width, at least [`BASIN_NARROW_BANK_CM`]) when the body is
+    /// narrower than two banks.
+    banks: Vec<i64>,
+    /// Highest lip of every body's step seams (`i64::MIN` without any).
+    lips: Vec<i64>,
+    /// Step seams: ring edges between water of different surfaces, each with
+    /// its body and lip (the highest surface along it), indexed by bounds.
+    steps: Vec<StepSeam>,
+    step_index: crate::bounds_index::BoundsIndex,
     /// Every water ring edge, indexed for exact point-in-water tests whose cost
     /// does not grow with the body's vertex count.
     edges: Vec<RingEdge>,
@@ -250,7 +289,7 @@ pub struct BasinCounts {
 
 /// Diagnostic of a document's basins. Components are the union of all water
 /// bodies (any level). A component is `kept_out` when no generated vertex can
-/// sink in it (every sampled interior point lies in a keep-out or mixes levels)
+/// sink in it (every sampled interior point lies in a keep-out)
 /// and `trimmed` when a road, barrier, building or placement keep-out meets it.
 #[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
 pub struct BasinReport {
@@ -336,10 +375,11 @@ fn grid_split(a: Point, b: Point, work: &mut usize) -> Result<Vec<Point>> {
     Ok(out)
 }
 /// Closed offset polyline of a ring whose edges have the basin on their left:
-/// every edge moves `r` to the left, and consecutive moved edges join at their
-/// crossing, at a mitre within `2r` when they diverge, or otherwise by a chord.
-fn offset_loop(edges: &[(Point, Point)], r: i64) -> Vec<Point> {
-    let moved: Vec<(Point, Point)> = edges.iter().map(|&(a, b)| {
+/// every edge moves its offset (`r`, or 0 on a seam) to the left, and
+/// consecutive moved edges join at their crossing, at a mitre within twice the
+/// larger offset when they diverge, or otherwise by a chord.
+fn offset_loop(edges: &[(Point, Point)], offsets: &[i64]) -> Vec<Point> {
+    let moved: Vec<(Point, Point)> = edges.iter().zip(offsets).map(|(&(a, b), &r)| {
         let (dx, dy) = ((b[0] - a[0]) as f64, (b[1] - a[1]) as f64);
         let len = libm::sqrt(dx * dx + dy * dy);
         if len == 0.0 { return (a, b); }
@@ -354,6 +394,7 @@ fn offset_loop(edges: &[(Point, Point)], r: i64) -> Vec<Point> {
         let den = u[0] * v[1] - u[1] * v[0];
         let (a, b) = if den == 0.0 { (-1.0, -1.0) } else { ((w[0] * v[1] - w[1] * v[0]) / den, (w[0] * u[1] - w[1] * u[0]) / den) };
         let x = [p[0] as f64 + u[0] * a, p[1] as f64 + u[1] * a];
+        let r = offsets[i].max(offsets[(i + 1) % moved.len()]);
         let near = |e: Point| libm::sqrt((x[0] - e[0] as f64).powi(2) + (x[1] - e[1] as f64).powi(2)) <= 2.0 * r as f64;
         // Crossing moved edges meet at their crossing; diverging ones at their
         // extended crossing when it is near (a mitre), otherwise by a chord.
@@ -426,7 +467,8 @@ fn keep_sidewalk(d: &MapDocument, r: &Road) -> i64 {
 impl Basins {
     fn empty() -> Self {
         let none = || crate::bounds_index::BoundsIndex::new(&[]);
-        Self { active: false, body_index: none(), body_bounds: vec![], levels: vec![], edges: vec![], edge_index: none(),
+        Self { active: false, body_index: none(), body_bounds: vec![], levels: vec![], banks: vec![], lips: vec![],
+            steps: vec![], step_index: none(), edges: vec![], edge_index: none(),
             segments: vec![], segment_index: none(), shore_lines: 0, shores: 0, keep: vec![], keep_index: none(),
             counts: BasinCounts::default() }
     }
@@ -449,7 +491,7 @@ impl Basins {
                 edges.extend((0..ring.len()).map(|e| RingEdge { a: ring[e], b: ring[(e + 1) % ring.len()], body: i as u32, ring: k as u32 }));
             }
         }
-        let fixed = std::mem::size_of::<Self>() as u64 + vec_bytes(&body_bounds) + 16 * bodies.len() as u64
+        let fixed = std::mem::size_of::<Self>() as u64 + vec_bytes(&body_bounds) + 32 * bodies.len() as u64
             + vec_bytes(&edges) + index_bytes(edges.len()) + 32 * edges.len() as u64 + index_bytes(bodies.len());
         within(limit, fixed, &[])?;
         tick(&mut work, edges.len().saturating_mul(edges.len().max(2).ilog2() as usize + 1))?;
@@ -461,16 +503,25 @@ impl Basins {
             body_index: crate::bounds_index::BoundsIndex::new(&body_bounds),
             body_bounds,
             levels: bodies.iter().map(|b| (b.surface_cm, b.bottom_cm)).collect(),
+            banks: bodies.iter().map(|b| bank_cm(b.surface_cm, b.bottom_cm)).collect(),
+            lips: vec![i64::MIN; bodies.len()],
+            steps: vec![], step_index: none(),
             edges, edge_index,
             segments: vec![], segment_index: none(), shore_lines: 0, shores: 0, keep: vec![], keep_index: none(),
             counts: BasinCounts::default(),
         };
         let fixed = fixed - 32 * basins.edges.len() as u64;
         // Water shores, with the water on the left. A ring edge whose midpoint
-        // lies in another body of the same surface and bottom is a seam between
-        // import pieces (which share whole cut edges), not a shore; touching
-        // bodies of different levels keep a bank between them.
+        // lies in another body is a seam between import pieces (which share
+        // whole cut edges), not a shore, whatever the two levels. Where the
+        // surfaces differ (a stepped stream, a stream entering a lake) it is a
+        // step: the ground along it rises to the higher surface, a lip that
+        // holds the upper water without a bank of terrain across the water
+        // (see `height`).
         let mut water_shores: Vec<(Point, Point)> = Vec::new();
+        let mut steps: Vec<StepSeam> = Vec::new();
+        // Seam kind of every ring edge, in `edges` order, for the bank loops.
+        let mut seams: Vec<Seam> = Vec::with_capacity(basins.edges.len());
         for (i, body) in bodies.iter().enumerate() {
             for (k, ring) in std::iter::once(&body.polygon).chain(&body.islands).enumerate() {
                 let reverse = (ring_area(ring) > 0) == (k != 0);
@@ -478,22 +529,39 @@ impl Basins {
                     let (a, b) = (ring[e], ring[(e + 1) % ring.len()]);
                     let doubled = [a[0] + b[0], a[1] + b[1]];
                     let m = mid(a, b);
-                    let mut covered = false;
+                    let (mut covered, mut low, mut high) = (false, body.surface_cm, body.surface_cm);
                     for j in basins.body_index.query(&Bounds { min: m, max: [m[0] + 1, m[1] + 1] }, &mut work)? {
-                        if j == i || basins.levels[j] != basins.levels[i] { continue; }
+                        if j == i { continue; }
                         let hit = basins.rings_at(j, doubled, 2, &mut work)?;
                         // On an island's shore still counts as water here.
                         if hit[0].inside() && !hit[1..].iter().any(|h| h.odd && !h.boundary) {
                             covered = true;
-                            break;
+                            low = low.min(bodies[j].surface_cm);
+                            high = high.max(bodies[j].surface_cm);
                         }
                     }
-                    if covered { basins.counts.seam_edges += 1; continue; }
-                    water_shores.push(if reverse { (b, a) } else { (a, b) });
+                    if !covered {
+                        seams.push(Seam::Shore);
+                        water_shores.push(if reverse { (b, a) } else { (a, b) });
+                        continue;
+                    }
+                    basins.counts.seam_edges += 1;
+                    if low == high { seams.push(Seam::Level); continue; }
+                    seams.push(if body.surface_cm < high { Seam::Below } else { Seam::Above });
+                    steps.push(StepSeam { a, b, body: i as u32, lip: high });
+                    basins.lips[i] = basins.lips[i].max(high);
                 }
             }
-            within(limit, fixed, &[vec_bytes(&water_shores)])?;
+            within(limit, fixed, &[vec_bytes(&water_shores), vec_bytes(&seams), vec_bytes(&steps)])?;
         }
+        steps.shrink_to_fit();
+        let step_fixed = vec_bytes(&steps) + index_bytes(steps.len());
+        within(limit, fixed + step_fixed, &[vec_bytes(&water_shores), vec_bytes(&seams), 32 * steps.len() as u64])?;
+        tick(&mut work, steps.len().saturating_mul(steps.len().max(2).ilog2() as usize + 1))?;
+        basins.step_index = crate::bounds_index::BoundsIndex::new(
+            &steps.iter().map(|s| crate::bounds_index::bounds(&[s.a, s.b])).collect::<Vec<_>>());
+        basins.steps = steps;
+        let fixed = fixed + step_fixed + vec_bytes(&seams);
         basins.counts.water_shore_edges = water_shores.len() as u64;
         // Keep-outs: generated ground stays on the terrain under ground, tunnel
         // and underpass road surfaces (junction aprons and sidewalks included),
@@ -627,27 +695,47 @@ impl Basins {
         within(limit, fixed, &[vec_bytes(&segments)])?;
         let mut lines = Vec::new();
         let mut ring_edges = Vec::new();
-        for body in bodies {
+        let mut offsets = Vec::new();
+        let mut next_edge = 0;
+        for (i, body) in bodies.iter().enumerate() {
+            let mut first = next_edge;
+            next_edge += body.vertices();
             let w = bank_cm(body.surface_cm, body.bottom_cm);
             // A loop farther in than the body's mean width (2 · area / perimeter,
-            // seams included) would leave the water.
-            let (mut area, mut perimeter) = (0f64, 0f64);
+            // seams included) would leave the water. Its shore width counts only
+            // shore edges (water continues across a seam), so a stretch of a cut
+            // stream gets the banks of the stream; at most 5/2 of the mean width,
+            // which a strip between seams would exceed.
+            let (mut area, mut perimeter, mut shore) = (0f64, 0f64, 0f64);
+            let mut at = first;
             for (k, ring) in std::iter::once(&body.polygon).chain(&body.islands).enumerate() {
                 area += if k == 0 { 1.0 } else { -1.0 } * (ring_area(ring) as f64).abs() / 2.0;
-                perimeter += (0..ring.len()).map(|e| {
+                for e in 0..ring.len() {
                     let (a, b) = (ring[e], ring[(e + 1) % ring.len()]);
-                    libm::sqrt(((b[0] - a[0]) as f64).powi(2) + ((b[1] - a[1]) as f64).powi(2))
-                }).sum::<f64>();
+                    let length = libm::sqrt(((b[0] - a[0]) as f64).powi(2) + ((b[1] - a[1]) as f64).powi(2));
+                    perimeter += length;
+                    if seams[at + e] == Seam::Shore { shore += length; }
+                }
+                at += ring.len();
             }
             let reach = if perimeter > 0.0 { libm::floor(2.0 * area / perimeter) as i64 } else { i64::MAX };
+            let width = if shore > 0.0 { (libm::floor(2.0 * area / shore) as i64).min(reach.saturating_mul(5) / 2) } else { i64::MAX };
             // One closed loop at the bank width, where flat-map banks (terrain
             // depth + freeboard above the bottom) meet the bed; past it a bank
             // under higher terrain keeps falling on the terrain tile vertices
             // only, so the plan view stays independent of terrain. A body
-            // narrower than two banks gets one loop at 2/5 of its mean width,
-            // near its middle.
-            let r = if 2 * w < reach { w } else { reach * 2 / 5 };
+            // narrower than two banks gets one loop at 2/5 of its shore width,
+            // near its middle, and its bank falls to the bottom there (at
+            // most 68 cm per BASIN_NARROW_BANK_CM): at the flat-map slope a
+            // narrow channel stays too shallow for its water to show over
+            // sloping terrain. The loop follows seams of one
+            // surface and the upper side of steps (water continues across
+            // them) and lies the loop distance (at most 2/5 of the mean width)
+            // below a step's lip, where the lip falls past the lower surface.
+            let r = if 2 * w < width { w } else { width * 2 / 5 };
             if r <= 0 { continue; }
+            basins.banks[i] = if r < w { r.max(BASIN_NARROW_BANK_CM) } else { r };
+            let below = r.min(reach * 2 / 5);
             for (k, ring) in std::iter::once(&body.polygon).chain(&body.islands).enumerate() {
                 let reverse = (ring_area(ring) > 0) == (k != 0);
                 ring_edges.clear();
@@ -655,16 +743,27 @@ impl Basins {
                     let (a, b) = (ring[e], ring[(e + 1) % ring.len()]);
                     if reverse { (b, a) } else { (a, b) }
                 }));
-                let looped = offset_loop(&ring_edges, r);
+                offsets.clear();
+                offsets.extend(seams[first..first + ring.len()].iter().map(|seam| match seam {
+                    Seam::Shore => r, Seam::Below => below, Seam::Level | Seam::Above => 0 }));
+                // A step seam is a line from shore to shore, so no ground face
+                // crosses its lip.
+                for (e, &(a, b)) in ring_edges.iter().enumerate() {
+                    if matches!(seams[first + e], Seam::Below | Seam::Above) { lines.push(if a < b { (a, b) } else { (b, a) }); }
+                }
+                first += ring.len();
+                let looped = offset_loop(&ring_edges, &offsets);
                 tick(&mut work, looped.len())?;
                 for i in 0..looped.len() {
                     let (p, q) = (looped[i], looped[(i + 1) % looped.len()]);
                     if p != q { lines.push(if p < q { (p, q) } else { (q, p) }); }
                 }
-                within(limit, fixed, &[vec_bytes(&segments), vec_bytes(&lines), vec_bytes(&ring_edges)])?;
+                within(limit, fixed, &[vec_bytes(&segments), vec_bytes(&lines), vec_bytes(&ring_edges), vec_bytes(&offsets)])?;
             }
         }
         drop(ring_edges);
+        drop(offsets);
+        drop(seams);
         lines.sort();
         lines.dedup();
         within(limit, fixed, &[vec_bytes(&segments), vec_bytes(&lines), 32 * (segments.len() + lines.len()) as u64])?;
@@ -687,8 +786,8 @@ impl Basins {
     /// Conservative retained bytes: vector capacities plus index nodes.
     pub fn retained_bytes(&self) -> u64 {
         std::mem::size_of::<Self>() as u64
-            + vec_bytes(&self.body_bounds) + vec_bytes(&self.levels) + vec_bytes(&self.edges)
-            + vec_bytes(&self.segments)
+            + vec_bytes(&self.body_bounds) + vec_bytes(&self.levels) + vec_bytes(&self.banks) + vec_bytes(&self.lips)
+            + vec_bytes(&self.edges) + vec_bytes(&self.segments) + vec_bytes(&self.steps) + index_bytes(self.steps.len())
             + vec_bytes(&self.keep) + self.keep.iter().map(vec_bytes).sum::<u64>()
             + index_bytes(self.edges.len()) + index_bytes(self.segments.len()) + index_bytes(self.keep.len())
             + index_bytes(self.body_bounds.len())
@@ -794,17 +893,24 @@ impl Basins {
         }
         Ok(false)
     }
-    /// Surface and bottom where `p` may sink: inside water bodies of one
-    /// surface and bottom and outside every keep-out.
-    fn level(&self, p: Point, work: &mut usize) -> Result<Option<(i64, i64)>> {
-        let mut found = None;
-        for i in self.body_index.query(&Bounds { min: p, max: p }, work)? {
-            if !self.contains(i, p, work)? { continue; }
-            match found {
-                None => found = Some(self.levels[i]),
-                Some(other) if other != self.levels[i] => return Ok(None),
-                _ => {}
+    /// Where `p` may sink: inside water and outside every keep-out, to the
+    /// lowest (surface, then bottom, then bank) body containing it. On a seam
+    /// between bodies of different levels the bed takes the lower one, and the
+    /// step's lip (see `height`) holds the upper water.
+    fn level(&self, p: Point, work: &mut usize) -> Result<Option<Level>> {
+        let mut found: Option<Level> = None;
+        let at = Bounds { min: p, max: p };
+        for i in self.body_index.query(&at, work)? {
+            // Index leaves reach beyond their bodies; no point outside a body's
+            // own bounds lies in it, so only those bodies run the ring test.
+            if !overlaps(&self.body_bounds[i], &at) || !self.contains(i, p, work)? { continue; }
+            let (surface, bottom) = self.levels[i];
+            let level = found.get_or_insert(Level { surface, bottom, bank: self.banks[i], lip: i64::MIN, bodies: Vec::new() });
+            if (surface, bottom, self.banks[i]) < (level.surface, level.bottom, level.bank) {
+                (level.surface, level.bottom, level.bank) = (surface, bottom, self.banks[i]);
             }
+            level.lip = level.lip.max(self.lips[i]);
+            level.bodies.push(i as u32);
         }
         if found.is_none() || self.in_keep(p, work)? { return Ok(None); }
         Ok(found)
@@ -823,33 +929,58 @@ impl Basins {
         Ok((best.isqrt() as i64).min(cap))
     }
     /// The basin height of a generated ground vertex at `p` whose terrain height
-    /// is `g`, `d` its shore distance, `w` the bank width and `k = depth +
+    /// is `g`, `d` its shore distance, `w` the body's bank width and `k = depth +
     /// freeboard` the bank fall per bank width: terrain above the bottom moves to
     /// `g − min(g − bottom, k · min(d, reach) / w)`, a bank at the flat-map slope
     /// down to the bottom (within `w` where the terrain lies `k` above the
     /// bottom, as on flat imports; farther under higher terrain, at most `k ·
     /// reach / w` under it); terrain at or below the bottom rises to it,
-    /// `g − (g − bottom) · min(d, w) / w`. Shore, keep-out and dry vertices keep
-    /// `g`. A function of the vertex alone, so faces sharing it never crack.
+    /// `g − (g − bottom) · min(d, w) / w`. Within a bank width or so of a step
+    /// seam of the bodies containing it, the ground rises to the step's lip
+    /// (the higher surface) falling at the same slope, `lip − k · d_step / w`,
+    /// but not above the terrain: the upper water ends on a lip instead of over
+    /// the lower bed, and no terrain bank crosses the water. Shore, keep-out and
+    /// dry vertices keep `g`. A function of the vertex alone, so faces sharing
+    /// it never crack.
     pub(crate) fn height(&self, p: Point, g: i64, work: &mut usize) -> Result<i64> {
-        let Some((surface, bottom)) = self.level(p, work)? else { return Ok(g) };
-        let w = bank_cm(surface, bottom);
-        let rise = g - bottom;
-        if rise <= 0 {
-            let depth = self.depth(p, w, work)?;
-            return Ok(g - (rise as i128 * depth as i128 / w as i128) as i64);
-        }
+        let Some(level) = self.level(p, work)? else { return Ok(g) };
+        let (surface, bottom, w) = (level.surface, level.bottom, level.bank);
         let fall = surface - bottom + BASIN_FREEBOARD_CM;
-        // The bank meets the bottom `rise · w / fall` from the shore: no farther
-        // edge can change the height, so the shore query stops there.
-        let reach = (rise as i128 * w as i128 + fall as i128 - 1) / fall as i128;
-        let depth = self.depth(p, reach.min(BASIN_REACH_CM as i128) as i64, work)?;
-        Ok(g - rise.min((fall as i128 * depth as i128 / w as i128) as i64))
+        let rise = g - bottom;
+        let sunk = if rise <= 0 {
+            let depth = self.depth(p, w, work)?;
+            g - (rise as i128 * depth as i128 / w as i128) as i64
+        } else {
+            // The bank meets the bottom `rise · w / fall` from the shore: no farther
+            // edge can change the height, so the shore query stops there.
+            let reach = (rise as i128 * w as i128 + fall as i128 - 1) / fall as i128;
+            let depth = self.depth(p, reach.min(BASIN_REACH_CM as i128) as i64, work)?;
+            g - rise.min((fall as i128 * depth as i128 / w as i128) as i64)
+        };
+        if level.lip <= sunk { return Ok(sunk); }
+        // A step seam of the bodies containing `p` is a bank whose top is its
+        // lip: `lip − k · d / w`. It lies under `sunk` from `(lip − sunk) · w /
+        // fall` on (no farther seam can raise the ground), and never rises
+        // above the terrain.
+        let reach = ((level.lip - sunk) as i128 * w as i128 + fall as i128 - 1) / fall as i128;
+        let reach = reach.min(BASIN_REACH_CM as i128) as i64;
+        let area = Bounds { min: [p[0] - reach, p[1] - reach], max: [p[0] + reach, p[1] + reach] };
+        let found = self.step_index.query(&area, work)?;
+        tick(work, found.len())?;
+        let mut held = sunk;
+        for s in found {
+            let step = self.steps[s];
+            if step.lip <= held || !level.bodies.contains(&step.body) { continue; }
+            let d2 = segment_distance2(p, step.a, step.b);
+            if d2 > (reach as u128) * (reach as u128) { continue; }
+            held = held.max(step.lip - (fall as i128 * d2.isqrt() as i128 / w as i128) as i64);
+        }
+        Ok(held.min(g).max(sunk))
     }
     /// Whether ground at `p` lies in a basin bed (an earth face).
     pub(crate) fn bed(&self, p: Point, work: &mut usize) -> Result<bool> {
-        let Some((surface, bottom)) = self.level(p, work)? else { return Ok(false) };
-        Ok(self.depth(p, bank_cm(surface, bottom), work)? > 0)
+        let Some(level) = self.level(p, work)? else { return Ok(false) };
+        Ok(self.depth(p, level.bank, work)? > 0)
     }
 }
 
