@@ -111,3 +111,43 @@ fn city_tree_radius_follows_the_zone_that_grew_it() {
     d.placements[0].id = "park:west:9:9".into();
     assert!(d.validate().is_err());
 }
+
+#[test]
+fn road_signs_are_solid_posts_with_display_only_plates_and_boards() {
+    let poles = ["builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60",
+        "builtin:sign_speed_80", "builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield",
+        "builtin:sign_children"];
+    let mut d = doc();
+    d.placements = poles.iter().enumerate()
+        .map(|(i, asset)| place(&format!("sign-{i}"), asset, 300 + i as i64 * 250, 400, (i % 4) as u8))
+        .collect();
+    d.placements.push(place("guide", "builtin:guide_sign", 1600, 1600, 1));
+    d.validate().unwrap();
+    let chunk = generate(GenerationInput { document: &d, cell: Cell { x: 0, y: 0 }, heightgrid: None, max_triangles: 200_000 }).unwrap();
+    assert_eq!(chunk.objects.len(), 11, "every sign is a rendered object");
+    for (i, p) in d.placements.iter().enumerate() {
+        let faces: Vec<_> = chunk.triangles.iter().filter(|t| t.object_id == p.id).flat_map(|t| t.vertices).collect();
+        assert!(!faces.is_empty(), "{} has collision faces", p.asset_id);
+        let (half, top) = if i < poles.len() { (3, 104) } else { (5, 250) };
+        assert!(faces.iter().all(|v| (v[0] - p.position[0]).abs() <= half && (v[2] - p.position[2]).abs() <= half),
+            "{}: only the post collides", p.asset_id);
+        assert_eq!(faces.iter().map(|v| v[1]).max(), Some(top), "{} top", p.asset_id);
+    }
+    let cost = PreparedMap::new(d.clone()).unwrap().estimate(Cell { x: 0, y: 0 }, 500_000).unwrap();
+    assert!(cost.triangles >= chunk.triangles.len() as u64 && cost.objects >= chunk.objects.len() as u64);
+    let mut crowded = d.clone();
+    crowded.placements.push(place("sign-x", "builtin:sign_stop", 304, 400, 0));
+    assert!(crowded.validate().is_err(), "two posts 4 cm apart overlap");
+
+    // Only the guide pole reserves ground: it may stand just beside a road
+    // corridor while the display-only arm overhangs the carriageway.
+    let mut road = doc();
+    road.nodes = vec![RoadNode { id: "w".into(), position: [0, 0, 1600], level: 0 }, RoadNode { id: "e".into(), position: [3200, 0, 1600], level: 0 }];
+    road.roads = vec![Road { design: None, snow_retention_percent: 100, id: "street".into(), from: "w".into(), to: "e".into(),
+        points: vec![[0, 0, 1600], [3200, 0, 1600]], widths_cm: vec![400], surfaces: vec![Surface::Asphalt], kind: RoadKind::Ground,
+        clearance_cm: None, sidewalk_cm: Some(0), markings: None }];
+    road.placements = vec![place("guide", "builtin:guide_sign", 1600, 1820, 1)];
+    road.validate().unwrap();
+    road.placements[0].position[2] = 1700;
+    assert!(road.validate().is_err(), "a pole on the carriageway is refused");
+}

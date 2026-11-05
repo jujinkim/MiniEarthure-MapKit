@@ -21,7 +21,12 @@ static func profile(level: int) -> Dictionary:
 		# streetlights and benches (only as far as their small parts stay
 		# resolvable), furniture_near for the other kinds (none on low), the
 		# simple mesh beyond.
-		"furniture_near":[0.0,32.0,48.0][level], "streetlight_near":[0.0,20.0,32.0][level], "bench_near":[0.0,12.0,20.0][level]}
+		"furniture_near":[0.0,32.0,48.0][level], "streetlight_near":[0.0,20.0,32.0][level], "bench_near":[0.0,12.0,20.0][level],
+		# Facade and rooftop fixtures: blade signs, penthouses and tanks
+		# (every tier) and the other kinds (from medium) show the detailed
+		# mesh within fixture_near (none on low), the simple mesh beyond (see
+		# apply_fixture).
+		"fixture_near":[0.0,24.0,40.0][level]}
 
 static func active() -> Dictionary:
 	return profile(1) if current.is_empty() else current.duplicate()
@@ -45,6 +50,7 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 		node.lod_bias = float(value.lod_bias)
 		if node.has_meta("mapkit_vegetation_lod"): apply_vegetation(node, value)
 		elif node.has_meta("mapkit_furniture_lod"): apply_furniture(node, value)
+		elif node.has_meta("mapkit_fixture_lod"): apply_fixture(node, value)
 		elif node.get_meta("mapkit_decoration",false):
 			node.visibility_range_end = float(value.decoration_distance)
 			node.visibility_range_end_margin = 8.0
@@ -135,6 +141,38 @@ static func apply_furniture(node: GeometryInstance3D, value: Dictionary) -> void
 		node.visibility_range_end = maxf(reach, 1.0)
 		node.visibility_range_end_margin = VEGETATION_MARGIN
 
+## Facade fixture groups (facade_fixture_meshes.gd, 32 m squares): the near
+## mesh within fixture_near + GROUP_REACH, the far mesh beyond, ending at
+## decoration_distance + GROUP_REACH for blade signs, penthouses and tanks,
+## three quarters of decoration_distance + GROUP_REACH for roof rims and half
+## of it for air-conditioner and condenser units, solar rows and masts. Low
+## draws the far meshes of blade signs, penthouses and tanks only (no near
+## meshes). Those three cast shadows from medium, the other kinds' near
+## meshes on high.
+static func apply_fixture(node: GeometryInstance3D, value: Dictionary) -> void:
+	var kind := str(node.get_meta("mapkit_fixture_kind", ""))
+	var blade := kind in ["blade", "penthouse", "tank"]
+	var far := str(node.get_meta("mapkit_fixture_lod")) == "far"
+	var level := int(value.level)
+	var near := float(value.get("fixture_near", 24.0))
+	var reach := near + GROUP_REACH if near > 0.0 else 0.0
+	var end := float(value.decoration_distance) * (1.0 if blade else (0.75 if kind == "edge" else 0.5)) + GROUP_REACH
+	node.visibility_range_fade_mode = range_fade(RenderingServer.get_current_rendering_method())
+	var shadows := level >= 1 if blade else (level >= 2 and not far)
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if far:
+		node.visible = blade or level >= 1
+		node.visibility_range_begin = reach
+		node.visibility_range_begin_margin = VEGETATION_MARGIN if reach > 0.0 else 0.0
+		node.visibility_range_end = end
+		node.visibility_range_end_margin = 8.0
+	else:
+		node.visible = reach > 0.0 and (blade or level >= 1)
+		node.visibility_range_begin = 0.0
+		node.visibility_range_begin_margin = 0.0
+		node.visibility_range_end = maxf(reach, 1.0)
+		node.visibility_range_end_margin = VEGETATION_MARGIN
+
 ## Grass field tier (grass_field.gd: window, rings and memory): the tier its
 ## cache textures were loaded at (texture_size, which adaptive quality keeps
 ## at the user's ceiling), 0 on low. A GPU-pressure dip only lowers the live
@@ -168,10 +206,9 @@ const FACADE_TILE_MAX := 256
 static func tile_bytes(size: int, count: int) -> int:
 	# Mipmaps + generation scratch, CPU/GPU copies and retirement overlap,
 	# for `count` tile kinds (the last FACADE_TILE_LAYERS are facade layers
-	# capped at FACADE_TILE_MAX) and the 1024x640 sign atlas (512x320 with
-	# 128px tiles).
+	# capped at FACADE_TILE_MAX). Storefront signs are procedural.
 	var facade := mini(size,FACADE_TILE_MAX)
-	return 1048576 + (count - FACADE_TILE_LAYERS) * size * size * 24 + FACADE_TILE_LAYERS * facade * facade * 24 + (1024 * 640 if size >= 256 else 512 * 320) * 24
+	return 1048576 + (count - FACADE_TILE_LAYERS) * size * size * 24 + FACADE_TILE_LAYERS * facade * facade * 24
 
 ## Estimated sky radiance cubemap of a tier from the engine's texture-array
 ## allocation: six RGBA16F faces with mipmaps for each of eight roughness

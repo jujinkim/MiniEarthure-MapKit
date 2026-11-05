@@ -217,7 +217,14 @@ earlier documents keep their bytes, world hashes and generated geometry.
   renderer-drawn heads whose lamps
   cycle locally (green 6 s, yellow 2 s, red 8 s, odd quarter turns half a cycle
   apart, never synced); solid `builtin:bus_shelter`, `builtin:subway_entrance`,
-  `builtin:station_sign`; display-only `builtin:bench` and `builtin:shrub` (no
+  `builtin:station_sign`; road signs whose solid 6 cm post is 104 cm tall under a
+  display-only plate printed toward local map +y (the third proxy axis; toward the
+  approaching traffic):
+  `builtin:sign_speed_30`, `_40`, `_50`, `_60`, `_80`, `_100`, `builtin:sign_crossing`,
+  `builtin:sign_stop`, `builtin:sign_yield`, `builtin:sign_children`;
+  `builtin:guide_sign` (solid 10 cm pole 250 cm tall; display-only cantilever arms
+  and a direction board over the road along local +x, from 170 cm up);
+  display-only `builtin:bench` and `builtin:shrub` (no
   collision, 80/70 cm square footprints); `builtin:city_tree` (a solid 14 cm
   trunk 140 cm tall under one of three renderer canopies, 0.85–1.15× by identity,
   120 cm square footprint), also allowed as a zone tree with a radius of 120..200 cm.

@@ -42,7 +42,7 @@ func run() -> void:
 			check(source!=null and source.get_width()==size and source.get_height()==size,"facade tile %s at %d px"%[layer,size])
 	facades=null
 	check(not context.tiles.has("facade:brick"),"facade layers never bind as racing detail tiles")
-	check(context.signs!=null and context.signs.get_width()==1024 and context.signs.get_height()==640,"shared storefront sign atlas")
+	check(not ("signs" in context) and MATERIALS.MEMORY_BYTES==1048576+15*256*256*24,"storefront signs are procedural: no sign atlas is loaded or charged")
 	surface_factory_quality(context)
 	var source:=StandardMaterial3D.new()
 	var picture:=Image.create(128,128,false,Image.FORMAT_RGBA8);picture.fill(Color(.5,.5,1,1))

@@ -36,6 +36,7 @@ safety furniture, placement intersection and regional influence margin.
   the leftmost lane its left turn, the rightmost its right turn, others straight.
   `MapDocument.traffic.driving_side` picks the inbound half (absent = right). All of
   it is shader paint from the road style; geometry and hashes of cells are unchanged.
+  Mark shapes and sizes: [ROAD_DESIGN](ROAD_DESIGN.md#road-paint).
 - `RoadMarkings.lane_width_cm` (optional, 0 omitted, else 50..1000 map cm) keeps
   every painted lane that wide, centred on the road (clamped to its width). Lane
   dividers, the center line, stop lines, arrows and wheel-track wear stay inside
@@ -45,7 +46,9 @@ safety furniture, placement intersection and regional influence margin.
 - Urban asphalt (`urban_surface.gdshader`) adds broad tonal blotches, light
   aggregate, seeded repair patches and sparse domain-warped cracks from world
   position; marked roads darken and polish two wheel tracks per lane, and paint
-  has uneven, track-scuffed coverage with lower roughness. Paving varies per slab.
+  wears as described in [ROAD_DESIGN](ROAD_DESIGN.md#road-paint). Concrete carriageways
+  vary per slab; sidewalk paving, curbs and gutters are in
+  [ROAD_DESIGN](ROAD_DESIGN.md#sidewalks-and-curbs).
   Small features fade by 24 m and all variation fades with the effect weight;
   colours, geometry and contact surfaces are unchanged.
 
@@ -82,9 +85,12 @@ safety furniture, placement intersection and regional influence margin.
 `tests/road_safety.rs` (decks, mouths, dead ends, layered crossings, seams,
 archives, cancellation, reserved IDs) and the Godot `road_safety_validator`
 (`MAPKIT_ROAD_CAPTURE` optionally writes an image). Renderer-drawn traffic
-signals and bus shelters borrow the shared signal set
+signals (horizontal ones with their road-name boards) and bus shelters borrow the
+shared signal set
 ([RICHER_MATERIALS](RICHER_MATERIALS.md#traffic-signals-and-bus-shelters),
-`street_signal_validator`); shrubs and city trees borrow the
+`street_signal_validator`); road signs and overhead guide signs the shared road-sign
+set ([RICHER_MATERIALS](RICHER_MATERIALS.md#road-signs-and-guide-signs),
+`road_sign_validator`); shrubs and city trees borrow the
 shared park vegetation set ([RICHER_MATERIALS](RICHER_MATERIALS.md#park-vegetation)),
 streetlights and benches the shared street furniture set
 ([RICHER_MATERIALS](RICHER_MATERIALS.md#street-furniture), `street_furniture_validator`),

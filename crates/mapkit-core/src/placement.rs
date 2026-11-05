@@ -348,6 +348,14 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
         ]),
         "builtin:subway_entrance" => Some(vec![proxy([0, 55, 0], [80, 110, 120])]),
         "builtin:station_sign" => Some(vec![proxy([0, 90, 0], [24, 180, 24])]),
+        // Road signs: a solid post; the renderer draws the display-only plate on
+        // it, its printed face toward local map +y (the approaching traffic).
+        "builtin:sign_speed_30" | "builtin:sign_speed_40" | "builtin:sign_speed_50" | "builtin:sign_speed_60"
+        | "builtin:sign_speed_80" | "builtin:sign_speed_100" | "builtin:sign_crossing" | "builtin:sign_stop"
+        | "builtin:sign_yield" | "builtin:sign_children" => Some(vec![proxy([0, 52, 0], [6, 104, 6])]),
+        // Overhead guide sign: a solid pole beside the road; the display-only
+        // cantilever arms and board reach along local +x over the road from 1.70 m up.
+        "builtin:guide_sign" => Some(vec![proxy([0, 125, 0], [10, 250, 10])]),
         // Display-only details: no collision, a small reserved footprint.
         "builtin:bench" | "builtin:shrub" => Some(vec![]),
         _ => None,
@@ -844,6 +852,13 @@ pub(crate) fn sidewalk_width(d: &MapDocument, r: &Road) -> u32 {
         "rural" => 0,
         _ if nearby >= 2 && road_width >= 500 => 150,
         _ => 0,
+    }
+}
+impl MapDocument {
+    /// Width of the sidewalk generated beside `r` in map centimetres (0: none).
+    /// Presentation uses it to draw kerbside gutters; display only.
+    pub fn sidewalk_width_cm(&self, r: &Road) -> u32 {
+        sidewalk_width(self, r)
     }
 }
 fn emit_placement(

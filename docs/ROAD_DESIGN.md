@@ -1,7 +1,7 @@
 # Independent roads and composite worlds
 
-Owner of designed ordinary roads, track overlays on existing maps and shared
-surface attachments. Field bounds live in the generated schema; the overall
+Owner of designed ordinary roads, track overlays on existing maps, shared
+surface attachments and the shapes of displayed road paint. Field bounds live in the generated schema; the overall
 contract is [CURRENT_V1](../spec/CURRENT_V1.md).
 
 ## Designed roads
@@ -159,6 +159,124 @@ it; junctions with designed approaches sample under the caller's profile and are
 planned per call.
 Building/road clearance checks test footprint containment and crossings through
 the footprint's edge index.
+
+## Road paint
+
+`urban_surface.gdshader` draws every mark from the road style uniforms
+([ROAD_SAFETY](ROAD_SAFETY.md) owns which roads get which marks); it is display
+only, so cells, collision and hashes are unchanged. Sizes are scene metres, real
+sizes at the cards' 1:3 in parentheses; stations count from the path end.
+
+- Each mark is box filtered over the pixel footprint along and across the nearest
+  path segment, taken from world-position derivatives, so edges are antialiased
+  near the camera and distant marks settle to their area coverage without shimmer.
+  The windows that skip mark evaluation widen by half the footprint, so grazing
+  views never cut a filtered edge. No mark adds a loop over the 128 path segments.
+- Dividers are 5.6 cm (17 cm) lines dashed over 37.5% of each fitted period
+  (about 0.9 m line, 1.5 m gap: Korean urban 3:5). On the inbound half the last
+  10 m (30 m) before a stop line, at most 45% of the road, is solid. Even lane
+  counts with `center_line` paint a double yellow centre (5 cm lines 9 cm apart)
+  with a reflective stud between them every two dash periods; studs glow faint
+  amber while the sun is below the horizon. Lines end at the stop line, or at the
+  crosswalk on a departure end.
+- Crosswalks lie 0.3–1.7 m from the end: whole 16.7 cm (50 cm) bars along traffic
+  on a 38.3 cm pitch (65 cm gaps), centred on the road and kept 20 cm inside its
+  edges. The 13 cm stop line starts 1.95 m from the end (0.55 m without a
+  crosswalk) and spans only the inbound half, also before mid-block crosswalks;
+  one-way roads stop only at their travel end.
+- Arrows are 1.7 m (5 m) long, tips 0.5 m behind the stop line, drawn only where
+  the far end's crosswalk or stop line leaves room and repeated 7.5 m further
+  back when the road is at least 14 m longer than the stop distance. Lanes with
+  no movement get none. Straight and turn parts share one shaft (combined
+  straight and turn arrows); a turn bends through a quarter circle into its
+  head. Each arrow stays 4 cm clear of dividers, the double yellow and edge
+  lines: a turn-only shaft prefers 12 cm away from its turn, any shaft shifts as
+  far as needed, and turn heads shorten on narrow lanes.
+- Before a crosswalk every inbound lane gets 1.5 × 0.5 m warning diamond
+  outlines (횡단보도 예고) 5.5 m and 17 m (16 and 51 m) behind the stop line, each
+  only where the road leaves room for it.
+- Paint is 0.25 smoother than asphalt with specular 0.45 (asphalt 0.35). Coverage
+  wears with broad noise and wheel tracks, lets aggregate and cracks show through,
+  and tyre tracks grey it; crosswalk bars vary per bar. With `detail_quality` ≥ 1,
+  where the footprint resolves them, bars chip at their edges, their gaps collect
+  grime and all paint shows fine abrasion; within 8 m the paint edge raises the
+  normal like 1 mm (3 mm) thermoplastic, and within 3 m glass beads glint in fixed
+  8 mm world cells (integer hash, never time-varying). Quality 0 keeps the filtered
+  marks, broad and wheel-track wear, aggregate and crack show-through, per-bar
+  wear and the studs; it skips chips, gap grime, abrasion, the raised edge and
+  glints.
+- `road_marking_validator` (rendered) reads road paint back from top-down
+  orthographic renders, which check geometry only (surface effects are off).
+  On a straight two-way road at qualities 0 and 2 it checks bar count, width,
+  pitch and centring, inbound-only stop lines, solid lines before stop lines and
+  the 3:5 dash ratio, combined arrows clear of the double yellow, diamond
+  placement and the double yellow centre, and compares far crosswalk pixels with
+  analytic bar coverage. A one-way six-lane road checks the travel-end-only stop
+  line, lines cut at the departure crosswalk and bare lanes without a movement; a
+  short left-hand road checks the mid-block stop line, the 45% solid cap and a
+  kerb-lane arrow clear of the edge line. A near perspective shot with surface
+  effects on checks that quality 2 chips, abrades and grimes the crosswalk
+  while keeping its bars, that quality 0 does not, and that frames repeat
+  exactly. `MAPKIT_ROAD_MARKING_CAPTURE` optionally writes the images.
+
+## Sidewalks and curbs
+
+Sidewalk paving, curbs and gutters are display only: sidewalk geometry, curb
+heights, collision and cell hashes are unchanged
+([ROAD_CONTACT](ROAD_CONTACT.md#sidewalk-boundaries-and-shared-geometry)). Sizes
+are map metres with real sizes at 1:3 in parentheses.
+
+- Frames: presentation (`road_style.rs`) gives every sidewalk top and wall
+  (`<road>:sidewalk`) of a packed cell a frame, uploaded as UV/UV2 of the shared
+  `concrete` batches (`sidewalk_triangles`, `sidewalk_frames`;
+  `render_memory.sidewalk_arrays`): the distance along a curb, the distance across
+  from it (walls: the rise above their bottom), the offset from a crosswalk centre,
+  and a kind plus a section hashed from the road record. A curb is a sidewalk wall
+  whose outer side is a carriageway face; almost collinear pieces share one line,
+  and the along distance projects onto its direction snapped to 0.25°, so a
+  straight curb keeps its paving phase across cells. A top takes the nearest curb
+  within 3 m, otherwise it is paved world-aligned; bends and corners change frame
+  at triangle edges. Legacy dictionary cells have no frames.
+- Tops: a granite curb band 0.06 m (18 cm) wide, a mortar line, a soldier course of
+  0.033 × 0.067 m blocks, then one of three bonds per section: 90° herringbone or
+  running bond of 0.067 × 0.033 m (20 × 10 cm) blocks, or 0.067 m squares, in one
+  of four Korean mixes (grey, red-brown, ochre, charcoal; three tones at
+  45/35/20 %). Each block varies in tone; 7 % are replacements in another tone, 2 %
+  sunken (darker, tilted) and 1.5 % cracked. Recessed sand joints darken and gather
+  grime, chamfers darken block edges, and joint coverage and block tones settle to
+  their mean over the pixel footprint.
+- Curbs: granite with a per-stone tone and black, white and feldspar grains in
+  1.5 mm cells that fade with the footprint; sawn joints every 1/3 m (1 m) line
+  up between the band and the curb face, which share the along distance; a worn
+  arris runs along the road edge. Faces darken at their base and along a damp
+  line. Other sidewalk edges show the block mix, darkened.
+- Tactile paving (점자블록): at a painted crosswalk (`crosswalk_start` or
+  `crosswalk_end` on a road longer than 5 m), tops whose curb runs within about
+  30° of the crossed road get a yellow dotted warning pad (5 × 5 studs per 0.1 m
+  (30 cm) tile) 0.1–0.3 m from the curb and as wide as the 1.4 m crossing, and a
+  0.1 m linear guide strip of four raised bars leading 1.3 m in from the pad. A
+  triangle holds one crossing; unpainted crossings and curbs across the crossed
+  road get no pad.
+- Gutters: marked roads with a sidewalk (`curbed`) draw a 0.12 m (36 cm) concrete
+  gutter inside their carriageway edges along the painted body, with joints every
+  1/3 m, a damp line at the curb and a dark seam to the asphalt; paint covers it.
+  Unmarked roads and junction areas have none. Concrete carriageways (`slabs`)
+  keep 0.7 m cast slabs; other concrete ground lays world-aligned 0.1 m (30 cm)
+  squares in its base tone.
+- Quality: `detail_quality` 0 keeps the curb band and stone joints, the bonds with
+  filtered joints and block tones, the tactile pad and strip and the gutter; it
+  skips grains, replaced, sunken and cracked blocks, joint grime, chamfer shading
+  and stud shading. Quality 2 also tilts blocks, chamfers, studs and the arris in
+  the normal near the camera. No per-pixel loop is added: tops read their frame
+  and the gutter reuses the paint loop's nearest segment.
+- `sidewalk_paving_validator` (rendered) reads a framed sidewalk back from
+  top-down orthographic renders: the 0.06 m granite band and its 1/3 m stone
+  joints, the tactile pad and guide strip at a crossing mouth and nothing beside
+  them, at qualities 2 and 0; no tactile paving without a crossing; running-bond,
+  row and soldier-course pitches; the far render matching the near mean; repeated
+  frames; and a kerbed road's gutter, damp line and seam (none when not kerbed).
+  It also checks the frame upload of `concrete` batches.
+  `MAPKIT_SIDEWALK_CAPTURE` optionally writes the images.
 
 ## CLI and audit
 

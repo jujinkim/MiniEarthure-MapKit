@@ -43,10 +43,10 @@ activate their shared shader one surface at a time. Source materials retire duri
 import; pending bindings retain the same bitmap and context leases. Textures load
 after admission through Godot resource remapping with mipmaps,
 never script preloads. The five facade layers load one per admitted step after the
-racing tiles (the last step uploads the array) and the sign atlas follows (halved to
-512×320 with 128px tiles). Shared context reservations are 10.375/38.5/83.5MiB for
+racing tiles (the last step uploads the array); storefront signs are procedural and
+load nothing. Shared context reservations are 6.625/23.5/68.5MiB for
 128/256/512px tiers (`display_quality.tile_bytes`: `1MiB + 10 × size² × 24` racing
-tiles + `5 × min(size, 256)² × 24` facade layers + the atlas pixels × 24), including
+tiles + `5 × min(size, 256)² × 24` facade layers), including
 CPU/GPU/mipmap/retirement overlap. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.
 
@@ -90,13 +90,22 @@ with stone courses), the night-window role and a floor pitch of 3 m ÷ the map s
 presentation publishes as `facade_floor_cm` (300 when no OSM layer records a scale).
 Panes and bands are drawn procedurally from world position on vertical faces within the
 quality effect distance. Packed chunks carry `facade_seeds` (seed, 1000 + base metres)
-and `facade_tops` (one float, 1000 + top metres) on every generated building solid
+and `facade_tops` (one float, ±(1000 + top metres)) on every generated building solid
 (triangles of one record sharing a vertex): the seed's high 12 bits are the record seed
 (`sha256(record ID)`, shared with the distant mesh) and its low 12 bits hash the record
 ID and the solid's smallest vertex; the top is the eaves (the lowest vertex of the
 solid's non-vertical faces above its base, so a gable ridge does not count), else the
-highest vertex. Facade batches bind the seed as UV2 instead of UV (their materials are
-world-space) and commercial ones the top as CUSTOM0.x. Storeys start at the solid's
+highest vertex. A triangle whose highest vertex rises above the top (a gable end, the
+taller part of a merged solid, a roof slope) carries the top negated. Flat roof faces
+(horizontal, above the solid's base) carry the solid's roof frame instead: 4000 + the
+dominant direction of its facade walls modulo 90° (the length-weighted mean of 4θ of
+its flat roof perimeter edges, quantized to 1/4096 rad, so each cell showing a
+rectangular building's walls finds the same frame). Roof edges shared by two flat roof
+triangles of the solid (triangulation and fan diagonals, whose prisms carry internal
+wall pairs) and edges on the cell cut (the chunk's extent) do not count. Facade batches
+bind the seed as UV2 instead of UV (their materials are world-space) and the top as
+CUSTOM0.x (commercial storeys from its magnitude, and every kind's parapet coping on
+walls whose top is positive; roof finishes square to the frame, values above 3500). Storeys start at the solid's
 base, so ground floors follow terrain. Commercial walls fit whole storeys: a shop
 storey g = 1.5 floors (never taller than the solid), then n = max(1, ⌊(top − base − g)
 / floor⌋) storeys of (top − base − g) / n, so L ≥ 3 whole levels show the shop storey and
@@ -114,19 +123,77 @@ faded tones and scene-height storeys. The shop storey is split into sign slots o
 bays; in height fractions of g each slot has a darker stall riser (0–0.08), one door
 0.3 floors wide with a frame (0.08–0.72; left, centre or right by a PCG hash of the slot),
 display windows (0.10–0.68) with two or three mullions per bay, a transom (0.70–0.76), a
-canopy shadow line and a fascia (0.78–0.98). The fascia holds a storefront sign (85 % of
-slots) at the atlas content aspect 56:16, fascia-high, at most 88 % of the slot wide and
-centred, and otherwise shows a plain charcoal, off-white or darker-body panel. Shop
-glass lights at night. Signs come from the shared original atlas
-`textures/sign_atlas.png` (512 tiles of 64×20 px, each sign in the central 56×16 px
-with edge-repeat gutters, tiles downsampled one by one:
-8 category rows of colours, a pictogram and glyphs of an invented script, no font,
-text or external image; `scripts/sign_atlas.py` reproduces it). Signs read left to
-right from outside and glow at night. The solid seed, base and height are flat varyings and
-per-slot sign and lit-window choices use an integer (PCG) hash of the 24-bit seed and
-the integer slot or cell, so each choice is constant across its pixels. Signs sample
-with analytic gradients (anisotropic) and fade to one tile colour once a sign texel
-covers more than four pixels. Bottoms and imported assets are unchanged.
+canopy shadow line and a fascia (0.78–0.98), a plain charcoal, off-white or darker-body
+panel. Shop glass lights at night in a soft warm white (all of it lit).
+
+Roofs keep the record's roof palette colour and, within the effect distance, draw a
+finish (`roof_finish` in `atmosphere_surface.gdshader`) whose tint averages 1 over the
+roof (patterns are zero-mean or divided by their area share, and settle with the pixel
+footprint), so a roof far away shows the distant mesh's colour. Flat roofs run square
+to their roof frame, in floor pitches. Green and red-brown entries are urethane
+coatings: roller passes 0.12 floors wide along one frame axis (each a little lighter or
+darker, a lap ridge), a fine roller stipple, repaired patches (fresher, more saturated)
+and sun-faded ones (chalky, greyer) on a 3-floor grid with a darker edge, and broad
+weathering. Grey entries are, per record, a grey coating or a concrete slab (expansion
+joints every floor with dark sealant, each bay a shade lighter or darker, a fine
+aggregate); industrial roofs also take a sheet membrane (1 m sheets with a lighter lap
+band and a dark seam), public roofs a membrane or gravel ballast. Every flat roof drains to roof
+drains on a 5–8 floor grid (record phase): a dark grate, a ragged stain round it and
+dirtier valley lines between drains. Pitched faces run down their slope: red entries
+clay tile courses (0.11 floors, staggered barrel tiles with a shadowed lip and a tilted
+normal on high), grey ones asphalt shingles (0.05-floor courses, staggered tab slots) or
+standing-seam metal, green ones coloured steel sheet; a gutter shadow follows the eaves
+and moss creeps up from it. The finish also sets roughness and specular (coatings
+glossier, slabs and gravel rough). Low keeps the joints, patches and drains and drops
+the noise-based grain. `facade_validator` renders green, grey and red records (flat and
+pitched) near and beyond the effect distance and checks that each shows its pattern and
+keeps its mean colour.
+
+Storefront signs are procedural (`godot/facade_signs.gdshaderinc`, original, no font,
+text, texture or real brand); `bind_signs` enables them on commercial walls and binds
+nothing. One sign stands on 85 % of slots, centred on the fascia (centre 0.88 g):
+0.16 g high (channel letters 0.18 g), 80–94 % of the slot wide and at most 8:1. Its
+design comes from the 12-bit record and the slot (`facade_pcg`, the hash of the wall
+finish), so a seed that wobbles by 1e-7 keeps its signs: one of eight categories
+(food, cafe, shop, clinic, finance, beauty, academy, store) with four backgrounds, two
+inks and a pictogram (bowl, cup, bag, cross, coin, star, book, stripe), a border style
+(none, outline, bottom bar, side bar), a pictogram on 70 % and 2–6 glyphs of an
+invented, language-neutral script: 3–5 strokes of one weight with rounded caps between
+neighbouring points of a 3×4 lattice, a dot one time in five. Three types: a backlit
+lightbox panel (45 %), channel letters on a thin dark rail over a dark fascia (30 %;
+never the off-white tone, and a body tone no lighter than the charcoal; the letters
+show a darker return and cast a soft offset shadow on the fascia) and a
+two-line panel (25 %; the name over a row of small glyph groups with dashes, and an
+optional divider). Glyphs, pictograms and panel edges are signed distances
+antialiased from the pixel footprint (taken in uniform control flow), so they stay
+crisp at any distance. Each glyph owns a cell from mid-gap to mid-gap (0.12 glyph
+units before its box), so whole strokes, caps and dots fall in it; a raised glyph's
+return and shadow reaching into the next cell are added there. As strokes near a
+pixel each glyph settles on its own ink mean over its cell, and as glyphs do the run
+settles on the expected mean (dashes counted) over the same cells (pictograms on
+their filled share), so far signs keep their mean colour and never crawl. The rail
+and the two-line divider are box-filtered (exact pulse integrals), so they settle on
+their area share once thinner than a pixel. Flat (non-channel) signs and lettering
+evaluate each distance once. Panels have acrylic gloss (roughness 0.3, specular 0.5), a soft drop
+shadow below-right on the fascia and, on medium/high, a bevelled edge normal near the
+camera. At night lightboxes glow, a little brighter in the middle, with dark ink
+blocking the light or bright ink glowing on a dimmer dark panel; channel letters glow
+while their fascia stays dark. `facade_sign_face(local, bits, aspect, footprint,
+vertical)` returns a `FacadeSign` (sRGB face colour, ink share, body coverage, shadow
+on the mount, night glow, bevel slope) for horizontal or vertical (upright stacked
+glyph) signs, and `facade_glyph_run` draws any glyph run; both need nothing else, so
+other shaders can include the file. Signs read left to right from outside.
+
+Window lettering: on commercial walls with signs, about 30 % of slot storeys among the
+first three upper storeys (one integer hash of the sign design and storey) carry large
+glyphs (0.42 of the glass height, 2–6 across the slot) in one ink, white, yellow, red
+or blue, drawn only on the slot's glass. Their storey is lit at night: the vinyl
+blocks the room's light and glows in its own ink.
+
+The solid seed, base and height are flat varyings and per-slot, per-window and
+per-room choices use an integer (PCG) hash of the seed or record and the integer slot
+or cell, so each choice is constant across its pixels. Bottoms and imported assets are
+unchanged.
 
 Wall finishes make a record's walls read as one material. `facade_palette.json`
 `finishes` lists the finishes (facade tile layer, tile edge in storeys, roughness,
@@ -140,8 +207,8 @@ concrete surface carries the shared facade array. `vertex()` picks one finish pe
 record (a flat varying) with one integer PCG of the 12-bit record seed against the
 cumulative weights, so all walls of a building agree at every pixel. Within the
 effect distance the finish sets the roughness, metallic and specular of walls, piers
-and stall risers; shop frames, canopy shadow, fascia and signs keep the plain
-response. Metallic stays at most 0.1 so a finished wall keeps its diffuse brightness
+and stall risers; shop frames, canopy shadow and fascia keep the plain response, and
+signs their own acrylic gloss. Metallic stays at most 0.1 so a finished wall keeps its diffuse brightness
 and matches the distant body colour (metal panels read through roughness 0.42 and
 specular 0.5); far walls fade back to the plain response, and neither the albedo
 mean nor the distant body colours change. A finished wall samples its tile in
@@ -155,11 +222,37 @@ walls. Panes, frames, fascia and signs take no relief.
 
 Pane, mullion and spandrel shares are box-filtered over the pixel footprint (an exact
 pulse integral per cell axis, with the fitted commercial storey height), so thin
-mullions and spandrels settle on their area share instead of aliasing. Window
-openings are recessed: a reveal band 0.06 storeys wide (0.015 on curtain walls)
-inside each pane edge stays wall, 18% darker, and on medium/high its normal tilts
-towards the opening; the band fades out before it is narrower than about two pixels.
-Edges on the cell boundary (ribbon windows) are continuous glass without a reveal.
+mullions and spandrels settle on their area share instead of aliasing; every band
+below (reveals, frames, mullions, sills, balconies, coping) is a box-filtered share
+the same way. Window openings are recessed: a reveal band 0.06 storeys wide (0.015 on
+curtain walls) inside each pane edge stays wall, 18% darker, and on medium/high its
+normal tilts towards the opening near the camera (the tilt fades out before the band
+is narrower than about two pixels). Edges on the cell boundary (ribbon windows) are
+continuous glass without a reveal. Punched windows (not curtain walls or shop fronts)
+then show, on every tier, a frame band 0.022 storeys wide inside the reveal (white
+PVC, silver or bronze on homes; dark or silver aluminium, rarely white, elsewhere; per
+record), mullions (a sliding pair on homes, a centre bar and transom on industrial
+walls, and per record three panes, a transom, both or a fixed pane on commercial upper
+storeys and public walls), a lighter sill ledge 0.035 storeys high and 0.03 wider each
+side under the pane with a shadow band below it, and a lintel shadow over the top 18 %
+of the glass. Apartments (kind 1) carry balconies on about 45 % of bay columns above
+the base storey: a light slab edge, a tinted glass balustrade (0.06–0.33 storeys,
+glossy) and a white or dark top rail, the slab above shading the top of each storey
+below. Every facade kind with a known top (CUSTOM0) draws a light parapet coping 0.05
+storeys high at the solid top and a drip shadow 0.035 below it (not over the fascia),
+on walls that end at the top only (none across gable ends or the taller part of a
+merged solid). Medium/high add weathering, faded with the effect weight and towards
+the mean of its streaks once they near two pixels: soft vertical streaks under sills
+and under the coping (value noise along the wall) and darker, mottled grime over the
+lowest 0.3 storeys (its 0.4 × 0.25 m mottling settles on its mean as the pixel
+footprint reaches 5–12 cm); never on glass or signs.
+
+Behind punched glass on medium/high each window shows its room: a back wall 0.9 storeys
+deep seen along the view ray (so the ceiling, floor and side walls frame it as the
+camera moves) in one of four wall tones, and a dressing at the glass by an integer hash
+of the window: side curtains of two widths in one of six fabrics with folds (mostly
+homes), part-drawn slatted blinds (box-filtered 3 cm slats, mostly offices), a sheer or
+none. Both settle on the plain glass once a pane nears a few pixels.
 Shop windows have their own frames and mullions (shop part 4) instead of reveals.
 Glass (punched windows, curtain walls and shop windows alike) has roughness
 0.08–0.15 per record and specular 0.55. On medium/high in daylight its tint keeps
@@ -174,7 +267,10 @@ each cell between 4% mullions and transoms in neutral anodised grey above a dark
 coated spandrel (no wall tile), in a reflective tint (blue, green, bronze or silver,
 metallic 0.35); at night half as many of their panes are lit (a second PCG draw per
 cell), at 60% strength, so a glazed tower does not outshine punched walls; shop
-fronts stay fully lit. Other night window choices are unchanged.
+fronts stay fully lit. Lit rooms (every tier) vary per window in warmth (warm, neutral
+or cool white; offices cooler) and brightness (60–105 %); on medium/high the room's
+depth, curtains (coloured light), blinds (striped light) and sheers shape it. Far
+walls keep the warm average.
 
 Fresh generated-face and canopy attachments defer detail/wind quality until their
 node is tracked in the same admitted call, before publication. Fresh urban/RC
@@ -470,14 +566,21 @@ right-hand driving and toward the junction under left-hand driving, so every
 head is lit on both faces with red at the arm-tip (road-centre) end or on top:
 drivers see a lit face, red toward the road centre, under either convention.
 
-- Signals (`signal_h` 1,484 triangles, far 112; `signal_v` 1,284, far 124): a
+- Signals (`signal_h` 1,648 triangles, far 124; `signal_v` 1,284, far 124): a
   bolted square base plate, flange and tapered round pole with a cap and a
   yellow push-button box, all inside the unchanged 8×220×8 cm pole box; a
   pedestrian signal (stop and walk figures under hoods) facing across the road
   at 0.85–1.0 m. `signal_h` adds a tapered mast arm with a collar, tie rod and
   end cap, and under it at 1.32 m a horizontal head; `signal_v` a vertical head at 1.85 m held by brackets above
-  and below it. A head is a bevelled housing with three domed lenses and a
-  hood over each lens on both faces (the hoods toward the pole of a vertical
+  and below it. Under the arm (x 0.50–1.02 m, y 1.97–2.11 m) `signal_h` hangs a
+  double-faced road-name board on two strap clamps: the blank board (aluminium
+  rim, blue field, white border on both faces) is part of `signal_h_near`; its
+  print is a separate near part per layout (`name_board_0..3`: a glyph run, two
+  small numbers and an arrow at each viewer's right end), chosen per 32 m
+  square and axis (`name_layout`) so the two crossing roads of a junction
+  differ; the far `signal_h` carries a plain blue board on the printed
+  surface, lit at night like the near one. A head is a bevelled housing with
+  three domed lenses and a hood over each lens on both faces (the hoods toward the pole of a vertical
   head are half as long and stay 7 mm clear of it) and a black mid-plane
   backplate whose light border is a ring of bars beside it. Far heads draw
   8-sided lenses. The lens shader keeps the cycle (green 6 s, amber 2 s, red
@@ -515,15 +618,16 @@ drivers see a lit face, red toward the road centre, under either convention.
 The renderer no longer draws their generated proxy faces
 (`render_memory.hidden_objects`, the street furniture mechanism); collision and
 occluders never read them. A cell instances them per kind and 32 m square as
-near and far MultiMeshes after its objects with the street furniture range
+near and far MultiMeshes after its objects (horizontal signals also join
+their name-board group, near only) with the street furniture range
 policy for solid kinds (`furniture_near`; low draws only the far mesh, the far
 mesh stays drawn like the faces it replaces, shadows on every tier); shelter
 glass is one node per group, drawn at every distance on every tier, and never
 casts shadows (`mapkit_furniture_glass`, tagged far for editor picking). The
 set is one claim per resource cache (`render_resource_cache.claim_mesh_set`,
-960 KiB: about 7,100 vertices and 13,500 indices in CPU arrays and GPU
-buffers, 0.90 MB, plus materials, the lens shader and build arrays), claimed
-as the cell begins (`chunk_renderer.begin`, before any upload) and built one
+1,152 KiB: about 8,600 vertices and 15,800 indices in CPU arrays and GPU
+buffers, 1.09 MB with the road-name boards, plus materials, the lens shader
+and build arrays), claimed as the cell begins (`chunk_renderer.begin`, before any upload) and built one
 material or mesh per admitted step (`signal_preparation`, cache stages
 `signals_<part>`); a refused set fails the cell before it uploads anything.
 Each placement adds 48 B to each of its instance buffers and its id to the
@@ -536,6 +640,232 @@ quarter turns and offsets, hidden faces with untouched collision triangles,
 memory, refusal before upload, release and (rendered) two planned heads at
 44° and 45° in one frame, instanced paint tints and the poster by night and
 day. Distant cells keep the native proxy boxes.
+
+## Road signs and guide signs
+
+Builtin road signs (`sign_speed_30/40/50/60/80/100`, `sign_crossing`,
+`sign_stop`, `sign_yield`, `sign_children`) and overhead guide signs
+(`guide_sign`) are procedural display meshes (`godot/road_sign_meshes.gd`, built
+with the street furniture builder and shapes), each a detailed `near` and a
+simple `far` mesh sharing two materials: painted metal (the street furniture
+paint: posts, brackets, aluminium backs and edges) and vertex-tinted printed
+faces (`lighting_role` 2: they glow at 0.9 × their colour from sunset, standing
+in for retroreflection; printed colours stay at 0.8 so the glow never clips).
+Shapes are generic traffic-control forms; digits are seven-segment bars and
+names glyphs of the invented storefront script (3–5 strokes on a 3×4 lattice,
+fixed bits per sign) drawn as geometry: no fonts, real text or logos. The
+importer turns the printed face (local −z) against the traffic and local +x
+over the road under right-hand driving.
+
+- Pole signs (near 432–592 triangles, far 26–58): a foot sleeve
+  reaching 4 cm below the foot, a slightly tapered round post with a domed cap,
+  a back channel and two band clamps, all inside the unchanged 6×104×6 cm post
+  box below 0.66 m, holding an aluminium plate (rolled edge, plain back with a
+  stiffener rail) within 16 cm of the post across x. Speed limits: a white rim,
+  red ring and white disc with black digits ("100" in narrower cells); the
+  crossing sign a blue chamfered square, white border, walking figure and zebra
+  bars; stop a red inverted triangle with a white border and two white glyphs;
+  yield a wide red band, white field and two red glyphs; children protection a
+  yellow triangle with a red band, two black child figures holding hands and a
+  white supplementary plate (dark border, four glyphs) below it. Far meshes: a
+  square post, the outline with one coplanar inner field and a flat back (speed
+  signs one dark bar). Speed limits share one body (near and far) under their
+  own digit parts.
+- Guide sign (near 1,418–1,466 triangles, far 100): a concrete collar,
+  bolted base plate and tapered round pole with a cap inside the unchanged
+  10×250×10 cm pole box; two cantilever pipes at 2.44 m and 1.725 m with end
+  caps, collars, a diagonal web and gussets; a 1.70×0.60 m board from 1.78 m up
+  in front of them with Z-bar stiffeners and brackets with U-bolts on its back,
+  printed with a blue field, a white border, white arrows, glyph runs and white
+  route shields with two blue digits. Four layouts chosen by the object
+  identity: a junction diagram, straight with a right branch, a left branch
+  with straight, and an overhead lane board; the frame and blank board are one
+  part, each layout's print another. The far mesh keeps the open truss: two
+  arm bars and one diagonal behind a board with a white border and two bars.
+  Only the pole stands below 1.70 m; the arms and board reach 2.58 m along +x
+  (the importer accepts an approach whose half carriageway spans 2.6 m), clear
+  of vehicles. The arm reaches one way only, so the importer places guide signs
+  under right-hand traffic.
+- Printed faces are tiled coplanar regions (a ring and its disc, a band and its
+  field); symbols stand 1.5 mm in front, as lens rims do.
+
+The renderer draws them instead of their generated proxy faces
+(`render_memory.DRAWN_OVER`); collision and occluders never read those faces. A
+cell instances them per kind, guide layout and 32 m square as near and far
+MultiMeshes after its objects with the street furniture range policy for solid
+kinds (`furniture_near`; low draws only the far mesh, the far mesh stays drawn
+like the faces it replaces, shadows on every tier). The set is one claim per
+resource cache (`render_resource_cache.claim_mesh_set`, 960 KiB: about
+6,650 vertices and 14,640 indices in CPU arrays and GPU buffers,
+0.86 MB, plus the two materials and build arrays), claimed as the cell
+begins and built one material or mesh per admitted step
+(`road_sign_preparation`, cache stages `road_signs_<part>`); a refused set fails
+the cell before it uploads anything. Each placement adds 48 B to each of its
+instance buffers and its id to the group's id list inside its 64 KiB object
+share (speed and guide signs: two near parts and a far one, so three
+buffers). Cells without a cache build a process-lifetime set.
+`road_sign_validator` checks the post and pole boxes, footprint and vehicle
+clearance, printed colours and fronts, the open far truss, board prints inside
+the blue field and laid out for the driver's right, layouts and digits, tier variants and
+ranges, planned groups, hidden faces with untouched collision triangles,
+memory, refusal before upload, release and (rendered) a speed sign and a guide
+board by day and night. Distant cells keep the native proxy boxes.
+
+## Facade fixtures
+
+Generated buildings carry display-only 3D fixtures
+(`godot/facade_fixture_meshes.gd`, original, no external asset or brand): on
+walls, projecting blade signs on commercial walls (Korean 돌출간판: vertical
+lightboxes standing perpendicular to the wall) and air-conditioner outdoor
+units under upper-storey windows of house, commercial and public walls; on flat
+roofs, stair penthouses, water tanks, condenser units, parapet rims with guard
+railings on part of the roofs, solar panel rows and antenna masts or satellite
+dishes. Apartment and industrial walls and non-building geometry carry no wall
+fixtures. Nothing generated, collided or sent over the network changes;
+formats stay v1.
+
+- Placement is native (`crates/mapkit-godot/src/facade_fixtures.rs`, rooftop
+  candidates from `roof_fixtures.rs`) when a cell is decorated
+  (`with_presentation`, `preview_document_packed`, `source_preview_packed`),
+  because it needs the floor pitch (`facade_floor_cm`). It reads only the
+  packed display arrays: vertical triangles of each generated solid (same
+  object and facade seed) are grouped into wall planes (outward normal from the
+  Godot winding, extent along the wall, base and eaves top from the facade
+  seeds and tops), flat roof faces into roof planes (one height of one solid,
+  with its packed roof frame). Coincident walls facing the other way (internal
+  walls between a footprint's prisms, party walls of touching buildings) cover
+  no facade, so nothing mounts there.
+- Every choice is an integer PCG hash (the shader's `facade_pcg`) of the 12-bit
+  record (rooftops: the 24-bit solid seed and roof height) and integer slot,
+  column, row or attempt indices. Wall positions mirror the facade shader's
+  layout (`atmosphere_surface.gdshader`, kept in step by hand): the wall frame
+  u = dot(p, normalize(-n.z, 0, n.x)), bays of floor pitch × base (house 1.8,
+  commercial 0.8, public 1.5) × (0.8 + 0.5 × record bits 9–11 / 7), two-bay
+  sign slots read along -u, `facade_storeys` for commercial walls, the window
+  rect per kind and record variant and the 0.035-floor sill ledge. Curtain
+  walls (the record's finish pick against the ordered `facade_palette.json`
+  weights) get no units.
+- Blade sign: on about 45 % of sign-slot boundaries, 0.12 floors above the
+  shop storey, 0.9–1.3 floors tall (clipped below the top and to the first
+  three upper storeys, at least 0.7), 0.2 floors out of the wall from a
+  0.04-floor standoff, 0.06 floors thick. Sizes are in floor pitches, so they
+  are metres on 1:3 cards and scale with any other recorded map scale.
+- Air-conditioner unit: on about 14 % of upper-storey windows (commercial from
+  the second upper storey), at most three per wall, 0.27 × 0.2 × 0.1 floors on
+  a 0.03-floor standoff and rack, hanging under the window's sill shadow and
+  above the window below, centred or to one side, only where that band is
+  tall enough.
+- Rooftop fixtures stand square to the roof frame. Each slot (one penthouse,
+  tank, condenser group, solar array or mast) tries up to 24 hashed positions
+  in the roof's frame extent and keeps up to four whose footprint lies on the
+  roof 0.2 floors inside its outline; the first of them clear of other
+  triangles and of fixtures kept before it wins. Stair penthouse (a plastered
+  box in the building's body colour, an overhanging slab in the roof coating,
+  a steel door with a canopy and lamp, a louvred vent): roofs 2.9 floors up or
+  more, one per roof (apartments up to three along their length), 0.95–1.25 ×
+  1.2–1.6 floors, 0.88–1 floor tall. Water tank: apartments, offices and public
+  roofs four storeys up (two on large ones), a small round one on 40 % of
+  houses three storeys up and 30 % of industrial roofs; a square FRP panel tank
+  (2 or 3 one-metre panels a side, on two steel beams, with a ladder and a
+  manhole) or a round stainless one (35 %; hoops, a conical crown, four legs).
+  Condenser units (0.3 × 0.3 × 0.22 floors, side-blow or top-blow, on steel
+  sleepers) in rows of 2–5 on 70 % of commercial, 60 % of public and 50 % of
+  industrial roofs, one or two on 15 % of apartments, one on 25 % of houses.
+  Solar rows (1.2–3 floors long, panels tilted about 27° toward the frame
+  direction nearest south, 1–3 rows 0.8 floors apart) on roofs up to 5.5 floors
+  high (houses, industrial and public 35 %, offices 12 %, apartments 8 %). An
+  antenna mast with two Yagi booms or a satellite dish on 15 % of roofs.
+- Parapet rims stand on the roof edges with a facade wall of the same solid
+  under them (never on internal or party walls or on the faces closing a solid
+  at the cell edge), collinear edges merged into one run and runs under 0.5
+  floors dropped: 0.12 floors high and 0.06 deep, 0.015 inside the wall plane,
+  in the building's body colour under a light coping, in pieces of at most 24
+  floors. At square corners (turns within about 26° of 90°) rims meet without
+  a gap or an overlap: at a convex corner a run ends at the next run's inner
+  face and the next starts at its outer face; at a reflex (inner) corner a run
+  carries on across the next run's strip, which starts at its outer face. Other
+  corners trim the run a thickness short, and a 0–2 % height step between runs
+  keeps their tops from sharing a plane. On
+  35 % of residential and commercial roofs a guard railing (posts about every
+  0.6 floors, mid and top rails; galvanised, green, white or black) stands on
+  the rim.
+- A fixture is skipped when its box plus a 0.03-floor margin would meet any
+  other triangle of the cell (neighbouring buildings, roofs, tree trunks,
+  terrain, other walls of its own building, a separating-axis test against a
+  4 m grid of the candidates), would leave the cell rect, or would not mount
+  on its own wall; units keep clear of accepted blade signs, rooftop fixtures
+  of other kept fixtures (a footprint separating-axis test; a condenser row's
+  or solar array's own units may touch). A cell keeps at most 1,024 fixtures
+  in at most 16 squares of 32 m. Measured on the 1:3 real-city cards (128 m
+  cells, so every square of a cell is kept), Yeongtong cells ask for at most
+  633 fixtures in nine of ten cells (2,054 at most) and Jongno's dense blocks
+  1,298 (5,325 at most); about three quarters of rooftop fixtures are rim
+  runs. Caps never follow generation order: clear candidates go blade signs
+  first, then penthouses, tanks, rims (whole roofs by a hash of the roof), then the rest by
+  a hash rank (of the design bits on walls, so a wall's three units spread
+  over its storeys and bays; of the slot on roofs), and the 16 squares are
+  those showing the most fixtures (ties by a hash of the square), the busiest
+  blocks of a larger cell; presentation `facade_fixtures` lists them (10
+  floats each: mount point, yaw, kind, scale, height, 24-bit design bits,
+  width and depth) and `facade_fixtures_capped` counts those the cap dropped.
+  Rooftop design bits carry the building's palette key and body and roof
+  entries (bits 0–8) and the mesh variant (bits 9–10).
+
+The meshes (blade near 168 triangles, far 24; unit near 140, far 32; penthouse
+94/22; tank 348/100; condenser 104/30; rim 354/10; solar row 96/12; mast 232/56)
+share one material (`godot/facade_fixture.gdshader`): surface roles in UV.x, a
+baked shade plus twice the mesh variant of the part in UV.y (the vertex shader
+collapses parts of other variants: square or round tanks, side- or top-blow
+condensers, railing or none, antenna or dish), face coordinates in UV2, the
+design bits in instance custom data (three 8-bit channels, exact on every
+renderer) and the blade's aspect or a rooftop fixture's floor pitch. Rims and
+solar rows stretch along their length; rail posts and solar legs carry their
+anchor in UV2 and keep their width (posts spread over the instance's length,
+at most 31 intervals). The material binds the record palettes, so penthouse
+walls and rims take the building's body colour and the penthouse slab its roof
+coating. Blade faces are both broad faces of the lightbox, drawn by
+`facade_sign_face` in vertical mode (the storefront signs' designs, palettes
+and far settling), each read left-to-right from its own side; the housing is
+charcoal, silver or white enamel with a raised rim and top cap, on two bracket
+arms with wall plates. Units are ivory, light grey or beige with a
+box-filtered fan grille (bezel, wire rings and cross over three blades and a
+hub), side louvres, insulated pipes and a rack. FRP tanks show one-metre
+panels with flanges and domed centres; solar panels one-third-floor modules of
+6 × 10 cells in silver frames; doors a painted steel leaf with a frame
+rebate, handle and louvre. By night blade faces glow like the storefront
+signs (lit all night, × 0.55, fading with the surface effect distance), 70 %
+of penthouse door lamps burn faintly and wash their door; rain darkens and
+snow covers upward faces as on walls.
+
+A cell instances each kind per 32 m square as near and far MultiMeshes after
+its objects (`display_quality.apply_fixture`): the near mesh within
+`fixture_near` none/24/40 m plus the group reach, the far mesh beyond to the
+decoration distance (blade signs, penthouses, tanks; rims three quarters of
+it, units, condensers, solar rows and masts half) plus the group reach; low
+draws the far meshes of blade signs, penthouses and tanks only, medium and
+high every kind. Blade signs, penthouses and tanks cast shadows from medium,
+the other kinds' near meshes on high. The set is one claim per resource cache
+(`render_resource_cache.claim_mesh_set`, 640 KiB: about 3,700 vertices and
+5,500 indices in CPU arrays and GPU buffers, 0.46 MB, plus the material, its
+shader and build arrays), claimed as a cell with fixtures begins and built one
+part per admitted step (`fixture_preparation`, cache stages
+`fixture_<part>`); refused, the cell skips its fixtures. The cell reserves
+`render_memory.fixture_bytes` (384 B per fixture, 16 KiB per kind and square)
+in its estimate and, before generation, the cap (`FIXTURE_BOUND_BYTES`,
+2.4 MiB: 1,024 fixtures and eight kinds in 16 squares) when it has building
+prisms; its lease carries the nodes and instance buffers. Cells without a cache
+build a process-lifetime set. `cargo test -p mapkit-godot -- facade roof packed`
+checks the hash, the ordered finish weights, the roof frame, outward blade
+signs on slot boundaries and only on commercial walls, units under windows,
+internal walls, clearance and cell-edge skips, rooftop fixtures inside their
+roof's outline and clear of each other, rims along the outer walls meeting at
+corners and skipping internal walls and cell cuts, the palette bits, the cap
+and determinism; `facade_fixture_validator` checks the set (one part per step,
+identical builds, clearance boxes with anchored posts and legs, sign faces,
+palettes, memory), native placement at 1:3 on walls and roofs, instance
+counts, transforms (scaled by kind) and design bits against the packed list,
+visibility per tier, reservation, lease release, refusal, standalone previews
+and (rendered) a blade face and a penthouse door lamp by night and day.
 
 ## Display quality
 

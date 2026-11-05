@@ -4,7 +4,11 @@ extends SceneTree
 ## heads where the earlier renderer drew them (three lenses on both faces, red
 ## at the arm tip or on top for either driving side, visors, backplate, a
 ## pedestrian signal), shelters inside their proxies' envelope with posts,
-## roof and back wall where their collision boxes are, near/far tier variants,
+## roof and back wall where their collision boxes are, double-faced road-name
+## boards under the signal_h arm (inside their box, clear of the tie rod and
+## head, four layouts laid out for each face's viewer, the two axes of a
+## junction on different layouts, the far board printed on both faces),
+## near/far tier variants,
 ## ranges and shadows (glass: one node, always drawn, no shadows), hidden
 ## proxy faces with untouched collision triangles (prepared and unprepared
 ## paths, owner and neighbour cells), the lamp phase per quarter turn in the
@@ -37,6 +41,7 @@ func _initialize() -> void: run.call_deferred()
 func run() -> void:
 	var set := meshes()
 	signals(set)
+	boards(set)
 	shelters(set)
 	policy()
 	await renderer()
@@ -102,7 +107,8 @@ func signals(set: Dictionary) -> void:
 		for lod in SIGNALS.LODS:
 			var mesh: ArrayMesh = set[kind + "_" + lod]
 			var label := "%s %s" % [kind, lod]
-			check(mesh.get_surface_count() == 2, label + " has paint and lens surfaces")
+			var surfaces := 3 if kind == "signal_h" else 2
+			check(mesh.get_surface_count() == surfaces, label + " has paint and lens surfaces (and the name board's printed field)")
 			var base := 0
 			var top := 0.0
 			var reach := 0.0
@@ -158,6 +164,80 @@ func signals(set: Dictionary) -> void:
 	for point: Vector3 in points(set.signal_h_near, 1):
 		if point.x > 0.5: h_lens = h_lens.expand(point)
 	check(absf(h_lens.get_center().x - SIGNALS.H_HEAD.x) < 0.01 and absf(h_lens.get_center().y - SIGNALS.H_HEAD.y) < 0.01, "the horizontal head hangs at %s" % h_lens.get_center())
+
+## Road-name boards: the blank board (rim, straps, printed field and
+## border) in the near horizontal signal inside its box under the arm (the
+## strap clamps reach up round it), the four printed layouts just in front of
+## both faces, all clear of the tie rod and the head clamps; the far signal
+## carries the silhouette.
+func boards(set: Dictionary) -> void:
+	var box: AABB = SIGNALS.NAME_BOARD.grow(0.0015)
+	var printed_box := AABB(box.position - Vector3(0.0, 0.0, 0.002), box.size + Vector3(0.0, 0.0, 0.004))
+	var straps := AABB(Vector3(SIGNALS.NAME_BOARD.position.x, SIGNALS.NAME_BOARD.end.y - 0.01, -0.03), Vector3(SIGNALS.NAME_BOARD.size.x, 0.07, 0.06))
+	var tie_rod := AABB(Vector3(0.0, 1.9, -0.03), Vector3(0.44, 0.27, 0.06))
+	var head := AABB(SIGNALS.H_HEAD - Vector3(0.23, 0.09, 0.09), Vector3(0.46, 0.18, 0.18))
+	var blank: ArrayMesh = set.signal_h_near
+	var field: Array = blank.surface_get_arrays(2)
+	var outside := 0
+	var sides := {}
+	for index in field[Mesh.ARRAY_VERTEX].size():
+		if not box.has_point(field[Mesh.ARRAY_VERTEX][index]): outside += 1
+		sides[signf((field[Mesh.ARRAY_NORMAL][index] as Vector3).z)] = true
+	check(outside == 0 and sides.size() == 2, "the blank name board's field and border lie on both faces of its box: %d outside" % outside)
+	var hung := 0
+	for point: Vector3 in points(blank, 0):
+		if point.x > 0.49 and point.x < 1.03 and (box.has_point(point) or straps.has_point(point)) and point.y < 2.118: hung += 1
+	check(hung >= 24, "the board's rim and straps hang under the arm: %d vertices" % hung)
+	var faces := []
+	for layout in SIGNALS.NAME_BOARDS:
+		var mesh: ArrayMesh = set["name_board_%d" % layout]
+		var label := "name board %d" % layout
+		check(mesh.get_surface_count() == 1, label + " is one printed surface")
+		var clear := 0
+		var clashing := 0
+		for point: Vector3 in points(mesh):
+			if not printed_box.has_point(point) or absf(absf(point.z) - SIGNALS.NAME_BOARD.size.z * 0.5) > 0.0016: clear += 1
+			if tie_rod.has_point(point) or head.has_point(point): clashing += 1
+		check(clear == 0, label + " lies just in front of both board faces: %d vertices elsewhere" % clear)
+		check(clashing == 0, label + " keeps clear of the tie rod and head: %d vertices" % clashing)
+		check(triangles(mesh) >= 60 and triangles(mesh) <= 300, label + " triangle count: %d" % triangles(mesh))
+		var printed: Array = mesh.surface_get_arrays(0)
+		var sides_printed := {}
+		for normal: Vector3 in printed[Mesh.ARRAY_NORMAL]:
+			sides_printed[signf(normal.z)] = absf(normal.z) > 0.99
+		check(sides_printed.size() == 2 and sides_printed.values().all(func(ok: bool) -> bool: return ok), label + " is printed on both faces")
+		faces.append(printed)
+	for a in faces.size():
+		for b in range(a + 1, faces.size()): check(faces[a] != faces[b], "name board layouts %d and %d differ" % [a, b])
+	var silhouette := 0
+	for point: Vector3 in points(set.signal_h_far, 0):
+		if box.has_point(point): silhouette += 1
+	check(silhouette >= 8, "the far horizontal signal carries the board's rim: %d vertices" % silhouette)
+	# The far board's field is printed (lit at night like the near board) on both faces.
+	var far_field: Array = set.signal_h_far.surface_get_arrays(2)
+	var far_outside := 0
+	var far_sides := {}
+	for index in far_field[Mesh.ARRAY_VERTEX].size():
+		if not box.has_point(far_field[Mesh.ARRAY_VERTEX][index]): far_outside += 1
+		far_sides[signf((far_field[Mesh.ARRAY_NORMAL][index] as Vector3).z)] = true
+	check(set.signal_h_far.surface_get_material(2) == set.materials.sign and far_outside == 0 and far_sides.size() == 2,
+		"the far board's field is printed on both faces of its box: %d outside" % far_outside)
+	# Each face is laid out for its own viewer: the arrow at the viewer's
+	# right end (local -x on the -z face, +x on the +z face).
+	var centre_x: float = SIGNALS.NAME_BOARD.get_center().x
+	var arrows := {-1.0: 0, 1.0: 0}
+	var mirrored := 0
+	for point: Vector3 in points(set.name_board_0):
+		var u := (centre_x - point.x) if point.z < 0.0 else (point.x - centre_x)
+		if u > 0.2: arrows[signf(point.z)] += 1
+		if u < -0.2 and absf(point.y - SIGNALS.NAME_BOARD.get_center().y + 0.01) < 0.002: mirrored += 1
+	check(arrows[-1.0] >= 3 and arrows[1.0] >= 3 and mirrored == 0, "each face prints its arrow at its viewer's right: %s, %d mirrored" % [arrows, mirrored])
+	# The two axes of a junction (quarter turns of opposite parity in one 32 m
+	# square) show different boards; opposite approaches the same one.
+	for x in [0, 1700, 5000]:
+		var layouts := []
+		for turns in 4: layouts.append(SIGNALS.name_layout({"position": [x, 0, 300], "quarter_turns": turns}))
+		check(layouts[0] == layouts[2] and layouts[1] == layouts[3] and layouts[0] != layouts[1], "junction at %d: crossing axes differ: %s" % [x, layouts])
 
 func shelters(set: Dictionary) -> void:
 	for step in ["shelter_near", "shelter_far", "shelter_glass"]:
@@ -290,7 +370,7 @@ func renderer() -> void:
 	for object: Dictionary in fixture(false).objects: SIGNALS.plan(planned, object)
 	for key: String in planned.signal_plan:
 		for part: PackedFloat32Array in planned.signal_plan[key].parts: check(part.size() == 12, "%s instances carry a transform only" % key)
-	check(planned.signal_plan.size() == 4, "signals and shelters group per kind and 32 m square: %s" % [planned.signal_plan.keys()])
+	check(planned.signal_plan.size() == 6, "signals and shelters group per kind and 32 m square, name boards per layout and square: %s" % [planned.signal_plan.keys()])
 	for prepared in [false, true]:
 		for level in 3:
 			QUALITY.current = QUALITY.profile(level)
@@ -321,8 +401,8 @@ func renderer() -> void:
 				var ids: PackedStringArray = node.get_meta("mapkit_object_ids", PackedStringArray())
 				check(ids.size() == node.multimesh.instance_count and Array(ids).all(func(id): return id in ["sig-a", "sig-b", "sig-v", "stop"]), label + " nodes list their instances' object ids: %s" % ids)
 				if level == 0: check(node.visible == (node.get_meta("mapkit_furniture_lod") == "far"), label + " low draws far meshes only")
-			check(counts == {"signal_h_near": 2, "signal_h_far": 2, "signal_v_near": 1, "signal_v_far": 1, "shelter_near": 1, "shelter_far": 1, "shelter_far_glass": 1},
-				label + " instances two horizontal and one vertical signal and a glazed shelter near and far: %s" % counts)
+			check(counts == {"signal_h_near": 2, "signal_h_far": 2, "signal_v_near": 1, "signal_v_far": 1, "shelter_near": 1, "shelter_far": 1, "shelter_far_glass": 1, "name_board_near": 2},
+				label + " instances two horizontal and one vertical signal, their name boards and a glazed shelter near and far: %s" % counts)
 			RENDER.cancel(job)
 			parent.queue_free()
 			for _frame in 4: await process_frame
@@ -335,7 +415,7 @@ func renderer() -> void:
 	var preview := Node3D.new()
 	root.add_child(preview)
 	var standalone := RENDER.attach(fixture(false), preview)
-	check(standalone.find_children("Signals_*", "MultiMeshInstance3D", true, false).size() == 9, "standalone previews draw signals from the process-lifetime set")
+	check(standalone.find_children("Signals_*", "MultiMeshInstance3D", true, false).size() == 11, "standalone previews draw signals from the process-lifetime set")
 	preview.free()
 	# A refused shared set fails the cell as it begins, before any upload:
 	# its signals would have no body.

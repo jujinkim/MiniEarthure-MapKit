@@ -19,6 +19,13 @@ const FURNITURE := preload("./street_furniture_meshes.gd")
 const SIGNALS := preload("./street_signal_meshes.gd")
 ## Subway entrances and station signs: transit_meshes.gd groups (TRANSIT.KINDS).
 const TRANSIT := preload("./transit_meshes.gd")
+## Road signs and overhead guide signs: road_sign_meshes.gd groups (ROAD_SIGNS.KINDS).
+const ROAD_SIGNS := preload("./road_sign_meshes.gd")
+## Facade and rooftop fixtures of generated buildings (presentation
+## facade_fixtures, facade_fixtures.rs and roof_fixtures.rs): blade signs and
+## air-conditioner units on walls, penthouses, tanks, condensers, rims, solar
+## rows and masts on flat roofs; facade_fixture_meshes.gd groups after the objects.
+const FIXTURES := preload("./facade_fixture_meshes.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 # Triple the lit ground width at the same mounting height (tan of the cone angle).
 const STREETLIGHT_SPREAD := 3.0
@@ -30,7 +37,9 @@ static var _phase_usec: Dictionary = {}
 static var _phase_peak_usec: Dictionary = {}
 
 const BUILTINS := ["builtin:tree", "builtin:fence", "builtin:streetlight", "builtin:signal_h", "builtin:signal_v",
-	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub", "builtin:city_tree"]
+	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub", "builtin:city_tree",
+	"builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60", "builtin:sign_speed_80",
+	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign"]
 ## City trees (three street variants over the 140 cm collision trunk, scaled
 ## 0.85–1.15, or three wide park variants for zone footprints of 160–200 cm)
 ## and shrubs (three sizes) are display-only vegetation_meshes.gd meshes chosen
@@ -44,7 +53,8 @@ const VEGETATION_GROUP_METRES := 32.0
 ## (collision stays the generated boxes): city trees and shrubs (VEGETATION_IDS, vegetation groups),
 ## streetlights and benches (street_furniture_meshes.gd, FURNITURE.KINDS),
 ## traffic signals and bus shelters (street_signal_meshes.gd, SIGNALS.KINDS),
-## subway entrances and station signs (transit_meshes.gd, TRANSIT.KINDS).
+## subway entrances and station signs (transit_meshes.gd, TRANSIT.KINDS),
+## road signs and guide signs (road_sign_meshes.gd, ROAD_SIGNS.KINDS).
 ## `_street_detail` builds one city tree or shrub as single nodes for the lease
 ## and placement checks of tests/street_detail_lease_validator.gd only.
 const STREET_DETAILS := {"builtin:shrub": true, "builtin:city_tree": true}
@@ -300,6 +310,12 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 		if not TRANSIT.claim(job, view.objects):
 			fail(job,"E_MEMORY_BUDGET","Shared transit details exceed memory allowance")
 			return job
+		# Road signs likewise.
+		if not ROAD_SIGNS.claim(job, view.objects):
+			fail(job,"E_MEMORY_BUDGET","Shared road signs exceed memory allowance")
+			return job
+		# Facade fixtures likewise; a refused claim only skips them.
+		FIXTURES.claim(job)
 	return job
 
 static func advance(job: Dictionary) -> bool:
@@ -366,7 +382,10 @@ static func _advance(job: Dictionary) -> bool:
 			var facade: int = PLAN.facade_arrays(key) if chunk.get("facade_seeds", PackedVector2Array()).size() == chunk.wall_uv.size() else 0
 			if facade == 0: arrays[Mesh.ARRAY_TEX_UV] = chunk.wall_uv.slice(first * 3, offset * 3)
 			else: arrays[Mesh.ARRAY_TEX_UV2] = chunk.facade_seeds.slice(first * 3, offset * 3)
-			if facade == 2 and chunk.get("facade_tops", PackedFloat32Array()).size() == chunk.wall_uv.size(): arrays[Mesh.ARRAY_CUSTOM0] = chunk.facade_tops.slice(first * 3, offset * 3)
+			if facade == 1 and chunk.get("facade_tops", PackedFloat32Array()).size() == chunk.wall_uv.size(): arrays[Mesh.ARRAY_CUSTOM0] = chunk.facade_tops.slice(first * 3, offset * 3)
+			if key == "concrete":
+				var framed := PLAN.sidewalk_arrays(chunk, PackedInt32Array(range(first, offset)), arrays[Mesh.ARRAY_TEX_UV])
+				if not framed.is_empty(): arrays[Mesh.ARRAY_TEX_UV] = framed[0]; arrays[Mesh.ARRAY_TEX_UV2] = framed[1]
 			if key == "grass" and int(job.get("grass_level", 0)) > 0: job.grass_parts.append(arrays[Mesh.ARRAY_VERTEX])
 			var prepared := ArrayMesh.new()
 			prepared.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, FACADE_TOP_FORMAT if arrays[Mesh.ARRAY_CUSTOM0] != null else 0)
@@ -507,6 +526,14 @@ static func _advance(job: Dictionary) -> bool:
 					return false
 				TRANSIT.plan(job, object)
 				continue
+			if ROAD_SIGNS.KINDS.has(id):
+				var signs := ROAD_SIGNS.ready(job)
+				if signs < 0: return fail(job, "E_RENDER_ASSET", "Shared road signs are unavailable")
+				if signs == 0:
+					job.object -= 1
+					return false
+				ROAD_SIGNS.plan(job, object)
+				continue
 			if VEGETATION_IDS.has(id):
 				var ready := _vegetation_ready(job)
 				if ready < 0: return true
@@ -545,9 +572,13 @@ static func _advance(job: Dictionary) -> bool:
 	elif not job.get("transit_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		TRANSIT.attach_group(job)
+	elif not job.get("road_sign_plan", {}).is_empty():
+		job.last_phase = "instance_upload"
+		ROAD_SIGNS.attach_group(job)
 	elif not job.get("vegetation_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		_attach_vegetation_group(job)
+	elif FIXTURES.step(job): pass
 	elif _grass_step(job): pass
 	else:
 		job.done = true
@@ -677,7 +708,7 @@ static func dispose(job: Dictionary) -> void:
 	job.chunk = {}
 	job.erase("lamp_bindings")
 	job.erase("urban_shader")
-	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "hidden_objects"]: job.erase(key)
+	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "road_signs", "road_sign_plan", "fixtures", "fixture_plan", "hidden_objects"]: job.erase(key)
 	if job.get("lease") != null:
 		job.lease.seal()
 		job.lease = null
@@ -691,7 +722,8 @@ static func material_color(key: String) -> Color:
 	if key.begins_with("builtin:"):
 		return {"builtin:tree": Color("745138"), "builtin:city_tree": Color("6b4c36"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63"),
 			"builtin:signal_h": Color("4a5055"), "builtin:signal_v": Color("4a5055"), "builtin:bus_shelter": Color("7aa0b8"),
-			"builtin:subway_entrance": Color("3f6fa8"), "builtin:station_sign": Color("2f7fd0")}.get(key, Color.GRAY)
+			"builtin:subway_entrance": Color("3f6fa8"), "builtin:station_sign": Color("2f7fd0"),
+			"builtin:guide_sign": Color("1d4f9c")}.get(key, Color("8d949a") if key.begins_with("builtin:sign_") else Color.GRAY)
 	if key.begins_with("barrier:"):
 		return {"barrier:hedge": Color("486447"), "barrier:fence": Color("9b764f"), "barrier:wall": Color("b7b8b0")}.get(key, Color.GRAY)
 	if not key.contains(":"):
@@ -713,8 +745,11 @@ static func facade_kind(key: String) -> int:
 		"public": return 5
 	return 0
 
-## Commercial facade batches carry their solids' offset top (eaves) height in
-## CUSTOM0.x (packed `facade_tops`) so the shop storey and whole storeys fit.
+## Facade batches carry their solids' offset top (eaves) height in CUSTOM0.x
+## (packed `facade_tops`, negated on triangles rising above it): commercial
+## storeys fit below it, and every kind draws its parapet coping there on walls
+## that end at it. Flat roof faces carry their solid's roof frame there instead
+## (4000 + the angle, read above 3500), which roof finishes run square to.
 const FACADE_TOP_FORMAT := Mesh.ARRAY_CUSTOM_R_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 
 ## Floor pitch follows the authored map scale (3 m ÷ D) published by presentation.
@@ -941,7 +976,7 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
-	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,key.get_slice(":",0))
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","builtin:guide_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,"metal" if key.begins_with("builtin:sign_") else key.get_slice(":",0))
 
 static func occluding_surface(key: String) -> bool:
 	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])

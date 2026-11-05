@@ -38,9 +38,9 @@ func run() -> void:
 		check(context!=null and cache.bytes()==QUALITY.tile_bytes(p.texture_size,15) and MATERIALS.TILE_KINDS.size()==15,"exact admitted tier memory (ten racing tiles, five facade layers)")
 		for texture: Texture2D in context.tiles.values(): check(texture.get_width()==p.texture_size,"requested texture resolution")
 		check(context.facades!=null and context.facades.get_width()==mini(p.texture_size,256) and context.facades.get_layers()==5,"facade layers at the tier resolution, at most 256 px")
-		check(QUALITY.tile_bytes(p.texture_size,15)==1048576+10*p.texture_size*p.texture_size*24+5*mini(p.texture_size,256)*mini(p.texture_size,256)*24+(1024*640 if p.texture_size>=256 else 512*320)*24,"tier charge: ten racing tiles, five capped facade layers, sign atlas")
+		check(QUALITY.tile_bytes(p.texture_size,15)==1048576+10*p.texture_size*p.texture_size*24+5*mini(p.texture_size,256)*mini(p.texture_size,256)*24,"tier charge: ten racing tiles and five capped facade layers (procedural signs)")
 		check(p.sky_radiance==[32,64,128][level] and QUALITY.radiance_bytes(p.sky_radiance)==6*8*p.sky_radiance*p.sky_radiance*8*4/3,"sky radiance per tier and its cubemap bound")
-		check(context.signs.get_width()==(1024 if p.texture_size>=256 else 512),"sign atlas halves with 128px tiles")
+		check(not ("signs" in context) and context.tile_cursor==MATERIALS.TILE_KINDS.size(),"no sign texture: preparation ends with the last facade layer")
 		QUALITY.current=QUALITY.profile(2-level)
 		check(context==cache.environment_context(),"live quality keeps existing texture owner")
 		cache.shutdown();context=null

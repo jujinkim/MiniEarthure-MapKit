@@ -310,6 +310,17 @@ fn decorate_inner(
     let cell=chunk.get("cell").unwrap().to::<VarDictionary>();
     let bounds=document.cell_bounds(mapkit_core::Cell{x:cell.get("x").unwrap().to::<i32>(),y:cell.get("y").unwrap().to::<i32>()})?;
     presentation.set("cell_bounds_json",serde_json::to_string(&bounds).unwrap().as_str());
+    // Display-only facade and rooftop fixtures of generated buildings (blade
+    // signs and air-conditioner units on walls, facade_fixtures.rs; penthouses,
+    // tanks, condensers, rims, solar rows and masts, roof_fixtures.rs): they need the floor pitch, so they are placed here
+    // from the packed arrays rather than in pack().
+    if let Some(geometry) = chunk.get("geometry").and_then(|v| v.try_to::<Gd<crate::packed::MapKitPackedGeometry>>().ok()) {
+        let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
+        let rect = [bounds.min[0] as f32 * scale, -bounds.max[1] as f32 * scale, bounds.max[0] as f32 * scale, -bounds.min[1] as f32 * scale];
+        let placed = geometry.bind().facade_fixtures(facade_floor_cm(document) as f32 * scale, rect);
+        presentation.set("facade_fixtures", &PackedFloat32Array::from(placed.values.as_slice()));
+        presentation.set("facade_fixtures_capped", placed.capped as i64);
+    }
     chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);
     Ok(data)

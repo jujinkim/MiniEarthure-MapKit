@@ -11,9 +11,11 @@ proxies needing individual alpha/order. `prepare_batches` groups opaque faces by
 material and 32 m triangle-bounds-centre bucket, at most 512 triangles, preserving
 geometry/winding and hidden-proxy exclusion. Batches carry position, normal and
 UV; generated building facade batches carry the solid seed (UV2) instead of UV,
-which their world-space materials never sample, and commercial ones also the
-solid top (CUSTOM0, `facade_arrays`). Packed buffers cost at most 108
-bytes/visible triangle (96 without the solid top) plus bounded metadata; callers
+which their world-space materials never sample, and the solid top (CUSTOM0,
+`facade_arrays`). Shared `concrete` batches holding framed sidewalk faces add the
+sidewalk frame (UV2, `sidewalk_arrays`; [ROAD_DESIGN](docs/ROAD_DESIGN.md#sidewalks-and-curbs)).
+Packed buffers cost at most 120 bytes/visible triangle (96 with UV only, 108 for
+facades) plus bounded metadata; callers
 admit source/preparation before worker execution.
 Check support before using empty batch results.
 
@@ -135,10 +137,32 @@ cell reservations and job-local importers; caches cannot subtract unproven allow
 
 ## Shared miniature material tiles
 
-Weather reserves 10.375/38.5/83.5 MiB for ten 128/256/512 px racing tiles, five
-facade relief layers (at most 256 px), the storefront sign atlas (512×320 or
-1024×640) and CPU/GPU/mipmap/retirement overlap, even without admission callbacks. All five source bitmap
-slots join asset leases. See [materials](docs/RICHER_MATERIALS.md).
+Weather reserves 6.625/23.5/68.5 MiB for ten 128/256/512 px racing tiles, five
+facade relief layers (at most 256 px) and CPU/GPU/mipmap/retirement overlap, even
+without admission callbacks; storefront signs are procedural and need no texture.
+All five source bitmap slots join asset leases. See [materials](docs/RICHER_MATERIALS.md).
+
+## Facade fixtures
+
+Blade signs and air-conditioner units on generated walls and the rooftop
+fixtures (penthouses, tanks, condensers, rims and railings, solar rows, masts)
+are one shared mesh set per resource cache (640 KiB). A cell's estimate adds
+384 B per listed fixture and 16 KiB per kind in each 32 m square holding them;
+`upper_bound` adds the 1,024-fixture cap with eight kinds in 16 squares
+(2.4 MiB) to a cell with building prisms. See
+[facade fixtures](docs/RICHER_MATERIALS.md#facade-fixtures).
+
+## Street details drawn over proxies
+
+Streetlights and benches, traffic signals and bus shelters, subway entrances
+and station signs, and road signs and guide signs are drawn from shared mesh
+sets (`claim_mesh_set`, one per resource cache: 640 KiB, 1,152 KiB, 768 KiB
+and 960 KiB) over their unchanged collision proxies, whose faces leave the
+batches (`render_memory.DRAWN_OVER`). A refused set fails a cell holding
+streetlights, signals and shelters, transit details or road signs before any
+upload; a cell with only benches skips them. Instance buffers, id lists and groups fit inside the 64 KiB object
+share, so the estimate adds nothing. See
+[road signs](docs/RICHER_MATERIALS.md#road-signs-and-guide-signs).
 
 ## LOD and occlusion admission
 

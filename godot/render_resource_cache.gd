@@ -160,7 +160,8 @@ func vegetation(key: String) -> Dictionary:
 	return entries[key].get("vegetation",{})
 
 ## Generic shared display-only mesh set (street_furniture_meshes.gd,
-## street_signal_meshes.gd, transit_meshes.gd): claimed under its own key and
+## street_signal_meshes.gd, transit_meshes.gd, road_sign_meshes.gd,
+## facade_fixture_meshes.gd): claimed under its own key and
 ## allowance, built by `build` (a static func(state: Dictionary, lease,
 ## context) -> bool) one part per admitted call until it leaves the set in
 ## state.result. The environment context is the

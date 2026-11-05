@@ -1,8 +1,11 @@
 extends SceneTree
 ## Generated building facades: key classification, twelve base colours and the
 ## record palettes shared with the distant mesh, per-record wall finishes, floor pitch from the recorded
-## map scale, shader uniforms, the solid top (CUSTOM0) binding and the
-## commercial storey/shop-front layout.
+## map scale, shader uniforms, the solid top (CUSTOM0) binding, the
+## commercial storey/shop-front layout, the procedural storefront signs
+## (facade_signs.gdshaderinc) and window lettering, and the roof finishes
+## (flat roofs square to their packed roof frame, pitched faces down their
+## slope) keeping the palette's mean colour.
 const RENDER := preload("../chunk_renderer.gd")
 const CACHE := preload("../render_resource_cache.gd")
 const MATERIALS := preload("../environment_materials.gd")
@@ -98,19 +101,25 @@ func storefront_layout() -> void:
 				var free_bay := Vector2(width*0.5,width) if choice == 0 else Vector2(0.0,width*0.5)
 				check(runs(4,0.4,ground,width,door,mullions,pitch,free_bay.x+0.02,free_bay.y-0.02) == int(mullions),"display windows hold the mullions of a free bay"+label)
 				check(runs(2,0.4,ground,width,door,mullions,pitch,free_bay.x,free_bay.y) == int(mullions)+1 and storefront(free_bay.x+width*0.25/(mullions+1.0),0.73,ground,width,door,mullions,pitch) == 5,"display panes and transom glass"+label)
-			# The sign fills the fascia at the atlas content aspect, centred in the slot.
-			var sign_height := 0.20*ground
-			var sign_width := minf(width*0.88,sign_height*3.5)
-			check(absf(sign_width/sign_height/3.5-1.0) <= 0.05 and sign_width <= width*0.88 and storefront(width*0.5,0.78+0.5*0.20,ground,width,width*0.5,2.0,pitch) == 7,"sign aspect 56:16 within the fascia (slot %.2f)"%width)
+			# Panels (0.16 storeys) and channel letters (0.18) centred on the fascia
+			# at 0.88, 80-94 % of the slot wide and at most 8:1.
+			for height_share: float in [0.16,0.18]:
+				var sign_height := height_share*ground
+				for share: float in [0.80,0.94]:
+					var sign_width := minf(width*share,8.0*sign_height)
+					var low := 0.88-0.5*height_share
+					var high := 0.88+0.5*height_share
+					check(sign_width <= width*0.94 and sign_width/sign_height <= 8.0 and storefront(width*0.5,low+0.001,ground,width,width*0.5,2.0,pitch) == 7 and storefront(width*0.5,high-0.001,ground,width,width*0.5,2.0,pitch) == 7,"sign within the fascia and slot (slot %.2f, %.2f high, %.2f wide)"%[width,height_share,share])
 	var code: String = MATERIALS.new().shader.code
-	for marker: String in ["if(height<=0.0) return vec2(pitch);","float ground = min(1.5*pitch,height);","upper<0.75*pitch ? 0.0 : upper/max(1.0,floor(upper/pitch+0.01))","if(height<=0.0) return 1.0+(v-storeys.x)/pitch;","if(v<height) return storeys.y>0.0 ? 1.0+(v-storeys.x)/storeys.y : 1.0;","return 1.0+(storeys.y>0.0 ? round((height-storeys.x)/storeys.y) : 0.0)+(v-height)/pitch;","facade_row(v,storeys,solid_height,floor_pitch)","facade_kind==3 && storeys.y<=0.0 && v<solid_height) { window = 0.0; spandrel = 0.0; }"]:
+	for marker: String in ["if(height<=0.0) return vec2(pitch);","float ground = min(1.5*pitch,height);","upper<0.75*pitch ? 0.0 : upper/max(1.0,floor(upper/pitch+0.01))","if(height<=0.0) return 1.0+(v-storeys.x)/pitch;","if(v<height) return storeys.y>0.0 ? 1.0+(v-storeys.x)/storeys.y : 1.0;","return 1.0+(storeys.y>0.0 ? round((height-storeys.x)/storeys.y) : 0.0)+(v-height)/pitch;","facade_row(v,storeys,solid_height,floor_pitch)","facade_kind==3 && storeys.y<=0.0 && v<solid_height) { pane_mask = 0.0; spandrel = 0.0; }"]:
 		check(code.contains(marker),"shader storeys match the mirror: "+marker)
-	for marker: String in ["if(w>=0.78) return 7;","if(w>=0.765) return 6;","d<0.15*pitch-frame && w<0.72-frame/ground) ? 3 : 4;","if(w<0.08) return 1;","if(w>=0.10 && w<0.68) {","abs(s-round(s/pane)*pane)<0.012*pitch ? 4 : 2;","if(w>=0.70 && w<0.76) return 5;","slot_width*(0.22+0.28*float(slot_layout%3u)),2.0+float((slot_layout>>2u)&1u)","float sign_height = 0.20*storeys.x;","float sign_width = min(slot_width*0.88,sign_height*3.5);"]:
+	for marker: String in ["if(w>=0.78) return 7;","if(w>=0.765) return 6;","d<0.15*pitch-frame && w<0.72-frame/ground) ? 3 : 4;","if(w<0.08) return 1;","if(w>=0.10 && w<0.68) {","abs(s-round(s/pane)*pane)<0.012*pitch ? 4 : 2;","if(w>=0.70 && w<0.76) return 5;","slot_width*(0.22+0.28*float(slot_layout%3u)),2.0+float((slot_layout>>2u)&1u)","float sign_height = (sign_type==FACADE_SIGN_CHANNEL ? 0.18 : 0.16)*storeys.x;","float sign_width = min(slot_width*(0.80+0.14*facade_unit(sign_bits^2654435769u)),8.0*sign_height);","vec2 local = vec2(slot_s-(slot_width-sign_width)*0.5,0.88*storeys.x+0.5*sign_height-v)/sign_height;"]:
 		check(code.contains(marker),"shader shop front matches the mirror: "+marker)
 
-## Both upload paths bind the same attributes: commercial facades the solid seed
-## (UV2) and top (CUSTOM0, one float), other facades the seed only, both without
-## UV (world-space materials); other batches keep UV and no facade arrays.
+## Both upload paths bind the same attributes: every generated facade kind the
+## solid seed (UV2) and top (CUSTOM0, one float: commercial storeys and the
+## parapet coping of all kinds) without UV (world-space materials); other
+## batches keep UV and no facade arrays.
 func top_binding() -> void:
 	var vertices := PackedVector3Array()
 	for x: float in [0.0,40.0]: vertices.append_array(PackedVector3Array([Vector3(x,0,0),Vector3(x+2,0,0),Vector3(x,3,0),Vector3(x+2,0,0),Vector3(x+2,3,0),Vector3(x,3,0)]))
@@ -125,7 +134,7 @@ func top_binding() -> void:
 		"scene_vertices":vertices,"scene_normals":normals,"wall_uv":uv,"facade_seeds":seeds,"facade_tops":tops,"presentation":{"proxy_materials":{"shop":"concrete:commercial","flat":"concrete:residential"},"facade_floor_cm":100}}
 	check(RENDER.FACADE_TOP_FORMAT == Mesh.ARRAY_CUSTOM_R_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT,"solid tops upload as one float")
 	# Expected per mesh by its first vertex x: [UV, UV2, CUSTOM0].
-	var expected := {0.0:[false,true,true],40.0:[false,true,false],80.0:[true,false,false]}
+	var expected := {0.0:[false,true,true],40.0:[false,true,true],80.0:[true,false,false]}
 	for prepared in [false,true]:
 		var input := chunk.duplicate(true)
 		if prepared:
@@ -286,6 +295,218 @@ func finish_pixels(job: Dictionary, context: RefCounted) -> void:
 	scene.queue_free()
 	await process_frame
 
+static func picture_stats(picture: Image) -> Array:
+	var sum := Vector3.ZERO
+	var squares := 0.0
+	var count := picture.get_width() * picture.get_height()
+	for y in picture.get_height():
+		for x in picture.get_width():
+			var c := picture.get_pixel(x, y)
+			sum += Vector3(c.r, c.g, c.b)
+			var l := c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722
+			squares += l * l
+	var mean := sum / float(count)
+	var luma := mean.x * 0.2126 + mean.y * 0.7152 + mean.z * 0.0722
+	return [mean, sqrt(maxf(squares / float(count) - luma * luma, 0.0))]
+
+## Roof finishes (roof_finish): flat roofs of green, grey and red records
+## (urethane coatings, concrete slabs, membranes, gravel) carrying a packed
+## roof frame, and a pitched face of a red record (clay tiles), seen from
+## above at 4 m show their pattern and keep the palette's mean colour, which
+## is all a roof shows beyond the effect distance.
+func roof_pixels(job: Dictionary, context: RefCounted) -> void:
+	var code: String = MATERIALS.new().shader.code
+	check(code.contains("varying flat float roof_frame;") and code.contains("roof_frame = solid_seed>=0.0 && CUSTOM0.x>3500.0 ? CUSTOM0.x-4000.0 : 0.0;"),"flat roofs read their packed frame (CUSTOM0 above 3500) as a flat varying")
+	check(code.contains("RoofFinish roof = roof_finish(world_position,up,position_dx,position_dy,"),"roof finishes take the uniform-flow position derivatives")
+	if DisplayServer.get_name() == "headless": return
+	root.size = Vector2i(128,128)
+	var scene := Node3D.new(); root.add_child(scene)
+	var world := WorldEnvironment.new(); world.environment = Environment.new()
+	world.environment.background_mode = Environment.BG_COLOR
+	world.environment.background_color = Color.BLACK
+	world.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	world.environment.ambient_light_color = Color.WHITE
+	world.environment.ambient_light_energy = 1.0
+	world.environment.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	scene.add_child(world)
+	var camera := Camera3D.new(); camera.projection = Camera3D.PROJECTION_ORTHOGONAL; camera.size = 14.0; camera.far = 1000.0
+	scene.add_child(camera); camera.current = true
+	var node := MeshInstance3D.new(); scene.add_child(node)
+	context.update(43200,0,0,0.8,1080,0.18,1.0)
+	# [key, record, pitched]: green, grey and red roof entries of several kinds.
+	var cases := [["concrete:residential",0,false],["concrete:residential",8,false],["concrete:residential",16,false],["concrete:residential",24,false],
+		["concrete:industrial",16,false],["concrete:industrial",48,false],["concrete:public",16,false],["concrete:public",112,false],["brick:residential",0,false],["brick:residential",0,true],["brick:residential",48,true]]
+	for case: Array in cases:
+		node.material_override = RENDER._generated_material(job,case[0],{"facade_floor_cm":100})
+		var pitched: bool = case[2]
+		var normal := Vector3(0.0,0.894,0.447).normalized() if pitched else Vector3.UP
+		var slope := 0.5 if pitched else 0.0
+		var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
+		var corners := [Vector3(-8,0,-8),Vector3(8,0,-8),Vector3(8,0,8),Vector3(-8,0,-8),Vector3(8,0,8),Vector3(-8,0,8)]
+		var vertices := PackedVector3Array(); var normals := PackedVector3Array(); var seeds := PackedVector2Array(); var tops := PackedFloat32Array()
+		for c: Vector3 in corners:
+			vertices.append(Vector3(c.x,(8.0-c.z)*slope,c.z)); normals.append(normal)
+			seeds.append(Vector2((float(case[1])+0.5)/4096.0,1000.0-3.0))
+			tops.append(-1003.0 if pitched else 4000.3)
+		arrays[Mesh.ARRAY_VERTEX] = vertices; arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_TEX_UV2] = seeds; arrays[Mesh.ARRAY_CUSTOM0] = tops
+		var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays,[],{},RENDER.FACADE_TOP_FORMAT)
+		node.mesh = mesh
+		var stats := {}
+		for distance in [4.0,250.0]:
+			camera.position = (Vector3(0.0,4.0,0.0) if pitched else Vector3.ZERO) + normal * distance
+			camera.look_at(camera.position - normal,Vector3.FORWARD)
+			for frame in 4: await process_frame
+			await RenderingServer.frame_post_draw
+			stats[distance] = picture_stats(root.get_texture().get_image())
+		var near: Vector3 = stats[4.0][0]
+		var far: Vector3 = stats[250.0][0]
+		var label := "%s record %d%s" % [case[0],case[1]," pitched" if pitched else ""]
+		print("ROOF_FINISH %s near=%s sd=%.4f far=%s sd=%.4f" % [label,near,stats[4.0][1],far,stats[250.0][1]])
+		check(stats[4.0][1] > stats[250.0][1] + 0.004,"the roof shows its finish near: "+label)
+		check(maxf(absf(near.x-far.x),maxf(absf(near.y-far.y),absf(near.z-far.z))) < 0.035,"the roof keeps its palette mean beyond the effect distance: "+label)
+	node.free()
+	scene.queue_free()
+	await process_frame
+
+# GDScript mirror of the sign and lettering choices (atmosphere_surface.gdshader,
+# facade_signs.gdshaderinc).
+static func cell(v: int) -> int: return (v + 1048576) & 0xFFFFFFFF
+static func unit(v: int) -> float: return float(pcg(v) >> 8) / 16777216.0
+static func sign_bits(seed: float, slot: int) -> int:
+	var record := floori(PackedFloat32Array([seed])[0] * 4096.0)
+	return pcg(record ^ 1478450703) ^ pcg(cell(slot) ^ 3266489917)
+static func sign_type(bits: int) -> int:
+	var t := pcg(bits ^ 2246822507) % 20
+	return 0 if t < 9 else (1 if t < 15 else 2)
+static func lettered(bits: int, row: int) -> bool: return unit(pcg(bits ^ pcg(cell(row) ^ 620728307))) < 0.30
+
+## Sign and lettering choices: integer hashes of the 12-bit record and the slot
+## (steady when the seed's float wobbles by 1e-7), their shares, the lettering
+## gate (commercial upper storeys 1-3, glass only) and coping for every kind.
+func signs(code: String) -> void:
+	check(code.contains("uint sign_bits = facade_record ? facade_pcg(uint(record)^1478450703u)^facade_pcg(facade_cell(slot)^3266489917u) : slot_bits;"),"sign designs hash the record and slot (mirrored here)")
+	check(code.contains("int facade_sign_type(uint bits) { uint t = facade_pcg(bits^2246822507u)%20u; return t<9u ? FACADE_SIGN_LIGHTBOX : (t<15u ? FACADE_SIGN_CHANNEL : FACADE_SIGN_TWO_LINE); }"),"sign types follow the mirrored hash")
+	check(code.contains("uint letter_bits = facade_pcg(sign_bits^facade_pcg(facade_cell(floor(cell.y))^620728307u));") and code.contains("if(facade_unit(letter_bits)<0.30) {"),"window lettering picks slot storeys with the mirrored hash")
+	check(not code.contains("#include"),"every include joins the environment shader")
+	var steady := true
+	# 1e-7 is 1.7 steps of the 24-bit seed: solids within two steps of a record
+	# boundary cannot hold, any other can.
+	for record: int in [0,1,777,2048,4095]:
+		for solid: int in [2,100,2047,4093]:
+			var seed := float((record << 12) | solid) / 16777216.0
+			for slot: int in [-3,0,5]:
+				var bits := sign_bits(seed,slot)
+				for delta: float in [-1e-7,1e-7]:
+					var moved := sign_bits(seed+delta,slot)
+					if moved != bits or sign_type(moved) != sign_type(bits) or lettered(moved,2) != lettered(bits,2): steady = false
+	check(steady,"sign choices hold under +-1e-7 seed changes")
+	check(sign_bits(0.5/4096.0,0) != sign_bits(1.5/4096.0,0) and sign_bits(0.5/4096.0,0) != sign_bits(0.5/4096.0,1),"records and slots draw different designs")
+	var shown := 0
+	var types := [0,0,0]
+	var letters := 0
+	var storeys := 0
+	for record in 2048:
+		for slot in range(-4,4):
+			var bits := sign_bits((float(record)+0.5)/4096.0,slot)
+			if unit(bits) < 0.85:
+				shown += 1
+				types[sign_type(bits)] += 1
+			for row in [1,2,3]:
+				storeys += 1
+				if lettered(bits,row): letters += 1
+	var share := float(shown)/16384.0
+	check(absf(share-0.85) < 0.02,"85 %% of slots carry a sign (%.3f)"%share)
+	check(absf(float(types[0])/shown-0.45) < 0.03 and absf(float(types[1])/shown-0.30) < 0.03 and absf(float(types[2])/shown-0.25) < 0.03,"lightbox, channel and two-line shares %s"%[types])
+	var lettering := float(letters)/storeys
+	check(lettering >= 0.25 and lettering <= 0.35,"window lettering on 25-35 %% of slot storeys (%.3f)"%lettering)
+	check(code.contains("if(signs_enabled && facade_kind==3 && !shop && !curtain && window>0.0 && cell.y>=1.0 && cell.y<4.0 && (solid_height<=0.0 || v<solid_height)) {") and code.contains("float lettering = letters*window;") and code.contains("facade_pattern *= 1.0-letters;"),"window lettering only on the glass of commercial upper storeys 1-3")
+	check(code.contains("if(solid_coping>0.5) {") and code.contains("cap = facade_band(v,solid_height-0.05*floor_pitch,solid_height,fw_v);") and not code.contains("facade_kind==3 && solid_height>0.0"),"parapet coping at the top of every facade kind")
+	check(code.contains("solid_coping = solid_height>0.0 && CUSTOM0.x>0.0 ? 1.0 : 0.0;"),"no coping on walls rising above the top (negated top: gable ends, taller merged parts)")
+
+const SIGN_SHADER := """shader_type spatial;
+render_mode unshaded, cull_disabled;
+%s
+uniform uint bits = 0u;
+uniform float aspect = 5.0;
+uniform bool vertical = false;
+uniform float forced = 0.0;
+uniform bool ink_out = false;
+void fragment() {
+	vec2 extent = vertical ? vec2(2.0,aspect+1.0) : vec2(aspect+1.0,2.0);
+	vec2 local = UV*extent-0.5;
+	vec2 dx = dFdx(local);
+	vec2 dy = dFdy(local);
+	float fw = forced>0.0 ? forced : max(length(dx),length(dy));
+	FacadeSign face = facade_sign_face(local,bits,aspect,fw,vertical);
+	vec3 c = ink_out ? vec3(face.ink*face.body) : face.color*face.body;
+	ALBEDO = OUTPUT_IS_SRGB ? c : mix(c/12.92,pow((c+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),c));
+}"""
+
+static func picture_mean(picture: Image) -> Color:
+	var total := Color(0,0,0,0)
+	for y in picture.get_height():
+		for x in picture.get_width(): total += picture.get_pixel(x,y)
+	return total/float(picture.get_width()*picture.get_height())
+
+## Rendered runs only: the shared sign function alone (any shader can include
+## it) draws each type deterministically, and a sign whose glyph runs have
+## settled (a forced far footprint) keeps the colour and ink means of its crisp
+## near drawing, horizontal and vertical.
+func sign_pixels() -> void:
+	if DisplayServer.get_name() == "headless": return
+	var scene := Node3D.new(); root.add_child(scene)
+	var world := WorldEnvironment.new(); world.environment = Environment.new()
+	world.environment.background_mode = Environment.BG_COLOR
+	world.environment.background_color = Color.BLACK
+	scene.add_child(world)
+	var camera := Camera3D.new(); camera.projection = Camera3D.PROJECTION_ORTHOGONAL; camera.position = Vector3(0,0,2)
+	scene.add_child(camera); camera.current = true
+	var shader := Shader.new(); shader.code = SIGN_SHADER % preload("../facade_signs.gdshaderinc").code
+	var material := ShaderMaterial.new(); material.shader = shader
+	var node := MeshInstance3D.new(); node.material_override = material; scene.add_child(node)
+	var designs := []
+	var bits := 7
+	while designs.size() < 6:
+		bits = pcg(bits)
+		if designs.filter(func(d): return sign_type(d) == sign_type(bits)).size() < 2: designs.append(bits)
+	var cases := []
+	for d: int in designs: cases.append([d,false,5.0])
+	cases.append([designs[0],true,3.0]); cases.append([designs[2],true,3.0])
+	for entry: Array in cases:
+		var vertical: bool = entry[1]
+		var aspect: float = entry[2]
+		var extent := Vector2(2.0,aspect+1.0) if vertical else Vector2(aspect+1.0,2.0)
+		root.size = Vector2i(roundi(extent.x*70.0),roundi(extent.y*70.0))
+		camera.size = extent.y
+		var quad := QuadMesh.new(); quad.size = extent; node.mesh = quad
+		material.set_shader_parameter("bits",entry[0]); material.set_shader_parameter("aspect",aspect); material.set_shader_parameter("vertical",vertical)
+		var means := {}
+		var first: Image
+		for pass_ in ["near","near_again","settled","far","near_ink","settled_ink"]:
+			material.set_shader_parameter("forced",0.6 if pass_ == "far" else (0.14 if pass_.begins_with("settled") else 0.0))
+			material.set_shader_parameter("ink_out",pass_.ends_with("ink"))
+			for frame in 3: await process_frame
+			await RenderingServer.frame_post_draw
+			var picture := root.get_texture().get_image()
+			if pass_ == "near": first = picture
+			if pass_ == "near_again": check(picture.get_data() == first.get_data(),"sign %d draws deterministically"%entry[0])
+			means[pass_] = picture_mean(picture)
+		var near: Color = means.near
+		var settled: Color = means.settled
+		var far: Color = means.far
+		var label := "sign %d type %d %s"%[entry[0],sign_type(entry[0]),"vertical" if vertical else "horizontal"]
+		print("FACADE_SIGN %s near=%s settled=%s far=%s ink=%.3f/%.3f"%[label,near,settled,far,means.near_ink.r,means.settled_ink.r])
+		var body := 1.0/(extent.x*extent.y)*aspect
+		check(means.near_ink.r > 0.02*body and means.near_ink.r < 0.6*body,"ink coverage mean in bounds: "+label)
+		# Strokes settled on their glyph means (footprint 0.14): ink and colour
+		# keep the crisp means; glyph runs settled too (0.6, a sign a few pixels
+		# high): the colour still does.
+		check(absf(means.near_ink.r-means.settled_ink.r) < 0.02 and maxf(absf(near.r-settled.r),maxf(absf(near.g-settled.g),absf(near.b-settled.b))) < 0.03,"glyphs settling on their means keep the ink and colour: "+label)
+		check(maxf(absf(near.r-far.r),maxf(absf(near.g-far.g),absf(near.b-far.b))) < 0.05,"settled far colour keeps the near mean: "+label)
+	node.free()
+	scene.queue_free()
+	await process_frame
+
 func run() -> void:
 	var cache := CACHE.new(func(bytes): return Lease.new(bytes))
 	cache.environment_profile = {"lights":[]}
@@ -294,26 +515,29 @@ func run() -> void:
 	var job := {"resources":cache,"urban_shader":cache.urban_shader()}
 	var names := {}
 	for uniform: Dictionary in MATERIALS.new().shader.get_shader_uniform_list(): names[uniform.name] = true
-	check(names.has("facade_kind") and names.has("floor_pitch") and names.has("lighting_role") and names.has("sign_atlas"),"surface shader compiles with the facade uniforms")
+	check(names.has("facade_kind") and names.has("floor_pitch") and names.has("lighting_role") and names.has("signs_enabled") and not names.has("sign_atlas"),"surface shader compiles with the facade uniforms (procedural signs, no sign atlas)")
 	check(names.has("facade_body") and names.has("facade_roof") and names.has("facade_accent") and names.has("facade_palette"),"surface shader compiles with the record palette uniforms")
 	check(names.has("facade_finish") and names.has("facade_finish_look") and names.has("facade_finish_count") and names.has("facade_tiles") and names.has("facade_tiles_enabled"),"surface shader compiles with the finish and facade tile uniforms")
 	check(context.facades is Texture2DArray and context.facades.get_layers() == MATERIALS.FACADE_LAYERS.size(),"shared facade tile array")
 	finishes(job,context)
 	await finish_pixels(job,context)
+	await roof_pixels(job,context)
 	# Per-solid choices must not depend on interpolated values: flat seeds and an
 	# integer hash keep each sign slot and lit window one choice across its pixels.
 	var code: String = MATERIALS.new().shader.code
-	check(code.contains("varying flat float solid_seed;") and code.contains("varying flat float solid_base;") and code.contains("varying flat float solid_height;"),"solid seed, base and height are flat varyings")
-	check(code.contains("CUSTOM0.x>500.0 ? (MODEL_MATRIX * vec4(0.0,CUSTOM0.x-1000.0,0.0,1.0)).y-solid_base : -1.0;"),"solid height reads the offset top in CUSTOM0 and falls back without it")
-	check(code.contains("float pick = facade_unit(") and code.contains("facade_lit = step(0.35,facade_unit("),"sign picks and lit windows use the integer hash")
-	check(code.contains("textureGrad(sign_atlas") and not code.contains("texture(sign_atlas"),"signs sample with analytic gradients")
+	check(code.contains("varying flat float solid_seed;") and code.contains("varying flat float solid_base;") and code.contains("varying flat float solid_height;") and code.contains("varying flat float solid_coping;"),"solid seed, base, height and coping flag are flat varyings")
+	check(code.contains("abs(CUSTOM0.x)>500.0 && CUSTOM0.x<=3500.0 ? (MODEL_MATRIX * vec4(0.0,abs(CUSTOM0.x)-1000.0,0.0,1.0)).y-solid_base : -1.0;"),"solid height reads the offset top (either sign) in CUSTOM0 and falls back without it or on a roof frame")
+	check(code.contains("bool has_sign = signs_enabled && facade_unit(sign_bits)<0.85;") and code.contains("facade_lit = step(0.35,facade_unit("),"sign picks and lit windows use the integer hash")
+	check(code.contains("FacadeSign face = facade_sign_face(local,sign_bits,sign_width/sign_height,footprint/sign_height,false);") and code.contains("float footprint = max(length(wall_dx),length(wall_dy));") and not code.contains("sign_atlas"),"signs are drawn by the shared sign function from the uniform-flow footprint")
+	signs(code)
+	await sign_pixels()
 	var kinds := {"concrete:residential":1,"brick:residential":2,"wood:residential":2,"concrete:commercial":3,"brick:commercial":3,"wood:industrial":4,"concrete:public":5,"brick:home":0,"concrete":0,"barrier:wall":0,"rc:wall":0,"builtin:tree":0}
 	for key: String in kinds:
 		check(RENDER.facade_kind(key) == kinds[key],"facade kind "+key)
-		check(RENDER.PLAN.facade_arrays(key) == (0 if kinds[key] == 0 else (2 if kinds[key] == 3 else 1)),"batch facade arrays follow the facade kind: "+key)
+		check(RENDER.PLAN.facade_arrays(key) == (0 if kinds[key] == 0 else 1),"every facade kind carries the solid seed and top: "+key)
 	var scaled: ShaderMaterial = RENDER._generated_material(job,"concrete:commercial",{"facade_floor_cm":100})
 	check(scaled.get_shader_parameter("facade_kind") == 3 and is_equal_approx(scaled.get_shader_parameter("floor_pitch"),1.0) and scaled.get_shader_parameter("lighting_role") == 1,"generated walls carry the facade kind, 1:3 floor pitch and night windows")
-	check(scaled.get_shader_parameter("signs_enabled") == true and scaled.get_shader_parameter("sign_atlas") == context.signs,"commercial walls draw the shared sign atlas")
+	check(scaled.get_shader_parameter("signs_enabled") == true and scaled.get_shader_parameter("sign_atlas") == null,"commercial walls draw procedural signs (no texture bound)")
 	var table: Dictionary = RENDER.FACADE_PALETTE.data
 	var commercial: Dictionary = RENDER.facade_palette("concrete:commercial")
 	check(scaled.get_shader_parameter("facade_palette") == true and scaled.get_shader_parameter("facade_body") == commercial.body and scaled.get_shader_parameter("facade_roof") == commercial.roof and scaled.get_shader_parameter("facade_accent") == commercial.accent,"generated walls bind their record palettes")

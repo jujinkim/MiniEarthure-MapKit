@@ -1,8 +1,10 @@
 mod distant;
+mod facade_fixtures;
 mod occupied;
 mod packed;
 mod presentation;
 mod regional;
+mod roof_fixtures;
 mod road_style;
 mod source_preview;
 mod work_token;

@@ -17,7 +17,18 @@ extends RefCounted
 ## box inside it as well; a pedestrian signal facing across the road above
 ## 0.85 m. signal_h carries a tapered mast arm (collar, tie rod, end cap) and,
 ## hung under it at 1.32 m, a horizontal head; signal_v a vertical head at
-## 1.85 m held by brackets above and below it. A head is a bevelled housing
+## 1.85 m held by brackets above and below it. Under the arm between the tie
+## rod and the head clamps (x 0.50-1.02 m, below its 2.118 m underside) hangs
+## a double-faced road-name board on two strap clamps (the near signal_h: an
+## aluminium rim, a blue field with a white border on both faces). Its print
+## is a separate near part in NAME_BOARDS layouts, road_sign_meshes.PROUD in
+## front of both faces: a centred run of the invented storefront script
+## (road_sign_meshes.run: 3-5 glyphs, not text), small white two-digit
+## numbers at both ends and an arrow at the right end, laid out per face so a
+## driver reads one under either convention. A horizontal signal joins the
+## name-board group of the layout its 32 m square and axis choose
+## (name_layout: the two axes of a junction differ); the far signal_h carries
+## a plain blue board on the same printed surface. A head is a bevelled housing
 ## with three domed lenses (red, amber, green) and a visor over each lens on
 ## both faces (shorter toward the pole) and a mid-plane backplate with a light
 ## border. The lens shader cycles the lamps (green 6 s, amber 2 s, red 8 s;
@@ -45,8 +56,9 @@ extends RefCounted
 ##
 ## The renderer draws these meshes instead of the generated proxy faces
 ## (render_memory.DRAWN_OVER); collision and occluders never read those faces.
-## A cell instances each kind per 32 m group as near and far MultiMeshes, and
-## shelter glass once per group at every distance (display_quality
+## A cell instances each kind per 32 m group as near and far MultiMeshes (and
+## the name-board print per layout and group, near only), and shelter glass
+## once per group at every distance (display_quality
 ## .apply_furniture: the near mesh within furniture_near, none on low; shadows
 ## on every tier, none for glass). build() makes one part per call for
 ## admitted streaming steps (render_resource_cache.prepare_mesh_set);
@@ -55,13 +67,20 @@ extends RefCounted
 
 const F := preload("./street_furniture_meshes.gd")
 const QUALITY := preload("./display_quality.gd")
+const GLYPHS := preload("./road_sign_meshes.gd")
 const KINDS := {"builtin:signal_h": "signal_h", "builtin:signal_v": "signal_v", "builtin:bus_shelter": "shelter"}
 const LODS := ["near", "far"]
 ## Meshes drawn per kind and LOD; the shelter glass is one node per group
 ## tagged far (editor picking) and drawn at every distance.
 const PARTS := {"signal_h": {"near": ["signal_h_near"], "far": ["signal_h_far"]},
 	"signal_v": {"near": ["signal_v_near"], "far": ["signal_v_far"]},
-	"shelter": {"near": ["shelter_near"], "far": ["shelter_far", "shelter_glass"]}}
+	"shelter": {"near": ["shelter_near"], "far": ["shelter_far", "shelter_glass"]},
+	"name_board": {"near": [], "far": []}}
+## Road-name board layouts (near parts name_board_0..3) and the board box
+## (min corner, size: x 0.50-1.02 m, y 1.97-2.11 m) under the signal_h arm.
+const NAME_BOARDS := 4
+const NAME_BOARD := AABB(Vector3(0.5, 1.97, -0.006), Vector3(0.52, 0.14, 0.012))
+const NAME_BLUE := "1d4f9c"
 ## Lamp phase tie-break (quarter turns): a yaw exactly halfway between two
 ## quarter turns goes to the next one; the threshold lies between whole
 ## millidegrees (0.0005 degrees early), far beyond float error.
@@ -93,12 +112,13 @@ const ROOF := "5a636a"
 const FASCIA := "1f4f86"
 const STEEL := "9aa1a6"
 const STEPS := ["material_paint", "material_sign", "material_lens", "material_glass", "signal_h_near", "signal_h_far",
-	"signal_v_near", "signal_v_far", "shelter_near", "shelter_far", "shelter_glass"]
-## Memory allowance of one shared set (render_resource_cache): about 7,100
-## vertices at <= 56 B and 13,500 indices at 4 B in CPU arrays and GPU buffers
-## (0.90 MB; street_signal_validator measures them), 64 KiB for the four
-## materials, the lens shader and one mesh's build arrays.
-const SHARED_BYTES := 960 * 1024
+	"signal_v_near", "signal_v_far", "shelter_near", "shelter_far", "shelter_glass", "name_board_0", "name_board_1", "name_board_2", "name_board_3"]
+## Memory allowance of one shared set (render_resource_cache): about 8,600
+## vertices at <= 56 B and 15,800 indices at 4 B in CPU arrays and GPU buffers
+## (1.09 MB with the road-name boards; street_signal_validator measures
+## them), 64 KiB for the four materials, the lens shader and one mesh's build
+## arrays.
+const SHARED_BYTES := 1152 * 1024
 static var _shared: Dictionary = {}
 static var _shared_job: Dictionary = {}
 
@@ -414,6 +434,7 @@ const RED_ENDS := [1, 1]
 static func signal_mesh(kind: String, lod: String, materials: Dictionary) -> ArrayMesh:
 	var paint := F.Builder.new()
 	var lenses := F.Builder.new()
+	var signs := F.Builder.new()
 	var near := lod == "near"
 	var color := linear(POLE)
 	pole(paint, lenses, near)
@@ -429,8 +450,17 @@ static func signal_mesh(kind: String, lod: String, materials: Dictionary) -> Arr
 			for x: float in [1.17, 1.37]:
 				F.box(paint, Vector3(x, 2.14, 0.0), Vector3(0.01, 0.025, 0.025), 0.003, linear(POLE, 0.92))
 				F.box(paint, Vector3(x, 2.125, 0.0), Vector3(0.008, 0.012, 0.018), 0.0, linear(HOUSING))
+			blank_board(paint, signs)
 		else:
 			F.box(paint, Vector3(0.7, 2.14, 0.0), Vector3(0.7, 0.022, 0.022), 0.0, color)
+			# The road-name board: a steel rim and on both faces a plain blue
+			# field on the printed surface, lit at night like the near board.
+			var centre := NAME_BOARD.get_center()
+			var half := Vector2(NAME_BOARD.size.x, NAME_BOARD.size.y) * 0.5
+			var shape := GLYPHS.chamfered(Vector2.ZERO, half, 0.0)
+			GLYPHS.plate(paint, GLYPHS.face(centre + Vector3.FORWARD * NAME_BOARD.size.z * 0.5, Vector3.FORWARD), shape, NAME_BOARD.size.z, linear(STEEL), false)
+			for normal: Vector3 in [Vector3.FORWARD, Vector3.BACK]:
+				GLYPHS.fill(signs, GLYPHS.face(centre + normal * NAME_BOARD.size.z * 0.5, normal), shape, 0.0, GLYPHS.ink(NAME_BLUE))
 		head(paint, lenses, H_HEAD, Vector3.RIGHT, [-1.0, 1.0], RED_ENDS, [0.05, 0.05], near)
 	else:
 		# Brackets from the pole to the plate's top and bottom edges, clear of
@@ -443,8 +473,60 @@ static func signal_mesh(kind: String, lod: String, materials: Dictionary) -> Arr
 	var mesh := ArrayMesh.new()
 	paint.commit(mesh, materials.get("paint"))
 	commit_lenses(lenses, mesh, materials.get("lens"))
+	signs.commit(mesh, materials.get("sign"))
 	mesh.resource_name = "mk_%s_%s" % [kind, lod]
 	return mesh
+
+## Blank road-name board under the signal_h arm (in the near signal): an
+## aluminium rim, two strap clamps round the arm and on both faces a blue
+## field inside a white border (road_sign_meshes faces: u is each viewer's
+## right). The printed layouts are their own parts (name_board()).
+static func blank_board(paint: F.Builder, signs: F.Builder) -> void:
+	var centre := NAME_BOARD.get_center()
+	var half := Vector2(NAME_BOARD.size.x, NAME_BOARD.size.y) * 0.5
+	var depth := NAME_BOARD.size.z
+	var shape := GLYPHS.rounded(GLYPHS.chamfered(Vector2.ZERO, half, 0.0), 0.008, 2)
+	var white := GLYPHS.ink(GLYPHS.WHITE)
+	var blue := GLYPHS.ink(NAME_BLUE)
+	GLYPHS.plate(paint, GLYPHS.face(centre + Vector3.FORWARD * depth * 0.5, Vector3.FORWARD), shape, depth, linear(STEEL), false)
+	for x: float in [0.56, 0.96]:
+		F.box(paint, Vector3(x, 2.137, 0.0), Vector3(0.006, 0.03, 0.026), 0.0, linear(POLE, 0.92))
+	for normal: Vector3 in [Vector3.FORWARD, Vector3.BACK]:
+		var f := GLYPHS.face(centre + normal * depth * 0.5, normal)
+		var edge := GLYPHS.rounded(GLYPHS.inset(GLYPHS.chamfered(Vector2.ZERO, half, 0.0), 0.004), 0.004, 2)
+		var inner := GLYPHS.rounded(GLYPHS.inset(GLYPHS.chamfered(Vector2.ZERO, half, 0.0), 0.009), 0.0005, 2)
+		GLYPHS.band(signs, f, shape, edge, 0.0, blue)
+		GLYPHS.band(signs, f, edge, inner, 0.0, white)
+		GLYPHS.fill(signs, f, inner, 0.0, blue)
+
+## Printed road-name board `layout` (surface sign only): on both faces a
+## centred glyph run, small two-digit numbers at both ends and an arrow at
+## the right end, road_sign_meshes.PROUD in front of the blank board.
+static func name_board(layout: int, materials: Dictionary) -> ArrayMesh:
+	var signs := F.Builder.new()
+	var centre := NAME_BOARD.get_center()
+	var depth := NAME_BOARD.size.z
+	var white := GLYPHS.ink(GLYPHS.WHITE)
+	var count := 3 + layout % 3
+	var numbers := [10 + GLYPHS.pcg(layout * 31 + 5) % 90, 10 + GLYPHS.pcg(layout * 31 + 6) % 90]
+	for normal: Vector3 in [Vector3.FORWARD, Vector3.BACK]:
+		var f := GLYPHS.face(centre + normal * depth * 0.5, normal)
+		GLYPHS.run(signs, f, 0x4e21 + layout * 613, count, Vector2(-0.01, 0.0), 0.05, 1.0, white)
+		GLYPHS.number(signs, f, numbers[0], Vector2(-0.212, -0.01), Vector2(0.02, 0.036), 0.007, 0.025, 1.0, white, true)
+		GLYPHS.number(signs, f, numbers[1], Vector2(0.172, -0.01), Vector2(0.02, 0.036), 0.007, 0.025, 1.0, white, true)
+		GLYPHS.arrow(signs, f, [Vector2(0.204, -0.01), Vector2(0.244, -0.01)], 0.008, 0.016, 0.024, 1.0, white)
+	var mesh := ArrayMesh.new()
+	signs.commit(mesh, materials.get("sign"))
+	mesh.resource_name = "mk_name_board_%d" % layout
+	return mesh
+
+## Name-board layout of a horizontal signal: its 32 m square's hash plus its
+## axis (the lamp phase's quarter-turn parity), so the two crossing roads of
+## a junction show different boards.
+static func name_layout(object: Dictionary) -> int:
+	var o := F.placement(object).origin
+	var square := GLYPHS.pcg(posmod(floori(o.x / GROUP_METRES) * 73856093 ^ floori(o.z / GROUP_METRES) * 19349663, 1 << 32))
+	return (square + int(phase(object) * 2.0)) % NAME_BOARDS
 
 ## Roof deck sloping from 0.958 m at the front to 0.94 m at the back.
 const ROOF_SLOPE := 0.018 / 0.486
@@ -652,6 +734,7 @@ static func build(state: Dictionary, lease: RefCounted = null, context: RefCount
 	else:
 		var mesh: ArrayMesh
 		if step == "shelter_glass": mesh = glass(result.materials)
+		elif step.begins_with("name_board"): mesh = name_board(int(step.trim_prefix("name_board_")), result.materials)
 		elif step.begins_with("shelter"): mesh = shelter(step.get_slice("_", 1), result.materials)
 		else: mesh = signal_mesh(step.left(8), step.get_slice("_", 2), result.materials)
 		if lease != null: lease.track(mesh)
@@ -713,17 +796,26 @@ static func phase(object: Dictionary) -> float:
 	return fmod(absf(quarters), 2.0) * 0.5
 
 ## One admitted step per object: its transform and id join the cell's group
-## of its kind and 32 m square.
+## of its kind and 32 m square; a horizontal signal also joins the group of
+## its name-board layout there.
 static func plan(job: Dictionary, object: Dictionary) -> void:
 	var kind: String = KINDS[str(object.asset_id)]
 	var transform := F.placement(object)
 	var o := transform.origin
-	var key := "%s/%d,%d" % [kind, floori(o.x / GROUP_METRES), floori(o.z / GROUP_METRES)]
+	var square := "%d,%d" % [floori(o.x / GROUP_METRES), floori(o.z / GROUP_METRES)]
 	if not job.has("signal_plan"): job.signal_plan = {}
-	if not job.signal_plan.has(key): job.signal_plan[key] = {"kind": kind, "parts": [], "ids": PackedStringArray()}
 	var b := transform.basis
-	job.signal_plan[key].parts.append(PackedFloat32Array([b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z]))
-	job.signal_plan[key].ids.append(str(object.id))
+	var part := PackedFloat32Array([b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z])
+	var groups := [["%s/%s" % [kind, square], kind, ""]]
+	if kind == "signal_h":
+		var layout := name_layout(object)
+		groups.append(["name_board/%d/%s" % [layout, square], "name_board", "name_board_%d" % layout])
+	for entry: Array in groups:
+		if not job.signal_plan.has(entry[0]):
+			job.signal_plan[entry[0]] = {"kind": entry[1], "parts": [], "ids": PackedStringArray()}
+			if not str(entry[2]).is_empty(): job.signal_plan[entry[0]].mesh = entry[2]
+		job.signal_plan[entry[0]].parts.append(part)
+		job.signal_plan[entry[0]].ids.append(str(object.id))
 
 ## Near and far MultiMeshes of one planned group (shelter glass one more,
 ## shadowless node). The cell lease carries the nodes and instance buffers;
@@ -737,7 +829,9 @@ static func attach_group(job: Dictionary) -> void:
 	for part: PackedFloat32Array in group.parts: buffer.append_array(part)
 	var quality := QUALITY.active()
 	for lod: String in LODS:
-		for mesh_key: String in PARTS[group.kind][lod]:
+		var keys: Array = PARTS[group.kind][lod]
+		if group.has("mesh"): keys = [group.mesh] if lod == "near" else []
+		for mesh_key: String in keys:
 			var multi := MultiMesh.new()
 			multi.transform_format = MultiMesh.TRANSFORM_3D
 			multi.mesh = job.signals[mesh_key]

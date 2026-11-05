@@ -25,7 +25,8 @@ pub struct MapKitPackedGeometry {
     /// The base lets ground-floor facades follow terrain. Display only.
     facade_seeds: PackedVector2Array,
     /// Per vertex: FACADE_BASE_OFFSET + the solid's top (eaves) height in scene metres
-    /// on a generated building solid, 0 elsewhere, so facades fit whole storeys.
+    /// on a generated building solid, 0 elsewhere, so facades fit whole storeys;
+    /// flat roof faces carry ROOF_FRAME_OFFSET + the solid's roof frame angle.
     facade_tops: PackedFloat32Array,
     prism_vertices: PackedInt64Array,
     prism_indices: PackedInt32Array,
@@ -93,6 +94,18 @@ impl MapKitPackedGeometry {
             ))
         })())
     }
+    /// Display-only facade fixtures of this cell (facade_fixtures.rs) for a
+    /// floor pitch in scene metres and the cell rect (scene min x, min z, max
+    /// x, max z): the packed list and the count dropped by the cap.
+    pub(crate) fn facade_fixtures(&self, pitch: f32, bounds: [f32; 4]) -> crate::facade_fixtures::Placed {
+        let kinds: Vec<u8> = (0..self.materials.len()).map(|i| crate::facade_fixtures::facade_kind(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())).collect();
+        let concrete: Vec<bool> = (0..self.materials.len()).map(|i| self.materials.get(i).unwrap_or_default() == "concrete").collect();
+        let keys: Vec<u8> = (0..self.materials.len()).map(|i| crate::roof_fixtures::palette_key(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())).collect();
+        crate::facade_fixtures::place(&crate::facade_fixtures::Input {
+            vertices: self.scene_vertices.as_slice(), normals: self.scene_normals.as_slice(), objects: self.indices.as_slice(),
+            seeds: self.facade_seeds.as_slice(), tops: self.facade_tops.as_slice(), kinds: &kinds, concrete: &concrete, keys: &keys, pitch, bounds,
+        }, crate::facade_fixtures::MAX_FIXTURES)
+    }
     #[func]
     fn view(&self) -> VarDictionary {
         vdict! {
@@ -148,10 +161,33 @@ pub(super) fn warnings_array(warnings: &[mapkit_core::Warning]) -> VarArray {
 }
 /// Added to a solid's scene-metre base height so that y > 0.5 marks a seed.
 const FACADE_BASE_OFFSET: f32 = 1000.0;
+/// Added to a flat roof face's frame angle in its facade top (CUSTOM0.x):
+/// values above 3500 mark a roof frame, never a top (tops stay below 3000).
+pub(crate) const ROOF_FRAME_OFFSET: f32 = 4000.0;
+
+/// A solid's roof frame: the dominant direction of its facade walls modulo
+/// 90° (the length-weighted mean of 4θ of its flat roof perimeter edges, see
+/// `facade_seeds`), in [0, π/2) and quantized to 1/4096 rad, so every cell
+/// showing one of a rectangular building's walls finds the same frame. The
+/// frame's u axis is (cos a, 0, sin a), its v axis (-sin a, 0, cos a); 0
+/// without perimeter edges.
+pub(crate) fn roof_frame(sum_cos: f64, sum_sin: f64) -> f32 {
+    if sum_cos.hypot(sum_sin) < 1e-9 { return 0.0; }
+    let a = (0.25 * sum_sin.atan2(sum_cos)).rem_euclid(std::f64::consts::FRAC_PI_2);
+    // 6434 / 4096 is π/2 to within 5e-6 rad: the same frame as 0.
+    ((a * 4096.0).round() as i64 % 6434) as f32 / 4096.0
+}
 /// One stable seed per connected building solid: triangles of a building
 /// object that share a vertex form one solid (walls and roof of one part).
 /// Returns per-vertex seeds (seed, offset base) and offset solid tops (eaves).
-fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &[i32]) -> (Vec<Vector2>, Vec<f32>) {
+/// A triangle rising above its solid's top (a gable end, the taller part of a
+/// merged solid, a roof slope) carries the offset top negated: storeys still
+/// fit below |top|, but the shader draws no parapet coping there. Flat roof
+/// faces (horizontal, above the solid's base) carry the solid's roof frame
+/// instead: ROOF_FRAME_OFFSET + its angle (`roof_frame`), which the roof
+/// finishes of atmosphere_surface.gdshader and the rooftop fixtures of
+/// roof_fixtures.rs align to.
+pub(crate) fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &[i32]) -> (Vec<Vector2>, Vec<f32>) {
     let buildings: std::collections::BTreeSet<i32> = prism_indices.iter().copied().collect();
     let mut parent: Vec<usize> = (0..chunk.triangles.len()).collect();
     fn find(parent: &mut [usize], mut i: usize) -> usize {
@@ -196,6 +232,45 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
             eaves.entry(root).and_modify(|h| *h = (*h).min(low)).or_insert(low);
         }
     }
+    // Roof frames from the perimeter edges of each solid's flat roof faces.
+    // Generated buildings extrude every roof triangle as its own prism, so a
+    // solid also carries coincident wall pairs on its triangulation and fan
+    // diagonals and closing walls on the cell cut: walls do not tell the
+    // facade apart. A roof edge shared by two flat roof triangles of the solid
+    // is such a diagonal; an edge on the chunk's extent (everything a cell
+    // generates lies inside its rect, so a cut lies there) is a cut. The rest
+    // run along the facade walls (map y is scene -z).
+    let mut flat_roofs = vec![false; chunk.triangles.len()];
+    let mut edges = BTreeMap::<(usize, [i64; 3], [i64; 3]), u32>::new();
+    let (mut lo, mut hi) = ([i64::MAX; 2], [i64::MIN; 2]);
+    for (t, triangle) in chunk.triangles.iter().enumerate() {
+        for v in triangle.vertices { for (k, axis) in [0, 2].into_iter().enumerate() { lo[k] = lo[k].min(v[axis]); hi[k] = hi[k].max(v[axis]); } }
+        if !buildings.contains(&object_indices[t]) { continue; }
+        let root = find(&mut parent, t);
+        let [a, b, c] = triangle.vertices.map(|v| v.map(|x| x as f64));
+        let (e, f) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+        let n = [e[1] * f[2] - e[2] * f[1], e[2] * f[0] - e[0] * f[2], e[0] * f[1] - e[1] * f[0]];
+        let low = triangle.vertices.iter().map(|v| v[1]).min().unwrap();
+        if n[0] == 0.0 && n[2] == 0.0 && n[1] != 0.0 && low > smallest[&root].1 {
+            flat_roofs[t] = true;
+            for i in 0..3 {
+                let (p, q) = (triangle.vertices[i], triangle.vertices[(i + 1) % 3]);
+                *edges.entry((root, p.min(q), p.max(q))).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut frames = BTreeMap::<usize, (f64, f64)>::new();
+    for (&(root, p, q), &count) in &edges {
+        let cut = [0, 2].into_iter().enumerate().any(|(k, axis)| (p[axis] == lo[k] && q[axis] == lo[k]) || (p[axis] == hi[k] && q[axis] == hi[k]));
+        if count != 1 || cut { continue; }
+        let (dx, dy) = ((q[0] - p[0]) as f64, (q[2] - p[2]) as f64);
+        let length = dx.hypot(dy);
+        if length == 0.0 { continue; }
+        let theta = 4.0 * (-dy).atan2(dx);
+        let sum = frames.entry(root).or_insert((0.0, 0.0));
+        sum.0 += length * theta.cos();
+        sum.1 += length * theta.sin();
+    }
     let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
     let mut values = BTreeMap::<usize, f32>::new();
     let mut seeds = Vec::with_capacity(chunk.triangles.len() * 3);
@@ -211,7 +286,13 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
             });
             let (_, base, top) = smallest[&root];
             let top = eaves.get(&root).copied().unwrap_or(top);
-            (Vector2::new(seed, FACADE_BASE_OFFSET + base as f32 * scale), FACADE_BASE_OFFSET + top as f32 * scale)
+            let rises = triangle.vertices.iter().map(|v| v[1]).max().unwrap() > top;
+            let offset = FACADE_BASE_OFFSET + top as f32 * scale;
+            let top = if flat_roofs[t] {
+                let (c, s) = frames.get(&root).copied().unwrap_or((0.0, 0.0));
+                ROOF_FRAME_OFFSET + roof_frame(c, s)
+            } else if rises { -offset } else { offset };
+            (Vector2::new(seed, FACADE_BASE_OFFSET + base as f32 * scale), top)
         } else {
             (Vector2::ZERO, 0.0)
         };
@@ -219,6 +300,23 @@ fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &
         tops.extend([value.1; 3]);
     }
     (seeds, tops)
+}
+
+/// Scene-space corners (Godot order) and face normal of a generated triangle.
+pub(crate) fn scene_triangle(triangle: &mapkit_core::Triangle) -> ([Vector3; 3], Vector3) {
+    let points = [0, 2, 1].map(|i| {
+        let v = triangle.vertices[i];
+        Vector3::new(v[0] as f32, v[1] as f32, -v[2] as f32)
+            * (mapkit_core::WORLD_SCALE as f32 / 100.0)
+    });
+    // Godot front faces are clockwise, after the map-y to -z reflection.
+    let cross = (points[2] - points[0]).cross(points[1] - points[0]);
+    let normal = if cross.length_squared() > 0.0 {
+        cross.normalized()
+    } else {
+        Vector3::ZERO
+    };
+    (points, normal)
 }
 
 pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> {
@@ -237,18 +335,7 @@ pub(super) fn pack(chunk: GeneratedChunk) -> mapkit_core::Result<VarDictionary> 
     let mut index = BTreeMap::<&str, i32>::new();
     for triangle in &chunk.triangles {
         mapkit_core::cancellation::checkpoint()?;
-        let points = [0, 2, 1].map(|i| {
-            let v = triangle.vertices[i];
-            Vector3::new(v[0] as f32, v[1] as f32, -v[2] as f32)
-                * (mapkit_core::WORLD_SCALE as f32 / 100.0)
-        });
-        // Godot front faces are clockwise, after the map-y to -z reflection.
-        let cross = (points[2] - points[0]).cross(points[1] - points[0]);
-        let normal = if cross.length_squared() > 0.0 {
-            cross.normalized()
-        } else {
-            Vector3::ZERO
-        };
+        let (points, normal) = scene_triangle(triangle);
         for point in points {
             scene_vertices.push(point);
             scene_normals.push(normal);
@@ -400,18 +487,125 @@ mod tests {
 
     #[test]
     fn facade_tops_end_at_the_eaves_of_a_gable() {
-        // A wall and two roof slopes up to a 600 cm ridge.
+        // A wall, two roof slopes up to a 600 cm ridge and a gable end wall.
         let triangles = vec![
             triangle("b", [[0, 0, 0], [1000, 0, 0], [0, 400, 0]]),
             triangle("b", [[0, 400, 0], [1000, 400, 0], [500, 600, 300]]),
             triangle("b", [[0, 400, 0], [0, 400, 600], [500, 600, 300]]),
+            triangle("b", [[0, 0, 0], [0, 400, 0], [0, 600, 300]]),
         ];
         let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
             cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
-        let (seeds, tops) = facade_seeds(&chunk, &[0, 0, 0], &[0]);
+        let (seeds, tops) = facade_seeds(&chunk, &[0, 0, 0, 0], &[0]);
         let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
         assert!(seeds.iter().all(|s| *s == seeds[0]) && seeds[0].y == FACADE_BASE_OFFSET);
-        assert!(tops.iter().all(|t| *t == FACADE_BASE_OFFSET + 400.0 * scale), "storeys end at the eaves, not the ridge");
+        assert!(tops.iter().all(|t| t.abs() == FACADE_BASE_OFFSET + 400.0 * scale), "storeys end at the eaves, not the ridge");
+        assert!(tops[..3].iter().all(|t| *t > 0.0), "the eaves wall ends at the top: coping");
+        assert!(tops[3..].iter().all(|t| *t < 0.0), "roof slopes and the gable end rise above it: no coping");
+    }
+
+    #[test]
+    fn the_taller_part_of_a_merged_solid_draws_no_coping_at_the_lower_top() {
+        // A 400 cm part and an 800 cm part of one record touching at a vertex.
+        let triangles = vec![
+            triangle("b", [[0, 0, 0], [100, 0, 0], [0, 400, 0]]),
+            triangle("b", [[0, 400, 0], [100, 400, 0], [0, 400, 100]]),
+            triangle("b", [[100, 0, 0], [200, 0, 0], [100, 800, 0]]),
+            triangle("b", [[100, 800, 0], [200, 800, 0], [100, 800, 100]]),
+            // Ground reaching past the building: the chunk's extent (cell rect).
+            triangle("g", [[-1000, 0, -1000], [1000, 0, -1000], [-1000, 0, 1000]]),
+        ];
+        let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
+            cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
+        let (_, tops) = facade_seeds(&chunk, &[0, 0, 0, 0, 1], &[0]);
+        let top = FACADE_BASE_OFFSET + 400.0 * (mapkit_core::WORLD_SCALE as f32 / 100.0);
+        assert!(tops[..3].iter().all(|t| *t == top), "the lower part ends at the top");
+        assert!(tops[6..9].iter().all(|t| *t == -top), "the taller part rises above it");
+        // Flat roof faces carry the roof frame of their edges (along x: angle 0).
+        assert!(tops[3..6].iter().chain(&tops[9..12]).all(|t| *t == ROOF_FRAME_OFFSET), "flat roofs carry the frame: {tops:?}");
+    }
+
+    #[test]
+    fn flat_roofs_carry_the_frame_of_their_walls() {
+        // A box rotated by atan(3/4) (about 36.87°) in the map plane: walls
+        // along (400, 300) and (-300, 400), a flat roof at 600 cm.
+        let corners = [[0i64, 0], [400, 300], [100, 700], [-300, 400]];
+        let mut triangles = Vec::new();
+        for k in 0..4 {
+            let (a, b) = (corners[k], corners[(k + 1) % 4]);
+            triangles.push(triangle("b", [[a[0], 0, a[1]], [b[0], 0, b[1]], [b[0], 600, b[1]]]));
+            triangles.push(triangle("b", [[a[0], 0, a[1]], [b[0], 600, b[1]], [a[0], 600, a[1]]]));
+        }
+        let top = |c: [i64; 2]| [c[0], 600, c[1]];
+        triangles.push(triangle("b", [top(corners[0]), top(corners[1]), top(corners[2])]));
+        triangles.push(triangle("b", [top(corners[0]), top(corners[2]), top(corners[3])]));
+        let objects = vec![0; triangles.len()];
+        let chunk = GeneratedChunk { water_bodies: vec![], grind_lines: vec![], gimmicks: vec![], format_version: 1,
+            cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
+        let (_, tops) = facade_seeds(&chunk, &objects, &[0]);
+        let frame = tops[24] - ROOF_FRAME_OFFSET;
+        assert!(tops[24..].iter().all(|t| *t == tops[24]), "one frame per roof");
+        assert!(tops[..24].iter().all(|t| (*t - (FACADE_BASE_OFFSET + 600.0 * mapkit_core::WORLD_SCALE as f32 / 100.0)).abs() < 1e-3), "walls keep their top");
+        // Scene walls run along (4, -3) and (3, 4) (map y is -z): the frame
+        // is one of them modulo 90°.
+        let expected = (4.0f32).atan2(3.0);
+        assert!((frame - expected).abs() < 1e-3, "frame {frame} vs {expected}");
+        let (u, v) = (Vector3::new(frame.cos(), 0.0, frame.sin()), Vector3::new(-frame.sin(), 0.0, frame.cos()));
+        for k in 0..4 {
+            let (a, b) = (corners[k], corners[(k + 1) % 4]);
+            let d = Vector3::new((b[0] - a[0]) as f32, 0.0, -(b[1] - a[1]) as f32).normalized();
+            assert!(d.dot(u).abs() > 0.9999 || d.dot(v).abs() > 0.9999, "wall {k} runs along a frame axis");
+        }
+        assert_eq!(roof_frame(0.0, 0.0), 0.0);
+        assert!(roof_frame(1.0, -1e-7) == 0.0 && roof_frame(1.0, 0.0) == 0.0, "the frame wraps at 90°");
+    }
+
+    /// The roof frames (angles) of the flat roofs packed for one cell.
+    fn generated_frames(d: &mapkit_core::MapDocument, cell: mapkit_core::Cell) -> Vec<f32> {
+        let chunk = mapkit_core::generate(mapkit_core::GenerationInput { document: d, cell, heightgrid: None, max_triangles: 500_000 }).unwrap();
+        let mut ids: Vec<&str> = Vec::new();
+        let objects: Vec<i32> = chunk.triangles.iter().map(|t| match ids.iter().position(|id| *id == t.object_id) {
+            Some(i) => i as i32,
+            None => { ids.push(&t.object_id); ids.len() as i32 - 1 }
+        }).collect();
+        let prisms: Vec<i32> = chunk.building_prisms.iter().map(|p| ids.iter().position(|id| *id == p.object_id).unwrap() as i32).collect();
+        let (_, tops) = facade_seeds(&chunk, &objects, &prisms);
+        let mut frames: Vec<f32> = tops.iter().filter(|t| **t > ROOF_FRAME_OFFSET - 500.0).map(|t| t - ROOF_FRAME_OFFSET).collect();
+        frames.dedup();
+        frames
+    }
+
+    #[test]
+    fn generated_rectangles_get_the_frame_of_their_walls_in_every_cell() {
+        // Generated buildings carry internal walls on every roof triangulation
+        // diagonal and closing walls on the cell cut: the frame follows the
+        // facade walls of rotated non-square rectangles anyway, inside a cell
+        // and across the east edge of cell (0, 0) at x 51200 cm.
+        let mut d: mapkit_core::MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+        let template = d.buildings[0].clone();
+        let rotated = |centre: [f64; 2], w: f64, h: f64, degrees: f64| -> Vec<[i64; 2]> {
+            let (s, c) = degrees.to_radians().sin_cos();
+            [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].iter()
+                .map(|(i, j)| { let (u, v) = (i * w / 2.0, j * h / 2.0); [(centre[0] + u * c - v * s).round() as i64, (centre[1] + u * s + v * c).round() as i64] }).collect()
+        };
+        let (inside, across) = (vec![mapkit_core::Cell { x: 0, y: 0 }], vec![mapkit_core::Cell { x: 0, y: 0 }, mapkit_core::Cell { x: 1, y: 0 }]);
+        for (centre, w, h, degrees, cells) in [([20000.0, 20000.0], 2000.0, 1000.0, 30.0, &inside), ([30000.0, 40000.0], 1200.0, 1000.0, 20.0, &inside),
+                                                ([10000.0, 10000.0], 3000.0, 1000.0, 0.0, &inside), ([51200.0, 30000.0], 2000.0, 1000.0, 30.0, &across)] {
+            let mut b = template.clone();
+            b.id = "slab".into();
+            b.footprint = rotated(centre, w, h, degrees);
+            d.buildings = vec![b];
+            // Map direction (cos α, sin α) is scene (cos α, 0, -sin α).
+            let expected = (-(degrees as f32).to_radians()).rem_euclid(std::f32::consts::FRAC_PI_2);
+            for &cell in cells {
+                let frames = generated_frames(&d, cell);
+                assert!(!frames.is_empty(), "a flat roof in {cell:?}");
+                for f in frames {
+                    let off = (f - expected).abs().min(std::f32::consts::FRAC_PI_2 - (f - expected).abs());
+                    assert!(off < 2e-3, "{degrees}° rectangle in {cell:?}: frame {f} vs {expected}");
+                }
+            }
+        }
     }
 
     #[test]
@@ -428,6 +622,7 @@ mod tests {
             cell: mapkit_core::Cell { x: 0, y: 0 }, triangles, objects: vec![], building_prisms: vec![], asset_convexes: vec![] };
         let (_, tops) = facade_seeds(&chunk, &[0, 0, 0, 0], &[0]);
         let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
-        assert!(tops.iter().all(|t| *t == FACADE_BASE_OFFSET + 100.0 * scale), "a steep gable still ends storeys at the eaves");
+        assert!(tops.iter().all(|t| t.abs() == FACADE_BASE_OFFSET + 100.0 * scale), "a steep gable still ends storeys at the eaves");
+        assert!(tops[0] > 0.0 && tops[9] > 0.0 && tops[3] < 0.0 && tops[6] < 0.0, "only the slopes rise above the top");
     }
 }

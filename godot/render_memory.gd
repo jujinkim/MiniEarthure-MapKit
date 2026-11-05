@@ -38,6 +38,32 @@ const GRASS_CELL_BYTES := 32768
 ## group of two nodes and MultiMeshes (< 16 KiB) per kind and 32 m square
 ## inside the object share; one shared set per resource cache
 ## (transit_meshes.SHARED_BYTES).
+## Road signs and guide signs likewise: 48 B per placement in each of its
+## group's instance buffers (speed and guide signs: two near parts and a far
+## one), its id in the group's id list, at most one group of up to three
+## nodes and MultiMeshes (< 24 KiB) per kind, guide layout and 32 m square
+## inside the object share; one shared set per resource cache
+## (road_sign_meshes.SHARED_BYTES). A horizontal signal also adds 48 B to its
+## name-board group (one node and MultiMesh per layout and square).
+
+## Facade and rooftop fixtures (facade_fixture_meshes.gd; placed natively
+## into the presentation's `facade_fixtures`, at most 1,024 per cell in at
+## most 16 squares of 32 m, eight kinds): each fixture holds 64 B in its
+## group's near and far instance buffers (12 transform and 4 custom floats),
+## a transient copy and its 40 B packed entry, FIXTURE_BYTES in all; each
+## group (one kind in one square) two nodes and MultiMeshes,
+## FIXTURE_GROUP_BYTES. The meshes and the material are one shared set per
+## resource cache (facade_fixture_meshes.SHARED_BYTES). Before generation a
+## cell with building prisms reserves the cap (FIXTURE_BOUND_BYTES: 2.4 MiB).
+const FIXTURE_BYTES := 384
+const FIXTURE_GROUP_BYTES := 16384
+const FIXTURE_BOUND_BYTES := 1024 * FIXTURE_BYTES + 16 * 8 * FIXTURE_GROUP_BYTES
+static func fixture_bytes(chunk: Dictionary) -> int:
+	var list: Variant = chunk.get("presentation", {}).get("facade_fixtures", PackedFloat32Array())
+	if not list is PackedFloat32Array or list.is_empty(): return 0
+	var groups := {}
+	for i in range(0, list.size() - 9, 10): groups[Vector3i(floori(list[i] / 32.0), floori(list[i + 2] / 32.0), int(list[i + 4]))] = true
+	return list.size() / 10 * FIXTURE_BYTES + groups.size() * FIXTURE_GROUP_BYTES
 
 ## Object ids whose generated proxy faces are not drawn: the presentation's
 ## hidden proxies and every builtin streetlight, which the renderer draws as
@@ -45,10 +71,14 @@ const GRASS_CELL_BYTES := 32768
 ## every traffic signal and bus shelter, drawn as street_signal_meshes.gd
 ## signals and shelters standing where their boxes are, and every subway
 ## entrance and station sign, drawn as transit_meshes.gd entrances and pylons
-## inside theirs (each owner cell lists the object; a neighbour cell holding
-## clipped faces of it knows it from the proxy materials). Collision,
+## inside theirs, and every road sign and guide sign, drawn as
+## road_sign_meshes.gd signs on their posts and poles (each owner cell lists
+## the object; a neighbour cell holding clipped faces of it knows it from the
+## proxy materials). Collision,
 ## occluders and lamp bindings never read these faces.
-const DRAWN_OVER := ["builtin:streetlight", "builtin:signal_h", "builtin:signal_v", "builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign"]
+const DRAWN_OVER := ["builtin:streetlight", "builtin:signal_h", "builtin:signal_v", "builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign",
+	"builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60", "builtin:sign_speed_80",
+	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign"]
 static func hidden_objects(chunk: Dictionary) -> Dictionary:
 	var result := {}
 	var presentation: Dictionary = chunk.get("presentation", {})
@@ -82,12 +112,13 @@ static func shared_bytes(chunk: Dictionary) -> int:
 
 ## Admission bound before generation. A material can change on every triangle.
 static func upper_bound(cost: Dictionary) -> int:
-	return 131072 + grass_bytes(int(cost.triangles)) + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (768 + 12288) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
+	return 131072 + (FIXTURE_BOUND_BYTES if int(cost.get("building_prisms", 0)) > 0 else 0) + grass_bytes(int(cost.triangles)) + int(cost.get("gimmick_bytes", 0))*16 + int(cost.get("water_bytes", 0)) + int(cost.triangles) * (768 + 12288) + int(cost.objects) * 65536 + int(cost.get("presentation_bytes", 0))
 
 ## Worker-only opaque surface grouping. Native source/collision order is untouched.
 ## Position, normal and UV take 96 bytes per visible triangle. Facade batches swap
-## UV, which their world-space materials never sample, for the solid seed (UV2) and,
-## commercial only, the solid top (CUSTOM0): at most 108, within the existing
+## UV, which their world-space materials never sample, for the solid seed (UV2) and
+## add the solid top (CUSTOM0): at most 108. Shared `concrete` batches holding
+## framed sidewalk faces add UV2 (`sidewalk_arrays`): 120, within the existing
 ## 128-byte presentation allowance.
 static func supports_batches(chunk: Dictionary) -> bool:
 	var presentation: Dictionary = chunk.get("presentation", {})
@@ -129,7 +160,7 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 			var facade: int = facade_arrays(key.get_slice("|",0)) if seeds.size() == source_uv.size() else 0
 			if facade == 0: uv.resize(count)
 			else: uv2.resize(count)
-			if facade == 2 and tops.size() == source_uv.size(): custom0.resize(count)
+			if facade == 1 and tops.size() == source_uv.size(): custom0.resize(count)
 			for index in count:
 				var source := int(indices[first + index / 3]) * 3 + index % 3
 				vertices[index] = chunk.scene_vertices[source]
@@ -137,16 +168,49 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 				if not uv.is_empty(): uv[index] = source_uv[source]
 				if not uv2.is_empty(): uv2[index] = seeds[source]
 				if not custom0.is_empty(): custom0[index] = tops[source]
+			if key.get_slice("|",0) == "concrete":
+				var framed := sidewalk_arrays(chunk, indices.slice(first, first + count / 3), uv)
+				if not framed.is_empty(): uv = framed[0]; uv2 = framed[1]
 			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv, "uv2": uv2, "custom0": custom0})
 	return result
 
-## Facade arrays a display batch carries: 0 UV only, 1 the solid seed (UV2) for a
-## generated building facade (chunk_renderer.facade_kind > 0), 2 also the solid
-## top (CUSTOM0) for commercial facades, the only reader.
+## Display-only sidewalk frames (mapkit-godot road_style.rs) on the shared
+## `concrete` batches: framed triangles take (along, across) as UV and
+## (crossing, kind + 8 * section) as UV2; the batch's other triangles keep
+## their UV and a zero UV2 (world-aligned paving). Returns [uv, uv2], or an
+## empty array when no triangle of `triangles` (ascending) is framed. UV2 adds
+## 24 bytes per batched triangle: 120 B, inside the 128-byte presentation
+## allowance (`supports_batches`). The presentation's own sidewalk lists (a 4 B
+## index and three 16 B frames, about 52 B per framed triangle) fall inside the
+## road-style estimate of 256 B per cell triangle (presentation.rs cost).
+static func sidewalk_arrays(chunk: Dictionary, triangles: PackedInt32Array, uv: PackedVector2Array) -> Array:
+	var presentation: Dictionary = chunk.get("presentation", {})
+	var listed: PackedInt32Array = presentation.get("sidewalk_triangles", PackedInt32Array())
+	var frames: PackedVector4Array = presentation.get("sidewalk_frames", PackedVector4Array())
+	if listed.is_empty() or frames.size() != listed.size() * 3 or uv.size() != triangles.size() * 3: return []
+	var framed := uv.duplicate()
+	var uv2 := PackedVector2Array()
+	uv2.resize(uv.size())
+	var found := false
+	for t in triangles.size():
+		var k := listed.bsearch(triangles[t])
+		if k >= listed.size() or listed[k] != triangles[t]: continue
+		found = true
+		for c in 3:
+			var f: Vector4 = frames[k * 3 + c]
+			framed[t * 3 + c] = Vector2(f.x, f.y)
+			uv2[t * 3 + c] = Vector2(f.z, f.w)
+	return [framed, uv2] if found else []
+
+## Facade arrays a display batch carries: 0 UV only, 1 the solid seed (UV2) and
+## top (CUSTOM0) for a generated building facade (chunk_renderer.facade_kind > 0):
+## commercial storeys fit below the top and every kind draws its parapet coping there
+## (on walls that end at it: the top is negated on triangles rising above it); flat
+## roof faces carry the solid's roof frame (4000 + the angle) instead of the top.
 static func facade_arrays(key: String) -> int:
 	var fields := key.split(":")
 	if fields.size() != 2 or not fields[0] in ["brick","wood","concrete"] or not fields[1] in ["residential","commercial","industrial","public"]: return 0
-	return 2 if fields[1] == "commercial" else 1
+	return 1
 
 static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	if asset_bytes < 0 or asset_bytes > 64 * 1024 * 1024 * 1024: return -1
@@ -177,7 +241,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
 	var grind_bytes := 0
 	for line: Dictionary in preload("./grind_geometry.gd").records(chunk): grind_bytes += 32768 + line.get("samples",[]).size()*8192
-	return grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	return fixture_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:
