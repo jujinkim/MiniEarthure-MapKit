@@ -228,6 +228,26 @@ earlier documents keep their bytes, world hashes and generated geometry.
   collision, 80/70 cm square footprints); `builtin:city_tree` (a solid 14 cm
   trunk 140 cm tall under one of three renderer canopies, 0.85–1.15× by identity,
   120 cm square footprint), also allowed as a zone tree with a radius of 120..200 cm.
+- Street planting builtins (local +x along the road):
+  - Street trees `builtin:street_tree_ginkgo`, `_zelkova`, `_plane`, `_cherry` and
+    `_pine`: the city-tree trunk (solid 14 cm, 140 cm tall) in a tree pit whose
+    footprint is a `STREET_TREE_PIT_CM` = 40 cm square turned with the placement
+    (quarter turns and yaw offset), so a pit fits on a sidewalk beside the curb.
+    The crown is display-only and stays within `STREET_TREES` reach of the trunk
+    axis (ginkgo 60, zelkova 125, plane 115, cherry 120, pine 85 cm); beyond 30 cm
+    of the axis every crown vertex is at least `STREET_CANOPY_MIN_CM` = 120 cm
+    above the foot, so crowns may overhang roads from there up. They are not
+    zone-tree assets.
+  - Solid flower beds, footprint the hull of their boxes: `builtin:planter`
+    (80×30 cm, 14 cm tall; plants under 45 cm), `builtin:planter_square`
+    (60×60 cm, 18 cm tall; plants under 60 cm), `builtin:median_bed` (300×80 cm,
+    8 cm tall; plants under 25 cm) and `builtin:median_bed_pine` (the median bed
+    plus a pine trunk box at local (0, 0) under a pine crown). Plants stay within
+    the box + 3 cm.
+  - `distant_tree(id)`: `builtin:tree`, `builtin:city_tree` and the street-tree
+    species omit their trunk faces from distant generation in their anchor cell
+    in favour of a far tree; flower beds, including the median pine, keep their
+    proxy faces.
 - Zone trees stand on unpainted terrain or on painted grass or dirt; other paint,
   roads, water and buildings keep refusing them.
 - `MapDocument.play_area` (optional, absent = the whole `bounds` rectangle): up to

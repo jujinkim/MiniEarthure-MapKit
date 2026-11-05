@@ -15,7 +15,7 @@ extends RefCounted
 ## Collision is unchanged: the 14 x 140 x 14 cm trunk box (placement.rs) stays
 ## inside the trunk at every instance scale. The horizontal reach of every crown
 ## vertex at the largest scale, plus its largest wind sway, stays inside the
-## tree's placement footprint (the 120 cm CITY_TREE_RADIUS of street trees, the
+## tree's placement footprint (the 120 cm CITY_TREE_RADIUS of placed city trees, the
 ## zone's declared radius up to 200 cm for park trees, see tree_set; the
 ## baseline 42 cm for shrubs), so crowns never reach into facades, fences or
 ## lanes the placement keeps clear.
@@ -83,7 +83,7 @@ const KINDS := ["body", "cards", "far"]
 ## MultiMesh floats per instance of the tree and shrub groups (chunk_renderer):
 ## 3x4 transform and the custom colour.
 const FLOATS := 16
-## Mesh sets: street trees, wide park trees, shrubs.
+## Mesh sets: narrow city trees, wide park trees, shrubs.
 const PLANTS := ["tree", "wide", "shrub"]
 static var STEPS: PackedStringArray = _steps()
 static var _shared: Dictionary = {}
@@ -140,7 +140,7 @@ static func linear(srgb: String) -> Color:
 	return Color(srgb).srgb_to_linear()
 
 ## Mesh set and size of a city tree with a placement footprint of `radius_cm`
-## (120..200, CITY_TREE_RADIUS for street trees): the instance scale is
+## (120..200, CITY_TREE_RADIUS for placed city trees): the instance scale is
 ## `factor` times the span, so its widest crown vertex reaches the radius at
 ## the span's top and never past it.
 static func tree_set(radius_cm: int) -> Dictionary:

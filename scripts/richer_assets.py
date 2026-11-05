@@ -404,6 +404,11 @@ def leaf_atlas(destination):
                     k=row+px;edge=1.0-abs(v)/max(half,1e-3)
                     lum[k]=tone*(.78+.22*min(1.0,edge*3))*(ridge if abs(v)<width*.035 else 1.0)*(.88+.12*t2)
                     yel[k]=yellow;cover[k]=1
+    _leaf_image(lum,yel,cover,size,ss,destination/LEAF_ATLAS)
+
+def _leaf_image(lum,yel,cover,size,ss,target):
+    """Box-downsample a supersampled leaf canvas into the packed data channels."""
+    big=size*ss
     pixels=[];total=0.0;count=0;cells=[]
     for y in range(size):
         for x in range(size):
@@ -420,8 +425,109 @@ def leaf_atlas(destination):
         light=(l/c)*.65/mean if c else .65
         pixels.append((round(max(0,min(1,light))*255),round(max(0,min(1,g/c if c else 0))*255),0,round(a*255)))
     image=Image.new('RGBA',(size,size));image.putdata(pixels)
-    target=destination/LEAF_ATLAS;target.parent.mkdir(parents=True,exist_ok=True)
+    target.parent.mkdir(parents=True,exist_ok=True)
     image.save(target,compress_level=9)
+
+# Street-tree leaf atlas (street_planting_meshes.gd), same packing as the leaf
+# atlas: 2x2 cells of 128px, one twig cluster each. Cell 0 ginkgo fans (bilobed
+# wedges with radial veins on thin petioles), cell 1 pine needle tufts (fascicles
+# of long needles along a twig), cell 2 small serrate ovate leaves (zelkova and
+# cherry) alternating on twigs, cell 3 large palmately lobed plane leaves.
+STREET_LEAF_ATLAS='vegetation/street_leaf_atlas.png'
+
+def street_leaf_atlas(destination):
+    size=256;cell=128;ss=4;big=size*ss;span=cell*ss
+    lum=[0.0]*(big*big);yel=[0.0]*(big*big);cover=bytearray(big*big)
+    def paint(ox,oy,bx,by,angle,reach,inside):
+        # Pixels of one leaf: `inside(u, v)` in the leaf frame (u along `angle`
+        # from the base at bx, by; v across) returns its luminance or None.
+        ca=math.cos(angle);sa=math.sin(angle);r=int(reach+2)
+        for py in range(max(oy+2,int(by-r)),min(oy+span-2,int(by+r))):
+            row=py*big
+            for px in range(max(ox+2,int(bx-r)),min(ox+span-2,int(bx+r))):
+                u=(px-bx)*ca+(py-by)*sa;v=-(px-bx)*sa+(py-by)*ca
+                value=inside(u,v)
+                if value is None:continue
+                k=row+px;lum[k]=value[0];yel[k]=value[1];cover[k]=1
+    def line(ox,oy,ax,ay,angle,length,width,tone):
+        paint(ox,oy,ax,ay,angle,length+width,lambda u,v:(tone,0.0) if 0<=u<=length and abs(v)<=width*.5*(1-.6*u/length) else None)
+    for index in range(4):
+        rng=random.Random(9300+index);ox=(index%2)*span;oy=(index//2)*span
+        cx=ox+span*.5;cy=oy+span*.5
+        if index==0:
+            # Ginkgo: fans on short petioles scattered over the cluster.
+            for leaf in range(60):
+                sa=rng.uniform(0,math.tau);reach=math.sqrt(rng.random())*.17*span
+                bx=cx+math.cos(sa)*reach;by=cy+math.sin(sa)*reach
+                angle=rng.uniform(0,math.tau);stem=rng.uniform(0,.04)*span
+                blade=rng.uniform(.13,.19)*span;spread=math.radians(rng.uniform(42,60))
+                tone=rng.uniform(.55,.9);yellow=max(0.0,rng.uniform(-1.5,.9))
+                line(ox,oy,bx,by,angle,stem,span*.012,tone*.8)
+                fx=bx+math.cos(angle)*stem;fy=by+math.sin(angle)*stem
+                def fan(u,v,blade=blade,spread=spread,tone=tone,yellow=yellow):
+                    r=math.hypot(u,v)
+                    if r<1 or u<=0:return None
+                    phi=math.atan2(v,u)
+                    if abs(phi)>spread:return None
+                    edge=blade*(1-.28*math.exp(-(phi/.09)**2))*(.94+.06*math.cos(phi*9))
+                    if r>edge:return None
+                    return (tone*(.86+.14*math.cos(phi*46))*(.8+.2*r/edge),yellow)
+                paint(ox,oy,fx,fy,angle,blade,fan)
+        elif index==1:
+            # Pine: a twig with fascicles of two long needles fanning forward.
+            turn=rng.uniform(0,math.tau)
+            for twig in range(5):
+                ta=turn+twig*1.257+rng.uniform(-.3,.3)
+                for k in range(20):
+                    t=k/19;bx=cx+math.cos(ta)*t*span*.3;by=cy+math.sin(ta)*t*span*.3
+                    for needle in range(4):
+                        angle=ta+rng.choice((-1,1))*rng.uniform(.2,1.2)
+                        line(ox,oy,bx,by,angle,rng.uniform(.12,.2)*span*(1.1-.3*t),span*.016,rng.uniform(.55,.95))
+                line(ox,oy,cx,cy,ta,span*.3,span*.02,.5)
+        elif index==2:
+            # Zelkova and cherry: alternate serrate ovate leaves on two twigs.
+            turn=rng.uniform(0,math.tau)
+            for twig in range(5):
+                ta=turn+twig*1.257+rng.uniform(-.2,.2)
+                line(ox,oy,cx,cy,ta,span*.34,span*.014,.5)
+                for k in range(12):
+                    t=(k+1)/13;side=1 if k%2 else -1
+                    bx=cx+math.cos(ta)*t*span*.34;by=cy+math.sin(ta)*t*span*.34
+                    angle=ta+side*rng.uniform(.45,.9);length=rng.uniform(.15,.2)*span*(1.1-.3*t);width=length*rng.uniform(.44,.54)
+                    tone=rng.uniform(.5,.88);yellow=max(0.0,rng.uniform(-1.4,.8))
+                    def ovate(u,v,length=length,width=width,tone=tone,yellow=yellow):
+                        t2=u/length
+                        if t2<0 or t2>1:return None
+                        tooth=1-.16*((t2*14)%1.0) if t2>.15 else 1
+                        half=width*.5*math.sin(math.pi*t2**.75)*tooth
+                        if abs(v)>half:return None
+                        vein=.82 if abs(v)<width*.04 or abs((abs(v)/max(half,1e-3))-((t2*7)%1.0))<.06 else 1
+                        return (tone*vein*(.8+.2*(1-abs(v)/max(half,1e-3))),yellow)
+                    paint(ox,oy,bx,by,angle,length,ovate)
+        else:
+            # Plane: few large palmate leaves (three main pointed lobes and two
+            # small basal ones), short petioles.
+            for leaf in range(20):
+                spot=rng.uniform(0,math.tau);reach=math.sqrt((leaf+.5)/20)*.27*span
+                fx=cx+math.cos(spot)*reach;fy=cy+math.sin(spot)*reach
+                angle=spot+rng.uniform(-.7,.7)
+                stem=rng.uniform(.03,.06)*span;size_=rng.uniform(.22,.3)*span
+                tone=rng.uniform(.55,.9);yellow=max(0.0,rng.uniform(-1.6,.8));twist=rng.uniform(-.3,.3)
+                bx=fx-math.cos(angle)*(stem+size_*.3);by=fy-math.sin(angle)*(stem+size_*.3)
+                line(ox,oy,bx,by,angle,stem,span*.014,tone*.8)
+                def palmate(u,v,size_=size_,tone=tone,yellow=yellow,twist=twist):
+                    r=math.hypot(u,v)
+                    if r<1:return (tone,yellow)
+                    phi=math.atan2(v,u)+twist
+                    edge=0.0;near=1.0
+                    for at,reach_ in ((0,1.0),(.95,.88),(-.95,.88),(1.85,.5),(-1.85,.5)):
+                        d=min(1.0,abs(phi-at)/.5);near=min(near,d)
+                        edge=max(edge,size_*.58*reach_*(1-.55*d**.8))
+                    if r>edge:return None
+                    vein=.8 if near<.04*size_/max(r,1) else 1
+                    return (tone*vein*(.82+.18*(1-r/edge)),yellow)
+                paint(ox,oy,fx,fy,angle,size_*.6,palmate)
+    _leaf_image(lum,yel,cover,size,ss,destination/STREET_LEAF_ATLAS)
 
 def create(destination):
     destination.mkdir(parents=True,exist_ok=False);(destination/'.gdignore').write_text('')
@@ -434,7 +540,7 @@ def create(destination):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('destination',type=Path);p.add_argument('--textures',action='store_true');p.add_argument('--racing',action='store_true');p.add_argument('--facade',action='store_true');p.add_argument('--leaves',action='store_true');a=p.parse_args()
-    if a.textures and a.leaves:leaf_atlas(a.destination)
+    if a.textures and a.leaves:leaf_atlas(a.destination);street_leaf_atlas(a.destination)
     elif a.textures and a.facade:facade_textures(a.destination)
     elif a.textures:textures(a.destination,a.racing)
     else:create(a.destination)

@@ -1,6 +1,7 @@
 extends SceneTree
-## Generated street details (single-node shrubs and city trees) share
-## process-lifetime meshes and materials. A cell's display lease must retire with its nodes.
+## Generated street details (single-node shrubs, city trees, street trees and
+## flower beds) share process-lifetime meshes and materials. A cell's display
+## lease must retire with its nodes.
 const CHUNKS := preload("../chunk_renderer.gd")
 const QUALITY := preload("../display_quality.gd")
 class Lease extends RefCounted:
@@ -38,6 +39,9 @@ func run() -> void:
 	for plant in CHUNKS.VEGETATION.PLANTS:
 		for part in CHUNKS.VEGETATION.KINDS:
 			for mesh: Mesh in vegetation[plant + "_" + part]: shared_vegetation[mesh] = true
+	var street: Dictionary = CHUNKS.STREET.shared()
+	for name: String in street:
+		if name != "materials": shared_vegetation[street[name]] = true
 	# Vegetation nodes carry their materials on the shared mesh surfaces.
 	check(not shared.is_empty() and shared.keys().all(func(value): return value == null or shared_vegetation.has(value)), "street details borrow only shared vegetation resources")
 	# City trees: a near body (trunk, branches, crown hull) and its leaf cards

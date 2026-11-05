@@ -45,6 +45,13 @@ const GRASS_CELL_BYTES := 32768
 ## inside the object share; one shared set per resource cache
 ## (road_sign_meshes.SHARED_BYTES). A horizontal signal also adds 48 B to its
 ## name-board group (one node and MultiMesh per layout and square).
+## Street trees and flower beds likewise: 64 B per instance in each of its
+## group's body, cards and far buffers (12 transform and 4 custom floats; a
+## planter or median bed is two instances, rim and planting, a median bed
+## with a pine three), its id in the group's id list, at most one group of up
+## to three nodes and MultiMeshes (< 24 KiB) per mesh, variant and 32 m
+## square inside the object share; one shared set per resource cache
+## (street_planting_meshes.SHARED_BYTES).
 
 ## Facade and rooftop fixtures (facade_fixture_meshes.gd; placed natively
 ## into the presentation's `facade_fixtures`, at most 1,024 per cell in at
@@ -72,13 +79,17 @@ static func fixture_bytes(chunk: Dictionary) -> int:
 ## signals and shelters standing where their boxes are, and every subway
 ## entrance and station sign, drawn as transit_meshes.gd entrances and pylons
 ## inside theirs, and every road sign and guide sign, drawn as
-## road_sign_meshes.gd signs on their posts and poles (each owner cell lists
+## road_sign_meshes.gd signs on their posts and poles, and every street tree
+## and flower bed, drawn as street_planting_meshes.gd trunks in their tree pits
+## and planter rims round their boxes (each owner cell lists
 ## the object; a neighbour cell holding clipped faces of it knows it from the
 ## proxy materials). Collision,
 ## occluders and lamp bindings never read these faces.
 const DRAWN_OVER := ["builtin:streetlight", "builtin:signal_h", "builtin:signal_v", "builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign",
 	"builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60", "builtin:sign_speed_80",
-	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign"]
+	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign",
+	"builtin:street_tree_ginkgo", "builtin:street_tree_zelkova", "builtin:street_tree_plane", "builtin:street_tree_cherry", "builtin:street_tree_pine",
+	"builtin:planter", "builtin:planter_square", "builtin:median_bed", "builtin:median_bed_pine"]
 static func hidden_objects(chunk: Dictionary) -> Dictionary:
 	var result := {}
 	var presentation: Dictionary = chunk.get("presentation", {})

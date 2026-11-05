@@ -1226,7 +1226,7 @@ mod road_paint;
 pub use road_paint::{RoadPaint, RoadPaintSegment};
 mod road_safety;
 mod urban;
-pub use placement::{BuildingPrism, CITY_TREE_RADIUS};
+pub use placement::{BuildingPrism, CITY_TREE_RADIUS, STREET_TREE_PIT_CM, STREET_CANOPY_MIN_CM, STREET_TREES, street_tree_crown_cm, distant_tree};
 
 /// Zone of a generated vegetation identity `{zone}:{x}:{y}` (canonical lattice
 /// integers, placement.rs), else None. Validation rejects any authored identity
@@ -1247,7 +1247,7 @@ pub fn city_tree_zone_radii(d: &MapDocument) -> BTreeMap<&str, i64> {
 }
 /// Placement footprint radius (cm) of a `builtin:city_tree` object: a zone tree
 /// takes its zone's declared radius (`radii` from `city_tree_zone_radii`), a
-/// street or authored city tree `CITY_TREE_RADIUS`. Display only: renderers keep
+/// placed city tree (a document placement) `CITY_TREE_RADIUS`. Display only: renderers keep
 /// every crown inside it, as placement keeps that square clear.
 pub fn city_tree_radius(radii: &BTreeMap<&str, i64>, object_id: &str) -> i64 {
     generated_zone_id(object_id)

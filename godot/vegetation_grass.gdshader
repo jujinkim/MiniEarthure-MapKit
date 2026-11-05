@@ -48,6 +48,10 @@ uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform bool environment_enabled = false;
 
 const float EMPTY_LIMIT = -1.0e5;
+// Flower drift colours: white, yellow, marigold orange, petunia magenta,
+// pansy violet, salvia red, cosmos pink.
+const vec3 DRIFT[7] = vec3[7](vec3(0.86,0.85,0.80), vec3(0.95,0.72,0.10), vec3(0.95,0.42,0.06), vec3(0.78,0.16,0.48),
+    vec3(0.45,0.28,0.75), vec3(0.80,0.10,0.10), vec3(0.92,0.55,0.70));
 
 varying vec3 blade_color;
 // Card: (column coordinate 0..card_columns, height share 0..1); flowers: x < 0.
@@ -216,9 +220,13 @@ void vertex() {
         // Some cards yellower, some bluer.
         color *= mix(vec3(0.94,1.0,1.08), vec3(1.10,1.04,0.86), hue);
         if(kind > 1.5) {
-            // White, yellow or violet heads with a warm centre (the rim
-            // vertices, shape z 1, carry the petal colour).
+            // Inside a flower patch (a fifth of the 4 m patches) every head
+            // takes the patch's one colour of DRIFT, so flowers grow in
+            // drifts; elsewhere white, yellow or violet heads mix. A warm
+            // centre (the rim vertices, shape z 1, carry the petal colour).
+            uint drift = hash32(uint(int(floor(root.x / 4.0)) + 1048576) * 73856093u ^ hash32(uint(int(floor(root.y / 4.0)) + 1048576) * 19349663u));
             vec3 petals = pick < 0.45 ? vec3(0.86,0.85,0.80) : (pick < 0.8 ? vec3(0.95,0.72,0.10) : vec3(0.52,0.36,0.78));
+            if(float(drift & 65535u) / 65536.0 < 0.2) petals = DRIFT[(drift >> 16u) % 7u];
             color = shape.z > 0.5 ? petals : mix(petals, vec3(0.95,0.75,0.2), 0.7);
         }
         blade_color = color;

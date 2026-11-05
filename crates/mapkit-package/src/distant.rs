@@ -35,6 +35,38 @@ const WIDE_FROM_CM: i64 = 160;
 /// bound needs no city-tree term.
 const CITY_TREE_TRIANGLES: u64 = 24;
 const _: () = assert!(CITY_TREE_TRIANGLES <= 12 + 12);
+/// Street trees of the near renderer (map-kit godot/street_planting_meshes.gd
+/// `FORMS`, in `mapkit_core::STREET_TREES` order: ginkgo, zelkova, plane,
+/// cherry, pine): canopy base and height in metres at scale 1 and a hexagon
+/// radius matching the near crown's mean silhouette, inside the species'
+/// crown reach at the largest scale. Variant (12 % young replacements at
+/// scale 1 with the crown x 0.65), scale (0.92-1.08) and quarter turn come
+/// from the object identity exactly as in street_planting_meshes.gd
+/// `tree_piece`, so the silhouette matches the near tree it replaces. A
+/// street tree draws CITY_TREE_TRIANGLES like a city tree.
+const STREET_TREES: [[f32; 3]; 5] = [[1.35, 2.55, 0.47], [1.35, 2.10, 0.98], [1.45, 2.35, 0.9], [1.35, 1.45, 0.94], [1.35, 1.55, 0.67]];
+const STREET_TREE_SCALE: [f32; 2] = [0.92, 1.08];
+const STREET_YOUNG_SHARE: f32 = 0.12;
+const STREET_YOUNG_CROWN: f32 = 0.65;
+/// Flat sRGB colours per species: bark, shaded lower crown, lit upper crown
+/// (ginkgo light yellow-green, zelkova and plane mid green, cherry dark green,
+/// pine blue-green).
+const STREET_TREE_COLORS: [[[u8; 4]; 3]; 5] = [
+    [[94, 82, 72, 255], [104, 128, 56, 255], [128, 152, 70, 255]],
+    [[138, 131, 122, 255], [62, 96, 56, 255], [80, 118, 66, 255]],
+    [[160, 156, 130, 255], [70, 104, 60, 255], [88, 124, 70, 255]],
+    [[75, 59, 54, 255], [50, 82, 50, 255], [64, 98, 60, 255]],
+    [[130, 88, 62, 255], [40, 70, 58, 255], [54, 88, 70, 255]]];
+/// The pine of a median bed keeps its proxy faces (bed slab and trunk box) and
+/// adds only a crown: a hexagonal bicone of 12 triangles, inside the
+/// per-object `maximum` (>= 12) of `distant_triangle_bound`.
+const MEDIAN_PINE_TRIANGLES: u64 = 12;
+const _: () = assert!(MEDIAN_PINE_TRIANGLES <= 12);
+/// Flower-bed proxy faces (planters and median beds, near
+/// street_planting_meshes.gd `FAR_SIDE` and `FAR_TOP`): granite sides and a
+/// planted top; the median pine's trunk box in pine bark.
+const BED_SIDE: [u8; 4] = [170, 166, 158, 255];
+const BED_TOP: [u8; 4] = [86, 112, 70, 255];
 
 #[derive(Clone, Debug)]
 struct Proxy {
@@ -329,7 +361,7 @@ impl Package {
         }
         for object in objects {
             checkpoint()?;
-            if matches!(object.asset_id.as_str(), "builtin:tree" | "builtin:city_tree")
+            if mapkit_core::distant_tree(&object.asset_id)
                 || self.document.asset(&object.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
                 omitted.insert(object.id.as_str());
@@ -349,6 +381,9 @@ impl Package {
                 let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
                 let roof = length > 0.0 && (n[1] / length).abs() >= 0.5;
                 facade_color(&building.material, &building.usage, facade_record(&triangle.object_id), roof)
+            } else if let Some(color) = self.document.placements.binary_search_by(|p| p.id.cmp(&triangle.object_id)).ok()
+                .and_then(|i| planting_color(&self.document.placements[i], triangle)) {
+                color
             } else if let Ok(i) = self.document.barriers.binary_search_by(|b| b.id.cmp(&triangle.object_id)) {
                 match self.document.barriers[i].kind {
                     mapkit_core::barrier::BarrierKind::Hedge => [72, 100, 71, 255],
@@ -419,6 +454,14 @@ impl Package {
             if object.asset_id == "builtin:city_tree" {
                 let radii = city_radii.get_or_insert_with(|| mapkit_core::city_tree_zone_radii(&self.document));
                 add_city_tree(&mut result, &object.id, object.position, mapkit_core::city_tree_radius(radii, &object.id));
+                continue;
+            }
+            if let Some(species) = mapkit_core::STREET_TREES.iter().position(|(id, _)| *id == object.asset_id) {
+                add_street_tree(&mut result, object, species);
+                continue;
+            }
+            if object.asset_id == "builtin:median_bed_pine" {
+                add_median_pine(&mut result, object);
                 continue;
             }
             let Some(asset) = self.document.asset(&object.asset_id).filter(|a| a.path.ends_with(".glb"))
@@ -522,6 +565,105 @@ fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3], 
     band(&middle, &[[origin[0], origin[1] + (base + height) * scale, origin[2]]], [80, 110, 70, 255]);
 }
 
+/// Identity unit of an object (chunk_renderer.gd `_identity_unit`).
+fn identity_unit(object_id: &str) -> f32 {
+    let hash = mapkit_core::sha256(object_id.as_bytes());
+    u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16_777_216.
+}
+
+/// Shape (base, height, radius), scale and yaw of a street tree or the median
+/// pine (`bed`: never young) from its identity, as street_planting_meshes.gd
+/// `tree_piece`.
+fn street_tree_shape(object: &GeneratedObject, species: usize, bed: bool) -> ([f32; 3], f32, f32) {
+    let pick = identity_unit(&object.id);
+    let young = !bed && (pick * 11.).fract() < STREET_YOUNG_SHARE;
+    let [base, height, radius] = STREET_TREES[species];
+    let shape = if young { [base, height * STREET_YOUNG_CROWN, radius * STREET_YOUNG_CROWN] } else { [base, height, radius] };
+    let scale = if young { 1. } else { STREET_TREE_SCALE[0] + (STREET_TREE_SCALE[1] - STREET_TREE_SCALE[0]) * (pick * 7.).fract() };
+    let quarter = ((pick * 13.).fract() * 4.) as u32 % 4;
+    let yaw = (f32::from(object.quarter_turns) + quarter as f32) * std::f32::consts::FRAC_PI_2
+        + (f64::from(object.yaw_offset_mdeg).to_radians() / 1000.) as f32;
+    (shape, scale, yaw)
+}
+
+/// Trunk, crown frustum and crown cone of a street tree (CITY_TREE_TRIANGLES)
+/// in its species colours; the pine's crown is a flatter frustum of tiers.
+fn add_street_tree(output: &mut DistantMesh, object: &GeneratedObject, species: usize) {
+    let ([base, height, radius], scale, yaw) = street_tree_shape(object, species, false);
+    let [bark, lower, upper] = STREET_TREE_COLORS[species];
+    let origin = [object.position[0] as f32 * 0.01, object.position[1] as f32 * 0.01, -object.position[2] as f32 * 0.01];
+    let ring = |sides: usize, r: f32, y: f32| -> Vec<[f32; 3]> { hex_ring(origin, yaw, scale, sides, r, y) };
+    band_faces(output, &ring(3, 0.13, -0.1), &ring(3, 0.08, base + 0.3), bark);
+    let pine = species == 4;
+    let middle = ring(6, radius, base + height * if pine { 0.4 } else { 0.5 });
+    band_faces(output, &ring(6, radius * if pine { 0.75 } else { 0.55 }, base + height * 0.05), &middle, lower);
+    band_faces(output, &middle, &[[origin[0], origin[1] + (base + height) * scale, origin[2]]], upper);
+}
+
+/// Crown of a median bed's pine (MEDIAN_PINE_TRIANGLES): a hexagonal bicone
+/// from the canopy base to the top; its trunk is the bed's proxy box.
+fn add_median_pine(output: &mut DistantMesh, object: &GeneratedObject) {
+    let ([base, height, radius], scale, yaw) = street_tree_shape(object, 4, true);
+    let [_, lower, upper] = STREET_TREE_COLORS[4];
+    let origin = [object.position[0] as f32 * 0.01, object.position[1] as f32 * 0.01, -object.position[2] as f32 * 0.01];
+    let middle = hex_ring(origin, yaw, scale, 6, radius, base + height * 0.4);
+    band_faces(output, &[[origin[0], origin[1] + base * scale, origin[2]]], &middle, lower);
+    band_faces(output, &middle, &[[origin[0], origin[1] + (base + height) * scale, origin[2]]], upper);
+}
+
+fn hex_ring(origin: [f32; 3], yaw: f32, scale: f32, sides: usize, r: f32, y: f32) -> Vec<[f32; 3]> {
+    (0..sides).map(|k| {
+        let a = yaw + std::f32::consts::TAU * (k as f32 + 0.5) / sides as f32;
+        [origin[0] + a.cos() * r * scale, origin[1] + y * scale, origin[2] + a.sin() * r * scale]
+    }).collect()
+}
+
+/// Side quads between two rings, or a cone from a ring to one apex (or from
+/// one point up to a ring); (b - a) x (c - a) faces outward.
+fn band_faces(output: &mut DistantMesh, lower: &[[f32; 3]], upper: &[[f32; 3]], color: [u8; 4]) {
+    let mut triangle = |points: [[f32; 3]; 3]| {
+        for p in points {
+            output.vertices.push(p);
+            output.colors.push(color);
+            output.light_data.push([0., 0.]);
+            output.decoration.push(0);
+        }
+    };
+    if lower.len() == 1 {
+        let n = upper.len();
+        for k in 0..n { triangle([lower[0], upper[(k + 1) % n], upper[k]]); }
+        return;
+    }
+    let n = lower.len();
+    for k in 0..n {
+        let j = (k + 1) % n;
+        if upper.len() == n { triangle([lower[k], upper[k], upper[j]]); }
+        triangle([lower[k], upper[j % upper.len()], lower[j]]);
+    }
+}
+
+/// Distant colour of a street-planting proxy triangle: flower beds BED_SIDE
+/// and BED_TOP (the median pine's trunk box in pine bark); a street tree's
+/// trunk box in its species bark (only the clipped sliver a neighbour cell
+/// keeps, as the anchor cell draws the far tree instead). None for other
+/// placements.
+fn planting_color(placement: &mapkit_core::Placement, triangle: &Triangle) -> Option<[u8; 4]> {
+    if let Some(species) = mapkit_core::STREET_TREES.iter().position(|(id, _)| *id == placement.asset_id) {
+        return Some(STREET_TREE_COLORS[species][0]);
+    }
+    if !matches!(placement.asset_id.as_str(), "builtin:planter" | "builtin:planter_square" | "builtin:median_bed" | "builtin:median_bed_pine") {
+        return None;
+    }
+    let [a, b, c] = triangle.vertices;
+    if placement.asset_id == "builtin:median_bed_pine" && [a, b, c].iter().any(|p| p[1] > placement.position[1] + 10) {
+        return Some(STREET_TREE_COLORS[4][0]);
+    }
+    let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+    let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
+    let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    Some(if length > 0.0 && (n[1] / length).abs() >= 0.5 { BED_TOP } else { BED_SIDE })
+}
+
 fn add_box(output: &mut DistantMesh, proxy: &Proxy, position: [i64; 3], quarter_turns: u8, yaw_offset_mdeg: i32, seed: f32) {
     let points: [[f32; 3]; 8] = std::array::from_fn(|i| {
         let p = std::array::from_fn(|a| {
@@ -590,6 +732,82 @@ mod tests {
                 assert!(n[0] * c[0] + n[2] * c[1] > 0. || n[1] > 0., "{id}: inward face");
             }
         }
+    }
+
+    fn object(id: &str, asset_id: &str) -> GeneratedObject {
+        GeneratedObject { id: id.into(), asset_id: asset_id.into(), position: [1000, 200, -3000], quarter_turns: 1, yaw_offset_mdeg: 15000 }
+    }
+
+    /// The far street trees mirror the near renderer's constants
+    /// (street_planting_meshes.gd) and core's crown table.
+    #[test]
+    fn far_street_trees_match_the_near_constants() {
+        let near = include_str!("../../../godot/street_planting_meshes.gd");
+        let line = |name: &str| near.lines().find(|l| l.starts_with(&format!("const {name} :=")))
+            .unwrap_or_else(|| panic!("{name} in street_planting_meshes.gd")).to_owned();
+        let crowns = line("CROWN_CM");
+        let forms = format!("{}{}", line("FORMS"), near.lines().skip_while(|l| !l.starts_with("const FORMS :=")).nth(1).unwrap());
+        for (i, (id, reach_cm)) in mapkit_core::STREET_TREES.iter().enumerate() {
+            let species = id.trim_start_matches("builtin:street_tree_");
+            assert!(crowns.contains(&format!("\"{species}\": {reach_cm}")), "{species} crown reach");
+            let [base, height, radius] = STREET_TREES[i];
+            assert!(forms.contains(&format!("\"{species}\": Vector3({base:.2}, {height:.2},")), "{species} form {base} {height}: {forms}");
+            // The silhouette stays inside the crown reach at the largest scale.
+            assert!(radius * STREET_TREE_SCALE[1] <= *reach_cm as f32 / 100. && radius * STREET_TREE_SCALE[1] >= *reach_cm as f32 / 100. * 0.8, "{species} silhouette");
+            assert!(mapkit_core::distant_tree(id) && mapkit_core::street_tree_crown_cm(id) == Some(*reach_cm));
+        }
+        assert!(near.contains("const SCALE := Vector2(0.92, 1.08)") && near.contains("const YOUNG_SHARE := 0.12") && near.contains("const YOUNG_CROWN := 0.65"));
+        assert!(near.contains("const FAR_SIDE := \"aaa69e\"") && near.contains("const FAR_TOP := \"567046\""));
+        assert_eq!((BED_SIDE, BED_TOP), ([0xaa, 0xa6, 0x9e, 255], [0x56, 0x70, 0x46, 255]));
+        assert!(!mapkit_core::distant_tree("builtin:median_bed_pine") && !mapkit_core::distant_tree("builtin:planter"));
+    }
+
+    #[test]
+    fn street_tree_is_a_trunk_frustum_and_cone_inside_its_crown_reach() {
+        let mut young = 0;
+        for i in 0..200 {
+            for (species, (id, reach_cm)) in mapkit_core::STREET_TREES.iter().enumerate() {
+                let tree = object(&format!("tree-{i}"), id);
+                let mut mesh = DistantMesh::default();
+                add_street_tree(&mut mesh, &tree, species);
+                assert_eq!(mesh.vertices.len() as u64, CITY_TREE_TRIANGLES * 3);
+                assert!(mesh.decoration.iter().all(|&d| d == 0) && mesh.light_data.iter().all(|l| *l == [0., 0.]));
+                let ([base, height, _], scale, _) = street_tree_shape(&tree, species, false);
+                if species == 0 && scale == 1. { young += 1; }
+                let top = mesh.vertices.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
+                assert!((top - (2. + (base + height) * scale)).abs() < 1e-4);
+                let reach = mesh.vertices.iter().map(|p| (p[0] - 10.).hypot(p[2] - 30.)).fold(0f32, f32::max);
+                assert!(reach <= *reach_cm as f32 / 100. + 1e-4, "{id}: {reach}");
+                // Above 30 cm of the axis every vertex is 1.2 m up or more.
+                assert!(mesh.vertices.iter().all(|p| (p[0] - 10.).hypot(p[2] - 30.) <= 0.3 || p[1] - 2. >= 1.2 - 1e-4));
+                for t in mesh.vertices.chunks(3) {
+                    let u = [t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]];
+                    let v = [t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]];
+                    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+                    let c = [(t[0][0] + t[1][0] + t[2][0]) / 3. - 10., (t[0][2] + t[1][2] + t[2][2]) / 3. - 30.];
+                    assert!(n[0] * c[0] + n[2] * c[1] > 0. || n[1] > 0., "{id}: inward face");
+                }
+            }
+        }
+        assert!((10..=45).contains(&young), "about 12 % young replacements: {young}");
+        let mut pine = DistantMesh::default();
+        add_median_pine(&mut pine, &object("median", "builtin:median_bed_pine"));
+        assert_eq!(pine.vertices.len() as u64, MEDIAN_PINE_TRIANGLES * 3);
+        assert!(pine.vertices.iter().all(|p| p[1] - 2. >= 1.35 * 0.92 - 1e-4));
+    }
+
+    #[test]
+    fn bed_proxy_faces_take_granite_sides_and_a_planted_top() {
+        let bed = |asset: &str| mapkit_core::Placement { id: "bed".into(), asset_id: asset.into(), position: [0, 100, 0], quarter_turns: 0, yaw_offset_mdeg: 0 };
+        let face = |a: [i64; 3], b: [i64; 3], c: [i64; 3]| Triangle { contact_class: 0, snow_retention_percent: 0, vertices: [a, b, c], surface: Surface::Concrete, object_id: "bed".into(), spawnable: false };
+        let top = face([0, 108, 0], [100, 108, 0], [0, 108, 100]);
+        let side = face([0, 100, 0], [100, 100, 0], [0, 108, 0]);
+        let trunk = face([0, 100, 0], [10, 100, 0], [0, 240, 0]);
+        assert_eq!(planting_color(&bed("builtin:planter"), &top), Some(BED_TOP));
+        assert_eq!(planting_color(&bed("builtin:median_bed"), &side), Some(BED_SIDE));
+        assert_eq!(planting_color(&bed("builtin:median_bed_pine"), &trunk), Some(STREET_TREE_COLORS[4][0]));
+        assert_eq!(planting_color(&bed("builtin:street_tree_zelkova"), &side), Some(STREET_TREE_COLORS[1][0]), "a neighbour cell's clipped trunk sliver");
+        assert_eq!(planting_color(&bed("builtin:bench"), &top), None);
     }
 
     #[test]

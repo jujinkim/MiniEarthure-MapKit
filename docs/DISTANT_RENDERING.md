@@ -21,7 +21,18 @@ footprint radius like the near renderer's variant (`vegetation_meshes.gd`
 identity, so park zones with 200 cm footprints show wide park crowns up to 1.91 m
 from the trunk, the hexagon's mean radius matching the near crown's). Its omitted 12-triangle
 collision trunk and the per-object allowance cover it, so the triangle bound is
-unchanged. No collision or full
+unchanged. A street tree (`mapkit_core::distant_tree`, the same omission as the
+full generation) is the same 24 triangles in its species' colours (ginkgo light
+yellow-green, zelkova and plane mid green, cherry dark green, pine blue-green, a
+flatter tiered frustum for the pine) with the near variant's base, height,
+scale, young replacement and quarter turn from its identity
+(`street_planting_meshes.gd`), its hexagon inside the species' crown reach. A
+median bed with a pine keeps its proxy boxes and adds a 12-triangle bicone
+crown inside the per-object allowance; flower-bed proxy faces take granite
+sides (170, 166, 158) and a planted top (86, 112, 70), the pine's trunk box pine
+bark. The anchor cell omits a street tree's trunk box; a neighbour cell keeps
+the clipped sliver of a trunk box that crosses its edge, coloured in the
+species' bark. No collision or full
 GLB/texture instance is produced. The traversal is iterative. Building material lookup uses normalized ID order;
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.

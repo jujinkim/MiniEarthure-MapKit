@@ -50,7 +50,10 @@ const BLOCKS := [0, 8, 12]
 ## Rings by tier: tile size (m), card and flower slots per tile, card width
 ## (m), blade columns per card, and camera distance fades in (x..y, none when
 ## x < 0) and out (z..w; the last ring ends at grass_distance). Flowers per m2
-## inside / outside flower patches: FLOWERS.
+## inside / outside flower patches: FLOWERS; the heads of a patch share one
+## drift colour (white, yellow, marigold, petunia, pansy, salvia or cosmos,
+## vegetation_grass.gdshader DRIFT), heads elsewhere mix white, yellow and
+## violet.
 const RINGS := [[], [
 	{"tile": 1.0, "cards": 64, "flowers": 1, "width": 0.24, "columns": 12, "fade": Vector4(-1.0, 0.0, 4.5, 6.0)},
 	{"tile": 2.0, "cards": 72, "flowers": 2, "width": 0.4, "columns": 10, "fade": Vector4(4.5, 6.0, 11.0, 14.0)},

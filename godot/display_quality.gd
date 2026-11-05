@@ -70,13 +70,17 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 ## distance with VEGETATION_MARGIN, a dithered crossfade on Forward+ and
 ## hysteresis elsewhere (Mobile and Compatibility do not fade). Far trees keep
 ## no end range, like the canopies they replace: every tree of a loaded cell
-## keeps a crown; distant silhouettes take over outside detail cells.
+## keeps a crown; distant silhouettes take over outside detail cells. Street
+## trees (street_planting_meshes.gd) are trees. Flower beds (kind `planter`)
+## show their near rim and planting within 0.6 x vegetation_near like
+## shrubs, cast shadows from medium and, being solid, keep their far box
+## without an end range.
 const VEGETATION_MARGIN := 6.0
 const GROUP_REACH := 23.0
 static func apply_vegetation(node: GeometryInstance3D, value: Dictionary) -> void:
 	var kind: String = node.get_meta("mapkit_vegetation_kind","")
-	var near := float(value.get("vegetation_near",32.0)) * (0.6 if kind == "shrub" else 1.0) + GROUP_REACH
-	var shadows := int(value.get("vegetation_shadows",1)) if kind == "tree" else 0
+	var near := float(value.get("vegetation_near",32.0)) * (0.6 if kind in ["shrub", "planter"] else 1.0) + GROUP_REACH
+	var shadows := int(value.get("vegetation_shadows",1)) if kind == "tree" else (1 if kind == "planter" and int(value.get("level",1)) >= 1 else 0)
 	var fade := range_fade(RenderingServer.get_current_rendering_method())
 	var lod := str(node.get_meta("mapkit_vegetation_lod"))
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows >= (2 if lod == "cards" else 1) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

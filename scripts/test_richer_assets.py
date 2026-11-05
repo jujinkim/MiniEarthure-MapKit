@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from PIL import Image
-from richer_assets import FACADE_TILES,LEAF_ATLAS,create,facade_textures,leaf_atlas,textures,unpack,water_mesh
+from richer_assets import FACADE_TILES,LEAF_ATLAS,STREET_LEAF_ATLAS,create,facade_textures,leaf_atlas,street_leaf_atlas,textures,unpack,water_mesh
 
 ROOT=Path(__file__).resolve().parents[1]
 class RicherAssets(unittest.TestCase):
@@ -68,6 +68,24 @@ class RicherAssets(unittest.TestCase):
                 self.assertAlmostEqual(sum(light)/len(light)/255,.65,delta=.03)
                 self.assertEqual(set(image.getchannel('B').getdata()),{0})
                 # Transparent texels carry the mean leaf value (no dark mip fringes).
+                self.assertEqual({l for l,a in zip(image.getchannel('R').getdata(),alpha) if a==0},{round(.65*255)})
+
+    def test_street_leaf_atlas_reproduces_four_species_clusters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            street_leaf_atlas(Path(tmp))
+            produced=Path(tmp)/STREET_LEAF_ATLAS
+            self.assertEqual(produced.read_bytes(),(ROOT/'godot/textures'/STREET_LEAF_ATLAS).read_bytes())
+            with Image.open(produced) as image:
+                self.assertEqual((image.size,image.mode),((256,256),'RGBA'))
+                alpha=list(image.getchannel('A').getdata())
+                # Each 128 px cell (ginkgo, pine, serrate, plane) holds one cluster.
+                for cell in range(4):
+                    ox,oy=(cell%2)*128,(cell//2)*128
+                    covered=sum(alpha[y*256+x]>127 for y in range(oy,oy+128) for x in range(ox,ox+128))/16384
+                    self.assertGreater(covered,.2,cell);self.assertLess(covered,.45,cell)
+                light=[l for l,a in zip(image.getchannel('R').getdata(),alpha) if a==255]
+                self.assertAlmostEqual(sum(light)/len(light)/255,.65,delta=.03)
+                self.assertEqual(set(image.getchannel('B').getdata()),{0})
                 self.assertEqual({l for l,a in zip(image.getchannel('R').getdata(),alpha) if a==0},{round(.65*255)})
 
     def test_common_library_and_tiles_reproduce_without_embedded_bitmaps(self):

@@ -10,6 +10,26 @@ const TREE_RADIUS: i64 = 200; // encloses the common renderer's 184 cm canopy
 /// City trees in proportion to 1:3 city maps (about 9 m tall at that scale):
 /// a 14 cm trunk 140 cm tall under renderer canopies within this radius.
 pub const CITY_TREE_RADIUS: i64 = 120;
+/// Street trees stand in a tree pit: a 40 cm square footprint turned with the
+/// placement (pit edges along local x and z), so a pit fits on a sidewalk.
+pub const STREET_TREE_PIT_CM: i64 = 40;
+/// Every street-tree crown vertex beyond 30 cm of the trunk axis stays at least
+/// this high above the foot, so crowns may overhang roads from here up.
+pub const STREET_CANOPY_MIN_CM: i64 = 120;
+/// Street-tree species and their display-only crown reach (cm) from the trunk axis.
+pub const STREET_TREES: [(&str, i64); 5] = [
+    ("builtin:street_tree_ginkgo", 60), ("builtin:street_tree_zelkova", 125),
+    ("builtin:street_tree_plane", 115), ("builtin:street_tree_cherry", 120),
+    ("builtin:street_tree_pine", 85)];
+/// Crown reach (cm) of a street-tree species, else None.
+pub fn street_tree_crown_cm(id: &str) -> Option<i64> {
+    STREET_TREES.iter().find(|(tree, _)| *tree == id).map(|(_, reach)| *reach)
+}
+/// Builtins whose distant generation omits the trunk-box faces in favour of a
+/// far tree: `builtin:tree`, `builtin:city_tree` and the street-tree species.
+pub fn distant_tree(id: &str) -> bool {
+    matches!(id, "builtin:tree" | "builtin:city_tree") || street_tree_crown_cm(id).is_some()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -358,6 +378,16 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
         "builtin:guide_sign" => Some(vec![proxy([0, 125, 0], [10, 250, 10])]),
         // Display-only details: no collision, a small reserved footprint.
         "builtin:bench" | "builtin:shrub" => Some(vec![]),
+        // Street trees: the city-tree trunk in a turned 40 cm tree pit; the
+        // display-only crown may overhang the road from 120 cm up.
+        "builtin:street_tree_ginkgo" | "builtin:street_tree_zelkova" | "builtin:street_tree_plane"
+        | "builtin:street_tree_cherry" | "builtin:street_tree_pine" => Some(vec![proxy([0, 70, 0], [14, 140, 14])]),
+        // Flower beds: solid low rims (local x along the curb); plants stay
+        // within the box + 3 cm and under a display height cap.
+        "builtin:planter" => Some(vec![proxy([0, 7, 0], [80, 14, 30])]),
+        "builtin:planter_square" => Some(vec![proxy([0, 9, 0], [60, 18, 60])]),
+        "builtin:median_bed" => Some(vec![proxy([0, 4, 0], [300, 8, 80])]),
+        "builtin:median_bed_pine" => Some(vec![proxy([0, 4, 0], [300, 8, 80]), proxy([0, 70, 0], [14, 140, 14])]),
         _ => None,
     }
 }
@@ -391,6 +421,10 @@ pub(crate) fn detail_radius(id: &str) -> Option<i64> {
     match id { "builtin:bench" => Some(40), "builtin:shrub" => Some(35), _ => None }
 }
 pub(crate) fn footprint(d: &MapDocument, p: &Placement) -> Vec<Point> {
+    if street_tree_crown_cm(&p.asset_id).is_some() {
+        let pit = CollisionBox { center: [0, 0, 0], size_cm: [STREET_TREE_PIT_CM as u32, 1, STREET_TREE_PIT_CM as u32] };
+        return crate::roads::hull(pit.placed(p).vertices.into_iter().map(|v| [v[0], 0, v[2]]).collect()).into_iter().map(xy).collect();
+    }
     if let Some(radius) = match p.asset_id.as_str() {
         "builtin:tree" => Some(TREE_RADIUS),
         "builtin:city_tree" => Some(CITY_TREE_RADIUS),
@@ -872,9 +906,9 @@ fn emit_placement(
     let owner = d.cell_at(xy(p.position)) == Some(cell);
     let asset = d.assets.binary_search_by(|a| a.id.cmp(&p.asset_id)).ok().map(|i| &d.assets[i]);
     // Match distant_from_generated's omission exactly: authored GLBs in every
-    // touched cell, generated GLBs and builtin (city) trees only in their anchor cell.
+    // touched cell, generated GLBs and builtin (city and street) trees only in their anchor cell.
     let omit_proxy = b.distant && ((asset.is_some_and(|a| a.path.ends_with(".glb"))
-        && (authored || owner)) || (matches!(p.asset_id.as_str(), "builtin:tree" | "builtin:city_tree") && owner));
+        && (authored || owner)) || (distant_tree(&p.asset_id) && owner));
     if !omit_proxy {
         let saved = b.bounds.clone();
         if unclipped {

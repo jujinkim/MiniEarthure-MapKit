@@ -155,14 +155,19 @@ are one shared mesh set per resource cache (640 KiB). A cell's estimate adds
 ## Street details drawn over proxies
 
 Streetlights and benches, traffic signals and bus shelters, subway entrances
-and station signs, and road signs and guide signs are drawn from shared mesh
-sets (`claim_mesh_set`, one per resource cache: 640 KiB, 1,152 KiB, 768 KiB
-and 960 KiB) over their unchanged collision proxies, whose faces leave the
-batches (`render_memory.DRAWN_OVER`). A refused set fails a cell holding
-streetlights, signals and shelters, transit details or road signs before any
-upload; a cell with only benches skips them. Instance buffers, id lists and groups fit inside the 64 KiB object
-share, so the estimate adds nothing. See
-[road signs](docs/RICHER_MATERIALS.md#road-signs-and-guide-signs).
+and station signs, road signs and guide signs, and street trees and flower beds
+are drawn from shared mesh sets (`claim_mesh_set`, one per resource cache:
+640 KiB, 1,152 KiB, 768 KiB, 960 KiB and 4 MiB; the street planting set
+holds its 256 px leaf atlas) over their unchanged collision proxies, whose
+faces leave the batches (`render_memory.DRAWN_OVER`). Each set is claimed only
+by a cell holding its kinds. A refused set fails a cell holding streetlights,
+signals and shelters, transit details, road signs or street planting before
+any upload; a cell with only benches skips them. Instance buffers (48 B per
+instance per buffer; street planting 64 B with tint and wind phase, two
+instances per flower bed, three for a median bed with a pine), id lists and
+groups fit inside the 64 KiB object share, so the estimate adds nothing. See
+[road signs](docs/RICHER_MATERIALS.md#road-signs-and-guide-signs) and
+[street trees and flower beds](docs/RICHER_MATERIALS.md#street-trees-and-flower-beds).
 
 ## LOD and occlusion admission
 

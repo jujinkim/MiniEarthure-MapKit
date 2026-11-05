@@ -21,6 +21,8 @@ const SIGNALS := preload("./street_signal_meshes.gd")
 const TRANSIT := preload("./transit_meshes.gd")
 ## Road signs and overhead guide signs: road_sign_meshes.gd groups (ROAD_SIGNS.KINDS).
 const ROAD_SIGNS := preload("./road_sign_meshes.gd")
+## Street trees and flower beds: street_planting_meshes.gd groups (STREET.IDS).
+const STREET := preload("./street_planting_meshes.gd")
 ## Facade and rooftop fixtures of generated buildings (presentation
 ## facade_fixtures, facade_fixtures.rs and roof_fixtures.rs): blade signs and
 ## air-conditioner units on walls, penthouses, tanks, condensers, rims, solar
@@ -39,7 +41,9 @@ static var _phase_peak_usec: Dictionary = {}
 const BUILTINS := ["builtin:tree", "builtin:fence", "builtin:streetlight", "builtin:signal_h", "builtin:signal_v",
 	"builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign", "builtin:bench", "builtin:shrub", "builtin:city_tree",
 	"builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60", "builtin:sign_speed_80",
-	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign"]
+	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign",
+	"builtin:street_tree_ginkgo", "builtin:street_tree_zelkova", "builtin:street_tree_plane", "builtin:street_tree_cherry", "builtin:street_tree_pine",
+	"builtin:planter", "builtin:planter_square", "builtin:median_bed", "builtin:median_bed_pine"]
 ## City trees (three street variants over the 140 cm collision trunk, scaled
 ## 0.85–1.15, or three wide park variants for zone footprints of 160–200 cm)
 ## and shrubs (three sizes) are display-only vegetation_meshes.gd meshes chosen
@@ -54,10 +58,13 @@ const VEGETATION_GROUP_METRES := 32.0
 ## streetlights and benches (street_furniture_meshes.gd, FURNITURE.KINDS),
 ## traffic signals and bus shelters (street_signal_meshes.gd, SIGNALS.KINDS),
 ## subway entrances and station signs (transit_meshes.gd, TRANSIT.KINDS),
-## road signs and guide signs (road_sign_meshes.gd, ROAD_SIGNS.KINDS).
-## `_street_detail` builds one city tree or shrub as single nodes for the lease
-## and placement checks of tests/street_detail_lease_validator.gd only.
-const STREET_DETAILS := {"builtin:shrub": true, "builtin:city_tree": true}
+## road signs and guide signs (road_sign_meshes.gd, ROAD_SIGNS.KINDS),
+## street trees and flower beds (street_planting_meshes.gd, STREET.IDS).
+## `_street_detail` builds one city tree, shrub, street tree or planter as
+## single nodes for the lease and placement checks of
+## tests/street_detail_lease_validator.gd only.
+const STREET_DETAILS := {"builtin:shrub": true, "builtin:city_tree": true, "builtin:street_tree_ginkgo": true, "builtin:street_tree_zelkova": true,
+	"builtin:street_tree_plane": true, "builtin:street_tree_cherry": true, "builtin:street_tree_pine": true, "builtin:planter": true, "builtin:median_bed_pine": true}
 
 static func _street_detail(id: String, object: Dictionary, radius_cm := 0) -> Node3D:
 	var anchor := Node3D.new()
@@ -65,6 +72,12 @@ static func _street_detail(id: String, object: Dictionary, radius_cm := 0) -> No
 	anchor.set_meta("mapkit_object_id", str(object.id))
 	anchor.position = scene_position(object.position)
 	anchor.rotation.y = float(int(object.quarter_turns)) * PI / 2.0 + deg_to_rad(float(object.get("yaw_offset_mdeg", 0)) / 1000.0)
+	if STREET.IDS.has(id):
+		# Street trees and flower beds: their near meshes as single nodes.
+		var placed := object.duplicate()
+		placed.asset_id = id
+		for node: MeshInstance3D in STREET.detail_nodes(placed, anchor.transform): anchor.add_child(node)
+		return anchor
 	match id:
 		_:
 			# Single-node city tree or shrub (validator helper; cells instance
@@ -314,6 +327,10 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 		if not ROAD_SIGNS.claim(job, view.objects):
 			fail(job,"E_MEMORY_BUDGET","Shared road signs exceed memory allowance")
 			return job
+		# Street trees and flower beds likewise.
+		if not STREET.claim(job, view.objects):
+			fail(job,"E_MEMORY_BUDGET","Shared street planting exceeds memory allowance")
+			return job
 		# Facade fixtures likewise; a refused claim only skips them.
 		FIXTURES.claim(job)
 	return job
@@ -534,6 +551,14 @@ static func _advance(job: Dictionary) -> bool:
 					return false
 				ROAD_SIGNS.plan(job, object)
 				continue
+			if STREET.IDS.has(id):
+				var planted := STREET.ready(job)
+				if planted < 0: return fail(job, "E_RENDER_ASSET", "Shared street planting is unavailable")
+				if planted == 0:
+					job.object -= 1
+					return false
+				STREET.plan(job, object)
+				continue
 			if VEGETATION_IDS.has(id):
 				var ready := _vegetation_ready(job)
 				if ready < 0: return true
@@ -575,6 +600,9 @@ static func _advance(job: Dictionary) -> bool:
 	elif not job.get("road_sign_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		ROAD_SIGNS.attach_group(job)
+	elif not job.get("street_plan", {}).is_empty():
+		job.last_phase = "instance_upload"
+		STREET.attach_group(job)
 	elif not job.get("vegetation_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		_attach_vegetation_group(job)
@@ -708,7 +736,7 @@ static func dispose(job: Dictionary) -> void:
 	job.chunk = {}
 	job.erase("lamp_bindings")
 	job.erase("urban_shader")
-	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "road_signs", "road_sign_plan", "fixtures", "fixture_plan", "hidden_objects"]: job.erase(key)
+	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "road_signs", "road_sign_plan", "street_planting", "street_plan", "fixtures", "fixture_plan", "hidden_objects"]: job.erase(key)
 	if job.get("lease") != null:
 		job.lease.seal()
 		job.lease = null
@@ -723,7 +751,8 @@ static func material_color(key: String) -> Color:
 		return {"builtin:tree": Color("745138"), "builtin:city_tree": Color("6b4c36"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63"),
 			"builtin:signal_h": Color("4a5055"), "builtin:signal_v": Color("4a5055"), "builtin:bus_shelter": Color("7aa0b8"),
 			"builtin:subway_entrance": Color("3f6fa8"), "builtin:station_sign": Color("2f7fd0"),
-			"builtin:guide_sign": Color("1d4f9c")}.get(key, Color("8d949a") if key.begins_with("builtin:sign_") else Color.GRAY)
+			"builtin:guide_sign": Color("1d4f9c"), "builtin:planter": Color("aaa69e"), "builtin:planter_square": Color("aaa69e"),
+			"builtin:median_bed": Color("aaa69e"), "builtin:median_bed_pine": Color("aaa69e")}.get(key, Color("8d949a") if key.begins_with("builtin:sign_") else (Color("5e5248") if key.begins_with("builtin:street_tree_") else Color.GRAY))
 	if key.begins_with("barrier:"):
 		return {"barrier:hedge": Color("486447"), "barrier:fence": Color("9b764f"), "barrier:wall": Color("b7b8b0")}.get(key, Color.GRAY)
 	if not key.contains(":"):
@@ -976,7 +1005,7 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
-	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","builtin:guide_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone"}.get(key,"metal" if key.begins_with("builtin:sign_") else key.get_slice(":",0))
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","builtin:guide_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone","builtin:planter":"stone","builtin:planter_square":"stone","builtin:median_bed":"stone","builtin:median_bed_pine":"stone"}.get(key,"metal" if key.begins_with("builtin:sign_") else ("wood" if key.begins_with("builtin:street_tree_") else key.get_slice(":",0)))
 
 static func occluding_surface(key: String) -> bool:
 	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])

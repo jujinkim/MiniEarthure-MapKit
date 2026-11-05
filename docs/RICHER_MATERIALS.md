@@ -296,15 +296,15 @@ completion-time reservations. See [timing controls](RENDER_DIAGNOSTICS.md#attach
 
 City trees (`builtin:city_tree`) and shrubs (`builtin:shrub`) are display-only
 procedural meshes (`godot/vegetation_meshes.gd`); no Kenney or external asset is
-used. A city tree's crown fits its placement footprint: street and authored city
-trees have the 120 cm `CITY_TREE_RADIUS`; a zone tree has its zone's declared
+used. A city tree's crown fits its placement footprint: placed city trees
+(document placements) have the 120 cm `CITY_TREE_RADIUS`; a zone tree has its zone's declared
 radius (120–200 cm, the city importer uses 200), which the native presentation
 lists per cell (`city_tree_radii`: object id → radius, only above 120 cm; display
 only, at most one entry per object inside its 64 KiB display share). Without that
 list (older native builds, standalone previews) every city tree is 120 cm.
 `vegetation_meshes.tree_set` picks the mesh set and size:
 
-- Street trees (footprints below 160 cm): three variants (round, columnar,
+- Narrow city trees (footprints below 160 cm): three variants (round, columnar,
   spreading; canopy base 1.45–1.7 m, crown 1.8–2.9 m tall), scaled 0.85–1.15
   times radius/120: about 1.7–2.3 m wide and 3–5 m tall at 120 cm.
 - Wide park trees (footprints from 160 cm): three broad variants (round, oval,
@@ -403,8 +403,12 @@ high 80 × 12, 22 × 12 (48 cm) and 6.25 × 10 (1 m); 15 % of the columns hold n
 blade. Roots darken into the lawn, tips lighten, and every blade takes the
 lawn's lush/dry patches with a gentle density, height and hue variation by
 clumps. Flower slots (stem and five-petal head tilted 50° toward the camera's
-side, white, yellow or violet with a warm centre) bloom in a fifth of the 4 m
-world squares (0.35/m² there, 0.012/m² elsewhere) on the 1 and 2 m rings. With
+side, with a warm centre) bloom in a fifth of the 4 m world squares (0.35/m²
+there, 0.012/m² elsewhere) on the 1 and 2 m rings. Inside such a square every
+head takes the square's one drift colour (white, yellow, marigold orange,
+petunia magenta, pansy violet, salvia red or cosmos pink, from the square's
+hash), so parks and lawns show drifts of flowers; scattered heads elsewhere mix
+white, yellow and violet. The drift is shader-only: no memory or geometry. With
 every quadrant drawn the rings hold 552 tile instances and 169,588 vertices on
 medium, 900 and 336,112 on high. Blades stand only on grass ground:
 a toroidal `Texture2DArray` of 8 m blocks (32 × 32 texels of 0.25 m, R32F; 8 × 8
@@ -710,6 +714,95 @@ the blue field and laid out for the driver's right, layouts and digits, tier var
 ranges, planned groups, hidden faces with untouched collision triangles,
 memory, refusal before upload, release and (rendered) a speed sign and a guide
 board by day and night. Distant cells keep the native proxy boxes.
+
+## Street trees and flower beds
+
+Street trees in tree pits (`builtin:street_tree_ginkgo`, `_zelkova`, `_plane`,
+`_cherry`, `_pine`) and flower beds (`builtin:planter`, `planter_square`,
+`median_bed`, `median_bed_pine`) are procedural display meshes
+(`godot/street_planting_meshes.gd`) on the park vegetation's shaders, wind,
+leaf tint, low-tier hull regrowth and weather, with their own 2×2 leaf atlas
+`godot/textures/vegetation/street_leaf_atlas.png` (`scripts/richer_assets.py
+--textures --leaves`, same data channels: ginkgo fans, pine needle tufts, small
+serrate leaves for zelkova and cherry, large lobed plane leaves). No external
+asset is used. Local +x runs along the road; the importer places them
+(`map-editor/docs/IMPORT_CITY.md`).
+
+Each species has a mature variant (instance scale 0.92–1.08) and a young
+replacement (12 % by identity, scale 1, crown × 0.65), the pine also a mature
+variant without a pit for median beds. A variant has a `body` (trunk with the
+species bark baked into vertex colours, branches, the crown's dark inner hull
+and the pit fixtures, 690–950 triangles), `cards` (77–200 alpha-scissor leaf
+cards) and `far` (a coarse hull, a plain trunk and the pit as one plate, 106
+triangles):
+
+- Ginkgo: a straight leader in a narrow cone with three whorls of short upswept
+  branches, grey-brown bark with vertical fissures, light yellow-green fans; a
+  cast-iron grate with 24 radial slots in a granite frame. Crown within 60 cm.
+- Zelkova: the trunk forks at 0.95 m into five ascending limbs under a broad
+  dome, smooth grey bark with orange-brown flakes; the grate. Within 125 cm.
+- Plane: a tall straight trunk under a broad ovoid crown, camouflage bark
+  (cream, olive and grey patches), large lobed leaves; a granite frame filled
+  with bark mulch and gravel. Within 115 cm.
+- Cherry: a low fork at 0.85 m into four spreading limbs under an umbrella
+  crown, dark bark with pale lenticel bands; a frame with a ring of liriope
+  tufts. Within 120 cm.
+- Pine: a gently curved trunk (6 cm at 1.4 m), grey and plated below turning
+  red-orange above, four or five flat needle pads in tiers (one hull per pad, so
+  the tiers stay apart); a soil mound in a ring of ten stones. Within 85 cm.
+- Young trees: a burlap trunk wrap to 0.60 m, a thin stem, and a wooden tripod
+  of three stakes with two rails and rubber ties to the stem.
+
+Every crown vertex plus its largest sway (and the low-tier hull grown back)
+stays within the species' crown reach (mapkit-core `STREET_TREES`) at the largest
+scale; at the smallest scale every vertex beyond 30 cm of the axis stands at
+least 1.20 m up (`STREET_CANOPY_MIN_CM`), so crowns may overhang the
+carriageway above vehicles. The twelve-sided trunk (young: the wrap) encloses
+the 14×140×14 cm trunk box to 0.60 m, above car height. Pit fixtures stay inside
+a 36 cm square (38.9 cm at 1.08, inside the 40 cm pit footprint) and rise to
+4.5 cm, so the frame shows above the 3 cm city sidewalk. A crown turns with the
+placement plus a quarter turn from the identity, so the pit stays square to the
+curb.
+
+Flower beds are two instances per piece, a rim with its soil and a planting
+(about 120–790 triangles each). Rims, chosen per 48 m world block so neighbours
+along a street match: planters take granite blocks with chamfered tops, red
+brick with stretcher courses and a soldier-course cap, exposed-aggregate
+concrete, or a dark green painted box with seams, a top lip and feet on a dark
+plinth; median beds take only granite (30 cm curb stones) or exposed-aggregate
+concrete. Plantings, by identity: bedding
+annuals (leafy mounds with petunia, marigold, pansy and begonia heads, one
+colour per clump), a clipped boxwood block, royal azaleas (lumpy mounds in
+magenta bloom), or ornamental grass with a liriope edge. Median beds hold a
+clipped azalea or boxwood hedge with rounded ends (per block), with or without
+an edge of annuals (by identity); `median_bed_pine` adds the bed pine at its
+centre. Rims enclose their proxy boxes by 5 mm, soil lies 2 cm under the rim
+top, and everything stays within the box plus 3 cm and below 45 cm (planter),
+60 cm (plaza planter) or 25 cm (median bed). A `far` box in granite with a
+planted top (28 triangles) replaces both from the near range on.
+
+The renderer draws them instead of their generated proxy faces
+(`render_memory.DRAWN_OVER`); collision and occluders never read those faces. A
+cell instances each mesh per 32 m square as MultiMeshes with leaf tint and wind
+phase and the instances' object ids (`apply_vegetation`): street trees as
+trees (near within `vegetation_near`, cards from medium, shadows by
+`vegetation_shadows`, far crowns never ending), flower beds as `planter` (near
+within 0.6 × `vegetation_near`, shadows from medium, the far box never ending
+since beds are solid); low draws no cards and no shadows. The set is one claim
+per resource cache (`render_resource_cache.claim_mesh_set`, 4 MiB: about
+21,900 vertices and 62,000 indices in CPU arrays and GPU buffers, 2.94 MB, plus
+the atlas as image and texture, the two materials and build arrays), claimed as
+the cell begins and built one atlas, material, crown step or mesh per admitted
+step (`street_planting_preparation`, cache stages `street_planting_<part>`); a
+refused set fails the cell before it uploads anything. Each instance adds 64 B
+to each of its group's buffers inside its 64 KiB object share. Cells without a
+cache build a process-lifetime set. `street_planting_validator` checks the
+build, memory, crown reach, canopy floor, trunk enclosure, pit fixtures, rim
+enclosure and planting caps, variant choice, hidden faces with untouched
+collision triangles, ranges and shadows per tier, refusal before upload and
+release; rendered runs write a capture of every species and bed piece
+(`MAPKIT_STREET_PLANTING_CAPTURE`). Distant cells draw far street trees and
+coloured bed boxes (`DISTANT_RENDERING.md`).
 
 ## Facade fixtures
 
