@@ -161,6 +161,7 @@ func vegetation(key: String) -> Dictionary:
 
 ## Generic shared display-only mesh set (street_furniture_meshes.gd,
 ## street_signal_meshes.gd, transit_meshes.gd, road_sign_meshes.gd,
+## street_planting_meshes.gd, city_lamp_meshes.gd, barrier_detail_meshes.gd,
 ## facade_fixture_meshes.gd): claimed under its own key and
 ## allowance, built by `build` (a static func(state: Dictionary, lease,
 ## context) -> bool) one part per admitted call until it leaves the set in

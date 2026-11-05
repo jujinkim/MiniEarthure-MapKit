@@ -32,15 +32,20 @@ crown inside the per-object allowance; flower-bed proxy faces take granite
 sides (170, 166, 158) and a planted top (86, 112, 70), the pine's trunk box pine
 bark. The anchor cell omits a street tree's trunk box; a neighbour cell keeps
 the clipped sliver of a trunk box that crosses its edge, coloured in the
-species' bark. No collision or full
+species' bark. City streetlights keep their 12 cm pole proxy faces in every
+cell (`distant_tree` is false for them, matching the full generation's
+omission rule) and add no far heads: lit heads inside the 16 cm-wide display
+envelope would be sub-pixel specks that shimmer at night. No collision or full
 GLB/texture instance is produced. The traversal is iterative. Building material lookup uses normalized ID order;
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.
 
 Native buildings (every part) emit closed triangular prisms in the near renderer's
 twelve material/use wall colours and carry light role 3 (night-lit walls at average
-window emission, dark roofs) with the map/object seed; barrier faces use a
-per-kind colour. The distant conversion removes
+window emission, dark roofs) with the map/object seed; barrier faces take
+their near design's colour (`barrier_design.rs`: wall and hedge paint, a fence's
+paint over the far backdrop by its far opacity, the haze its near far faces
+settle to). The distant conversion removes
 exactly paired, opposite internal vertical quads, even when their two triangles
 use different diagonals. It keeps source order and coordinates for every surviving
 face. Roofs, exterior walls, courtyard openings and cell-cut faces remain intact;

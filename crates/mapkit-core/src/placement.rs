@@ -25,8 +25,34 @@ pub const STREET_TREES: [(&str, i64); 5] = [
 pub fn street_tree_crown_cm(id: &str) -> Option<i64> {
     STREET_TREES.iter().find(|(tree, _)| *tree == id).map(|(_, reach)| *reach)
 }
+/// City streetlights: id, arm reach (cm, pole axis to head centre along local
+/// +x, over the road) and twin arms (heads at local ±x). Each stands on one
+/// solid pole; arms and heads are display-only. The reach is fixed per id, so
+/// an importer chooses the id that puts the head over the lanes from the pole's
+/// offset behind the curb.
+pub const CITY_STREETLIGHTS: [(&str, i64, bool); 8] = [
+    ("builtin:city_streetlight_75", 75, false), ("builtin:city_streetlight_135", 135, false),
+    ("builtin:city_streetlight_195", 195, false), ("builtin:city_streetlight_255", 255, false),
+    ("builtin:city_streetlight_315", 315, false), ("builtin:city_streetlight_375", 375, false),
+    ("builtin:city_streetlight_twin_75", 75, true), ("builtin:city_streetlight_twin_135", 135, true)];
+/// Width and height (cm) of the solid square city streetlight pole box, centred
+/// on the foot; it is the whole collision and footprint.
+pub const CITY_STREETLIGHT_POLE_CM: i64 = 12;
+pub const CITY_STREETLIGHT_HEIGHT_CM: i64 = 330;
+/// Height (cm) of the luminaire lens (head underside) above the foot.
+pub const CITY_STREETLIGHT_HEAD_CM: i64 = 310;
+/// Display envelope (cm) of a city streetlight around its foot: back (local
+/// −x beyond the pole axis; twins use the tip on both sides), tip (beyond the
+/// head centre along the arm), side (|local z|) and top. Every display vertex
+/// stays inside it; importers keep it clear of buildings, crowns and decks.
+pub const CITY_STREETLIGHT_ENVELOPE_CM: [i64; 4] = [25, 20, 8, 345];
+/// (arm reach cm, twin) of a city streetlight, else None.
+pub fn city_streetlight(id: &str) -> Option<(i64, bool)> {
+    CITY_STREETLIGHTS.iter().find(|(lamp, _, _)| *lamp == id).map(|(_, reach, twin)| (*reach, *twin))
+}
 /// Builtins whose distant generation omits the trunk-box faces in favour of a
 /// far tree: `builtin:tree`, `builtin:city_tree` and the street-tree species.
+/// City streetlights are not among them: their pole faces stay in distant cells.
 pub fn distant_tree(id: &str) -> bool {
     matches!(id, "builtin:tree" | "builtin:city_tree") || street_tree_crown_cm(id).is_some()
 }
@@ -388,6 +414,11 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
         "builtin:planter_square" => Some(vec![proxy([0, 9, 0], [60, 18, 60])]),
         "builtin:median_bed" => Some(vec![proxy([0, 4, 0], [300, 8, 80])]),
         "builtin:median_bed_pine" => Some(vec![proxy([0, 4, 0], [300, 8, 80]), proxy([0, 70, 0], [14, 140, 14])]),
+        // City streetlights: a solid pole only; the display-only arm and head
+        // reach over the road along local +x (twins along ±x) from about 280 cm up.
+        _ if city_streetlight(id).is_some() => Some(vec![proxy(
+            [0, CITY_STREETLIGHT_HEIGHT_CM / 2, 0],
+            [CITY_STREETLIGHT_POLE_CM as u32, CITY_STREETLIGHT_HEIGHT_CM as u32, CITY_STREETLIGHT_POLE_CM as u32])]),
         _ => None,
     }
 }

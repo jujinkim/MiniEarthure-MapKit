@@ -804,6 +804,147 @@ release; rendered runs write a capture of every species and bed piece
 (`MAPKIT_STREET_PLANTING_CAPTURE`). Distant cells draw far street trees and
 coloured bed boxes (`DISTANT_RENDERING.md`).
 
+## City streetlights
+
+The real-city lamps (`builtin:city_streetlight_75/135/195/255/315/375` and
+`_twin_75/135`, mapkit-core `CITY_STREETLIGHTS`) are procedural display meshes
+(`godot/city_lamp_meshes.gd`) over their only collision, the solid 12 cm pole
+box 330 cm tall. They follow the contract's frame: the foot at the origin,
+local +x over the road, the lens (luminaire underside) at 310 cm, and every
+display vertex inside the envelope (x from -25 cm, or -(reach + 20) cm on
+twins, to reach + 20 cm; |z| ≤ 8 cm; y from -8 cm to 345 cm), with nothing
+beyond x = 25 cm lower than 2.5 m.
+
+- Near mesh (774 triangles for a plain single lamp, 1,172 for a plain twin;
+  optional parts add up to about 400):
+  - footing and base: an octagonal concrete footing skirt down to -8 cm, which
+    hides DEM cut and fill at the foot; a base plate with four anchor nuts; a
+    square base cover over the whole 12 cm pole box up to 0.6 m (above the
+    car's 0.57 m), so a car always stops against a visible face; and an access
+    door with a lock and screws on the road side;
+  - shaft: a tapered 12-sided round or octagonal shaft (r 4.6 → 2.7 cm) with a
+    section collar at 1.6 m, a ribbed anti-poster sheet from 0.64 to 0.92 m,
+    and the white management-number plate with a yellow band and digit blocks;
+  - arm: either a bent mast, curving out of the shaft top through a 24 cm bend
+    and running level to the head, or a straight arm with a pole cap, two
+    clamp collars and a diagonal brace;
+  - LED head: a die-cast housing lofted from the spigot sleeve to a rounded
+    nose, five heat-sink fins and a photocell on top, and the flat lens with
+    twelve LED modules (two rows of six) and dark gaps;
+  - optional parts: banner brackets with a bowed, double-sided street banner
+    (four palettes: field, header stripe, pale band with a bar, border); a
+    pedestrian arm with a small head and lens at 1.45 m toward the pole's back
+    (single lamps only); a control box with a door seam and a conduit above
+    car height;
+  - twins: a second arm and head at -x.
+- Far mesh (32 triangles; 52 on twins): a hexagonal pole, an arm bar, a head
+  box and its lens.
+- Halo mesh: one quad per head.
+
+All three meshes serve every id. The arm reach is a per-instance value
+(`INSTANCE_CUSTOM.x`, cm, from the id). The vertex shader
+(`city_lamp.gdshader`) moves the head vertices by reach − 1.35 m and stretches
+the arm span between its fixed root and the head (`UV2.x` is the share of the
+stretch, negative on the twin side). Parts of other designs collapse to a
+point (`UV.y` is the part).
+
+Design choices are integer hashes:
+- From the lamp's 256 m world square and its road axis (the yaw modulo 180°
+  in 30° steps), so a street's lamps inside one square match on both sides.
+  The square is a fixed grid, not the road: a row changes design where it
+  crosses a square edge, the two sides of a street whose centreline runs
+  within half its width of an edge fall in different squares, and yaws near
+  a 15° + 30° k bucket edge can differ. The choices are the arm style
+  (22 % straight), the shaft (35 % octagonal), the paint (galvanised 45 %, dark
+  grey 30 %, bronze 15 %, warm white 10 %; heads die-cast light grey on pale
+  poles, in the pole colour on dark ones), banner streets (30 %, with their
+  palette) and pedestrian arms (30 %).
+- From the object identity: control boxes (40 %), and the 15 % of a banner
+  street's lamps that carry no banner.
+
+Weather wets and snows the lamps like walls.
+
+The lens and halos switch on while the sun is below the horizon, like
+`lighting_role` 2:
+- The lens is a frosted diffuser by day. At night it shows LED modules glowing
+  white-hot over the 4000 K light colour (sRGB FFEDD6).
+- The halo (`city_lamp_halo.gdshader`) is an additive, depth-tested quad that is
+  never written to depth. It sits just under each lens, faces the camera and is
+  pulled 0.2 m toward it. Its size grows with distance from 0.18 m and its
+  strength falls in proportion, so far heads stay steady points of about three
+  pixels. Its profile falls smoothly to zero at the edge. By day the halo
+  nodes are hidden, and every halo vertex collapses where no environment
+  reports the sun.
+
+The ground pools come from a per-cell night light map (presentation
+`lamp_map`, `lamp_map_rect` and `lamp_map_height`, mapkit-godot
+`lamp_map.rs`):
+- One RG8 texel every 50 cm (257 × 257 on a 128 m cell). Texel centres run
+  from one cell edge to the other, so two neighbouring cells meet on identical
+  border texels.
+- R sums the pools of every head whose pool reaches the cell, neighbours'
+  lamps included. A pool is an ellipse round the point under the head: 4.6 m
+  along the road, 3.0 m toward the road and 1.9 m back toward the pole, with a
+  bright (1 − q)² core and a (1 − q/4)⁴ tail that ends at twice those radii.
+  Only cells that some pool's bounding box reaches get a map.
+- G holds the light-weighted foot height of the lamps lighting the texel, in
+  16 cm steps above the cell's `lamp_map_height` base; unlit texels repeat a
+  lit neighbour's height so filtering never blends in a false one.
+- The renderer turns the map into one texture per cell without mipmaps (the
+  first road or sidewalk material makes it), so border texels stay identical
+  at every distance, and binds it on the cell's road and sidewalk materials
+  (`city_lamp_meshes.bind_light_map`).
+- After sunset, `urban_surface.gdshader` adds the surface's own albedo × 1.5
+  under the light, plus a faint sheen that grows on wet ground. Paint reads
+  brighter than asphalt, and snow brightest. The light fades out on surfaces
+  more than 2.4–3.0 m above the lit feet (a deck over the road, at the heads)
+  or 1.6–2.6 m below them (a road under a lit one), so pools stay on the level
+  their lamps stand on.
+- One texture fetch per road pixel at night, on every renderer (Mobile and
+  Compatibility included). No light nodes, decals or per-lamp loops.
+
+The light map was chosen over per-lamp SpotLights, decals, additive ground
+quads and a per-pixel lamp loop:
+- The SpotLight pool holds 4–8 lights shared with vehicles, so pools would pop
+  as lamps move in and out of it.
+- Mobile caps decals per mesh instance, and Compatibility has none.
+- Additive ground quads cut into crowned or sloped DEM roads.
+- A per-pixel lamp loop costs ALU per lamp.
+
+Grass verges, walls and vehicles are not lit by the lamps.
+
+A cell instances every lamp of a 16 m square into one group of near, far and
+halo MultiMeshes after its objects:
+- Near: within `streetlight_near` (none/20/32 m) + 11.5 m.
+- Far: beyond that, to the decoration distance + 11.5 m (64/112/192 m), from
+  0 m on low. A 12 cm pole is under a pixel farther away, and loaded cells then
+  pay no far draw calls; distant cells keep the pole proxy faces.
+- Halos: from medium, as far as the far mesh, and only at night: as the sun
+  crosses the horizon `display_quality.set_night_lights` hides or shows every
+  halo node, so halos issue no draws by day.
+- Near and far cast shadows from medium; halos never do.
+
+The far node lists its object ids for the editor's pick. The proxy faces are
+hidden (`render_memory.DRAWN_OVER`).
+
+The set is one claim per resource cache (`claim_mesh_set`, 512 KiB):
+- About 2,050 vertices and 5,920 indices in CPU arrays and GPU buffers
+  (0.31 MB), plus two materials with their shaders.
+- It is built one material or mesh per admitted step (`city_lamp_preparation`,
+  cache stages `city_lamp_<part>`).
+- Refused, it fails the cell before any upload.
+- Cells without a cache build a process-lifetime set.
+
+`city_lamp_validator` checks:
+- every id and design against the envelope, the 2.5 m rule and the pole box;
+- the lens under the head centre;
+- the far and halo meshes;
+- the street designs;
+- the tier ranges and shadows;
+- hidden faces, the groups and their instance data, and the lamp-map binding;
+- memory and refusal;
+- (rendered) the lens, halo and a lit road by night and day.
+
 ## Facade fixtures
 
 Generated buildings carry display-only 3D fixtures
@@ -959,6 +1100,126 @@ palettes, memory), native placement at 1:3 on walls and roofs, instance
 counts, transforms (scaled by kind) and design bits against the packed list,
 visibility per tier, reservation, lease release, refusal, standalone previews
 and (rendered) a blade face and a penthouse door lamp by night and day.
+
+## City barriers
+
+Generated barrier prisms (`MapDocument.barriers`: OSM fences, walls and
+hedges) draw as display-only detail inside their unchanged collision prisms;
+collision, surface probes, generation, the generated hash and the documents
+are untouched, and the prism faces leave the cell's batches
+(`render_memory.hidden_objects`) whenever the presentation lists the detail.
+At presentation time `mapkit-godot/src/barrier_details.rs` matches each
+generated prism (`asset_convexes` under the barrier ID) to its source segment
+and classifies its ends by rebuilding the owner cell's cuts (cell rect, the
+800 cm length lattice, heightmap grid lines and diagonals): an end on a cut
+continues, an extension past a polyline vertex is a joint, any other end is a
+span end (a line end, a road or structure gate). Runs follow the prism's own
+centreline and side vector (the side vector is rounded and can be skewed up
+to 15°; frames are right-handed); at joints turning 15° or more they stop at
+the vertex, and the segment starting there adds one corner post or pier and,
+for walls and hedges, a corner run over the outer wedge (centred on the
+vertex along that segment, 98 % of the prisms' half width, length and
+height, so it stays inside them and shares no plane with a run; hedges, giwa
+caps and every far solid box draw it, other walls' near corner piers cover
+the wedge); gentler joints reach a mitre's length past it, so neighbouring
+runs never overlap coplanar faces. Posts and piers stand on the
+barrier's arc-length lattice (one bay of the design), each owned by the piece
+whose clamped half-open range holds it and kept inside its piece (no post
+straddles a joint or a terrain crease), plus an end or 1.25 × gate post just
+inside each span end (slimmer on a span-end piece too short for it); lattice posts within 0.3 bay of a hard joint, line end,
+any gate of the barrier in the cell (a gate across a cell seam is not seen)
+or, on a closed line with a gentle closing turn, the post at arc 0 give way. Sizes stay inside the prism at every map
+scale (a size factor shrinks posts of thin authored fences). The cell's
+presentation carries `barrier_runs` (13 floats per run: ground point and
+ground vector, side vector, height, design bits, phase, end flags, ID index),
+`barrier_posts` (13 floats per post: ground point, x vector per real metre
+with the rise, side vector, height, bits, post kind, size factor, ID index),
+`barrier_ids` and `barrier_capped`; over 8,192 runs or 16,384 posts a cell lists
+nothing and keeps drawing its prisms. The 1:3 cards list at most 517 runs and
+707 posts (Jongno) or 417 runs and 841 posts (Yeongtong) in a cell, natively in
+12–39 ms on a development machine, every prism matched to its segment.
+
+Designs (`mapkit-package/src/barrier_design.rs`, shared with the distant mesh)
+hash the barrier ID and the real height (height × D of the map scale 1:D).
+Fences under 0.95 m are pipe rails or wooden; 0.95–1.6 m steel bar panels
+(plain, spear tips or a low arch per bay), welded wire mesh, wooden boards or
+pickets, or chain-link; taller ones welded mesh, chain-link or steel bars.
+Walls are red brick (a concrete cap or a soldier course), painted block,
+precast panels between H-posts or ashlar stone (40 % with a giwa tile cap);
+hedges take three leaf tones with a flat or rounded top. Paints, bays (fence
+1.8–3.0 m, walls 2.0–4.0 m) and far opacities come from
+`godot/barrier_palette.json`, which the shader binds and the design reads.
+
+`godot/barrier_detail_meshes.gd` builds the procedural set from one shader
+(`barrier_detail.gdshader`) in three materials (opaque, dithered infill and
+blended far): mesh x runs 0..1 along a run (posts in real
+metres), y 0..1 up and z −0.5..0.5 across the prism, with real-metre offsets
+in UV2 converted by the vertex shader from the instance's height,
+perpendicular width and map scale, so rails, tubes and posts keep real sizes
+while wall and hedge bodies fill the prism; normals are authored in that frame
+and corrected through the sheared, non-uniform instance basis. Parts collapse
+unless their variant matches the design bits. Fence runs carry rails, frames,
+tubes, boards and back rails; the infill (bars on a 16-per-bay pitch, 5 mm
+mesh wires with V-folds, a 3 mm diamond lattice, pointed pickets) is a
+box-filtered pattern on two faces 8 mm apart, alpha-tested near with wires at
+least most of a pixel wide and an ordered dither as the pattern goes
+unresolved (fewer than six pixels a mesh), where it settles to the fence's far
+opacity. Walls show an inset body (5 cm real) standing on a plinth, under a
+frieze and coping or the giwa eaves, slopes and ridge (the body meets the
+plinth top and the eave band instead of overlapping their end planes, so an
+exposed run end shows no coplanar faces), with brick, block, stone and panel
+courses on world height (level on slopes) and joints on the bay frame;
+patterns repeat whole per bay and noise follows world positions, so pieces
+join seamlessly. Piers (brick, block pilasters, precast H-posts; end, gate and
+corner piers) stand full width under the coping. Hedges draw with a bumped leaf
+clump field, darker gaps and a fresher clipped top. Rain darkens and snow
+settles on upward faces.
+
+A cell instances per 32 m square after its objects: near fence runs, solid runs
+(walls and hedges), fence infill, fence posts and wall piers, and far fence
+faces (alpha blended, never discarded: posts, rails and infill painted at the
+far opacity) and far solid boxes (piers, plinth and coping painted). Runs join
+the square of their midpoint, posts and piers the square of the run they stand
+on, and every group of a square carries the same custom AABB (the union of its
+roles' instances), so Godot measures every role's range to the same centre and
+the near-to-far handover never draws a part twice or not at all. Near groups
+show within `barrier_near` none/24/40 m plus the group reach, far groups beyond
+with a crossfade on Forward+ and hysteresis elsewhere, and never end
+(`display_quality.apply_barrier`). A cell planned on low, which draws no near
+meshes, plans one far fence and one far solid group for the whole cell
+instead (two draws, one shadow caster, per barrier cell rather than one or two
+per 32 m square); those groups draw from 0 on every tier until the cell
+reloads after a tier change. Walls and hedges cast
+shadows on every tier like the prisms, fence runs and posts from medium, the
+infill on high, the blended far faces never. Planning walks 256 entries per
+step. The set is one claim per resource cache (256 KiB: about 1,070 vertices
+and 1,530 indices in CPU arrays and GPU buffers, 0.13 MB, plus three materials,
+their shaders and build arrays), claimed as a cell with barrier detail begins
+and built one part per admitted step (`barrier_preparation`, cache stages
+`barrier_<part>`); refused, the cell fails before any upload, since its prism
+faces are hidden. The cell estimate adds `render_memory.barrier_bytes` (640 B
+per run, 192 B per post, 8 KiB per group); its lease carries the nodes and
+instance buffers. Cells without a resource cache (standalone scenes) build a
+process-lifetime set. Cells without a lease (the Editor's previews, which claim
+the Editor's cached set, and standalone scenes) keep each run's top on the far
+groups (`mapkit_pick_faces`) for surface picking. The distant mesh colours a
+wall or hedge with its paint and a fence with its paint over the far backdrop
+by its far opacity, the haze the near far faces settle to
+([distant rendering](DISTANT_RENDERING.md)). `cargo test -p mapkit-godot
+barrier_details` checks span ends only at line ends and the road gate, posts
+once per bay across pieces and cells, phase continuity, hard joints with one
+corner post, mitred gentle joints, corner piers on a closed wall and none on
+hedges, corner runs inside the prisms at hard wall and hedge joints, lattice
+posts once round a gentle closed ring, and determinism; `cargo test -p
+mapkit-package barrier_design` the
+designs per height band, whole patterns per bay and the distant haze;
+`barrier_detail_validator` the set (one part per step, identical builds,
+memory, the three materials, discard only in the near infill), native lists at
+1:3 for every family (designs, corner, end and gate posts), every placed vertex
+inside its barrier's prisms on flat and 12 %/6 % sloped ground, hidden faces
+only with a list, groups, shared square AABBs (posts with the far group that
+paints them), the whole-cell low plan, metadata, ranges and shadows per tier, the
+estimate, lease release, a refused set and standalone pick faces.
 
 ## Display quality
 

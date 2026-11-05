@@ -451,8 +451,12 @@ impl MapKitWorkingSnapshot {
                 files.insert(a.path.clone(), data);
             }
             let assets = mapkit_package::preview_asset_cost(&subset, &files, placements.len())?;
+            // The cell's night lamp map (lamp_map.rs) when any streetlight lights it.
+            let bounds = d.cell_bounds(cell)?;
+            let (min, size) = crate::lamp_map::square(&d, &bounds);
+            let lamps = if crate::lamp_map::lights(&crate::lamp_map::heads(&d), min, size) { crate::lamp_map::map_bytes(&d) } else { 0 };
             let presentation_bytes =
-                assets + presentation::environment_cost(&d) + estimate.triangles * 256;
+                assets + presentation::environment_cost(&d) + estimate.triangles * 256 + lamps;
             let mut value = serde_json::to_value(estimate).unwrap();
             value["presentation_bytes"] = serde_json::json!(presentation_bytes);
             Ok(value)

@@ -8,8 +8,13 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Cache {
     assets: BTreeMap<String, (Option<PackedByteArray>, String, u64, u64)>,
     placements: BTreeMap<String, usize>,
+    /// City streetlight heads of the document (lamp_map.rs), built once.
+    lamps: Option<Vec<crate::lamp_map::Head>>,
 }
 impl Cache {
+    fn lamps(&mut self, p: &Package) -> &[crate::lamp_map::Head] {
+        self.lamps.get_or_insert_with(|| crate::lamp_map::heads(&p.document))
+    }
     fn bytes(&mut self, p: &Package, id: &str) -> PackedByteArray {
         self.asset(p, id);
         self.assets
@@ -72,8 +77,14 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
             .map_or(0, |c| c.triangles * 256)
             + mapkit_core::road_style_bound(&p.document, cell)? * 16384
     };
+    // The night light map of the cell's streetlights (lamp_map.rs), when any
+    // head lights it: decorate lists exactly the same cells.
+    let bounds = p.document.cell_bounds(cell)?;
+    let (min, size) = crate::lamp_map::square(&p.document, &bounds);
+    let lamps = if crate::lamp_map::lights(cache.lamps(p), min, size) { crate::lamp_map::map_bytes(&p.document) } else { 0 };
     Ok(environment_cost(&p.document)
         + styles
+        + lamps
         + instances
             .into_iter()
             .map(|(id, count)| {
@@ -110,7 +121,8 @@ pub fn decorate(p: &Package, data: VarDictionary, cache: &mut Cache) -> Result<V
             .unwrap()
             .to::<VarDictionary>()
             .len() as u64
-            * 16384;
+            * 16384
+        + if presentation.contains_key("lamp_map") { crate::lamp_map::map_bytes(&p.document) } else { 0 };
     for asset in &p.document.assets {
         mapkit_core::cancellation::checkpoint()?;
         if !assets.contains_key(asset.id.as_str()) {
@@ -313,13 +325,41 @@ fn decorate_inner(
     // Display-only facade and rooftop fixtures of generated buildings (blade
     // signs and air-conditioner units on walls, facade_fixtures.rs; penthouses,
     // tanks, condensers, rims, solar rows and masts, roof_fixtures.rs): they need the floor pitch, so they are placed here
-    // from the packed arrays rather than in pack().
+    // from the packed arrays rather than in pack(); barrier detail needs the
+    // document's barrier lines and map scale likewise.
     if let Some(geometry) = chunk.get("geometry").and_then(|v| v.try_to::<Gd<crate::packed::MapKitPackedGeometry>>().ok()) {
         let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
         let rect = [bounds.min[0] as f32 * scale, -bounds.max[1] as f32 * scale, bounds.max[0] as f32 * scale, -bounds.min[1] as f32 * scale];
         let placed = geometry.bind().facade_fixtures(facade_floor_cm(document) as f32 * scale, rect);
         presentation.set("facade_fixtures", &PackedFloat32Array::from(placed.values.as_slice()));
         presentation.set("facade_fixtures_capped", placed.capped as i64);
+        // Display-only city barrier detail (barrier_details.rs): runs and
+        // posts drawn inside the prisms, whose faces the renderer then hides.
+        let barriers = geometry.bind().barrier_details(document, mapkit_core::Cell { x: cell.get("x").unwrap().to::<i32>(), y: cell.get("y").unwrap().to::<i32>() })?;
+        presentation.set("barrier_runs", &PackedFloat32Array::from(barriers.runs.as_slice()));
+        presentation.set("barrier_posts", &PackedFloat32Array::from(barriers.posts.as_slice()));
+        presentation.set("barrier_ids", &barriers.ids.iter().map(|id| GString::from(id.as_str())).collect::<PackedStringArray>());
+        presentation.set("barrier_capped", barriers.capped);
+    }
+    // Night light of the city streetlights whose pools reach this cell,
+    // neighbours' included (lamp_map.rs): an RG8 map (light, foot height)
+    // over the cell square, its scene rectangle [x0, z0, size m, texels]
+    // (rows along scene +z) and its height scale [G = 0 scene y, m per step].
+    let (min, size) = crate::lamp_map::square(document, &bounds);
+    let fresh;
+    let heads: &[crate::lamp_map::Head] = if let Some((p, cache)) = cached.as_mut() {
+        cache.lamps(*p)
+    } else {
+        fresh = crate::lamp_map::heads(document);
+        &fresh
+    };
+    let n = crate::lamp_map::texels(document);
+    if let Some(lit) = crate::lamp_map::map(heads, min, size, n) {
+        mapkit_core::cancellation::checkpoint()?;
+        let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
+        presentation.set("lamp_map", &PackedByteArray::from(lit.texels.as_slice()));
+        presentation.set("lamp_map_height", &PackedFloat32Array::from([lit.height_base as f32 * scale, crate::lamp_map::HEIGHT_STEP_CM as f32 * scale].as_slice()));
+        presentation.set("lamp_map_rect", &PackedFloat32Array::from([min[0] as f32 * scale, -((min[1] + size) as f32) * scale, size as f32 * scale, n as f32].as_slice()));
     }
     chunk.set("presentation", &presentation);
     data.set("chunk", &chunk);

@@ -97,9 +97,12 @@ streetlights and benches the shared street furniture set
 subway entrances and station signs the shared transit set
 ([RICHER_MATERIALS](RICHER_MATERIALS.md#transit-entrances-and-station-signs), `transit_detail_validator`),
 street trees and flower beds the shared street planting set
-([RICHER_MATERIALS](RICHER_MATERIALS.md#street-trees-and-flower-beds), `street_planting_validator`).
-A cell's display lease tracks only their nodes, MultiMeshes and instance buffers,
-so it retires with the cell (`street_detail_lease_validator`). `road_safety_probe` checks
+([RICHER_MATERIALS](RICHER_MATERIALS.md#street-trees-and-flower-beds), `street_planting_validator`),
+and city streetlights the shared city lamp set, with the night lamp map on
+road and sidewalk materials
+([RICHER_MATERIALS](RICHER_MATERIALS.md#city-streetlights), `city_lamp_validator`).
+A cell's display lease tracks only their nodes, MultiMeshes and instance buffers
+and the cell's lamp-map texture, so it retires with the cell (`street_detail_lease_validator`). `road_safety_probe` checks
 public regional examples. `reseal_courses` copies course definitions onto a new map
 identity without completion evidence and never overwrites. Vector status:
 [DETERMINISM](../spec/DETERMINISM.md). Vehicle driving and appearance are user checks.

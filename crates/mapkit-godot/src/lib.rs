@@ -1,5 +1,7 @@
+mod barrier_details;
 mod distant;
 mod facade_fixtures;
+mod lamp_map;
 mod occupied;
 mod packed;
 mod presentation;

@@ -194,7 +194,11 @@ earlier documents keep their bytes, world hashes and generated geometry.
     pruning; a region keeps the barriers its line bounds reach. Track environment
     export checks test driving space and supports exactly against the composed
     (track-gated) barrier pieces.
-  - Display key `barrier:<kind>` (hedge leaf, fence wood, wall stone colours).
+  - Display: the faces carry `barrier:<kind>` (hedge leaf, fence wood, wall
+    stone colours) as a fallback; a presentation listing barrier detail
+    (`barrier_runs`, `barrier_posts`) hides them and draws display-only fences,
+    walls and hedges inside the prisms, variants by barrier-ID hash and real
+    height ([city barriers](../docs/RICHER_MATERIALS.md#city-barriers)).
 - `Building.parts` (≤255): `{footprint, holes?, base_cm?, height_cm?}`; absent values
   inherit the record's and normalization drops values equal to them. The record
   stays one object (ID, material, usage, roof, entrances, object count); the
@@ -248,6 +252,22 @@ earlier documents keep their bytes, world hashes and generated geometry.
     species omit their trunk faces from distant generation in their anchor cell
     in favour of a far tree; flower beds, including the median pine, keep their
     proxy faces.
+- City streetlights (local +x over the road), `CITY_STREETLIGHTS`:
+  `builtin:city_streetlight_75`, `_135`, `_195`, `_255`, `_315`, `_375` (one arm) and
+  `builtin:city_streetlight_twin_75`, `_twin_135` (two arms along local ±x). The
+  number is the arm reach in cm from the pole axis to the head centre, fixed per
+  id. Collision and footprint are one solid pole box,
+  `CITY_STREETLIGHT_POLE_CM` = 12 cm square and `CITY_STREETLIGHT_HEIGHT_CM` =
+  330 cm tall, turned with the placement. The arm and head are display-only, with
+  the lens `CITY_STREETLIGHT_HEAD_CM` = 310 cm above the foot. Every display vertex
+  stays inside `CITY_STREETLIGHT_ENVELOPE_CM` = [back 25, tip 20, side 8, top 345]
+  cm: local x from −25 (twins −reach − 20) to reach + 20, |local z| ≤ 8, at most
+  345 cm up. A ground skirt may reach 8 cm below the foot. Unlike trees, they keep
+  their pole faces in distant generation. Repetitions do not accept them
+  (only `builtin:fence` and `builtin:streetlight`). Display: the pole faces are
+  hidden under display-only lamps whose designs follow street hashes, and a
+  per-cell presentation light map (not document data) lights roads and
+  sidewalks at night ([city streetlights](../docs/RICHER_MATERIALS.md#city-streetlights)).
 - Zone trees stand on unpainted terrain or on painted grass or dirt; other paint,
   roads, water and buildings keep refusing them.
 - `MapDocument.play_area` (optional, absent = the whole `bounds` rectangle): up to

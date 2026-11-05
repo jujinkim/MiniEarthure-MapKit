@@ -152,19 +152,53 @@ are one shared mesh set per resource cache (640 KiB). A cell's estimate adds
 (2.4 MiB) to a cell with building prisms. See
 [facade fixtures](docs/RICHER_MATERIALS.md#facade-fixtures).
 
+## City barriers
+
+Fences, walls and hedges drawn inside barrier prisms are one shared mesh set
+per resource cache (256 KiB). A cell's estimate adds 640 B per listed run
+(its 52 B entry, three 64 B instance slots and their three plan copies, ID
+references and the transient owner entry that puts its posts in its square),
+192 B per post or pier and 8 KiB per group (one role in one 32 m square); the
+prism faces they replace leave the batches, and each piece's 12 triangles
+already reserve far more in `upper_bound`, which needs no addition. A refused
+set fails the cell before any upload. See
+[city barriers](docs/RICHER_MATERIALS.md#city-barriers).
+
+## City streetlights
+
+City streetlights are one shared mesh set per resource cache (512 KiB: one
+near, far and halo mesh for all eight ids, about 2,050 vertices and 5,920
+indices, two materials and shaders). A lamp adds 64 B to each of its 16 m
+group's three instance buffers and its id to the group's list, inside its
+64 KiB object share; its pole proxy faces leave the batches. A refused set
+fails the cell before any upload.
+
+The night lamp map (presentation `lamp_map`, mapkit-godot `lamp_map.rs`) is
+presentation bytes. Native `cost()` (the admission bound) and `decorate()` (the
+measured count) both add `lamp_map::map_bytes` for every cell some head's
+pool reaches (the same pool-box test), and so does the editor's preview
+estimate. That is 257² × 2 + 4,096 = 136,194 B on a 128 m cell. The source
+holds the 129 KiB array within it, and the display estimate's share of the
+same `presentation_bytes` holds the renderer's unmipmapped RG8 texture of the
+same size, so `render_memory.gd` adds nothing and nothing is counted twice. See
+[city streetlights](docs/RICHER_MATERIALS.md#city-streetlights).
+
 ## Street details drawn over proxies
 
 Streetlights and benches, traffic signals and bus shelters, subway entrances
-and station signs, road signs and guide signs, and street trees and flower beds
-are drawn from shared mesh sets (`claim_mesh_set`, one per resource cache:
-640 KiB, 1,152 KiB, 768 KiB, 960 KiB and 4 MiB; the street planting set
-holds its 256 px leaf atlas) over their unchanged collision proxies, whose
+and station signs, road signs and guide signs, street trees and flower beds,
+and city streetlights are drawn from shared mesh sets (`claim_mesh_set`, one
+per resource cache: 640 KiB, 1,152 KiB, 768 KiB, 960 KiB, 4 MiB and 512 KiB;
+the street planting set holds its 256 px leaf atlas) over their unchanged
+collision proxies, whose
 faces leave the batches (`render_memory.DRAWN_OVER`). Each set is claimed only
 by a cell holding its kinds. A refused set fails a cell holding streetlights,
-signals and shelters, transit details, road signs or street planting before
+signals and shelters, transit details, road signs, street planting or city
+streetlights before
 any upload; a cell with only benches skips them. Instance buffers (48 B per
 instance per buffer; street planting 64 B with tint and wind phase, two
-instances per flower bed, three for a median bed with a pine), id lists and
+instances per flower bed, three for a median bed with a pine; city
+streetlights 64 B with reach and design), id lists and
 groups fit inside the 64 KiB object share, so the estimate adds nothing. See
 [road signs](docs/RICHER_MATERIALS.md#road-signs-and-guide-signs) and
 [street trees and flower beds](docs/RICHER_MATERIALS.md#street-trees-and-flower-beds).

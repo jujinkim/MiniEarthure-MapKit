@@ -1,6 +1,12 @@
 extends RefCounted
 ## Public presentation-only policy. Never serialized into map or race state.
 static var current: Dictionary = {}
+## Whether the sun is below the horizon (environment_renderer sets it as the
+## sun crosses 0, the threshold the lamp lenses, halos and pools use): city
+## lamp halos are hidden by day so they issue no draws. True until an
+## environment reports, so previews without one keep the shader's own switch.
+static var night_lights := true
+const HALO_GROUP := "mapkit_city_lamp_halos"
 
 static func profile(level: int) -> Dictionary:
 	level = clampi(level, 0, 2)
@@ -26,7 +32,11 @@ static func profile(level: int) -> Dictionary:
 		# (every tier) and the other kinds (from medium) show the detailed
 		# mesh within fixture_near (none on low), the simple mesh beyond (see
 		# apply_fixture).
-		"fixture_near":[0.0,24.0,40.0][level]}
+		"fixture_near":[0.0,24.0,40.0][level],
+		# City fences, walls and hedges: near runs, infill, posts and piers
+		# within barrier_near (none on low), the far faces and boxes beyond
+		# (see apply_barrier).
+		"barrier_near":[0.0,24.0,40.0][level]}
 
 static func active() -> Dictionary:
 	return profile(1) if current.is_empty() else current.duplicate()
@@ -51,6 +61,7 @@ static func apply_node(node: Node, value: Dictionary) -> void:
 		if node.has_meta("mapkit_vegetation_lod"): apply_vegetation(node, value)
 		elif node.has_meta("mapkit_furniture_lod"): apply_furniture(node, value)
 		elif node.has_meta("mapkit_fixture_lod"): apply_fixture(node, value)
+		elif node.has_meta("mapkit_barrier_lod"): apply_barrier(node, value)
 		elif node.get_meta("mapkit_decoration",false):
 			node.visibility_range_end = float(value.decoration_distance)
 			node.visibility_range_end_margin = 8.0
@@ -113,6 +124,9 @@ static func range_fade(method: String) -> GeometryInstance3D.VisibilityRangeFade
 
 static func apply_furniture(node: GeometryInstance3D, value: Dictionary) -> void:
 	var kind := str(node.get_meta("mapkit_furniture_kind",""))
+	if kind == "city_streetlight":
+		apply_city_lamp(node, value)
+		return
 	var own := kind == "streetlight" or kind == "bench"
 	var near := float(value.get(kind + "_near" if own else "furniture_near",32.0))
 	var reach := near + (FURNITURE_REACH if own else GROUP_REACH) if near > 0.0 else 0.0
@@ -145,6 +159,52 @@ static func apply_furniture(node: GeometryInstance3D, value: Dictionary) -> void
 		node.visibility_range_end = maxf(reach, 1.0)
 		node.visibility_range_end_margin = VEGETATION_MARGIN
 
+## City streetlight groups (city_lamp_meshes.gd, 16 m squares, like the
+## builtin streetlight): the near mesh within streetlight_near +
+## FURNITURE_REACH (none on low), the far mesh beyond it to
+## decoration_distance + FURNITURE_REACH (from 0 on low): a 12 cm pole is
+## under a pixel there and the distant cells keep its proxy faces, so far
+## rows cost no draw calls across every loaded cell. Both cast shadows from
+## medium. Halos (night glow, additive) from medium as far as the far mesh,
+## never casting shadows, and only while night_lights (set_night_lights
+## toggles them as the sun crosses the horizon).
+static func apply_city_lamp(node: GeometryInstance3D, value: Dictionary) -> void:
+	var lod := str(node.get_meta("mapkit_furniture_lod"))
+	var level := int(value.level)
+	var near := float(value.get("streetlight_near", 20.0))
+	var reach := near + FURNITURE_REACH if near > 0.0 else 0.0
+	var end := float(value.decoration_distance) + FURNITURE_REACH
+	node.visibility_range_fade_mode = range_fade(RenderingServer.get_current_rendering_method())
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if level >= 1 and lod != "halo" else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	match lod:
+		"far":
+			node.visible = true
+			node.visibility_range_begin = reach
+			node.visibility_range_begin_margin = VEGETATION_MARGIN if reach > 0.0 else 0.0
+			node.visibility_range_end = end
+			node.visibility_range_end_margin = 8.0
+		"halo":
+			node.set_meta("mapkit_halo_tier", level >= 1)
+			node.visible = level >= 1 and night_lights
+			node.visibility_range_begin = 0.0
+			node.visibility_range_begin_margin = 0.0
+			node.visibility_range_end = end
+			node.visibility_range_end_margin = 8.0
+		_:
+			node.visible = reach > 0.0
+			node.visibility_range_begin = 0.0
+			node.visibility_range_begin_margin = 0.0
+			node.visibility_range_end = maxf(reach, 1.0)
+			node.visibility_range_end_margin = VEGETATION_MARGIN
+
+## Records whether the sun is below the horizon and shows or hides every city
+## lamp halo of `tree` (HALO_GROUP) to match its tier; called on change only.
+static func set_night_lights(tree: SceneTree, night: bool) -> void:
+	night_lights = night
+	if tree == null: return
+	for node: Node in tree.get_nodes_in_group(HALO_GROUP):
+		if node is GeometryInstance3D: node.visible = night and bool(node.get_meta("mapkit_halo_tier", false))
+
 ## Facade fixture groups (facade_fixture_meshes.gd, 32 m squares): the near
 ## mesh within fixture_near + GROUP_REACH, the far mesh beyond, ending at
 ## decoration_distance + GROUP_REACH for blade signs, penthouses and tanks,
@@ -172,6 +232,41 @@ static func apply_fixture(node: GeometryInstance3D, value: Dictionary) -> void:
 		node.visibility_range_end_margin = 8.0
 	else:
 		node.visible = reach > 0.0 and (blade or level >= 1)
+		node.visibility_range_begin = 0.0
+		node.visibility_range_begin_margin = 0.0
+		node.visibility_range_end = maxf(reach, 1.0)
+		node.visibility_range_end_margin = VEGETATION_MARGIN
+
+## City barrier groups (barrier_detail_meshes.gd, 32 m squares): near runs,
+## infill, posts and piers within barrier_near + GROUP_REACH (none on low),
+## the far fence faces and solid boxes beyond with VEGETATION_MARGIN (a
+## crossfade on Forward+, hysteresis elsewhere) and no end: they replace
+## prism faces every loaded cell drew. Far groups of a cell planned on low
+## (one per role for the whole cell, mapkit_barrier_low_plan) begin at 0 on
+## every tier. Walls and hedges (solid runs, piers, far boxes) cast shadows
+## on every tier like the prisms; fence runs and posts from medium; the
+## dithered infill on high; the blended far fence faces never.
+static func apply_barrier(node: GeometryInstance3D, value: Dictionary) -> void:
+	var role := str(node.get_meta("mapkit_barrier_role", ""))
+	var far := str(node.get_meta("mapkit_barrier_lod")) == "far"
+	var level := int(value.level)
+	var near := float(value.get("barrier_near", 24.0))
+	var reach := near + GROUP_REACH if near > 0.0 and not node.get_meta("mapkit_barrier_low_plan", false) else 0.0
+	node.visibility_range_fade_mode = range_fade(RenderingServer.get_current_rendering_method())
+	var shadows := false
+	match role:
+		"solid", "pier", "solid_far": shadows = true
+		"fence", "post": shadows = level >= 1
+		"infill": shadows = level >= 2
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if far:
+		node.visible = true
+		node.visibility_range_begin = reach
+		node.visibility_range_begin_margin = VEGETATION_MARGIN if reach > 0.0 else 0.0
+		node.visibility_range_end = 0.0
+		node.visibility_range_end_margin = 0.0
+	else:
+		node.visible = reach > 0.0
 		node.visibility_range_begin = 0.0
 		node.visibility_range_begin_margin = 0.0
 		node.visibility_range_end = maxf(reach, 1.0)

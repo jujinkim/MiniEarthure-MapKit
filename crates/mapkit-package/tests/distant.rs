@@ -212,6 +212,41 @@ fn city_trees_become_bounded_silhouettes() {
     assert!(trees > 100 && wide > 30, "fixture zones plant trees: {trees}, {wide} wide");
 }
 
+#[test]
+fn city_streetlights_keep_their_pole_faces_in_distant_cells() {
+    // emit_placement's omit_proxy and distant_from_parts' omitted set agree:
+    // neither drops city streetlight poles (distant_tree is false for them),
+    // in any cell.
+    use mapkit_core::{MapDocument, Placement};
+    let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+    d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear(); d.placements.clear();
+    d.bounds.max = [25600, 25600]; d.cell_size_cm = 12800;
+    for (index, (id, _, _)) in mapkit_core::CITY_STREETLIGHTS.iter().enumerate() {
+        let x = 2000 + index as i64 * 1500;
+        d.placements.push(Placement { id: format!("lamp-{index}"), asset_id: (*id).into(), position: [x, 0, 6400], quarter_turns: (index % 4) as u8, yaw_offset_mdeg: [0, 30000][index % 2] });
+    }
+    // A yawed pole across the cell border x = 12800 (a convex proxy).
+    d.placements.push(Placement { id: "lamp-z".into(), asset_id: "builtin:city_streetlight_255".into(), position: [12802, 0, 9000], quarter_turns: 0, yaw_offset_mdeg: 20000 });
+    let p = read_bytes(&pack_bytes(d, Default::default()).unwrap()).unwrap();
+    let (mut owners, mut border) = (0, Vec::new());
+    for cell in p.document.cells() {
+        assert!(p.document.placements.iter().all(|l| !mapkit_core::distant_tree(&l.asset_id)));
+        let chunk = p.generate(cell, 500_000).unwrap();
+        let far = p.generate_distant(cell).unwrap();
+        assert_eq!(far.vertices.len() / 3, chunk.triangles.len(), "{cell:?}: every pole face stays in the distant mesh");
+        assert!(far.vertices.len() as u64 <= p.distant_triangle_bound(cell).unwrap() * 3);
+        owners += chunk.objects.iter().filter(|o| mapkit_core::city_streetlight(&o.asset_id).is_some()).count();
+        for lamp in &p.document.placements {
+            let faces = chunk.triangles.iter().filter(|t| t.object_id == lamp.id).count();
+            if p.document.cell_at([lamp.position[0], lamp.position[2]]) == Some(cell) { assert!(faces >= 8, "{}: {faces}", lamp.id); }
+        }
+        if chunk.triangles.iter().any(|t| t.object_id == "lamp-z") { border.push(cell); }
+    }
+    assert_eq!(owners, mapkit_core::CITY_STREETLIGHTS.len() + 1, "every id once plus the border pole");
+    // The neighbour keeps its clipped part of the yawed pole too.
+    assert_eq!(border, vec![mapkit_core::Cell { x: 0, y: 0 }, mapkit_core::Cell { x: 1, y: 0 }]);
+}
+
 /// `MAPKIT_DISTANT_BOUND_MEMAP=<package> cargo test -p mapkit-package --test distant -- --ignored`
 /// checks every cell of a real package: the distant mesh stays within its
 /// admission bound (city-tree silhouettes included).

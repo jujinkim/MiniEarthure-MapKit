@@ -39,6 +39,7 @@ const PREVIEW_DISPLAY: Budget = Budget { code: "preview_display", limit: 128 * 1
 mod assets;
 mod audit_hash;
 mod container;
+pub mod barrier_design;
 pub mod distant;
 use assets::validate_assets;
 /// Apply the package's resource safety checks to a bounded draft-cell asset set.

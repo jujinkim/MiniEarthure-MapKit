@@ -280,3 +280,68 @@ fn street_species_are_not_zone_trees() {
         assert!(d.validate().is_err(), "{asset} as a zone tree");
     }
 }
+
+const LAMPS: [(&str, i64, bool); 8] = [("builtin:city_streetlight_75", 75, false), ("builtin:city_streetlight_135", 135, false),
+    ("builtin:city_streetlight_195", 195, false), ("builtin:city_streetlight_255", 255, false),
+    ("builtin:city_streetlight_315", 315, false), ("builtin:city_streetlight_375", 375, false),
+    ("builtin:city_streetlight_twin_75", 75, true), ("builtin:city_streetlight_twin_135", 135, true)];
+
+#[test]
+fn city_streetlights_have_contract_constants_and_a_solid_pole_only() {
+    assert_eq!(CITY_STREETLIGHTS, LAMPS);
+    assert_eq!((CITY_STREETLIGHT_POLE_CM, CITY_STREETLIGHT_HEIGHT_CM, CITY_STREETLIGHT_HEAD_CM), (12, 330, 310));
+    assert_eq!(CITY_STREETLIGHT_ENVELOPE_CM, [25, 20, 8, 345]);
+    for (id, reach, twin) in LAMPS {
+        assert_eq!(city_streetlight(id), Some((reach, twin)), "{id}");
+        assert!(!distant_tree(id) && street_tree_crown_cm(id).is_none(), "{id}: the pole keeps its distant faces");
+    }
+    for id in ["builtin:streetlight", "builtin:signal_h", "builtin:city_streetlight", "builtin:city_streetlight_100"] {
+        assert_eq!(city_streetlight(id), None, "{id}");
+    }
+    let mut d = doc();
+    d.placements = LAMPS.iter().enumerate()
+        .map(|(i, (asset, _, _))| place(&format!("lamp-{i}"), asset, 400 + (i as i64 % 3) * 1000, 600 + (i as i64 / 3) * 1200, (i % 4) as u8))
+        .collect();
+    d.validate().unwrap();
+    let chunk = generate(GenerationInput { document: &d, cell: Cell { x: 0, y: 0 }, heightgrid: None, max_triangles: 200_000 }).unwrap();
+    assert_eq!(chunk.objects.len(), LAMPS.len(), "every lamp is a rendered object");
+    for p in &d.placements {
+        let faces: Vec<_> = chunk.triangles.iter().filter(|t| t.object_id == p.id).flat_map(|t| t.vertices).collect();
+        assert!(!faces.is_empty(), "{} is solid", p.asset_id);
+        assert!(faces.iter().all(|v| (v[0] - p.position[0]).abs() <= 6 && (v[2] - p.position[2]).abs() <= 6),
+            "{}: only the 12 cm pole collides (the arm and head are display-only)", p.asset_id);
+        assert_eq!(faces.iter().map(|v| v[1]).max(), Some(330), "{} top", p.asset_id);
+    }
+    let cost = PreparedMap::new(d.clone()).unwrap().estimate(Cell { x: 0, y: 0 }, 500_000).unwrap();
+    assert!(cost.triangles >= chunk.triangles.len() as u64 && cost.objects >= chunk.objects.len() as u64);
+    // The footprint is the pole square: poles 13 cm apart fit, 11 cm apart overlap.
+    let mut row = doc();
+    row.placements = vec![place("a", LAMPS[0].0, 800, 800, 0), place("b", LAMPS[6].0, 813, 800, 0)];
+    row.validate().unwrap();
+    row.placements[1].position[0] = 811;
+    assert!(row.validate().is_err(), "poles overlap");
+}
+
+#[test]
+fn city_streetlight_poles_stand_behind_the_sidewalk_turned_with_the_road() {
+    // Behind a 67 cm sidewalk + 30 cm, the arm (reach 135) puts the head 30 cm over the lanes.
+    for degrees in [0.0, 30.0, 45.0] {
+        let (road, angle, normal) = sidewalk_road(degrees);
+        let pose = angle + 90.0; // Local +x points back over the road.
+        for (asset, _, _) in LAMPS {
+            beside(&road, asset, 105.0, pose, normal).validate().unwrap_or_else(|e| panic!("{asset} at {degrees}°: {e:?}"));
+        }
+        let error = beside(&road, LAMPS[1].0, 4.0, pose, normal).validate().unwrap_err();
+        assert!(error.message.contains("intersects road"), "{degrees}°: {error:?}");
+    }
+    // A yawed pole is a convex proxy, and distant sources keep the pole faces.
+    let (road, angle, normal) = sidewalk_road(30.0);
+    let lamp = beside(&road, LAMPS[1].0, 105.0, angle + 90.0, normal);
+    let prepared = PreparedMap::new(lamp).unwrap();
+    let cell = Cell { x: 0, y: 0 };
+    let chunk = prepared.generate(cell, None, 500_000).unwrap();
+    assert!(chunk.objects.iter().any(|o| o.id == "pit" && o.asset_id == LAMPS[1].0));
+    assert!(chunk.asset_convexes.iter().any(|c| c.object_id == "pit"), "a yawed pole convex");
+    let distant = prepared.generate_distant_source(cell, None, 500_000).unwrap();
+    assert!(distant.triangles.iter().any(|t| t.object_id == "pit"), "lamp poles keep their distant proxy faces");
+}

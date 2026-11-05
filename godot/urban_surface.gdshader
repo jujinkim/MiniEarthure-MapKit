@@ -31,6 +31,18 @@ uniform bool left_hand = false;
 // roads draw a concrete gutter along their carriageway edges.
 uniform bool slabs = false;
 uniform bool curbed = false;
+// Night pools of the cell's city streetlights (city_lamp_meshes.gd
+// bind_light_map; mapkit-godot lamp_map.rs): an RG8 map (light, lit foot
+// height) whose texels sample the cell square edge to edge (rect: scene x0,
+// z0, size m, texels; height: G = 0 scene y, m per step), unmipmapped so
+// neighbouring cells meet on identical border texels at every distance.
+// Surfaces well above the lamps' feet (a deck over the road, above the
+// heads) or below them (a road under a lit one) stay dark.
+uniform bool lamp_enabled = false;
+uniform sampler2D lamp_map : filter_linear, repeat_disable;
+uniform vec4 lamp_map_rect = vec4(0.0,0.0,1.0,2.0);
+uniform vec2 lamp_map_height = vec2(0.0,0.16);
+uniform vec4 lamp_color : source_color = vec4(1.0,0.929,0.839,1.0);
 varying vec3 world_position;
 varying vec3 world_normal;
 void vertex() { world_position = (MODEL_MATRIX * vec4(VERTEX,1.0)).xyz; world_normal=normalize(MODEL_NORMAL_MATRIX*NORMAL); }
@@ -628,6 +640,17 @@ void fragment() {
     }
     // Studs return headlight-like amber at night; snow buries them.
     if(stud>0.0) EMISSION=vec3(1.0,0.62,0.18)*stud*0.45*(1.0-smoothstep(-0.08,0.02,sun_altitude))*(1.0-weather.y);
+    // Streetlight pools after sunset, when the lenses light: the surface's
+    // own albedo lit (paint brighter than asphalt, snow brightest) plus a
+    // faint sheen that grows on wet ground.
+    if(lamp_enabled && sun_altitude<0.0) {
+        float texels=lamp_map_rect.w;
+        vec2 lamp_uv=((world_position.xz-lamp_map_rect.xy)/lamp_map_rect.z*(texels-1.0)+0.5)/texels;
+        vec2 lamp=texture(lamp_map,lamp_uv).rg;
+        float rise=world_position.y-(lamp_map_height.x+lamp.g*255.0*lamp_map_height.y);
+        float lit=lamp.r*(1.0-smoothstep(2.4,3.0,rise))*smoothstep(-2.6,-1.6,rise);
+        EMISSION+=lamp_color.rgb*lit*(ALBEDO*1.5+vec3(0.012+0.05*weather.x));
+    }
     if(puddle>0.0) NORMAL=normalize(NORMAL+(VIEW_MATRIX*vec4(puddle_ripple(world_position,TIME,puddle),0.0)).xyz);
     // Block tilt, chamfers, tactile studs and the curb arris: the st height
     // gradient maps to world xz through the frame's derivative Jacobian.

@@ -106,6 +106,14 @@ impl MapKitPackedGeometry {
             seeds: self.facade_seeds.as_slice(), tops: self.facade_tops.as_slice(), kinds: &kinds, concrete: &concrete, keys: &keys, pitch, bounds,
         }, crate::facade_fixtures::MAX_FIXTURES)
     }
+    /// Display-only runs and posts of this cell's barrier prisms
+    /// (barrier_details.rs), from the generated convexes under barrier IDs.
+    pub(crate) fn barrier_details(&self, d: &mapkit_core::MapDocument, cell: mapkit_core::Cell) -> mapkit_core::Result<crate::barrier_details::Listed> {
+        let (offsets, vertices) = (self.convex_offsets.as_slice(), self.convex_vertices.as_slice());
+        let ids: Vec<String> = (0..self.convex_ids.len()).map(|i| self.convex_ids.get(i).unwrap_or_default().to_string()).collect();
+        crate::barrier_details::list(d, cell, ids.iter().enumerate()
+            .map(|(i, id)| (id.as_str(), &vertices[offsets[i] as usize..offsets[i + 1] as usize])))
+    }
     #[func]
     fn view(&self) -> VarDictionary {
         vdict! {

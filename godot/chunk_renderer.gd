@@ -28,6 +28,14 @@ const STREET := preload("./street_planting_meshes.gd")
 ## air-conditioner units on walls, penthouses, tanks, condensers, rims, solar
 ## rows and masts on flat roofs; facade_fixture_meshes.gd groups after the objects.
 const FIXTURES := preload("./facade_fixture_meshes.gd")
+## City fences, walls and hedges (presentation barrier_runs and
+## barrier_posts, barrier_details.rs): barrier_detail_meshes.gd groups after
+## the objects, drawn inside the collision prisms whose faces are hidden.
+const BARRIERS := preload("./barrier_detail_meshes.gd")
+## City streetlights (builtin:city_streetlight_*): city_lamp_meshes.gd groups
+## (CITY_LAMPS.IDS) and the presentation's night lamp_map on road and
+## sidewalk materials.
+const CITY_LAMPS := preload("./city_lamp_meshes.gd")
 const TRIANGLES_PER_BATCH := PLAN.TRIANGLES_PER_BATCH
 # Triple the lit ground width at the same mounting height (tan of the cone angle).
 const STREETLIGHT_SPREAD := 3.0
@@ -43,7 +51,10 @@ const BUILTINS := ["builtin:tree", "builtin:fence", "builtin:streetlight", "buil
 	"builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60", "builtin:sign_speed_80",
 	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign",
 	"builtin:street_tree_ginkgo", "builtin:street_tree_zelkova", "builtin:street_tree_plane", "builtin:street_tree_cherry", "builtin:street_tree_pine",
-	"builtin:planter", "builtin:planter_square", "builtin:median_bed", "builtin:median_bed_pine"]
+	"builtin:planter", "builtin:planter_square", "builtin:median_bed", "builtin:median_bed_pine",
+	"builtin:city_streetlight_75", "builtin:city_streetlight_135", "builtin:city_streetlight_195", "builtin:city_streetlight_255",
+	"builtin:city_streetlight_315", "builtin:city_streetlight_375",
+	"builtin:city_streetlight_twin_75", "builtin:city_streetlight_twin_135"]
 ## City trees (three street variants over the 140 cm collision trunk, scaled
 ## 0.85–1.15, or three wide park variants for zone footprints of 160–200 cm)
 ## and shrubs (three sizes) are display-only vegetation_meshes.gd meshes chosen
@@ -59,7 +70,10 @@ const VEGETATION_GROUP_METRES := 32.0
 ## traffic signals and bus shelters (street_signal_meshes.gd, SIGNALS.KINDS),
 ## subway entrances and station signs (transit_meshes.gd, TRANSIT.KINDS),
 ## road signs and guide signs (road_sign_meshes.gd, ROAD_SIGNS.KINDS),
-## street trees and flower beds (street_planting_meshes.gd, STREET.IDS).
+## street trees and flower beds (street_planting_meshes.gd, STREET.IDS),
+## city streetlights (city_lamp_meshes.gd, CITY_LAMPS.IDS);
+## generated barrier prisms likewise draw as fences, walls and hedges
+## (barrier_detail_meshes.gd, BARRIERS) from the native presentation lists.
 ## `_street_detail` builds one city tree, shrub, street tree or planter as
 ## single nodes for the lease and placement checks of
 ## tests/street_detail_lease_validator.gd only.
@@ -331,6 +345,15 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 		if not STREET.claim(job, view.objects):
 			fail(job,"E_MEMORY_BUDGET","Shared street planting exceeds memory allowance")
 			return job
+		# City streetlights likewise.
+		if not CITY_LAMPS.claim(job, view.objects):
+			fail(job,"E_MEMORY_BUDGET","Shared city streetlights exceed memory allowance")
+			return job
+		# City barrier detail likewise; a refused claim fails the cell (the
+		# prism faces are hidden).
+		if not BARRIERS.claim(job):
+			fail(job,"E_MEMORY_BUDGET","Shared barrier details exceed memory allowance")
+			return job
 		# Facade fixtures likewise; a refused claim only skips them.
 		FIXTURES.claim(job)
 	return job
@@ -559,6 +582,14 @@ static func _advance(job: Dictionary) -> bool:
 					return false
 				STREET.plan(job, object)
 				continue
+			if CITY_LAMPS.IDS.has(id):
+				var lit := CITY_LAMPS.ready(job)
+				if lit < 0: return fail(job, "E_RENDER_ASSET", "Shared city streetlights are unavailable")
+				if lit == 0:
+					job.object -= 1
+					return false
+				CITY_LAMPS.plan(job, object)
+				continue
 			if VEGETATION_IDS.has(id):
 				var ready := _vegetation_ready(job)
 				if ready < 0: return true
@@ -603,9 +634,14 @@ static func _advance(job: Dictionary) -> bool:
 	elif not job.get("street_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		STREET.attach_group(job)
+	elif not job.get("city_lamp_plan", {}).is_empty():
+		job.last_phase = "instance_upload"
+		CITY_LAMPS.attach_group(job)
 	elif not job.get("vegetation_plan", {}).is_empty():
 		job.last_phase = "instance_upload"
 		_attach_vegetation_group(job)
+	elif BARRIERS.step(job):
+		if job.get("barriers_failed", false): return fail(job, "E_RENDER_ASSET", "Shared barrier details are unavailable")
 	elif FIXTURES.step(job): pass
 	elif _grass_step(job): pass
 	else:
@@ -736,7 +772,7 @@ static func dispose(job: Dictionary) -> void:
 	job.chunk = {}
 	job.erase("lamp_bindings")
 	job.erase("urban_shader")
-	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "road_signs", "road_sign_plan", "street_planting", "street_plan", "fixtures", "fixture_plan", "hidden_objects"]: job.erase(key)
+	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "road_signs", "road_sign_plan", "street_planting", "street_plan", "city_lamps", "city_lamp_plan", "lamp_texture", "fixtures", "fixture_plan", "barrier_set", "barrier_plan", "barrier_cursor", "barrier_low", "barrier_owners", "barriers_done", "barriers_failed", "hidden_objects"]: job.erase(key)
 	if job.get("lease") != null:
 		job.lease.seal()
 		job.lease = null
@@ -752,7 +788,7 @@ static func material_color(key: String) -> Color:
 			"builtin:signal_h": Color("4a5055"), "builtin:signal_v": Color("4a5055"), "builtin:bus_shelter": Color("7aa0b8"),
 			"builtin:subway_entrance": Color("3f6fa8"), "builtin:station_sign": Color("2f7fd0"),
 			"builtin:guide_sign": Color("1d4f9c"), "builtin:planter": Color("aaa69e"), "builtin:planter_square": Color("aaa69e"),
-			"builtin:median_bed": Color("aaa69e"), "builtin:median_bed_pine": Color("aaa69e")}.get(key, Color("8d949a") if key.begins_with("builtin:sign_") else (Color("5e5248") if key.begins_with("builtin:street_tree_") else Color.GRAY))
+			"builtin:median_bed": Color("aaa69e"), "builtin:median_bed_pine": Color("aaa69e")}.get(key, Color("8d949a") if key.begins_with("builtin:sign_") or key.begins_with("builtin:city_streetlight") else (Color("5e5248") if key.begins_with("builtin:street_tree_") else Color.GRAY))
 	if key.begins_with("barrier:"):
 		return {"barrier:hedge": Color("486447"), "barrier:fence": Color("9b764f"), "barrier:wall": Color("b7b8b0")}.get(key, Color.GRAY)
 	if not key.contains(":"):
@@ -901,6 +937,8 @@ static func _generated_material(job: Dictionary, key: String, presentation: Dict
 		if facade_kind(key) == 3: context.bind_signs(generated)
 		return generated
 	var material := surface_material(key,presentation,job.get("urban_shader"))
+	# Roads and sidewalks take the cell's night lamp pools (lamp_map).
+	if _urban_surface(key,presentation): CITY_LAMPS.bind_light_map(job,material,presentation)
 	if material is StandardMaterial3D:
 		material.albedo_color = ground_color(key,presentation)
 		material.roughness = 0.9
@@ -1005,7 +1043,7 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
-	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","builtin:guide_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone","builtin:planter":"stone","builtin:planter_square":"stone","builtin:median_bed":"stone","builtin:median_bed_pine":"stone"}.get(key,"metal" if key.begins_with("builtin:sign_") else ("wood" if key.begins_with("builtin:street_tree_") else key.get_slice(":",0)))
+	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","builtin:guide_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone","builtin:planter":"stone","builtin:planter_square":"stone","builtin:median_bed":"stone","builtin:median_bed_pine":"stone"}.get(key,"metal" if key.begins_with("builtin:sign_") or key.begins_with("builtin:city_streetlight") else ("wood" if key.begins_with("builtin:street_tree_") else key.get_slice(":",0)))
 
 static func occluding_surface(key: String) -> bool:
 	return key == "rc:wall" or key.begins_with("building") or key.begins_with("urban:wall") or (key.contains(":") and key.get_slice(":",0) in ["brick","wood","concrete"])

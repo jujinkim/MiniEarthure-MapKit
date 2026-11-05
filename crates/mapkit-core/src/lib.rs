@@ -1226,7 +1226,8 @@ mod road_paint;
 pub use road_paint::{RoadPaint, RoadPaintSegment};
 mod road_safety;
 mod urban;
-pub use placement::{BuildingPrism, CITY_TREE_RADIUS, STREET_TREE_PIT_CM, STREET_CANOPY_MIN_CM, STREET_TREES, street_tree_crown_cm, distant_tree};
+pub use placement::{BuildingPrism, CITY_TREE_RADIUS, STREET_TREE_PIT_CM, STREET_CANOPY_MIN_CM, STREET_TREES, street_tree_crown_cm, distant_tree,
+    CITY_STREETLIGHTS, CITY_STREETLIGHT_POLE_CM, CITY_STREETLIGHT_HEIGHT_CM, CITY_STREETLIGHT_HEAD_CM, CITY_STREETLIGHT_ENVELOPE_CM, city_streetlight};
 
 /// Zone of a generated vegetation identity `{zone}:{x}:{y}` (canonical lattice
 /// integers, placement.rs), else None. Validation rejects any authored identity

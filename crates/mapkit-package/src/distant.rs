@@ -353,6 +353,10 @@ impl Package {
         let mut decorations = DistantMesh::default();
         let mut omitted = BTreeSet::new();
         let internal = internal_building_faces(&self.document, triangles)?;
+        // Barrier variants by barrier index: one design per barrier, the
+        // map scale read once.
+        let denominator = mapkit_core::osm_source_denominator(&self.document).unwrap_or(1);
+        let mut barrier_colors: BTreeMap<usize, [u8; 4]> = BTreeMap::new();
         for placement in &self.document.placements {
             if self.document.asset(&placement.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
@@ -385,11 +389,12 @@ impl Package {
                 .and_then(|i| planting_color(&self.document.placements[i], triangle)) {
                 color
             } else if let Ok(i) = self.document.barriers.binary_search_by(|b| b.id.cmp(&triangle.object_id)) {
-                match self.document.barriers[i].kind {
-                    mapkit_core::barrier::BarrierKind::Hedge => [72, 100, 71, 255],
-                    mapkit_core::barrier::BarrierKind::Fence => [155, 118, 79, 255],
-                    mapkit_core::barrier::BarrierKind::Wall => [183, 184, 176, 255],
-                }
+                // The near cells' variant (barrier_design.rs): wall and hedge
+                // paint, fences as the haze their far meshes settle to.
+                *barrier_colors.entry(i).or_insert_with(|| {
+                    let b = &self.document.barriers[i];
+                    crate::barrier_design::distant_color(crate::barrier_design::design(&b.id, b.kind, b.height_cm, denominator))
+                })
             } else {
                 match triangle.surface {
                     Surface::Asphalt => [48, 52, 59, 255],

@@ -30,6 +30,7 @@ var low := false
 var quality := preload("./display_quality.gd").active()
 var _precipitation_strength := 0.0
 var _night_lights := false
+var _halos_night := -1 # The night state last sent to display_quality (-1: none yet).
 var display_distance := 0.0 # Opt-in scene metres; zero preserves Editor/default weather fog.
 var ground_tint := Color(0.08, 0.10, 0.08) # Sky colour well below the horizon.
 var ground_tint_weight := 0.0
@@ -268,6 +269,10 @@ func _process(delta: float) -> void:
 
 func _update_static_lights(state: RefCounted, camera_position: Vector3) -> void:
 	_night_lights = float(state.celestial().altitude) < 0.0
+	# City lamp halos draw only at night (display_quality.set_night_lights).
+	if int(_night_lights) != _halos_night:
+		_halos_night = int(_night_lights)
+		preload("./display_quality.gd").set_night_lights(get_tree(), _night_lights)
 	if Time.get_ticks_msec() >= _scan_at:
 		_scan_at = Time.get_ticks_msec()+500
 		_light_candidates.clear()

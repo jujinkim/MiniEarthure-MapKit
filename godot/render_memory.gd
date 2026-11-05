@@ -52,6 +52,16 @@ const GRASS_CELL_BYTES := 32768
 ## to three nodes and MultiMeshes (< 24 KiB) per mesh, variant and 32 m
 ## square inside the object share; one shared set per resource cache
 ## (street_planting_meshes.SHARED_BYTES).
+## City streetlights likewise: 64 B per lamp in each of its group's near,
+## far and halo buffers (12 transform and 4 custom floats), a transient copy,
+## its id in the group's id list and at most one group of three nodes and
+## MultiMeshes (< 24 KiB) per 16 m square inside the object share; one shared
+## set per resource cache (city_lamp_meshes.SHARED_BYTES). The night lamp
+## map (presentation lamp_map, mapkit-godot lamp_map.rs) is presentation
+## bytes: native cost() and decorate() add lamp_map::map_bytes (257^2 x 2
+## + 4,096 B) for every cell some head's pool reaches, so the source holds its
+## 129 KiB array and this estimate's share of presentation_bytes (asset_bytes)
+## its unmipmapped RG8 texture of the same size; nothing is added here.
 
 ## Facade and rooftop fixtures (facade_fixture_meshes.gd; placed natively
 ## into the presentation's `facade_fixtures`, at most 1,024 per cell in at
@@ -65,6 +75,43 @@ const GRASS_CELL_BYTES := 32768
 const FIXTURE_BYTES := 384
 const FIXTURE_GROUP_BYTES := 16384
 const FIXTURE_BOUND_BYTES := 1024 * FIXTURE_BYTES + 16 * 8 * FIXTURE_GROUP_BYTES
+## City barrier detail (barrier_detail_meshes.gd; listed natively into the
+## presentation's barrier_runs and barrier_posts, barrier_details.rs, at most
+## 8,192 runs and 16,384 posts per cell): a run holds its 52 B packed entry,
+## 64 B in each of up to three instance buffers (near run, fence infill,
+## far), a 64 B transient plan copy of each (all planned before the first
+## group attaches: 52 + 3 x 64 + 3 x 64 = 436 B), three ID references and a
+## transient owner entry for its posts' squares (about 200 B),
+## BARRIER_RUN_BYTES; a post or pier its 52 B entry, one 64 B instance and
+## a copy, BARRIER_POST_BYTES; each group (one role in one 32 m square) a
+## node and its MultiMesh, BARRIER_GROUP_BYTES. The meshes and materials are one shared set per
+## resource cache (barrier_detail_meshes.SHARED_BYTES). No extra bound is
+## needed: each prism piece's 12 triangles reserve 12 x (768 + 12,288) B
+## before generation (upper_bound), far more than its run, its posts (at
+## most one per 0.6 m real) and its share of at most seven groups per square.
+## The prism faces the lists replace are hidden and leave the estimate.
+const BARRIER_RUN_BYTES := 640
+const BARRIER_POST_BYTES := 192
+const BARRIER_GROUP_BYTES := 8192
+static func barrier_bytes(chunk: Dictionary) -> int:
+	var presentation: Dictionary = chunk.get("presentation", {})
+	var runs: Variant = presentation.get("barrier_runs", PackedFloat32Array())
+	var posts: Variant = presentation.get("barrier_posts", PackedFloat32Array())
+	if not runs is PackedFloat32Array or runs.is_empty(): return 0
+	var groups := {}
+	for i in range(0, runs.size() - 12, 13):
+		var at := Vector2(runs[i] + runs[i + 3] * 0.5, runs[i + 2] + runs[i + 5] * 0.5)
+		var square := Vector2i(floori(at.x / 32.0), floori(at.y / 32.0))
+		var fence := (int(runs[i + 9]) & 3) == 1
+		groups[Vector3i(square.x, square.y, 0 if fence else 1)] = true
+		groups[Vector3i(square.x, square.y, 2 if fence else 3)] = true
+		if fence: groups[Vector3i(square.x, square.y, 4)] = true
+	if posts is PackedFloat32Array:
+		for i in range(0, posts.size() - 12, 13):
+			groups[Vector3i(floori(posts[i] / 32.0), floori(posts[i + 2] / 32.0), 5 if (int(posts[i + 9]) & 3) == 1 else 6)] = true
+	var post_count: int = posts.size() / 13 if posts is PackedFloat32Array else 0
+	return runs.size() / 13 * BARRIER_RUN_BYTES + post_count * BARRIER_POST_BYTES + groups.size() * BARRIER_GROUP_BYTES
+
 static func fixture_bytes(chunk: Dictionary) -> int:
 	var list: Variant = chunk.get("presentation", {}).get("facade_fixtures", PackedFloat32Array())
 	if not list is PackedFloat32Array or list.is_empty(): return 0
@@ -81,22 +128,32 @@ static func fixture_bytes(chunk: Dictionary) -> int:
 ## inside theirs, and every road sign and guide sign, drawn as
 ## road_sign_meshes.gd signs on their posts and poles, and every street tree
 ## and flower bed, drawn as street_planting_meshes.gd trunks in their tree pits
-## and planter rims round their boxes (each owner cell lists
+## and planter rims round their boxes, and every city streetlight, drawn as
+## a city_lamp_meshes.gd pole round its pole box (each owner cell lists
 ## the object; a neighbour cell holding clipped faces of it knows it from the
-## proxy materials). Collision,
+## proxy materials). Barrier prisms likewise when the presentation lists
+## their detail (barrier_runs, barrier_detail_meshes.gd fences, walls and
+## hedges inside them; every barrier face of a cell belongs to a prism of
+## that cell, all listed). Collision,
 ## occluders and lamp bindings never read these faces.
 const DRAWN_OVER := ["builtin:streetlight", "builtin:signal_h", "builtin:signal_v", "builtin:bus_shelter", "builtin:subway_entrance", "builtin:station_sign",
 	"builtin:sign_speed_30", "builtin:sign_speed_40", "builtin:sign_speed_50", "builtin:sign_speed_60", "builtin:sign_speed_80",
 	"builtin:sign_speed_100", "builtin:sign_crossing", "builtin:sign_stop", "builtin:sign_yield", "builtin:sign_children", "builtin:guide_sign",
 	"builtin:street_tree_ginkgo", "builtin:street_tree_zelkova", "builtin:street_tree_plane", "builtin:street_tree_cherry", "builtin:street_tree_pine",
-	"builtin:planter", "builtin:planter_square", "builtin:median_bed", "builtin:median_bed_pine"]
+	"builtin:planter", "builtin:planter_square", "builtin:median_bed", "builtin:median_bed_pine",
+	"builtin:city_streetlight_75", "builtin:city_streetlight_135", "builtin:city_streetlight_195", "builtin:city_streetlight_255",
+	"builtin:city_streetlight_315", "builtin:city_streetlight_375",
+	"builtin:city_streetlight_twin_75", "builtin:city_streetlight_twin_135"]
 static func hidden_objects(chunk: Dictionary) -> Dictionary:
 	var result := {}
 	var presentation: Dictionary = chunk.get("presentation", {})
 	for id: Variant in presentation.get("hidden_proxies", PackedStringArray()): result[str(id)] = true
 	var materials: Dictionary = presentation.get("proxy_materials", {})
+	var barriers: Variant = presentation.get("barrier_runs", PackedFloat32Array())
+	var detailed: bool = barriers is PackedFloat32Array and not barriers.is_empty()
 	for id: Variant in materials:
-		if str(materials[id]) in DRAWN_OVER: result[str(id)] = true
+		var material := str(materials[id])
+		if material in DRAWN_OVER or (detailed and material.begins_with("barrier:")): result[str(id)] = true
 	for object: Dictionary in chunk.get("objects", []):
 		if str(object.get("asset_id", "")) in DRAWN_OVER: result[str(object.id)] = true
 	return result
@@ -252,7 +309,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
 	var grind_bytes := 0
 	for line: Dictionary in preload("./grind_geometry.gd").records(chunk): grind_bytes += 32768 + line.get("samples",[]).size()*8192
-	return fixture_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	return fixture_bytes(chunk) + barrier_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:

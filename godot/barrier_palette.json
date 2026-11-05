@@ -1,0 +1,21 @@
+{
+	"comment": "Display-only city barrier palettes (sRGB), shared by barrier_detail_meshes.gd (shader slots) and mapkit-package barrier_design.rs (variant choice, distant colours). Fence families: steel bar, welded mesh, chain-link, wooden, pipe rail; wall families: brick, painted block, precast, stone; hedge leaf tones. bay_m is the post or pier lattice (real metres; wall patterns repeat whole per bay). far_opacity (per fence family; board_far_opacity for wooden boards) is the share a fence keeps once its infill is unresolved (near far meshes and the distant prism colour).",
+	"fence": [
+		[[47, 74, 58], [53, 57, 60], [216, 212, 200], [74, 61, 50]],
+		[[61, 106, 72], [123, 129, 134], [53, 57, 60]],
+		[[154, 161, 163], [75, 115, 80]],
+		[[122, 86, 56], [138, 127, 112], [90, 64, 48]],
+		[[214, 178, 58], [140, 144, 146], [61, 106, 72]]
+	],
+	"wall": [
+		[[143, 74, 55], [166, 90, 66], [125, 70, 54]],
+		[[216, 207, 184], [226, 224, 216], [167, 165, 156], [185, 196, 173]],
+		[[169, 170, 164], [182, 178, 166]],
+		[[185, 181, 171], [163, 154, 139]]
+	],
+	"hedge": [[[74, 107, 63], [63, 95, 58], [90, 116, 68]]],
+	"bay_m": {"fence": [2.0, 2.5, 3.0, 1.8, 2.0], "wall": [3.0, 4.0, 2.0, 3.0]},
+	"far_opacity": [0.4, 0.35, 0.35, 0.6, 0.25],
+	"board_far_opacity": 0.8,
+	"far_backdrop": [150, 152, 146]
+}
