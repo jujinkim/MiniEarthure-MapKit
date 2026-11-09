@@ -258,7 +258,9 @@ func add(record: Dictionary, root: Node3D, cell_tint: Color, lawn: Material = nu
 	cell.root = weakref(root)
 	cell.bounds = Rect2i(record.origin, record.size)
 	cell.tint = cell_tint
-	if lawn != null:
+	# Only the atmosphere surface shader has the lawn shade uniforms; a plain
+	# ground material (no prepared environment, as in Editor previews) keeps none.
+	if lawn is ShaderMaterial:
 		cell.lawn = weakref(lawn)
 		if not lawns.has(lawn.get_instance_id()):
 			lawns[lawn.get_instance_id()] = weakref(lawn)

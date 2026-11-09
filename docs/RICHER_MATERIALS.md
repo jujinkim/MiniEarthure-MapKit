@@ -434,7 +434,8 @@ raised quality never reaches past the field tier's window; low and polar ground
 have none. While it draws, the field darkens its cells' lawn under the blades
 (`grass_field_distance`, `grass_field_shade`: 16 % on medium, 18 % on high,
 none on banks steeper than its blades allow), fading out where they end, and
-clears the shade when it shows no blades. The lawn itself tilts its normal by
+clears the shade when it shows no blades; a plain lawn material without the
+atmosphere surface shader (no prepared environment) gets no shade. The lawn itself tilts its normal by
 the fine blade noise gradient within 30 m, fading wherever a pixel spans a third
 of the finest octave's period, so grazing views do not shimmer. Renderer
 diagnostics report the shared build as `vegetation_preparation` (cache stages
