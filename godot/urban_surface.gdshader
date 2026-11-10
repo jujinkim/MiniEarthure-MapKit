@@ -527,7 +527,8 @@ void fragment() {
                         if(count==1) { turn_left=(mask&1)!=0; turn_right=(mask&4)!=0; straight=(mask&2)!=0; }
                         if(mask!=0 && (straight || turn_left || turn_right)) {
                             // Clear widths beside the lane centre: a lane's outer side
-                            // meets the double yellow (r 0) or the edge line.
+                            // meets the centre line (r 0; double or single yellow)
+                            // or the edge line.
                             float left_limit=k>0 ? r0+float(k)*lane_span+0.07 : (abs(r0)<0.001 ? centre_clear : -outer_clear);
                             float right_limit=k<count-1 ? r0+float(k+1)*lane_span-0.07 : (abs(r1)<0.001 ? -centre_clear : outer_clear);
                             float room_l=centre-left_limit;

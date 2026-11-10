@@ -295,13 +295,15 @@ func yellow_at(x: float, z: float) -> bool:
 	var value := image.get_pixel(floori((x-CENTER_X)*ppm+W*0.5),floori(z*ppm+H*0.5))
 	return value.r > 0.7 and value.r-value.b > 0.25
 
-## Single: one 5 cm yellow on the axis and nothing at ±7 cm, where the double
-## yellow (5 cm lines 9 cm apart) lies. Studs stay on the centre either way.
+## Single: one 5 cm yellow on the axis, bare at ±4 cm and at ±7 cm, where
+## the double yellow (5 cm lines 9 cm apart) lies. Studs stay on the centre
+## either way.
 func two_lane_checks(single: bool) -> void:
 	var label := "two-lane single" if single else "two-lane edged"
 	for x in [21.0,26.0,30.5]:
 		if single:
 			check(yellow_at(x,0.0) and yellow_at(x,0.015) and yellow_at(x,-0.015),label+" yellow on the axis at x=%.1f"%x)
+			check(not yellow_at(x,0.04) and not yellow_at(x,-0.04) and lum(x,0.04) < 0.4 and lum(x,-0.04) < 0.4,label+" yellow narrower than 7.5 cm at x=%.1f"%x)
 			check(not yellow_at(x,0.07) and not yellow_at(x,-0.07) and lum(x,0.07) < 0.4 and lum(x,-0.07) < 0.4,label+" no paint at ±0.07 at x=%.1f"%x)
 		else:
 			check(yellow_at(x,0.07) and yellow_at(x,-0.07),label+" double yellow at ±0.07 at x=%.1f"%x)

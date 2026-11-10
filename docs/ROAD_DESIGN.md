@@ -220,7 +220,8 @@ sizes at the cards' 1:3 in parentheses; stations count from the path end.
   yellow without edge lines, the double yellow with them and the centre studs.
   A near perspective shot with surface effects on checks that quality 2 chips,
   abrades and grimes the crosswalk while keeping its bars, that quality 0 does
-  not, and that frames repeat exactly. `MAPKIT_ROAD_MARKING_CAPTURE` optionally writes the images.
+  not, and that frames repeat exactly. `MAPKIT_ROAD_MARKING_CAPTURE` optionally
+  writes the images.
 
 ## Sidewalks and curbs
 
