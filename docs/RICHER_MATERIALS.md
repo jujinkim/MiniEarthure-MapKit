@@ -270,11 +270,12 @@ Shop windows have their own frames and mullions (shop part 4) instead of reveals
 Glass (punched windows, curtain walls and shop windows alike) has roughness
 0.08–0.15 per record and specular 0.55. On medium/high in daylight its tint keeps
 45% of its strength and the glass adds what it reflects as emission: the procedural
-sky's zenith/horizon gradient and cloud grey along the reflected ray, with the
-sky's golden-hour blend at a low sun ([Environment](ENVIRONMENT.md); street and
-opposite walls below the horizon), weighted by Schlick Fresnel from a 0.10 base and
-scaled by the environment's daylight and cloud cover (`environment_data` pixel 0:
-wet, snow, cloud cover, daylight), so dusk, overcast and night follow the sky; at
+sky's zenith/horizon gradient and cloud grey along the reflected ray, and the dark
+street and opposite walls below the horizon. At a low sun the sky part takes the
+sky's golden-hour blend ([Environment](ENVIRONMENT.md)) by the sun altitude in
+`environment_data` pixel 1. The reflection is weighted by Schlick Fresnel from a
+0.10 base and scaled by the environment's daylight and cloud cover (pixel 0: wet,
+snow, cloud cover, daylight), so dusk, overcast and night follow the sky; at
 night it is off. Each pane leans up to about ±1.5° and reflects 70–130% as much; both
 settle once a pane nears a pixel. Low keeps plain tinted glass. Curtain walls glaze
 each cell between 4% mullions and transoms in neutral anodised grey above a dark
@@ -1294,9 +1295,10 @@ independent materials, denied admission, quality changes during preparation,
 MultiMesh bounds, occluders and final resource retirement. `richer_material_validator`
 also checks the voxel grain off on every tier, its clamped binding on surface
 materials only, and distant terrain taking it both at job creation and through the
-quality targets; rendered, `surface_grit_validator` keeps a flat earth quad's exact
-pixels with the grain off and, with it on, its mean luminance within 2% while the
-cubes add tone variance, overhead and at a grazing car-camera view. Track checks pair
+quality targets; rendered, `surface_grit_validator` checks that turning the grain on
+and back off restores a flat earth quad's untouched pixels exactly and that, on, it
+keeps the mean luminance within 2% while the cubes add tone variance, overhead and at
+a grazing car-camera view. Track checks pair
 `rc_venue_validator`, `pipe_material_validator` and `panel_geometry_validator`
 with the rendered `rc_piece_gallery`; `RC_PIECE_KINDS`, `RC_PIECE_WIDTH` and
 `RC_PIECE_CAPTURE` select supported catalogue variants and output images.

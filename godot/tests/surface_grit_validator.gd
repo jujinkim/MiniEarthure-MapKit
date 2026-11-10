@@ -1,8 +1,9 @@
 extends SceneTree
 ## Voxel ground grain (atmosphere_surface surface_grit): the surface shader
-## declares it off by default; rendered, a flat earth quad keeps its exact
-## pixels with the grain off and, with it on, keeps its mean luminance within
-## 2% while the cells add tone variance, near and at a grazing view.
+## declares it off by default; rendered, a flat earth quad captured untouched,
+## then with the grain on and set back off, returns to its exact untouched
+## pixels, and with it on keeps its mean luminance within 2% of off while the
+## cells add tone variance, overhead and at a grazing view.
 const SURFACE := preload("../atmosphere_surface.gdshader")
 var failed := false
 func check(value: bool, label: String) -> void:
@@ -28,28 +29,32 @@ func pixels() -> void:
 	scene.add_child(world)
 	# Dry daytime environment row: no rain, snow or night lights.
 	var data := Image.create(4,1,false,Image.FORMAT_RGBAF); data.fill(Color(0,0,0,0))
-	var material := ShaderMaterial.new(); material.shader = SURFACE
-	material.set_shader_parameter("environment_data",ImageTexture.create_from_image(data))
-	material.set_shader_parameter("terrain_surface",true)
-	material.set_shader_parameter("base_color",Color(.5,.45,.35))
+	var environment_data := ImageTexture.create_from_image(data)
 	var quad := MeshInstance3D.new(); var plane := PlaneMesh.new(); plane.size = Vector2(400,400)
-	quad.mesh = plane; quad.position.y = 2.0; quad.material_override = material
+	quad.mesh = plane; quad.position.y = 2.0
 	scene.add_child(quad)
 	var camera := Camera3D.new(); camera.far = 1000.0; scene.add_child(camera); camera.current = true
 	for view in [[Vector3(0,12,0),Vector3(0,2,0.01),"overhead"],[Vector3(0,2.36,0),Vector3(0,2,-20),"grazing"]]:
 		camera.position = view[0]; camera.look_at(view[1])
+		# Untouched: a fresh material that never sets surface_grit renders the
+		# shader default; on, then back off, must restore it exactly.
+		var material := ShaderMaterial.new(); material.shader = SURFACE
+		material.set_shader_parameter("environment_data",environment_data)
+		material.set_shader_parameter("terrain_surface",true)
+		material.set_shader_parameter("base_color",Color(.5,.45,.35))
+		quad.material_override = material
 		var baseline := await capture()
-		material.set_shader_parameter("surface_grit",0.0)
-		var off := await capture()
-		check(off.get_data() == baseline.get_data(),"%s: grain 0 keeps the exact pixels"%view[2])
 		material.set_shader_parameter("surface_grit",1.0)
 		var on := await capture()
+		material.set_shader_parameter("surface_grit",0.0)
+		var off := await capture()
+		check(off.get_data() == baseline.get_data(),"%s: grain set back to 0 restores the untouched pixels"%view[2])
+		check(on.get_data() != baseline.get_data(),"%s: grain 1 changes the pixels"%view[2])
 		var plain := stats(off); var grain := stats(on)
 		print("SURFACE_GRIT view=%s off=%s on=%s"%[view[2],plain,grain])
 		check(absf(grain[0]/maxf(plain[0],1e-3)-1.0) < 0.02,"%s: grain keeps the mean luminance within 2%%"%view[2])
 		# The cells' own spread, net of the broad terrain variation.
 		check(sqrt(maxf(grain[1]*grain[1]-plain[1]*plain[1],0.0)) > 0.002,"%s: grain cells add tone variance"%view[2])
-		material.set_shader_parameter("surface_grit",0.0)
 	scene.free()
 	await process_frame
 
