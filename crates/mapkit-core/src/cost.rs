@@ -40,6 +40,51 @@ fn bounds(points: impl Iterator<Item = Point>, margin: i64) -> Bounds {
 
 // A triangle clipped by four half-planes has at most seven vertices (five
 // triangles). Entirely contained triangles retain at most their original count.
+/// Upper bound of the trees one zone can emit into `area` (its owner cell), or
+/// `None` when the zone plants nothing there.
+fn zone_candidates(zone: &Zone, area: &Bounds) -> Option<u64> {
+    if zone.density_per_mille == 0 {
+        return None;
+    }
+    let shape = bounds(zone.polygon.iter().copied(), 0);
+    if clip_factor(&shape, area) == 0 {
+        return None;
+    }
+    let spacing = zone.spacing_cm as i64;
+    let jitter = if zone.kind == ZoneKind::Forest {
+        spacing / 3
+    } else {
+        0
+    };
+    let mut candidates = 1u64;
+    for axis in 0..2 {
+        let min = shape.min[axis].max(area.min[axis]) - jitter;
+        let max = shape.max[axis].min(area.max[axis]) + jitter;
+        candidates = candidates
+            .saturating_mul((max.div_euclid(spacing) - min.div_euclid(spacing) + 2) as u64);
+    }
+    // Same generator per-zone candidate ceiling; successful output cannot
+    // exceed this even when the domain bounds span many cells. Trees are
+    // emitted whole by their owner cell, never clipped into pieces; the one
+    // extra lattice index per axis above keeps the bound when an odd-sized
+    // rotated proxy box straddles the map edge by a centimetre.
+    Some(candidates.min(300_000))
+}
+
+/// Per authored tree asset, the upper bound of zone-planted instances in a
+/// cell. Display reservations use the same bound as generation (`estimate`).
+pub fn zone_asset_candidates(d: &MapDocument, cell: Cell) -> Result<BTreeMap<String, u64>> {
+    let area = d.cell_bounds(cell)?;
+    let mut out = BTreeMap::new();
+    for zone in &d.zones {
+        let Some(tree) = zone.tree.as_ref().filter(|t| crate::placement::builtin(&t.asset_id).is_none()) else { continue };
+        let Some(candidates) = zone_candidates(zone, &area) else { continue };
+        let entry = out.entry(tree.asset_id.clone()).or_insert(0u64);
+        *entry = entry.saturating_add(candidates);
+    }
+    Ok(out)
+}
+
 fn clip_factor(shape: &Bounds, cell: &Bounds) -> u64 {
     if (0..2).any(|a| shape.max[a] < cell.min[a] || shape.min[a] > cell.max[a]) {
         0
@@ -255,32 +300,7 @@ pub(crate) fn estimate_validated(
         cost.generation_scratch_bytes = cost.generation_scratch_bytes.saturating_add(pieces.saturating_mul(256));
     }
     for zone in &d.zones {
-        if zone.density_per_mille == 0 {
-            continue;
-        }
-        let shape = bounds(zone.polygon.iter().copied(), 0);
-        if clip_factor(&shape, &area) == 0 {
-            continue;
-        }
-        let spacing = zone.spacing_cm as i64;
-        let jitter = if zone.kind == ZoneKind::Forest {
-            spacing / 3
-        } else {
-            0
-        };
-        let mut candidates = 1u64;
-        for axis in 0..2 {
-            let min = shape.min[axis].max(area.min[axis]) - jitter;
-            let max = shape.max[axis].min(area.max[axis]) + jitter;
-            candidates = candidates
-                .saturating_mul((max.div_euclid(spacing) - min.div_euclid(spacing) + 2) as u64);
-        }
-        // Same generator per-zone candidate ceiling; successful output cannot
-        // exceed this even when the domain bounds span many cells. Trees are
-        // emitted whole by their owner cell, never clipped into pieces; the one
-        // extra lattice index per axis above keeps the bound when an odd-sized
-        // rotated proxy box straddles the map edge by a centimetre.
-        candidates = candidates.min(300_000);
+        let Some(candidates) = zone_candidates(zone, &area) else { continue };
         cost.objects = cost.objects.saturating_add(candidates);
         if let Some(boxes) = zone.tree.as_ref().and_then(|t| crate::placement::builtin(&t.asset_id)) {
             cost.occupied_solids = cost.occupied_solids.saturating_add(candidates.saturating_mul(boxes.len() as u64));

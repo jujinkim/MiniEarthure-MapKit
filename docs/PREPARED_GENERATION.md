@@ -23,6 +23,10 @@ Prepared indices are charged by package read planning: an additional eight times
 structured source bytes and 32 MiB for bounded repetition/footprint/index storage,
 plus `water::basin_reserve_bytes` (at most 8 MiB) for the basins.
 The existing generated-cell estimate cache, output limits and work budgets remain.
+The display reservation of a cell (`presentation_bytes` in `estimate_chunk`) counts
+authored placements and, per zone with an authored tree asset, the same per-cell
+tree candidate bound as generation (`zone_asset_candidates`); zone-planted
+authored trees are display instances too.
 
 `PreparedMap::generate_distant_source(cell, grid, limit)` shares the validated
 geometry, clipping and placement generator. It produces transient display triangles,

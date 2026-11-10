@@ -69,6 +69,13 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
     {
         *instances.entry(&asset.id).or_default() += 1;
     }
+    // Zone-planted authored trees are display instances as well; reserve the
+    // same per-cell bound that generation uses.
+    for (id, count) in mapkit_core::zone_asset_candidates(&p.document, cell)? {
+        if let Some(asset) = p.document.asset(&id) {
+            *instances.entry(&asset.id).or_default() += count;
+        }
+    }
     // Road styles exist per road and surface with faces in this cell, never for
     // the whole document.
     let styles = {
