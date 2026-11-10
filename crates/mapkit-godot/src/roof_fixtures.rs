@@ -74,20 +74,22 @@ pub fn palette_key(material: &str, usage: &str) -> u8 {
 }
 
 /// One flat roof plane: a solid's horizontal roof triangles at one height.
-struct Roof { triangles: Vec<usize>, object: usize, seed: u32, height: f32, base: f32, frame: f32 }
+/// Solids come from facade_fixtures.rs `solids`, not the seed: separate solids
+/// of one record with the same top share their seed but keep their own roofs.
+struct Roof { triangles: Vec<usize>, object: usize, solid: usize, seed: u32, height: f32, base: f32, frame: f32 }
 
-fn roofs(input: &Input) -> Vec<Roof> {
+fn roofs(input: &Input, solid_of: &[usize]) -> Vec<Roof> {
     let mut roofs: Vec<Roof> = Vec::new();
-    let mut index = HashMap::<(i32, u32, i64), usize>::new();
+    let mut index = HashMap::<(usize, i64), usize>::new();
     for (t, &object) in input.objects.iter().enumerate() {
         if input.kinds.get(object as usize).copied().unwrap_or(0) == 0 { continue; }
         let top = input.tops[t * 3];
         let seed = input.seeds[t * 3];
         if top < crate::packed::ROOF_FRAME_OFFSET - 500.0 || seed.y <= 0.5 { continue; }
         let y = input.vertices[t * 3].y;
-        let key = (object, seed.x.to_bits(), (y * 1000.0).round() as i64);
+        let key = (solid_of[t], (y * 1000.0).round() as i64);
         let r = *index.entry(key).or_insert_with(|| {
-            roofs.push(Roof { triangles: vec![], object: object as usize, seed: (seed.x.clamp(0.0, 1.0) * 16_777_216.0).round() as u32,
+            roofs.push(Roof { triangles: vec![], object: object as usize, solid: solid_of[t], seed: (seed.x.clamp(0.0, 1.0) * 16_777_216.0).round() as u32,
                 height: y, base: seed.y - 1000.0, frame: top - crate::packed::ROOF_FRAME_OFFSET });
             roofs.len() - 1
         });
@@ -186,14 +188,14 @@ impl Slot<'_> {
 }
 
 /// Rooftop candidates of every flat roof of the cell (after the wall ones).
-pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidate>, max: usize) {
+pub(crate) fn candidates(input: &Input, planes: &[Plane], solid_of: &[usize], out: &mut Vec<Candidate>, max: usize) {
     let p = input.pitch;
     let mut next_slot = 1u32;
-    for roof in roofs(input) {
+    for roof in roofs(input, solid_of) {
         if out.len() >= max { return; }
         let kind = input.kinds[roof.object];
         let key = input.keys.get(roof.object).copied().unwrap_or(255);
-        let look = crate::facade_fixtures::look(roof.seed, kind);
+        let look = crate::facade_fixtures::look(roof.seed, crate::facade_fixtures::share(input, roof.object));
         let frame = Frame::new(roof.frame);
         let storeys = (roof.height - roof.base) / p;
         // Extent in the frame and area.
@@ -374,7 +376,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
 /// about 2°) merged into one run.
 fn perimeter(input: &Input, planes: &[Plane], roof: &Roof) -> Vec<(Vector3, Vector3, Vector3)> {
     let p = input.pitch;
-    let walls: Vec<&Plane> = planes.iter().filter(|w| w.object == roof.object && w.seed == roof.seed).collect();
+    let walls: Vec<&Plane> = planes.iter().filter(|w| w.solid == roof.solid).collect();
     let mut edges = Vec::new();
     for &t in &roof.triangles {
         for i in 0..3 {
@@ -613,13 +615,42 @@ mod tests {
     }
 
     #[test]
+    fn separate_same_height_blocks_of_one_record_keep_their_own_roofs() {
+        // Two 20 m x 40 m blocks of one apartment complex record, 30 floors
+        // up and 20 m apart: one solid seed (record and top), two roofs, each
+        // with its own stair penthouses (three along a block) and tanks.
+        let blocks = [[30000, 30000, 32000, 34000], [34000, 30000, 36000, 34000]];
+        let (chunk, bounds) = crate::facade_fixtures::tests::generated_blocks("complex", &blocks, 3000, "residential", "concrete");
+        let s = scene(&chunk, &bounds);
+        let input = input(&s, 1.0);
+        let solid_of = crate::facade_fixtures::solids(&input);
+        let roofs = roofs(&input, &solid_of);
+        assert_eq!(roofs.len(), 2, "one roof per block");
+        assert_eq!(roofs[0].seed, roofs[1].seed, "one solid seed");
+        assert_ne!(roofs[0].solid, roofs[1].solid, "two solids");
+        let which: Vec<usize> = roofs.iter().map(|r| crate::facade_fixtures::tests::block_of(&input, &r.triangles, &blocks).expect("a roof on one block")).collect();
+        assert_eq!(which, [0, 1]);
+        for roof in &roofs { assert!((roof.height - 30.0).abs() < 1e-3); }
+        let placed = place(&input, MAX_FIXTURES);
+        let mut count = [[0; 2]; 2];
+        for f in fixtures(&placed.values) {
+            if f[4] != PENTHOUSE && f[4] != TANK { continue; }
+            let (x, z) = (f[0] * 100.0, -f[2] * 100.0);
+            let block = blocks.iter().position(|&[x0, y0, x1, y1]| x >= x0 as f32 && x <= x1 as f32 && z >= y0 as f32 && z <= y1 as f32).expect("on a block");
+            count[(f[4] == TANK) as usize][block] += 1;
+        }
+        assert!(count[0].iter().all(|&n| n == 3), "three stair penthouses on each block: {count:?}");
+        assert!(count[1].iter().all(|&n| n >= 1), "tanks on each block: {count:?}");
+    }
+
+    #[test]
     fn low_roofs_get_no_penthouse_and_bits_carry_the_palette() {
         let (chunk, bounds) = generated(&[("shed", [30000, 30000, 32000, 32000], 200, "industrial", "concrete")]);
         let s = scene(&chunk, &bounds);
         let placed = place(&input(&s, 1.0), MAX_FIXTURES);
         assert!(!fixtures(&placed.values).iter().any(|f| f[4] == PENTHOUSE), "two storeys: no stair penthouse");
         let seed = (s.seeds[s.objects.iter().position(|&o| s.kinds[o as usize] == 4).unwrap() * 3].x * 16_777_216.0).round() as u32;
-        let look = crate::facade_fixtures::look(seed, 4);
+        let look = crate::facade_fixtures::look(seed, mapkit_package::distant::facade_own_share("concrete:industrial"));
         for f in fixtures(&placed.values).into_iter().filter(|f| f[4] >= PENTHOUSE) {
             let bits = f[7] as u32;
             assert_eq!(bits & 7, 2, "concrete industrial palette key");

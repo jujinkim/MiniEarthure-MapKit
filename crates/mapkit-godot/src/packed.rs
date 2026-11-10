@@ -101,9 +101,10 @@ impl MapKitPackedGeometry {
         let kinds: Vec<u8> = (0..self.materials.len()).map(|i| crate::facade_fixtures::facade_kind(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())).collect();
         let concrete: Vec<bool> = (0..self.materials.len()).map(|i| self.materials.get(i).unwrap_or_default() == "concrete").collect();
         let keys: Vec<u8> = (0..self.materials.len()).map(|i| crate::roof_fixtures::palette_key(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())).collect();
+        let shares: Vec<f32> = (0..self.materials.len()).map(|i| mapkit_package::distant::facade_own_share(&format!("{}:{}", self.materials.get(i).unwrap_or_default(), self.usages.get(i).unwrap_or_default()))).collect();
         crate::facade_fixtures::place(&crate::facade_fixtures::Input {
             vertices: self.scene_vertices.as_slice(), normals: self.scene_normals.as_slice(), objects: self.indices.as_slice(),
-            seeds: self.facade_seeds.as_slice(), tops: self.facade_tops.as_slice(), kinds: &kinds, concrete: &concrete, keys: &keys, pitch, bounds,
+            seeds: self.facade_seeds.as_slice(), tops: self.facade_tops.as_slice(), kinds: &kinds, concrete: &concrete, keys: &keys, shares: &shares, pitch, bounds,
         }, crate::facade_fixtures::MAX_FIXTURES)
     }
     /// Display-only runs and posts of this cell's barrier prisms
@@ -652,7 +653,7 @@ mod tests {
                 let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
                 let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
                 let roof = (n[1] / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()).abs() >= 0.5;
-                let look = crate::facade_fixtures::look(bits, 3);
+                let look = crate::facade_fixtures::look(bits, share);
                 assert_eq!(far.colors[position * 3], distant::facade_color("concrete", "commercial", look, roof), "{cell:?} triangle {t}");
                 matched += 1;
             }
@@ -665,7 +666,7 @@ mod tests {
             assert_eq!(sides[0][&h], distant::facade_solid(id, h));
         }
         assert!(!sides[1].contains_key(&(record_heights[1] as i64)) && sides[0].contains_key(&(record_heights[1] as i64)));
-        let looks: std::collections::BTreeSet<u32> = sides[0].values().map(|&s| crate::facade_fixtures::look((record << 12) | s, 3)).collect();
+        let looks: std::collections::BTreeSet<u32> = sides[0].values().map(|&s| crate::facade_fixtures::look((record << 12) | s, share)).collect();
         assert!(looks.len() == 2 && looks.contains(&record), "an own look and the record's: {looks:?}");
     }
 

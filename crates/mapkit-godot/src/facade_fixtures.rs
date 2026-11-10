@@ -141,12 +141,44 @@ fn pane(kind: u8, look: u32) -> [f32; 4] {
     pane
 }
 
-/// The 12-bit look of a 24-bit facade seed (record << 12 | solid) on a wall
-/// of facade kind `kind` (1, apartments, is concrete:residential).
-pub(crate) fn look(seed: u32, kind: u8) -> u32 {
-    let share = mapkit_package::distant::facade_own_share(if kind == 1 { "concrete:residential" } else { "default" });
+/// The 12-bit look of a 24-bit facade seed (record << 12 | solid) of a
+/// building whose `material:usage` key has the own share `share`
+/// (mapkit-package distant.rs `facade_own_share`, as the shader binds it).
+pub(crate) fn look(seed: u32, share: f32) -> u32 {
     mapkit_package::distant::facade_look(seed >> 12, seed & 0xFFF, share)
 }
+
+/// The own-look share of an object (Input `shares`; 0 when missing).
+pub(crate) fn share(input: &Input, object: usize) -> f32 { input.shares.get(object).copied().unwrap_or(0.0) }
+
+/// Connected building solids of the packed cell, as packed.rs `facade_seeds`
+/// groups them (mapkit-package distant.rs `facade_solids`): triangles of one
+/// object with a facade seed that share a vertex form one solid. Per
+/// triangle: its solid (the smallest triangle index in it), NO_SOLID for
+/// other triangles. Separate solids of one record with the same top share
+/// their seed, so fixtures group walls and roofs by solid, not by seed.
+pub(crate) fn solids(input: &Input) -> Vec<usize> {
+    let count = input.objects.len();
+    let mut parent: Vec<usize> = (0..count).collect();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i]; }
+        i
+    }
+    let building = |t: usize| input.seeds[t * 3].y != 0.0;
+    let mut owner = HashMap::<(i32, [u32; 3]), usize>::new();
+    for t in 0..count {
+        if !building(t) { continue; }
+        for i in 0..3 {
+            let v = input.vertices[t * 3 + i];
+            match owner.get(&(input.objects[t], [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()])) {
+                Some(&other) => { let (a, b) = (find(&mut parent, t), find(&mut parent, other)); if a != b { parent[a.max(b)] = a.min(b); } }
+                None => { owner.insert((input.objects[t], [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()]), t); }
+            }
+        }
+    }
+    (0..count).map(|t| if building(t) { find(&mut parent, t) } else { NO_SOLID }).collect()
+}
+pub(crate) const NO_SOLID: usize = usize::MAX;
 
 /// facade_storeys: (shop storey, fitted upper pitch; 0 for a plain parapet).
 fn storeys(height: f32, pitch: f32) -> (f32, f32) {
@@ -172,6 +204,9 @@ pub struct Input<'a> {
     pub concrete: &'a [bool],
     /// Per object palette key (roof_fixtures::palette_key; 255 none).
     pub keys: &'a [u8],
+    /// Per object own-look share of its `material:usage` key
+    /// (mapkit-package distant.rs `facade_own_share`).
+    pub shares: &'a [f32],
     /// Floor pitch in scene metres (facade_floor_cm / 100).
     pub pitch: f32,
     /// Cell rect in scene metres: min x, min z, max x, max z.
@@ -188,7 +223,7 @@ pub struct Placed {
     pub blocked: usize,
 }
 
-pub(crate) struct Plane { pub(crate) normal: Vector3, pub(crate) offset: f32, triangles: Vec<usize>, pub(crate) object: usize, pub(crate) seed: u32, record: u32, pub(crate) look: u32, base: f32, height: f32, opposite: Vec<usize> }
+pub(crate) struct Plane { pub(crate) normal: Vector3, pub(crate) offset: f32, triangles: Vec<usize>, pub(crate) object: usize, pub(crate) solid: usize, record: u32, pub(crate) look: u32, base: f32, height: f32, opposite: Vec<usize> }
 
 /// A fixture box in its own frame (lo..hi; x right, y up, z out). Selection:
 /// by class (0 blade, 1 penthouse, 2 tank, 3 rim, 4 the rest), then rank and
@@ -198,14 +233,14 @@ pub(crate) struct Candidate { plane: usize, kind: f32, pub(crate) origin: Vector
     pub(crate) width: f32, pub(crate) depth: f32, pub(crate) class: u8, pub(crate) rank: u32, pub(crate) slot: u32, pub(crate) attempt: u32, pub(crate) group: u32 }
 
 /// Wall planes of generated building solids: vertical triangles of one solid
-/// (same object and seed) sharing a plane, in first-triangle order. Each
+/// (`solids`) sharing a plane, in first-triangle order. Each
 /// plane lists the coincident planes facing the other way (internal walls
 /// between a footprint's prisms, party walls of touching buildings): where
 /// one covers a mount, the wall is not a facade.
-fn planes(input: &Input) -> (Vec<Plane>, Vec<u32>) {
+fn planes(input: &Input, solid_of: &[usize]) -> (Vec<Plane>, Vec<u32>) {
     let mut planes: Vec<Plane> = Vec::new();
     let mut owner = vec![u32::MAX; input.objects.len()];
-    let mut solids = HashMap::<(i32, u32, u32), Vec<usize>>::new();
+    let mut solids = HashMap::<usize, Vec<usize>>::new();
     for (t, &object) in input.objects.iter().enumerate() {
         if input.kinds.get(object as usize).copied().unwrap_or(0) == 0 { continue; }
         let seed = input.seeds[t * 3];
@@ -217,14 +252,13 @@ fn planes(input: &Input) -> (Vec<Plane>, Vec<u32>) {
         let [a, b, c] = [input.vertices[t * 3], input.vertices[t * 3 + 1], input.vertices[t * 3 + 2]];
         if (b - a).cross(c - a).length_squared() < 1e-8 { continue; }
         let offset = normal.dot((a + b + c) / 3.0);
-        let key = (object, seed.x.to_bits(), seed.y.to_bits());
-        let list = solids.entry(key).or_default();
+        let list = solids.entry(solid_of[t]).or_default();
         let found = list.iter().copied().find(|&p| planes[p].normal.dot(normal) > 0.99995 && (planes[p].offset - offset).abs() < 0.01);
         let p = found.unwrap_or_else(|| {
             let seed_bits = (seed.x.clamp(0.0, 1.0) * 16_777_216.0).round() as u32;
             let base = seed.y - 1000.0;
-            let look = look(seed_bits, input.kinds[object as usize]);
-            planes.push(Plane { normal, offset, triangles: vec![], object: object as usize, seed: seed_bits, record: seed_bits >> 12, look, base, height: input.tops[t * 3].abs() - 1000.0 - base, opposite: vec![] });
+            let look = look(seed_bits, share(input, object as usize));
+            planes.push(Plane { normal, offset, triangles: vec![], object: object as usize, solid: solid_of[t], record: seed_bits >> 12, look, base, height: input.tops[t * 3].abs() - 1000.0 - base, opposite: vec![] });
             list.push(planes.len() - 1);
             planes.len() - 1
         });
@@ -425,7 +459,8 @@ pub fn place(input: &Input, cap: usize) -> Placed { place_in(input, cap, MAX_SQU
 fn place_in(input: &Input, cap: usize, max_squares: usize) -> Placed {
     let mut placed = Placed::default();
     if input.pitch <= 0.0 || input.vertices.len() != input.objects.len() * 3 || input.seeds.len() != input.vertices.len() || input.tops.len() != input.vertices.len() { return placed; }
-    let (planes, owner) = planes(input);
+    let solid_of = solids(input);
+    let (planes, owner) = planes(input, &solid_of);
     let mut candidates = Vec::new();
     for index in 0..planes.len() {
         if input.kinds[planes[index].object] == 3 { blades(input, &planes, index, &mut candidates); }
@@ -435,7 +470,7 @@ fn place_in(input: &Input, cap: usize, max_squares: usize) -> Placed {
         if !matches!(input.kinds[object], 2 | 3 | 5) { continue; }
         air_conditioners(input, &planes, index, input.concrete.get(object).copied().unwrap_or(false), input.kinds[object], &mut candidates);
     }
-    crate::roof_fixtures::candidates(input, &planes, &mut candidates, MAX_CANDIDATES);
+    crate::roof_fixtures::candidates(input, &planes, &solid_of, &mut candidates, MAX_CANDIDATES);
     if candidates.is_empty() { return placed; }
     // Clearance: candidates outside the cell rect, or whose box meets any
     // triangle other than their own wall's, are blocked. Candidates sit in a
@@ -517,7 +552,7 @@ pub(crate) mod tests {
 
     /// Scene arrays of a generated chunk, as packed.rs builds them.
     pub(crate) struct Scene { pub(crate) vertices: Vec<Vector3>, pub(crate) normals: Vec<Vector3>, pub(crate) objects: Vec<i32>, pub(crate) seeds: Vec<Vector2>, pub(crate) tops: Vec<f32>,
-        pub(crate) kinds: Vec<u8>, pub(crate) concrete: Vec<bool>, pub(crate) keys: Vec<u8>, pub(crate) bounds: [f32; 4] }
+        pub(crate) kinds: Vec<u8>, pub(crate) concrete: Vec<bool>, pub(crate) keys: Vec<u8>, pub(crate) shares: Vec<f32>, pub(crate) bounds: [f32; 4] }
 
     pub(crate) fn scene(chunk: &mapkit_core::GeneratedChunk, bounds: &mapkit_core::Bounds) -> Scene {
         let mut ids = Vec::<String>::new();
@@ -533,22 +568,24 @@ pub(crate) mod tests {
         let mut kinds = vec![0u8; ids.len()];
         let mut concrete = vec![false; ids.len()];
         let mut keys = vec![255u8; ids.len()];
+        let mut shares = vec![0.0f32; ids.len()];
         let mut prisms = Vec::new();
         for prism in &chunk.building_prisms {
             let id = ids.iter().position(|id| id == &prism.object_id).unwrap();
             kinds[id] = facade_kind(prism.material.as_str(), prism.usage.as_str());
             concrete[id] = prism.material.as_str() == "concrete";
             keys[id] = crate::roof_fixtures::palette_key(prism.material.as_str(), prism.usage.as_str());
+            shares[id] = mapkit_package::distant::facade_own_share(&format!("{}:{}", prism.material.as_str(), prism.usage.as_str()));
             prisms.push(id as i32);
         }
         let (seeds, tops) = crate::packed::facade_seeds(chunk, &objects, &prisms);
         let s = mapkit_core::WORLD_SCALE as f32 / 100.0;
-        Scene { vertices, normals, objects, seeds, tops, kinds, concrete, keys,
+        Scene { vertices, normals, objects, seeds, tops, kinds, concrete, keys, shares,
             bounds: [bounds.min[0] as f32 * s, -bounds.max[1] as f32 * s, bounds.max[0] as f32 * s, -bounds.min[1] as f32 * s] }
     }
 
     pub(crate) fn input(s: &Scene, pitch: f32) -> Input<'_> {
-        Input { vertices: &s.vertices, normals: &s.normals, objects: &s.objects, seeds: &s.seeds, tops: &s.tops, kinds: &s.kinds, concrete: &s.concrete, keys: &s.keys, pitch, bounds: s.bounds }
+        Input { vertices: &s.vertices, normals: &s.normals, objects: &s.objects, seeds: &s.seeds, tops: &s.tops, kinds: &s.kinds, concrete: &s.concrete, keys: &s.keys, shares: &s.shares, pitch, bounds: s.bounds }
     }
 
     /// The minimal example with the given buildings, generated at cell (0, 0).
@@ -573,6 +610,64 @@ pub(crate) mod tests {
         let cell = mapkit_core::Cell { x: 0, y: 0 };
         let chunk = mapkit_core::generate(mapkit_core::GenerationInput { document: &d, cell, heightgrid: None, max_triangles: 500_000 }).unwrap();
         (chunk, d.cell_bounds(cell).unwrap())
+    }
+
+    /// The minimal example with one record of separate rectangular blocks
+    /// (its footprint and parts, all `height` tall), at cell (0, 0).
+    pub(crate) fn generated_blocks(id: &str, blocks: &[[i64; 4]], height: i64, usage: &str, material: &str) -> (mapkit_core::GeneratedChunk, mapkit_core::Bounds) {
+        let rect = |[x0, y0, x1, y1]: [i64; 4]| vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+        let mut d: mapkit_core::MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+        let mut b = d.buildings[0].clone();
+        b.id = id.to_string();
+        b.footprint = rect(blocks[0]);
+        b.height_cm = height as _;
+        b.usage = serde_json::from_value(serde_json::json!(usage)).unwrap();
+        b.material = serde_json::from_value(serde_json::json!(material)).unwrap();
+        b.parts = blocks[1..].iter().map(|&r| mapkit_core::BuildingPart { footprint: rect(r), holes: vec![], base_cm: None, height_cm: Some(height as _) }).collect();
+        d.buildings = vec![b];
+        let cell = mapkit_core::Cell { x: 0, y: 0 };
+        let chunk = mapkit_core::generate(mapkit_core::GenerationInput { document: &d, cell, heightgrid: None, max_triangles: 500_000 }).unwrap();
+        (chunk, d.cell_bounds(cell).unwrap())
+    }
+
+    /// The block (index into `blocks`, map cm) holding every vertex of the
+    /// given triangles, if one does.
+    pub(crate) fn block_of(input: &Input, triangles: &[usize], blocks: &[[i64; 4]]) -> Option<usize> {
+        blocks.iter().position(|&[x0, y0, x1, y1]| triangles.iter().all(|&t| (0..3).all(|i| {
+            let v = input.vertices[t * 3 + i];
+            let (x, y) = (v.x * 100.0, -v.z * 100.0);
+            x >= x0 as f32 - 1.0 && x <= x1 as f32 + 1.0 && y >= y0 as f32 - 1.0 && y <= y1 as f32 + 1.0
+        })))
+    }
+
+    #[test]
+    fn coplanar_walls_of_separate_same_top_blocks_keep_their_own_planes() {
+        // Two apartment blocks of one record, one height, 20 m apart: one
+        // solid seed (record and top), but their coplanar south and north
+        // walls stay apart, each plane on one block.
+        let blocks = [[30000, 30000, 32000, 34000], [34000, 30000, 36000, 34000]];
+        let (chunk, bounds) = generated_blocks("complex", &blocks, 3000, "residential", "concrete");
+        let s = scene(&chunk, &bounds);
+        let input = input(&s, 1.0);
+        let solid_of = solids(&input);
+        let building: Vec<usize> = (0..s.objects.len()).filter(|&t| s.kinds[s.objects[t] as usize] == 1).collect();
+        let seeds: std::collections::BTreeSet<u32> = building.iter().map(|&t| s.seeds[t * 3].x.to_bits()).collect();
+        assert_eq!(seeds.len(), 1, "one solid seed for both blocks");
+        let roots: std::collections::BTreeSet<usize> = building.iter().map(|&t| solid_of[t]).collect();
+        assert_eq!(roots.len(), 2, "two solids");
+        // The same solids as the packed seeds (mapkit-package facade_solids).
+        let mask: Vec<bool> = chunk.triangles.iter().map(|t| t.object_id == "complex").collect();
+        let packed: Vec<Option<usize>> = mapkit_package::distant::facade_solids(&chunk.triangles, &mask).into_iter().map(|s| s.map(|s| s.0)).collect();
+        assert_eq!(packed, solid_of.iter().map(|&r| (r != NO_SOLID).then_some(r)).collect::<Vec<_>>());
+        let (planes, _) = planes(&input, &solid_of);
+        // Four outer walls and the two faces of the prisms' internal diagonal.
+        assert_eq!(planes.len(), 12, "six wall planes a block");
+        let mut per_block = [0; 2];
+        for plane in &planes {
+            let block = block_of(&input, &plane.triangles, &blocks).expect("a plane on one block");
+            per_block[block] += 1;
+        }
+        assert_eq!(per_block, [6, 6]);
     }
 
     pub(crate) fn fixtures(values: &[f32]) -> Vec<&[f32]> { values.chunks(FLOATS).collect() }
@@ -628,7 +723,7 @@ pub(crate) mod tests {
             let n = Vector3::new(f[3].sin(), 0.0, f[3].cos());
             let u = Vector3::new(f[0], f[1], f[2]).dot(Vector3::new(-n.z, 0.0, n.x));
             let seed = s.seeds[s.objects.iter().position(|&o| s.kinds[o as usize] == 3).unwrap() * 3].x;
-            let look = look((seed * 16_777_216.0).round() as u32, 3);
+            let look = look((seed * 16_777_216.0).round() as u32, mapkit_package::distant::facade_own_share("concrete:commercial"));
             let slot = 2.0 * 0.8 * (0.8 + 0.5 * ((look >> 9) & 7) as f32 / 7.0);
             assert!(((-u / slot) - (-u / slot).round()).abs() < 1e-3, "on a slot boundary: {u} / {slot}");
         }

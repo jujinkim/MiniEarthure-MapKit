@@ -989,11 +989,12 @@ formats stay v1.
   candidates from `roof_fixtures.rs`) when a cell is decorated
   (`with_presentation`, `preview_document_packed`, `source_preview_packed`),
   because it needs the floor pitch (`facade_floor_cm`). It reads only the
-  packed display arrays: vertical triangles of each generated solid (same
-  object and facade seed) are grouped into wall planes (outward normal from the
-  Godot winding, extent along the wall, base and eaves top from the facade
-  seeds and tops), flat roof faces into roof planes (one height of one solid,
-  with its packed roof frame). Coincident walls facing the other way (internal
+  packed display arrays: vertical triangles of each generated solid (one
+  object's faces connected by shared vertices, as the packed facade seeds
+  group them; separate solids sharing a seed stay apart) are grouped into wall
+  planes (outward normal from the Godot winding, extent along the wall, base
+  and eaves top from the facade seeds and tops), flat roof faces into roof
+  planes (one height of one solid, with its packed roof frame). Coincident walls facing the other way (internal
   walls between a footprint's prisms, party walls of touching buildings) cover
   no facade, so nothing mounts there.
 - Every choice is an integer PCG hash (the shader's `facade_pcg`) of the 12-bit
@@ -1070,7 +1071,8 @@ formats stay v1.
   floats each: mount point, yaw, kind, scale, height, 24-bit design bits,
   width and depth) and `facade_fixtures_capped` counts those the cap dropped.
   Rooftop design bits carry the building's palette key and its solid look's
-  body and roof entries (bits 0–8) and the mesh variant (bits 9–10).
+  body and roof entries (bits 0–8; the look uses the building's
+  `material:usage` own share, as its walls) and the mesh variant (bits 9–10).
 
 The meshes (blade near 168 triangles, far 24; unit near 140, far 32; penthouse
 94/22; tank 348/100; condenser 104/30; rim 354/10; solar row 96/12; mast 232/56)
