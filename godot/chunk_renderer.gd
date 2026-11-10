@@ -118,9 +118,10 @@ static func _street_detail(id: String, object: Dictionary, radius_cm := 0) -> No
 ## (tree or shrub), mesh set (vegetation_meshes PLANTS), variant, scene
 ## transform (origin at the trunk foot) and the instance data (leaf tint and
 ## wind phase). A city tree's crown fits its placement footprint `radius_cm`
-## (0: CITY_TREE_RADIUS 120 cm; vegetation_meshes.tree_set) and its variant is
-## `city_tree_variant` (stands); a shrub's variant, and every scale, yaw and
-## tint, follow the identity alone. Collision is the generated trunk box only.
+## (0: CITY_TREE_RADIUS 120 cm; vegetation_meshes.tree_set) and its variant
+## (and so its leaf colour family) is `city_tree_variant` (stands); a shrub's
+## variant, and every scale, yaw and per-tree leaf hue/brightness jitter, follow
+## the identity alone. Collision is the generated trunk box only.
 static func vegetation_placement(object: Dictionary, id := "", radius_cm := 0) -> Dictionary:
 	var pick := _identity_unit(object.id)
 	var tree := (id if not id.is_empty() else str(object.get("asset_id", "builtin:city_tree"))) == "builtin:city_tree"
