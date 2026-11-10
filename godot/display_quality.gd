@@ -36,7 +36,11 @@ static func profile(level: int) -> Dictionary:
 		# City fences, walls and hedges: near runs, infill, posts and piers
 		# within barrier_near (none on low), the far faces and boxes beyond
 		# (see apply_barrier).
-		"barrier_near":[0.0,24.0,40.0][level]}
+		"barrier_near":[0.0,24.0,40.0][level],
+		# Voxel ground grain on terrain (atmosphere_surface surface_grit, 0..1),
+		# off on every tier: the Client owns the switch and sets it on its
+		# current profile; distant terrain follows through the quality targets.
+		"surface_grit":0.0}
 
 static func active() -> Dictionary:
 	return profile(1) if current.is_empty() else current.duplicate()
@@ -290,6 +294,7 @@ static func apply_material(material: Material, value: Dictionary) -> void:
 	if material.get_meta("mapkit_surface",false):
 		material.set_shader_parameter("detail_quality",int(value.material_detail))
 		material.set_shader_parameter("wind_strength",float(value.vegetation_motion))
+		material.set_shader_parameter("surface_grit",clampf(float(value.get("surface_grit",0.0)),0.0,1.0))
 	elif material.get_meta("mapkit_detail",false): material.set_shader_parameter("detail_quality",int(value.material_detail))
 	if material.get_meta("mapkit_surface",false) or material.get_meta("mapkit_detail",false):
 		material.set_shader_parameter("surface_effect_distance",float(value.surface_effect_distance))

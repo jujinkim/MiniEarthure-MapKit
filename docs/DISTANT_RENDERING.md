@@ -120,4 +120,6 @@ can count cell resources independently of scene-generated node names.
   triangles; distant ground carries the same real-city earth basins as near
   cells. Batches split on kind and share at most two job materials within the
   fixed 64 KiB far overhead.
-- Terrain uses the same broad colour variation in near and distant shaders.
+- Terrain uses the same broad colour variation in near and distant shaders, and
+  the same voxel ground grain at the same amplitude when the Client turns it on
+  ([materials](RICHER_MATERIALS.md)).

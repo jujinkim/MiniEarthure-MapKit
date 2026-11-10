@@ -14,6 +14,19 @@ blades, soil crumbs, leaf veins) within the same bounds. The original tiles rema
 available as source artifacts. Generated grass ground (`lawn`) adds world-space lush
 and dry patches (about 10 m) at every distance and clumps, blades and clover within
 the effect distance.
+Voxel ground grain (`surface_grit`, 0–1, off by default) gives all terrain, near and
+distant, the tones of world-lattice cubes: square from above, a column from the side.
+The cube edge follows the pixel footprint so a cube never spans fewer than about
+3 pixels, from 0.25 m at the camera up to an 8 m rung; three octaves (S0, 2·S0,
+4·S0) crossfade along that ladder so nothing pops, and past the 8 m rung the grain
+fades out. One integer PCG chain per octave gives each cube its tone and a slight
+warm/cool hue; one amplitude (at most ±5.5% brightness) serves near and distant
+terrain, so the ring handover keeps its contrast. It lies over the detail tile,
+lawn, rock and shore tones and under the wet bank, snow and weather; roads and
+sidewalks (the urban shader) never take it. With the grain off the terrain keeps
+its exact pixels. The Client owns the switch: `display_quality.profile()` keeps it
+0 on every tier and `apply_material` binds the caller's value, so the MapEditor
+stays off. Mobile cost is unmeasured.
 `scripts/richer_assets.py --textures --facade` creates the facade relief tiles under
 `godot/textures/facade` at 128/256px (no 512px tier: 256px already holds 2–5mm per
 texel at 1:3): brick in running bond with recessed mortar (6 bricks × 20 courses),
@@ -1235,6 +1248,9 @@ remain fixed. These fields update live along with surface material detail. Clien
 automatic adaptation. Profiles never enter map files or authoritative race state.
 Profiles also expose a 96/128/160 m full-detail distance for consumers; Runtime
 owns its optional-cell transitions, margins and replacement lifetime.
+`surface_grit` (voxel ground grain, above) is 0 on every tier; only a consumer that
+sets it on the profile it applies turns it on, and distant terrain follows that
+profile through the quality targets.
 The texture tier is captured by each new map resource cache; live changes update
 resolution, water, effects, shadows, LOD and optional low-tier occlusion.
 
@@ -1274,7 +1290,12 @@ single-node trees/shrubs and the group MultiMeshes.
 `tree_canopy_validator`, `richer_material_validator` and
 `display_quality_validator` cover leaf/imported bindings, bitmap retention,
 independent materials, denied admission, quality changes during preparation,
-MultiMesh bounds, occluders and final resource retirement. Track checks pair
+MultiMesh bounds, occluders and final resource retirement. `richer_material_validator`
+also checks the voxel grain off on every tier, its clamped binding on surface
+materials only, and distant terrain taking it both at job creation and through the
+quality targets; rendered, `surface_grit_validator` keeps a flat earth quad's exact
+pixels with the grain off and, with it on, its mean luminance within 2% while the
+cubes add tone variance, overhead and at a grazing car-camera view. Track checks pair
 `rc_venue_validator`, `pipe_material_validator` and `panel_geometry_validator`
 with the rendered `rc_piece_gallery`; `RC_PIECE_KINDS`, `RC_PIECE_WIDTH` and
 `RC_PIECE_CAPTURE` select supported catalogue variants and output images.

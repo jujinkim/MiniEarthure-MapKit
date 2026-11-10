@@ -44,6 +44,7 @@ func run() -> void:
 	check(not context.tiles.has("facade:brick"),"facade layers never bind as racing detail tiles")
 	check(not ("signs" in context) and MATERIALS.MEMORY_BYTES==1048576+15*256*256*24,"storefront signs are procedural: no sign atlas is loaded or charged")
 	surface_factory_quality(context)
+	surface_grit_binding(cache,context)
 	var source:=StandardMaterial3D.new()
 	var picture:=Image.create(128,128,false,Image.FORMAT_RGBA8);picture.fill(Color(.5,.5,1,1))
 	var bitmap:=ImageTexture.create_from_image(picture)
@@ -191,6 +192,53 @@ func surface_factory_quality(context: RefCounted) -> void:
 	var transparent := StandardMaterial3D.new();transparent.resource_name = "mk_leaf"
 	transparent.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	check(context.surface_material(transparent,0) == transparent and context.import_surface(transparent,0,{}) == transparent,"transparent factory passthrough")
+	QUALITY.current = saved
+
+## Voxel ground grain (surface_grit): off on every tier, bound and clamped on
+## surface materials only, and reaching distant terrain both when its job binds
+## the active profile and through the quality-target group afterwards.
+class DistantGeometry extends RefCounted:
+	func view() -> Dictionary:
+		return {"vertices":PackedVector3Array([Vector3(0,2,0),Vector3(4,2,0),Vector3(0,2,4)]),
+			"normals":PackedVector3Array([Vector3.UP,Vector3.UP,Vector3.UP]),
+			"colors":PackedColorArray([Color(.5,.45,.35),Color(.5,.45,.35),Color(.5,.45,.35)]),
+			"light_data":PackedVector2Array([Vector2(0,-1),Vector2(0,-1),Vector2(0,-1)])}
+func surface_grit_binding(cache: RefCounted, context: RefCounted) -> void:
+	var saved := QUALITY.current
+	for level in 3: check(float(QUALITY.profile(level).surface_grit) == 0.0,"voxel grain off on tier %d"%level)
+	QUALITY.current = {}
+	var earth: ShaderMaterial = context.generated_material(Color(.5,.45,.35),"grass")
+	check(earth.get_shader_parameter("surface_grit") == 0.0,"new terrain material binds the grain off")
+	var on := QUALITY.profile(1)
+	for pair in [[1.0,1.0],[0.5,0.5],[3.0,1.0],[-1.0,0.0]]:
+		on.surface_grit = pair[0]
+		QUALITY.apply_material(earth,on)
+		var bound: Variant = earth.get_shader_parameter("surface_grit")
+		check(bound is float and is_equal_approx(bound,pair[1]),"grain %.1f binds as %.1f"%pair)
+	var missing := QUALITY.profile(1); missing.erase("surface_grit")
+	QUALITY.apply_material(earth,missing)
+	check(earth.get_shader_parameter("surface_grit") == 0.0,"a profile without the key turns the grain off")
+	var road := ShaderMaterial.new(); road.shader = cache.urban_shader(); context.bind_detail(road,"asphalt")
+	on.surface_grit = 1.0
+	QUALITY.apply_material(road,on)
+	check(road.get_shader_parameter("surface_grit") == null,"roads and sidewalks never take the grain")
+	var parent := Node3D.new(); root.add_child(parent)
+	var lease := Lease.new(0)
+	var viewport_state := [root.scaling_3d_scale,root.use_occlusion_culling]
+	QUALITY.apply(root,on)
+	var job: Dictionary = preload("../distant_renderer.gd").begin({"geometry":DistantGeometry.new()},parent,lease,cache)
+	while not preload("../distant_renderer.gd").advance(job): pass
+	var distant: MeshInstance3D = job.root.get_child(0) if job.root.get_child_count() == 1 else null
+	var far: ShaderMaterial = distant.material_override if distant != null and distant.material_override is ShaderMaterial else null
+	check(far != null and far.get_shader_parameter("distant") == true and far.get_meta("mapkit_surface",false),"distant terrain uses the surface shader")
+	if far != null:
+		check(far.get_shader_parameter("surface_grit") == 1.0,"a distant job binds the Client's current grain")
+		on.surface_grit = 0.0
+		QUALITY.apply(root,on)
+		check(far.get_shader_parameter("surface_grit") == 0.0,"distant terrain follows the grain switch through the quality targets")
+	preload("../distant_renderer.gd").cancel(job)
+	parent.free()
+	root.scaling_3d_scale = viewport_state[0]; root.use_occlusion_culling = viewport_state[1]
 	QUALITY.current = saved
 
 func check_surface_quality(material: ShaderMaterial, level: int, label: String) -> void:

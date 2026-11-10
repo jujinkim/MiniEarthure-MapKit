@@ -36,6 +36,9 @@ uniform bool lawn = false;
 // the lawn darkens toward the camera as the blades' shade.
 uniform float grass_field_distance = 0.0;
 uniform float grass_field_shade = 0.0;
+// Voxel ground grain strength on terrain (0 off, 1 full), bound from the
+// display profile (display_quality.gd); the Client owns the switch.
+uniform float surface_grit : hint_range(0.0,1.0) = 0.0;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform float roughness = 0.85;
 uniform float metallic = 0.0;
@@ -166,6 +169,37 @@ float lawn_noise(vec2 p) {
     vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);
     float a=facade_hash(i), b=facade_hash(i+vec2(1.0,0.0)), c=facade_hash(i+vec2(0.0,1.0)), d=facade_hash(i+vec2(1.0,1.0));
     return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
+}
+// Voxel ground grain (display only, off unless the Client turns surface_grit
+// on): tones of world-lattice cubes, square from above and a column from the
+// side (GRIT_Y scales their height). The cell edge doubles with the pixel
+// footprint fp so a cell never spans fewer than about 3 pixels: 0.25 m cubes at
+// the camera up to an 8 m rung. Three octaves (S0, 2·S0, 4·S0) crossfade along
+// the ladder with weights summing to 1.7, so nothing pops and tone and hue stay
+// within ±0.5; each cell size hashes the same on every rung (the salt follows
+// the size, not the octave). Past the 8 m rung the grain fades out before those
+// cells drop under 3 pixels. Cells are taken slightly inside the surface so a
+// face lying on a lattice plane never flickers between two cells.
+const float GRIT_Y = 1.0;
+const float GRIT_AMP = 0.055;
+float surface_grit_tone(vec3 p, vec3 n, float fp, out float hue) {
+    float l = max(log2(6.0*fp/0.25),0.0);
+    float k = min(floor(l),5.0);
+    float f = k<5.0 ? fract(l) : 0.0;
+    vec3 weights = vec3(1.0-f,0.7+0.3*f,0.7*f);
+    float tone = 0.0;
+    hue = 0.0;
+    for(int i=0;i<3;i++) {
+        float s = 0.25*exp2(k+float(i));
+        vec3 q = floor((p-n*0.03*s)/vec3(s,s*GRIT_Y,s));
+        uint salt = uint(int(k)+i)*2654435761u+374761393u;
+        uint h = facade_pcg(facade_cell(q.x)^facade_pcg(facade_cell(q.y)^facade_pcg(facade_cell(q.z)^salt)));
+        tone += weights[i]*(float(h&65535u)/65535.0-0.5);
+        hue += weights[i]*(float(h>>16u)/65535.0-0.5);
+    }
+    float fade = (1.0-smoothstep(5.0,6.0,l))/1.7;
+    hue *= fade;
+    return tone*fade;
 }
 vec3 facade_linear(vec3 c, bool srgb_output) { return srgb_output ? c : mix(c/12.92,pow((c+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),c)); }
 // Roof finishes of generated buildings (display only): a tint multiplying the
@@ -887,6 +921,15 @@ void fragment() {
         color=mix(color,vec3(0.40,0.37,0.30),rock*0.55);
         float shore=1.0-smoothstep(0.15,0.85,world_position.y);
         color=mix(color,vec3(0.42,0.39,0.29),shore*0.6);
+        // Voxel grain: one amplitude for near and distant terrain, so the ring
+        // handover keeps its contrast; the footprint ladder is its anti-alias.
+        if(surface_grit>0.0) {
+            float grit_hue;
+            float grit=surface_grit_tone(world_position,world_normal,max(max(length(position_dx),length(position_dy)),1e-4),grit_hue);
+            color*=1.0+2.0*GRIT_AMP*surface_grit*grit;
+            float grit_tint=0.5*GRIT_AMP*surface_grit*grit_hue;
+            color*=vec3(1.0+grit_tint,1.0,1.0-grit_tint);
+        }
     }
     // Wet bank: earth under and just above the water line darkens and turns
     // glossy (near ground only; dry earth keeps its look).
