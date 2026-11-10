@@ -112,6 +112,11 @@ fn engine_value(text: &str) -> mapkit_core::Result<serde_json::Value> {
 }
 #[godot_api]
 impl MapKitBridge {
+    /// `mapkit_core::BUILD_FINGERPRINT`: which MapKit sources this library was built from.
+    #[func]
+    fn build_fingerprint(&self) -> GString {
+        GString::from(mapkit_core::BUILD_FINGERPRINT)
+    }
     #[func]
     fn track_catalogue(&self) -> GString {
         response(Ok(mapkit_core::assembled_track::catalogue()))

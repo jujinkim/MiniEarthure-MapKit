@@ -91,7 +91,7 @@ This page lists the domain invariants and links each feature's owner.
   Cargo derives the fingerprint from sorted relative source/schema/dependency paths
   and UTF-8 contents (LF endings, length-delimited). Absolute paths, platform,
   timestamps and build output never enter it. Portable geometry vectors use a fixed
-  test key.
+  test key. `MapKitBridge.build_fingerprint()` returns it.
 - File-backed `read_with_budget(path, allowance)` bounds compressed input before
   allocation and checks the validation peak before retaining inflated payloads.
   Cost inspection streams JSON through a 64 KiB buffer; string tails beyond 256
