@@ -76,6 +76,8 @@ pub fn bytes(points: usize, entries: usize, crossings: usize, ambience: bool) ->
 }
 
 impl WalkLanes {
+    /// The bytes `presentation_bytes` counts once these lanes are published.
+    #[cfg(test)]
     pub fn bytes(&self) -> u64 {
         bytes(self.points.len(), self.lanes.len() + self.links.len(), self.signals.len(), self.ambience.is_some())
     }
