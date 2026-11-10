@@ -175,10 +175,11 @@ sizes at the cards' 1:3 in parentheses; stations count from the path end.
 - Dividers are 5.6 cm (17 cm) lines dashed over 37.5% of each fitted period
   (about 0.9 m line, 1.5 m gap: Korean urban 3:5). On the inbound half the last
   10 m (30 m) before a stop line, at most 45% of the road, is solid. Even lane
-  counts with `center_line` paint a double yellow centre (5 cm lines 9 cm apart)
-  with a reflective stud between them every two dash periods; studs glow faint
-  amber while the sun is below the horizon. Lines end at the stop line, or at the
-  crosswalk on a departure end.
+  counts with `center_line` paint a double yellow centre (5 cm lines 9 cm apart);
+  two-lane roads without `edge_lines` paint a single 5 cm (15 cm) yellow instead,
+  on every map. A reflective stud sits on the centre every two dash periods;
+  studs glow faint amber while the sun is below the horizon. Lines end at the
+  stop line, or at the crosswalk on a departure end.
 - Crosswalks lie 0.3–1.7 m from the end: whole 16.7 cm (50 cm) bars along traffic
   on a 38.3 cm pitch (65 cm gaps), centred on the road and kept 20 cm inside its
   edges. The 13 cm stop line starts 1.95 m from the end (0.55 m without a
@@ -190,8 +191,9 @@ sizes at the cards' 1:3 in parentheses; stations count from the path end.
   no movement get none. Straight and turn parts share one shaft (combined
   straight and turn arrows); a turn bends through a quarter circle into its
   head. Each arrow stays 4 cm clear of dividers, the double yellow and edge
-  lines: a turn-only shaft prefers 12 cm away from its turn, any shaft shifts as
-  far as needed, and turn heads shorten on narrow lanes.
+  lines (about 11 cm from a single yellow): a turn-only shaft prefers 12 cm away
+  from its turn, any shaft shifts as far as needed, and turn heads shorten on
+  narrow lanes.
 - Before a crosswalk every inbound lane gets 1.5 × 0.5 m warning diamond
   outlines (횡단보도 예고) 5.5 m and 17 m (16 and 51 m) behind the stop line, each
   only where the road leaves room for it.
@@ -214,10 +216,11 @@ sizes at the cards' 1:3 in parentheses; stations count from the path end.
   analytic bar coverage. A one-way six-lane road checks the travel-end-only stop
   line, lines cut at the departure crosswalk and bare lanes without a movement; a
   short left-hand road checks the mid-block stop line, the 45% solid cap and a
-  kerb-lane arrow clear of the edge line. A near perspective shot with surface
-  effects on checks that quality 2 chips, abrades and grimes the crosswalk
-  while keeping its bars, that quality 0 does not, and that frames repeat
-  exactly. `MAPKIT_ROAD_MARKING_CAPTURE` optionally writes the images.
+  kerb-lane arrow clear of the edge line; a two-lane road checks the single
+  yellow without edge lines, the double yellow with them and the centre studs.
+  A near perspective shot with surface effects on checks that quality 2 chips,
+  abrades and grimes the crosswalk while keeping its bars, that quality 0 does
+  not, and that frames repeat exactly. `MAPKIT_ROAD_MARKING_CAPTURE` optionally writes the images.
 
 ## Sidewalks and curbs
 

@@ -4,7 +4,8 @@ extends SceneTree
 ## lines, solid lines before stop lines, combined arrows kept inside their lanes,
 ## warning diamonds, the double yellow centre and footprint-filtered far paint on
 ## a two-way road; one-way, left-hand, short and mid-block rules on two more
-## roads; and the detail tier (chips, grime, abrasion) in a near perspective shot.
+## roads; the single yellow on a two-lane road without edge lines (double with
+## them); and the detail tier (chips, grime, abrasion) in a near perspective shot.
 const RENDER := preload("../chunk_renderer.gd")
 const PPM := 20.0 # pixels per metre of the near render
 const W := 1200
@@ -156,6 +157,18 @@ func run() -> void:
 		"crosswalk_end":false,"stop_start":0,"stop_end":8|1|2})
 	await capture("left-hand")
 	left_hand_checks()
+	# Two-lane two-way 3 m road without crosswalks or stop lines, at 1.25 cm
+	# pixels: a single yellow without edge lines, the double yellow with them.
+	var two_lane := {"road_metrics":PackedVector4Array([Vector4(3.0,0,50.0/21.0,50)]),"lanes":2,"lane_width":0.0,
+		"crosswalk_start":false,"crosswalk_end":false,"stop_start":0,"stop_end":0}
+	ppm = 80.0; camera.size = H/ppm
+	use(two_lane.merged({"edge_lines":false}))
+	await capture("two-lane")
+	two_lane_checks(true)
+	use(two_lane.merged({"road_borders":PackedVector4Array([Vector4(0,1.5,50,1.5),Vector4(50,-1.5,0,-1.5)]),"edge_count":2,"edge_lines":true}))
+	await capture("two-lane-edged")
+	two_lane_checks(false)
+	ppm = PPM; camera.size = H/PPM
 	await detail_checks(camera)
 	scene.queue_free(); await process_frame; await process_frame
 	print("road_marking_validator: ","FAIL" if failed else "PASS")
@@ -277,6 +290,25 @@ func left_hand_checks() -> void:
 	var clear := 0.0
 	for i in 9: clear = maxf(clear,linear(18.0+i*0.05,-2.475))
 	check(clear < 0.5 and fraction(Vector2(17.0,-2.54),Vector2(19.0,-2.54)) > 0.97,label+" left head clears the edge line (%.2f)"%clear)
+
+func yellow_at(x: float, z: float) -> bool:
+	var value := image.get_pixel(floori((x-CENTER_X)*ppm+W*0.5),floori(z*ppm+H*0.5))
+	return value.r > 0.7 and value.r-value.b > 0.25
+
+## Single: one 5 cm yellow on the axis and nothing at ±7 cm, where the double
+## yellow (5 cm lines 9 cm apart) lies. Studs stay on the centre either way.
+func two_lane_checks(single: bool) -> void:
+	var label := "two-lane single" if single else "two-lane edged"
+	for x in [21.0,26.0,30.5]:
+		if single:
+			check(yellow_at(x,0.0) and yellow_at(x,0.015) and yellow_at(x,-0.015),label+" yellow on the axis at x=%.1f"%x)
+			check(not yellow_at(x,0.07) and not yellow_at(x,-0.07) and lum(x,0.07) < 0.4 and lum(x,-0.07) < 0.4,label+" no paint at ±0.07 at x=%.1f"%x)
+		else:
+			check(yellow_at(x,0.07) and yellow_at(x,-0.07),label+" double yellow at ±0.07 at x=%.1f"%x)
+			check(not yellow_at(x,0.0) and lum(x,0.0) < 0.4,label+" bare axis between the double yellow at x=%.1f"%x)
+	# A stud every two dash periods (4.76 m): grey, not yellow, on the axis.
+	var stud := image.get_pixel(floori((5.0*100.0/21.0-CENTER_X)*ppm+W*0.5),floori(H*0.5))
+	check(stud.r > 0.45 and stud.r-stud.b < 0.15,label+" stud on the centre at x=23.81: "+str(stud))
 
 ## Near perspective shot over a crosswalk with surface effects on: quality 2
 ## chips, grimes and abrades the paint but keeps the bars, quality 0 skips it,

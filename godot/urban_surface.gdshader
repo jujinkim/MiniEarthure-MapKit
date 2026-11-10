@@ -465,7 +465,8 @@ void fragment() {
             float lane_span=(r1-r0)/float(count);
             float stop_lo=r0+(one_way==0 && left_hand==false ? 0.1 : 0.03);
             float stop_hi=r1-(one_way==0 && left_hand ? 0.1 : 0.03);
-            // Arrows keep 4 cm clear of dividers, the double yellow and edge lines.
+            // Arrows keep 4 cm clear of dividers, the double yellow and edge lines
+            // (about 11 cm from a single yellow).
             float centre_clear=0.135;
             float outer_clear=!edge_lines ? lane_half-0.04 : (shoulder ? lane_half-0.07 : min(lane_half-0.07,half_width-0.23));
             bool crossed_end[2];
@@ -550,14 +551,17 @@ void fragment() {
             }
             if(edge_lines && shoulder) white=max(white,box_cover(abs(across)-lane_half,-0.03,0.03,fa)*keep);
             // Dividers: Korean urban 3:5 dashes in each fitted period, solid on
-            // the inbound approach; even lane counts paint a double yellow centre.
+            // the inbound approach; even lane counts paint a double yellow centre,
+            // two-lane roads without edge lines a single one.
             const float DUTY=0.375;
+            bool single_yellow=lanes==2 && !edge_lines;
             float dash=stripes(station/max(period,0.001)+0.5*DUTY,DUTY,fs/max(period,0.001));
             for(int lane=1;lane<8;lane++) {
                 if(lane>=lanes) break;
                 float x=-lane_half+2.0*lane_half*float(lane)/float(lanes);
                 if(center_line && lane*2==lanes) {
-                    yellow=max(yellow,(box_cover(across,0.045,0.095,fa)+box_cover(across,-0.095,-0.045,fa))*keep);
+                    float centre_paint=single_yellow ? box_cover(across,-0.025,0.025,fa) : box_cover(across,0.045,0.095,fa)+box_cover(across,-0.095,-0.045,fa);
+                    yellow=max(yellow,centre_paint*keep);
                 } else {
                     float pattern=dash;
                     for(int s=0;s<2;s++) {
@@ -567,7 +571,7 @@ void fragment() {
                     white=max(white,box_cover(across,x-0.028,x+0.028,fa)*pattern*keep);
                 }
             }
-            // Reflective studs between the centre lines, one per two dash periods.
+            // Reflective studs on the centre, one per two dash periods.
             if(center_line && lanes%2==0) {
                 float spacing=2.0*max(period,0.001);
                 stud=stripes(station/spacing+0.02/spacing,0.04/spacing,fs/spacing)*box_cover(across,-0.02,0.02,fa)*keep*(1.0-crossing);
