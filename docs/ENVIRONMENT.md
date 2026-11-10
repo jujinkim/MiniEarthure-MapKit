@@ -80,8 +80,9 @@ Golden hour (`sky_hour.gd`): by the weight `golden(deg, cover)` (1 from 0° to 6
 of sun elevation under clear cover; 0 from 24° up, below -6° and from cloudy cover
 up), sun and ambient colour, sky zenith, horizon, dusk glow, halo and lit cloud,
 daylight fog, the grade (`golden_stop`; black and olive stops kept), saturation and
-glass reflection lerp towards its low-sun tables (mirrored in `sky_hour.gdshaderinc`;
-edit both). At weight 0 every output equals the plain formulas, so with the default
+glass reflection lerp towards its low-sun tables (fog towards `HORIZON` in the day
+fog ratio; saturation adds 0.05 × weight; mirrored in `sky_hour.gdshaderinc`; edit
+both). At weight 0 every output equals the plain formulas, so with the default
 06:00/18:00 sun Morning 09 and Noon 12 are unchanged. In astronomical mode at high
 latitude a winter sun can stay below 24° all day, keeping the layer on.
 
