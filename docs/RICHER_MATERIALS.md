@@ -329,7 +329,13 @@ list (older native builds, standalone previews) every city tree is 120 cm.
   tall at 200 cm, the leafy crown about as tall as it is wide and hanging low
   around a short trunk.
 
-Chosen, scaled and turned by the object identity, every crown vertex (hull,
+A shrub's variant follows its object identity. City trees grow in stands: a tree
+whose identity byte `sha256(id)[6:8]` is below 166 (about 65%) takes the variant
+of the 20 map m square (2000 cm, floored) it stands in, the others their own.
+`chunk_renderer.gd` and the distant proxies (`distant.rs`) share the
+integer-only `city_tree_variant`, so near and far trees match; one golden table
+is asserted in `street_detail_lease_validator` and the `mapkit-package` distant
+tests. Scaled and turned by the object identity, every crown vertex (hull,
 cards, the low-tier hull) plus its largest wind sway (see below; 12 cm times its
 sway weight on high, cards 1.1 cm more) reaches at most the footprint radius from
 the trunk at the largest scale, so crowns never reach into facades, fences or

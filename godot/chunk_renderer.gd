@@ -118,12 +118,13 @@ static func _street_detail(id: String, object: Dictionary, radius_cm := 0) -> No
 ## (tree or shrub), mesh set (vegetation_meshes PLANTS), variant, scene
 ## transform (origin at the trunk foot) and the instance data (leaf tint and
 ## wind phase). A city tree's crown fits its placement footprint `radius_cm`
-## (0: CITY_TREE_RADIUS 120 cm; vegetation_meshes.tree_set). Collision is the
-## generated trunk box only.
+## (0: CITY_TREE_RADIUS 120 cm; vegetation_meshes.tree_set) and its variant is
+## `city_tree_variant` (stands); a shrub's variant, and every scale, yaw and
+## tint, follow the identity alone. Collision is the generated trunk box only.
 static func vegetation_placement(object: Dictionary, id := "", radius_cm := 0) -> Dictionary:
 	var pick := _identity_unit(object.id)
-	var variant := int(pick * 3.0) % 3
 	var tree := (id if not id.is_empty() else str(object.get("asset_id", "builtin:city_tree"))) == "builtin:city_tree"
+	var variant := city_tree_variant(str(object.id), object.position) if tree else int(pick * 3.0) % 3
 	var set := VEGETATION.tree_set(radius_cm if radius_cm > 0 else 120) if tree else {"plant": "shrub", "factor": 1.0, "span": VEGETATION.SHRUB_SCALE}
 	var span: Vector2 = set.span
 	var scale: float = float(set.factor) * (span.x + (span.y - span.x) * fmod(pick * (7.0 if tree else 11.0), 1.0))
@@ -131,6 +132,21 @@ static func vegetation_placement(object: Dictionary, id := "", radius_cm := 0) -
 	var leaves: String = (VEGETATION.TREE_LEAVES if tree else VEGETATION.SHRUB_LEAVES)[variant]
 	return {"kind": "tree" if tree else "shrub", "mesh": set.plant, "variant": variant, "transform": Transform3D(basis, scene_position(object.position)),
 		"custom": VEGETATION.leaf_custom(leaves, pick)}
+
+## Canopy variant of a city tree, integer-only so the distant proxy
+## (mapkit-package distant.rs `city_tree_variant`) always matches: a tree whose
+## identity byte sha256(id)[6:8] is at least CITY_TREE_OWN_FROM (90 of 256, about
+## 35%) takes its own sha256(id)[0:6] % 3; the others take their stand's draw,
+## sha256("stand|sx|sz")[0:6] % 3 of the CITY_TREE_STAND_CM square (map cm,
+## floored, from the object's map position) they stand in.
+const CITY_TREE_STAND_CM := 2000
+const CITY_TREE_OWN_FROM := 166
+static func city_tree_variant(object_id: String, position: Array) -> int:
+	var own := object_id.sha256_text()
+	if own.substr(6, 2).hex_to_int() >= CITY_TREE_OWN_FROM: return own.substr(0, 6).hex_to_int() % 3
+	var sx := floori(float(position[0]) / float(CITY_TREE_STAND_CM))
+	var sz := floori(float(position[2]) / float(CITY_TREE_STAND_CM))
+	return ("stand|%d|%d" % [sx, sz]).sha256_text().substr(0, 6).hex_to_int() % 3
 
 ## Placement footprint radius (cm) of a cell's city tree: the native
 ## presentation lists zone trees wider than 120 cm (`city_tree_radii`, object

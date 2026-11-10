@@ -45,8 +45,8 @@ func run() -> void:
 	# Vegetation nodes carry their materials on the shared mesh surfaces.
 	check(not shared.is_empty() and shared.keys().all(func(value): return value == null or shared_vegetation.has(value)), "street details borrow only shared vegetation resources")
 	# City trees: a near body (trunk, branches, crown hull) and its leaf cards
-	# rooted at the object, 0.85–1.15×, shadows by tier; shrubs and trees vary
-	# by identity among three shared variants.
+	# rooted at the object, 0.85–1.15×, shadows by tier; shrubs (by identity)
+	# and trees (by identity or stand) vary among three shared variants.
 	var canopies := {}
 	var shrubs := {}
 	QUALITY.current = QUALITY.profile(2)
@@ -67,6 +67,14 @@ func run() -> void:
 		tree.free(); shrub.free()
 	QUALITY.current = {}
 	check(canopies.size() == 3 and shrubs.size() == 3, "three tree and three shrub variants")
+	# City-tree stands: the same golden literals as mapkit-package distant.rs
+	# CITY_TREE_VARIANTS (id, map position in cm, variant), so near and far match.
+	for golden: Array in [["park-1:12:7", [-1, 0, 0], 1], ["park-1:12:7", [0, 0, 0], 0], ["park-1:8:7", [500, 0, 1500], 0],
+			["park-1:6:7", [1999, 0, -1], 0], ["park-1:6:7", [2000, 0, -1], 2], ["park-1:20:7", [-2000, 0, -2000], 1],
+			["park-1:20:7", [-2001, 0, -2001], 2], ["park-1:2:7", [-3000, 0, -4000], 2], ["park-1:13:7", [1999, 0, 1999], 1]]:
+		var stand_tree := {"id": golden[0], "asset_id": "builtin:city_tree", "position": golden[1], "quarter_turns": 0}
+		var picked: int = CHUNKS.vegetation_placement(stand_tree).variant
+		check(picked == golden[2], "city tree %s at %s takes variant %d: %d" % [golden[0], golden[1], golden[2], picked])
 	# The renderer instances a cell's trees and shrubs: per kind, variant and
 	# 32 m group a body, cards and far MultiMesh with per-instance data.
 	var cell_lease := Lease.new()

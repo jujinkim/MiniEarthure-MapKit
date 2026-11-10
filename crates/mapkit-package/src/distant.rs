@@ -17,10 +17,11 @@ pub struct DistantMesh {
 /// City trees of the near renderer (map-kit godot/vegetation_meshes.gd `TREES`):
 /// canopy base, canopy height and silhouette radius in metres at scale 1 (the
 /// near crowns reach at most 1.2 m at the largest scale, the 120 cm placement
-/// footprint). A tree's variant, scale and yaw come from its object identity
-/// and footprint radius exactly as in chunk_renderer.gd `vegetation_placement`
-/// and vegetation_meshes.gd `tree_set`, so the silhouette matches the near
-/// tree it replaces.
+/// footprint). A tree's variant comes from `city_tree_variant` (its own
+/// identity or its 20 m stand), its scale and yaw from its object identity and
+/// footprint radius, exactly as in chunk_renderer.gd `vegetation_placement` and
+/// vegetation_meshes.gd `tree_set`, so the silhouette matches the near tree it
+/// replaces.
 const CITY_TREES: [[f32; 3]; 3] = [[1.5, 2.3, 0.95], [1.45, 2.9, 0.85], [1.7, 1.8, 1.0]];
 /// Wide park trees (vegetation_meshes.gd `WIDE_TREES`) of zone footprints from
 /// `WIDE_FROM_CM`: canopy base and height to the near crown's top, and a
@@ -536,7 +537,7 @@ fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3], 
     let hash = mapkit_core::sha256(object_id.as_bytes());
     let pick = u32::from_str_radix(&hash[..6], 16).unwrap() as f32 / 16_777_216.;
     let (shapes, factor, span, trunk) = city_tree_set(radius_cm);
-    let [base, height, radius] = shapes[(pick * 3.) as usize % 3];
+    let [base, height, radius] = shapes[city_tree_variant(object_id, position)];
     let scale = factor * (span[0] + (span[1] - span[0]) * (pick * 7.).fract());
     let yaw = std::f32::consts::TAU * (pick * 13.).fract();
     let origin = [position[0] as f32 * 0.01, position[1] as f32 * 0.01, -position[2] as f32 * 0.01];
@@ -568,6 +569,26 @@ fn add_city_tree(output: &mut DistantMesh, object_id: &str, position: [i64; 3], 
     let middle = ring(6, radius, base + height * 0.5);
     band(&ring(6, radius * 0.55, base + height * 0.05), &middle, [62, 90, 58, 255]);
     band(&middle, &[[origin[0], origin[1] + (base + height) * scale, origin[2]]], [80, 110, 70, 255]);
+}
+
+/// Map-cm side of a city-tree stand square (chunk_renderer.gd `CITY_TREE_STAND_CM`).
+const CITY_TREE_STAND_CM: i64 = 2000;
+/// Identity byte from which a city tree keeps its own canopy (90 of 256, about
+/// 35%; chunk_renderer.gd `CITY_TREE_OWN_FROM`).
+const CITY_TREE_OWN_FROM: u32 = 166;
+
+/// Canopy variant of a city tree, integer-only as chunk_renderer.gd
+/// `city_tree_variant`: its own sha256(id)[0:6] % 3 when sha256(id)[6:8] is at
+/// least `CITY_TREE_OWN_FROM`, otherwise its stand's sha256("stand|sx|sz")[0:6]
+/// % 3, where sx and sz floor the map position by `CITY_TREE_STAND_CM`.
+fn city_tree_variant(object_id: &str, position: [i64; 3]) -> usize {
+    let hex = |hash: &str, from: usize, to: usize| u32::from_str_radix(&hash[from..to], 16).unwrap();
+    let own = mapkit_core::sha256(object_id.as_bytes());
+    if hex(&own, 6, 8) >= CITY_TREE_OWN_FROM {
+        return hex(&own, 0, 6) as usize % 3;
+    }
+    let stand = format!("stand|{}|{}", position[0].div_euclid(CITY_TREE_STAND_CM), position[2].div_euclid(CITY_TREE_STAND_CM));
+    hex(&mapkit_core::sha256(stand.as_bytes()), 0, 6) as usize % 3
 }
 
 /// Identity unit of an object (chunk_renderer.gd `_identity_unit`).
@@ -716,7 +737,11 @@ mod tests {
             } else {
                 (CITY_TREES, footprint as f32 / 120., [0.85, 1.15])
             };
-            let [base, height, radius] = shapes[(pick * 3.) as usize % 3];
+            // Own draw from identity byte 166, else the stand at (0, -2)
+            // (1000, -3000 map cm floored by 2000).
+            let own = u32::from_str_radix(&hash[6..8], 16).unwrap() >= 166;
+            let draw = if own { hash[..6].to_string() } else { mapkit_core::sha256(b"stand|0|-2")[..6].to_string() };
+            let [base, height, radius] = shapes[u32::from_str_radix(&draw, 16).unwrap() as usize % 3];
             let scale = factor * (span[0] + (span[1] - span[0]) * (pick * 7.).fract());
             let top = mesh.vertices.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
             let low = mesh.vertices.iter().map(|p| p[1]).fold(f32::MAX, f32::min);
@@ -736,6 +761,21 @@ mod tests {
                 let c = [(t[0][0] + t[1][0] + t[2][0]) / 3. - 10., (t[0][2] + t[1][2] + t[2][2]) / 3. - 30.];
                 assert!(n[0] * c[0] + n[2] * c[1] > 0. || n[1] > 0., "{id}: inward face");
             }
+        }
+    }
+
+    /// Golden city-tree variants, asserted with the same literals in
+    /// street_detail_lease_validator.gd: negative coordinates, both sides of
+    /// stand edges and two own draws.
+    const CITY_TREE_VARIANTS: [(&str, [i64; 3], usize); 9] = [
+        ("park-1:12:7", [-1, 0, 0], 1), ("park-1:12:7", [0, 0, 0], 0), ("park-1:8:7", [500, 0, 1500], 0),
+        ("park-1:6:7", [1999, 0, -1], 0), ("park-1:6:7", [2000, 0, -1], 2), ("park-1:20:7", [-2000, 0, -2000], 1),
+        ("park-1:20:7", [-2001, 0, -2001], 2), ("park-1:2:7", [-3000, 0, -4000], 2), ("park-1:13:7", [1999, 0, 1999], 1)];
+
+    #[test]
+    fn city_tree_variants_follow_their_stand_or_own_draw() {
+        for (id, position, variant) in CITY_TREE_VARIANTS {
+            assert_eq!(city_tree_variant(id, position), variant, "{id} at {position:?}");
         }
     }
 
