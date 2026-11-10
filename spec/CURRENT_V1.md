@@ -232,6 +232,10 @@ earlier documents keep their bytes, world hashes and generated geometry.
   collision, 80/70 cm square footprints); `builtin:city_tree` (a solid 14 cm
   trunk 140 cm tall under one of three renderer canopies, 0.85–1.15× by identity,
   120 cm square footprint), also allowed as a zone tree with a radius of 120..200 cm.
+- Street life is presentation only (no collision, Runtime state, document field
+  or generated hash): walk lanes, crossings and an ambience mix derived from the
+  generated sidewalk tops and painted crosswalks, and game-scale walkers and
+  pigeons drawn by the renderer ([STREET_LIFE](../docs/STREET_LIFE.md)).
 - Street planting builtins (local +x along the road):
   - Street trees `builtin:street_tree_ginkgo`, `_zelkova`, `_plane`, `_cherry` and
     `_pine`: the city-tree trunk (solid 14 cm, 140 cm tall) in a tree pit whose

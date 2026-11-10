@@ -18,6 +18,9 @@ const VEGETATION_BYTES := VEGETATION.SHARED_BYTES
 # Camera-local grass field (grass_field.gd): one per cache at the cache's
 # texture tier, pinned by every registered grass cell.
 const GRASS_FIELD := preload("./grass_field.gd")
+# Camera-local street life (street_life_field.gd): one per cache from medium,
+# pinned by every registered cell.
+const STREET_LIFE := preload("./street_life_field.gd")
 var reserve: Callable
 var limit_bytes := 128 * 1024 * 1024 # Shared resources; still charged to consumer admission.
 var entries: Dictionary = {}
@@ -135,6 +138,41 @@ func grass_field() -> RefCounted:
 		item.grass_field = GRASS_FIELD.new(tier,item.lease,self)
 		item.stage = "done"
 	return item.grass_field
+
+## The cache's street-life field with one more pin (release(STREET_LIFE.KEY)
+## per call), or null on low (its walker_count is 0) or when its fixed memory
+## is refused.
+func street_life_field() -> RefCounted:
+	if int(quality_profile.get("level", 1)) <= 0: return null
+	var key := _claim(STREET_LIFE.KEY,STREET_LIFE.MEMORY_BYTES,"street_life_field")
+	if key.is_empty(): return null
+	var item: Dictionary = entries[key]
+	if not item.has("street_life_field"):
+		item.street_life_field = STREET_LIFE.new(item.lease,self)
+		item.stage = "done"
+	return item.street_life_field
+
+## Vehicle display positions for the street-life field this frame (up to 8;
+## velocities follow from the previous call unless given). No claim.
+func street_life_obstacles(points: PackedVector3Array, velocities := PackedVector3Array()) -> void:
+	var field := _street_life()
+	if field != null: field.set_obstacles(points, velocities)
+
+## Ambience around `eye` (street_life_field.ambience_at): area shares of
+## grass, asphalt, buildings and water and the walkers near; zeros without a field.
+func ambience_at(eye: Vector3) -> Dictionary:
+	var field := _street_life()
+	return field.ambience_at(eye) if field != null else {"grass": 0.0, "asphalt": 0.0, "built": 0.0, "water": 0.0, "walkers_near": 0}
+
+func _street_life() -> RefCounted:
+	if closed or not entries.has(STREET_LIFE.KEY): return null
+	return entries[STREET_LIFE.KEY].get("street_life_field")
+
+## The shared environment context's first pixel (wet, snow, clouds,
+## daylight), or null while none is prepared. Never prepares one.
+func environment_pixel() -> Variant:
+	if _environment == null or _environment_pending or _environment.pixels == null: return null
+	return _environment.pixels.get_pixel(0, 0)
 
 ## One part (atlas, materials or one mesh) per admitted call.
 func prepare_vegetation(key: String) -> bool:
@@ -411,6 +449,8 @@ func _evict(key: String) -> void:
 	item.erase("mesh_set_state")
 	if item.has("grass_field"): item.grass_field.close()
 	item.erase("grass_field")
+	if item.has("street_life_field"): item.street_life_field.close()
+	item.erase("street_life_field")
 	item.erase("occluder_arrays")
 	item.erase("light_binding")
 	item.erase("light_roles")

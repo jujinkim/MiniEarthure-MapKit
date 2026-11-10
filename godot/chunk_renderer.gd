@@ -15,6 +15,9 @@ const INSTANCES := preload("./render_instances.gd")
 const VEGETATION := preload("./vegetation_meshes.gd")
 const GRASS := preload("./grass_scatter.gd")
 const GRASS_FIELD := preload("./grass_field.gd")
+## Street-life walkers and pigeons (presentation walk lanes and ambience,
+## walk_lanes.rs): registered with the cache's street_life_field.gd last.
+const STREET_LIFE := preload("./street_life_field.gd")
 const FURNITURE := preload("./street_furniture_meshes.gd")
 const SIGNALS := preload("./street_signal_meshes.gd")
 ## Subway entrances and station signs: transit_meshes.gd groups (TRANSIT.KINDS).
@@ -265,6 +268,24 @@ static func _grass_step(job: Dictionary) -> bool:
 		if job.get("lease") != null: job.lease.track(cell)
 	return true
 
+## Street life after the grass: register the cell's walk lanes, ambience and
+## pigeon anchors with the cache's street-life field (`street_life_cell`,
+## released by cancel), whatever the live switch (the field gates spawning
+## and drawing). Without a cache or on low nothing registers. Returns whether
+## this call did work.
+static func _street_life_step(job: Dictionary) -> bool:
+	if job.get("street_life_done", false): return false
+	job.street_life_done = true
+	if job.get("resources") == null: return false
+	var record := STREET_LIFE.record(job.chunk)
+	if record.is_empty(): return false
+	job.last_phase = "street_life"
+	var cell: RefCounted = STREET_LIFE.register(record, job.root, job.resources)
+	if cell != null:
+		job.street_life_cell = cell
+		if job.get("lease") != null: job.lease.track(cell)
+	return true
+
 ## Stable display-only value in [0, 1) from an object identity.
 static func _identity_unit(id: Variant) -> float:
 	return float(str(id).sha256_text().substr(0, 6).hex_to_int()) / 16777216.0
@@ -294,6 +315,11 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 	# Keep their complete per-job reservation and local importer ownership.
 	if resources != null and shared == 0 and not view.get("presentation", {}).get("assets", {}).is_empty():
 		resources = null
+	# Street life registers only with a cache from medium (street_life_field):
+	# otherwise the cell returns its graph reservation (render_memory.street_life_bytes).
+	if resources == null or int(resources.quality_profile.get("level", 1)) <= 0:
+		var idle := PLAN.street_life_bytes(view)
+		if idle > 0 and planned_bytes - shared >= idle + 65536: planned_bytes -= idle
 	var lease: RefCounted
 	if reserve.is_valid():
 		var bytes := planned_bytes - shared
@@ -661,6 +687,7 @@ static func _advance(job: Dictionary) -> bool:
 		if job.get("barriers_failed", false): return fail(job, "E_RENDER_ASSET", "Shared barrier details are unavailable")
 	elif FIXTURES.step(job): pass
 	elif _grass_step(job): pass
+	elif _street_life_step(job): pass
 	else:
 		job.done = true
 		dispose(job)
@@ -917,6 +944,9 @@ static func cancel(job: Dictionary) -> void:
 	if job.has("grass_cell"):
 		job.grass_cell.release()
 		job.erase("grass_cell")
+	if job.has("street_life_cell"):
+		job.street_life_cell.release()
+		job.erase("street_life_cell")
 	dispose(job)
 	if is_instance_valid(job.root) and not job.root.is_queued_for_deletion():
 		var parent: Node = job.root.get_parent()

@@ -92,6 +92,11 @@ pub fn decorate(
             presentation.set("sidewalk_triangles", &PackedInt32Array::from(triangles.as_slice()));
             presentation.set("sidewalk_frames", &PackedVector4Array::from(frames.as_slice()));
         }
+        // Display-only street life on the same tops (walk_lanes.rs).
+        let surfaces: Vec<u8> = faces.iter().map(|f| f.3).collect();
+        let walk = crate::walk_lanes::build(d, &paint, &roads, &ids, &corners, &surfaces, &bounds, &crate::walk_lanes::CAPS);
+        walk.note();
+        walk.publish(presentation);
     }
     for (id, _p, spawn, surface) in faces {
         let mut key = if id.ends_with(":safety:metal") {
@@ -194,25 +199,25 @@ const FRAME_EDGE: f32 = 4.0;
 /// Tops farther than this from every curb in the cell keep world-aligned paving.
 const FRAME_REACH_M: f64 = 3.0;
 
-type P2 = [f64; 2];
-fn scene(v: [i64; 3]) -> P2 { [v[0] as f64 / 100.0, -(v[2] as f64) / 100.0] }
-fn sub(a: P2, b: P2) -> P2 { [a[0] - b[0], a[1] - b[1]] }
-fn dot(a: P2, b: P2) -> f64 { a[0] * b[0] + a[1] * b[1] }
-fn perp(a: P2) -> P2 { [-a[1], a[0]] }
-fn unit(a: P2) -> P2 { let l = dot(a, a).sqrt().max(1e-9); [a[0] / l, a[1] / l] }
-fn segment_distance(p: P2, a: P2, b: P2) -> f64 {
+pub(crate) type P2 = [f64; 2];
+pub(crate) fn scene(v: [i64; 3]) -> P2 { [v[0] as f64 / 100.0, -(v[2] as f64) / 100.0] }
+pub(crate) fn sub(a: P2, b: P2) -> P2 { [a[0] - b[0], a[1] - b[1]] }
+pub(crate) fn dot(a: P2, b: P2) -> f64 { a[0] * b[0] + a[1] * b[1] }
+pub(crate) fn perp(a: P2) -> P2 { [-a[1], a[0]] }
+pub(crate) fn unit(a: P2) -> P2 { let l = dot(a, a).sqrt().max(1e-9); [a[0] / l, a[1] / l] }
+pub(crate) fn segment_distance(p: P2, a: P2, b: P2) -> f64 {
     let ab = sub(b, a);
     let t = (dot(sub(p, a), ab) / dot(ab, ab).max(1e-12)).clamp(0.0, 1.0);
     let q = sub(p, [a[0] + ab[0] * t, a[1] + ab[1] * t]);
     dot(q, q).sqrt()
 }
-fn vertical(v: &[[i64; 3]; 3]) -> bool {
+pub(crate) fn vertical(v: &[[i64; 3]; 3]) -> bool {
     let [a, b, c] = v.map(|p| p.map(|x| x as f64));
     let (e, f) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
     let n = [e[1] * f[2] - e[2] * f[1], e[2] * f[0] - e[0] * f[2], e[0] * f[1] - e[1] * f[0]];
     10.0 * n[1] * n[1] < n[0] * n[0] + n[1] * n[1] + n[2] * n[2]
 }
-fn inside(t: [P2; 3], p: P2) -> bool {
+pub(crate) fn inside(t: [P2; 3], p: P2) -> bool {
     let side = |a: P2, b: P2| (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
     let s = [side(t[0], t[1]), side(t[1], t[2]), side(t[2], t[0])];
     s.iter().all(|v| *v >= 0.0) || s.iter().all(|v| *v <= 0.0)
@@ -233,6 +238,31 @@ impl Line {
         Line { a, d, q: [snapped.cos(), snapped.sin()] }
     }
     fn offset(&self, p: P2) -> f64 { dot(sub(p, self.a), perp(self.d)) }
+}
+
+/// Painted crosswalk centres: 1 m in from a crossed end of a road longer than
+/// 5 m (urban_surface.gdshader draws the bars 0.3–1.7 m in), with the road's
+/// unit direction there and its half width, in scene metres. Shared by the
+/// sidewalk frames (crossing mouths) and the street-life crossings (walk_lanes.rs).
+pub(crate) fn crosswalk_centres(paint: &RoadPaint, roads: &BTreeMap<&str, &mapkit_core::Road>) -> Vec<(P2, P2, f64)> {
+    let mut crossings: Vec<(P2, P2, f64)> = Vec::new();
+    for (id, r) in roads {
+        let Some(m) = &r.markings else { continue };
+        let Some(path) = paint.paths.get(*id) else { continue };
+        for (crossed, start) in [(m.crosswalk_start, true), (m.crosswalk_end, false)] {
+            if !crossed { continue; }
+            for s in path {
+                let (a, b) = (scene(s.a), scene(s.b));
+                let length = dot(sub(b, a), sub(b, a)).sqrt() * 100.0;
+                let target = if start { 100.0 } else { s.total_cm - 100.0 };
+                if s.total_cm <= 500.0 || length <= 0.0 || target < s.station_cm || target > s.station_cm + length { continue; }
+                let t = (target - s.station_cm) / length;
+                crossings.push(([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], unit(sub(b, a)), s.width_cm / 200.0));
+                break;
+            }
+        }
+    }
+    crossings
 }
 
 /// Display-only frames of sidewalk tops and walls (`<road>:sidewalk`) in a packed
@@ -305,26 +335,7 @@ fn sidewalk_frames(
         let found = lines.iter().position(|l| (l.d[0] * d[1] - l.d[1] * d[0]).abs() < 0.0087 && l.offset(a).abs() < 0.015 && l.offset(b).abs() < 0.015);
         line_of.insert(*k, found.unwrap_or_else(|| { lines.push(Line::new(a, b)); lines.len() - 1 }));
     }
-    // Painted crosswalk centres: 1 m in from a crossed end of a road longer than
-    // 5 m (urban_surface.gdshader draws the bars 0.3–1.7 m in), with the road's
-    // unit direction there and its half width.
-    let mut crossings: Vec<(P2, P2, f64)> = Vec::new();
-    for (id, r) in roads {
-        let Some(m) = &r.markings else { continue };
-        let Some(path) = paint.paths.get(*id) else { continue };
-        for (crossed, start) in [(m.crosswalk_start, true), (m.crosswalk_end, false)] {
-            if !crossed { continue; }
-            for s in path {
-                let (a, b) = (scene(s.a), scene(s.b));
-                let length = dot(sub(b, a), sub(b, a)).sqrt() * 100.0;
-                let target = if start { 100.0 } else { s.total_cm - 100.0 };
-                if s.total_cm <= 500.0 || length <= 0.0 || target < s.station_cm || target > s.station_cm + length { continue; }
-                let t = (target - s.station_cm) / length;
-                crossings.push(([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], unit(sub(b, a)), s.width_cm / 200.0));
-                break;
-            }
-        }
-    }
+    let crossings = crosswalk_centres(paint, roads);
     let mut triangles = Vec::new();
     let mut frames = Vec::new();
     for (i, v) in corners.iter().enumerate() {

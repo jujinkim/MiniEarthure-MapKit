@@ -9,6 +9,7 @@ mod regional;
 mod roof_fixtures;
 mod road_style;
 mod source_preview;
+mod walk_lanes;
 mod work_token;
 mod working;
 use godot::prelude::*;

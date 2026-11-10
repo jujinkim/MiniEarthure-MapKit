@@ -279,7 +279,7 @@ func renderer() -> void:
 				var field: RefCounted = cache.entries[FIELD.KEY].grass_field
 				for _frame in 600:
 					await process_frame
-					if field.window.x < (1 << 29) and field.dirty.is_empty(): break
+					if field.window.x < (1 << 29) and field.dirty.is_empty() and field.building < 0: break
 				var cost: Dictionary = field.draw_cost()
 				var bytes := measured(field)
 				print("tier %d field: %s, %d of %d B, %s" % [level, cost, bytes, FIELD.memory_bytes(level), field.stats])

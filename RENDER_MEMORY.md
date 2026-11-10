@@ -183,6 +183,17 @@ same `presentation_bytes` holds the renderer's unmipmapped RG8 texture of the
 same size, so `render_memory.gd` adds nothing and nothing is counted twice. See
 [city streetlights](docs/RICHER_MATERIALS.md#city-streetlights).
 
+## Street life
+
+The street-life field (walkers and pigeons, `street_life_field.gd`) is one
+fixed 256 KiB claim per resource cache from medium, pinned by every
+registered cell; a refused claim only skips street life. A cell's estimate
+adds `street_life_bytes`: 8 KiB plus 16 B per walk point and crossing mouth
+and 352 B per lane, link or crossing for its graph (returned at attachment
+when nothing registers). The packed walk arrays are presentation bytes,
+counted exactly by native decorate; `upper_bound` needs no addition. See
+[street life](docs/STREET_LIFE.md).
+
 ## Street details drawn over proxies
 
 Streetlights and benches, traffic signals and bus shelters, subway entrances

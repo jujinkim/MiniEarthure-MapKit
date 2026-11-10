@@ -112,6 +112,32 @@ static func barrier_bytes(chunk: Dictionary) -> int:
 	var post_count: int = posts.size() / 13 if posts is PackedFloat32Array else 0
 	return runs.size() / 13 * BARRIER_RUN_BYTES + post_count * BARRIER_POST_BYTES + groups.size() * BARRIER_GROUP_BYTES
 
+## Street life (street_life_field.gd; presentation walk lanes, links and
+## crossings, mapkit-godot walk_lanes.rs, at most 2,048 points, 512 lanes and
+## links and 256 crossings per cell): the registered cell holds its points
+## with their arc lengths (16 B each, the crossing mouths too), its edge
+## arrays (about 32 B per edge) and two node entries per edge in the field's
+## node table, hash grid and reference lists (about 160 B each),
+## STREET_LIFE_EDGE_BYTES in all, plus STREET_LIFE_CELL_BYTES for the record,
+## the Cell and its pigeon anchors. The packed walk arrays themselves are
+## presentation bytes (native decorate counts them exactly). No bound is
+## needed before generation: a lane needs sidewalk tops and their walls, each
+## triangle reserving 13,056 B (upper_bound), far more than its share. A cell
+## that registers nothing (no cache, or low) returns it at attachment.
+const STREET_LIFE_POINT_BYTES := 16
+const STREET_LIFE_EDGE_BYTES := 352
+const STREET_LIFE_CELL_BYTES := 8192
+static func street_life_bytes(chunk: Dictionary) -> int:
+	var presentation: Dictionary = chunk.get("presentation", {})
+	if not presentation.has("ambience") and not presentation.has("walk_points"): return 0
+	var points: Variant = presentation.get("walk_points", PackedVector3Array())
+	var mouths: Variant = presentation.get("walk_crossings", PackedVector3Array())
+	var lanes: Variant = presentation.get("walk_lanes", PackedVector4Array())
+	var links: Variant = presentation.get("walk_links", PackedVector4Array())
+	var point_count: int = (points.size() if points is PackedVector3Array else 0) + (mouths.size() if mouths is PackedVector3Array else 0)
+	var edges: int = (lanes.size() if lanes is PackedVector4Array else 0) + (links.size() if links is PackedVector4Array else 0) + (mouths.size() / 2 if mouths is PackedVector3Array else 0)
+	return STREET_LIFE_CELL_BYTES + point_count * STREET_LIFE_POINT_BYTES + edges * STREET_LIFE_EDGE_BYTES
+
 static func fixture_bytes(chunk: Dictionary) -> int:
 	var list: Variant = chunk.get("presentation", {}).get("facade_fixtures", PackedFloat32Array())
 	if not list is PackedFloat32Array or list.is_empty(): return 0
@@ -309,7 +335,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
 	var grind_bytes := 0
 	for line: Dictionary in preload("./grind_geometry.gd").records(chunk): grind_bytes += 32768 + line.get("samples",[]).size()*8192
-	return fixture_bytes(chunk) + barrier_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	return fixture_bytes(chunk) + barrier_bytes(chunk) + street_life_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:

@@ -129,7 +129,10 @@ pub fn decorate(p: &Package, data: VarDictionary, cache: &mut Cache) -> Result<V
             .to::<VarDictionary>()
             .len() as u64
             * 16384
-        + if presentation.contains_key("lamp_map") { crate::lamp_map::map_bytes(&p.document) } else { 0 };
+        + if presentation.contains_key("lamp_map") { crate::lamp_map::map_bytes(&p.document) } else { 0 }
+        // Street-life walk lanes and ambience (walk_lanes.rs), exactly; cost()
+        // adds no bound: the sidewalk tops they need reserve far more.
+        + crate::walk_lanes::presentation_bytes(&presentation);
     for asset in &p.document.assets {
         mapkit_core::cancellation::checkpoint()?;
         if !assets.contains_key(asset.id.as_str()) {

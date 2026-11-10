@@ -40,7 +40,13 @@ static func profile(level: int) -> Dictionary:
 		# Voxel ground grain on terrain (atmosphere_surface surface_grit, 0..1),
 		# off on every tier: the Client owns the switch and sets it on its
 		# current profile; distant terrain follows through the quality targets.
-		"surface_grit":0.0}
+		"surface_grit":0.0,
+		# Street life (street_life_field.gd): at most walker_count walkers
+		# within walker_distance of the camera, the six-box figure within
+		# walker_near, at most pigeon_count pigeons; none on low. Off on
+		# every tier: the Client owns the street_life switch.
+		"walker_count":[0,40,80][level], "walker_distance":[14.0,20.0,28.0][level], "walker_near":[0.0,6.0,8.0][level],
+		"pigeon_count":[0,16,32][level], "street_life":false}
 
 static func active() -> Dictionary:
 	return profile(1) if current.is_empty() else current.duplicate()

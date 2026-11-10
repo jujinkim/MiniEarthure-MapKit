@@ -37,6 +37,11 @@ var ground_tint := Color(0.08, 0.10, 0.08) # Sky colour well below the horizon.
 var ground_tint_weight := 0.0
 var _weather_fog_density := 0.0008
 var _weather_fog_energy := 0.6
+## Public presentation state of the last update_environment: daylight
+## (0 night .. 1 day) and the settlement of the design at the camera (urban,
+## village or sparse), read by consumers such as ambience audio.
+var daylight := 1.0
+var settlement := "sparse"
 
 ## Far ground seen below the horizon follows the map's ground colour (edge stage skirt).
 func set_ground_tint(color: Color, weight := 1.0) -> void:
@@ -150,8 +155,9 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	if state == null or state.config.is_empty(): return
 	var celestial: Dictionary = state.celestial()
 	var day := float(celestial.daylight)
+	daylight = day
 	var design := PROFILE.design_at(state.profile,Vector2(camera_position.x,-camera_position.z))
-	var settlement := str(design.get("settlement","urban" if design.get("concept")=="metropolis" else "sparse"))
+	settlement = str(design.get("settlement","urban" if design.get("concept")=="metropolis" else "sparse"))
 	var night_ambient := 0.22 if settlement == "urban" else (0.028 if settlement == "village" else 0.012)
 	var night_color := Color(0.42,0.49,0.63) if settlement == "urban" else Color(0.23,0.32,0.48)
 	var now := Time.get_ticks_msec()
