@@ -76,6 +76,29 @@ Direct light follows solar elevation, with cooler snow illumination and brighter
 olive-neutral ambient fill for readable shaded faces. Existing
 light/shadow pools, authority and display-distance limits are unchanged.
 
+Golden hour (`sky_hour.gd`) warms a low sun. The weight
+`(1-smoothstep(6,24,deg))·smoothstep(-6,0,deg)·(1-smoothstep(0.45,0.80,cover))`
+is 1 from 0° to 6° of sun elevation under clear cover and 0 from cloudy cover up.
+Each output lerps its current value towards a low-sun table by that weight:
+
+| Output | Low-sun target |
+| --- | --- |
+| Sun and ambient colour (energies unchanged) | `LOW_SUN`, `LOW_AMBIENT` |
+| Sky zenith, horizon, dusk glow, halo, lit cloud (sky uniforms) | `ZENITH`, `HORIZON`, `DUSK`, `HALO`, `CLOUD_LIT` |
+| Daylight fog | `HORIZON` in the day fog-to-horizon ratio, so far geometry meets the sky |
+| Grade | `golden_stop`: day × (1+0.07w, 1, 1−0.10w), w = smoothstep(0, 0.6, stop), clamped to 1 |
+| Saturation | +0.05 × weight |
+| Glass reflection | zenith/horizon/cloud through `sky_hour.gdshaderinc` |
+
+So every output equals the plain formulas from 24° up, below -6° (the `DUSK` -6°
+key is the dusk constant, so twilight is unchanged) and under cloud, rain or snow.
+With the default 06:00/18:00 simple sun, Morning 09 and Noon 12 are unaffected,
+Dawn 06 and Sunset 18 sit on the plateau and Evening 17 is partly warmed. The
+grade's black and olive stops keep their colour; stops from 0.25 up warm. In
+astronomical mode at high latitude a winter sun can stay below 24° all day, so the
+layer can stay on from sunrise to sunset. The include mirrors the GDScript tables
+as constants; edit both together.
+
 Precipitation uses a bounded camera-centred GPU volume and an overhead shelter ray.
 Splashes use one shared quad/material and a fixed 64-slot MultiMesh (24 on low),
 with at most two extra surface rays per 10Hz update. Covered/steep surfaces suppress
@@ -89,7 +112,8 @@ with mipmaps for each of eight roughness layers): 0.5/2/8MiB. The estimate is no
 measured and excludes the engine's small downsampled copy; every sky owner allocates
 its own. Glass and wet surfaces read the sharper reflection on higher tiers. Surface
 materials also read the renderer's cloud cover and daylight from `environment_data`
-(pixel 0: wet, snow, cloud cover, daylight) for the daylight glass reflection.
+(pixel 0: wet, snow, cloud cover, daylight) and the sun altitude (pixel 1) for the
+daylight glass reflection and its golden-hour blend.
 
 Wet upward surfaces share world-space puddle masks, small ripple normals,
 roughness 0.22 and modest specular response. There is no planar reflection pass
@@ -97,7 +121,8 @@ or fluid simulation. Shader includes expand before context-owned duplication for
 compatibility rendering. Rain contrasts with cloud/direct/ambient lighting;
 a curved noise dome handles clouds. The sky shader owns horizon haze and cloud
 occlusion, preserving sun and moon visibility; the horizon haze blends
-continuously into the lower hemisphere (`sky_horizon_validator`). Well below the
+continuously into the lower hemisphere (`sky_horizon_validator`: a known stale
+reference, no such validator exists). Well below the
 horizon the sky blends toward `ground_tint` by `ground_tint_weight`
 (`set_ground_tint(color, weight)`), so the far ground matches the map's ground
 colour and edge-stage skirt; the default keeps the dark green-grey.
@@ -115,6 +140,9 @@ inputs. `light_group_validator` covers ordering, atomic groups, culling, reentry
 static fallback, falloff reset and pool bounds. It also checks interleaved cell
 profiles, mounted offsets/yaw, opaque/transparent placements and cancellation/retirement.
 `color_grade_validator` checks actual Mobile framebuffer colours, night black, snow,
-HUD exclusion and bounded LUT reuse. Weather, splash pool, celestial occlusion and
-depth-fog checks run in Godot 4.7.2. Aesthetics and device
-performance are user checks.
+HUD exclusion, bounded LUT reuse and the golden curve (warmer highlights, kept
+shadow stops, exact day restore). `sky_hour_validator` checks per-table keys, the
+golden plateau and cut-offs, continuity, the include mirroring the tables, and
+renderer outputs equal to the plain formulas wherever the weight is 0. Weather,
+splash pool, celestial occlusion and depth-fog checks run in Godot 4.7.2.
+Aesthetics and device performance are user checks.

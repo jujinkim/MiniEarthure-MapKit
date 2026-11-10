@@ -3,6 +3,7 @@ render_mode cull_disabled;
 #include "wet_surface.gdshaderinc"
 #include "material_detail.gdshaderinc"
 #include "facade_signs.gdshaderinc"
+#include "sky_hour.gdshaderinc"
 uniform vec4 base_color : source_color = vec4(0.6,0.6,0.6,1.0);
 uniform sampler2D albedo_texture : source_color, filter_linear_mipmap, repeat_enable;
 uniform bool textured = false;
@@ -120,11 +121,17 @@ float facade_band(float x, float a, float b, float w) {
     return clamp((min(x+0.5*w,b)-max(x-0.5*w,a))/w,0.0,1.0);
 }
 // What daylit glass reflects along a ray rising by `rise`: the procedural sky's
-// own zenith/horizon gradient and cloud grey (atmosphere_sky.gdshader), the
-// street and opposite walls below the horizon.
-vec3 facade_sky(float rise, float clouds) {
-    vec3 sky = mix(vec3(0.16,0.28,0.40),vec3(0.58,0.57,0.51),pow(1.0-max(0.0,rise),4.0));
-    sky = mix(sky,vec3(0.27,0.30,0.34),clouds*0.85);
+// own zenith/horizon gradient and cloud grey (atmosphere_sky.gdshader), with the
+// same golden-hour blend at a low sun (sky_hour.gdshaderinc; `sun_altitude` in
+// radians from environment_data), the street and opposite walls below the horizon.
+vec3 facade_sky(float rise, float clouds, float sun_altitude) {
+    float deg = degrees(sun_altitude);
+    float golden = sky_hour_golden(deg,clouds);
+    vec3 zenith = mix(SKY_HOUR_DAY_ZENITH,sky_hour_zenith(deg),golden);
+    vec3 horizon = mix(SKY_HOUR_DAY_HORIZON,sky_hour_horizon(deg),golden);
+    vec3 cloud = mix(SKY_HOUR_CLOUD_DAY,sky_hour_cloud_lit(deg),golden);
+    vec3 sky = mix(zenith,horizon,pow(1.0-max(0.0,rise),4.0));
+    sky = mix(sky,cloud,clouds*0.85);
     return mix(sky,vec3(0.10,0.11,0.10),smoothstep(0.0,0.25,-rise));
 }
 // Commercial storeys (scene metres): (shop storey, upper pitch). With the solid
@@ -813,7 +820,7 @@ void fragment() {
                 float rise = (INV_VIEW_MATRIX*vec4(reflect(-VIEW,NORMAL),0.0)).y;
                 // Each pane also reflects a little more or less (coating, flatness).
                 float pane_gain = 1.0+0.6*(float((pane_bits>>16u)&255u)/255.0-0.5)*pane_steady;
-                glass_reflection = facade_sky(rise,weather.z)*(GLASS_REFLECTANCE+(1.0-GLASS_REFLECTANCE)*fresnel)*pane_gain*facade_window*weather.w;
+                glass_reflection = facade_sky(rise,weather.z,clock.z)*(GLASS_REFLECTANCE+(1.0-GLASS_REFLECTANCE)*fresnel)*pane_gain*facade_window*weather.w;
             }
             // Window lettering (commercial walls with signs): on the first three
             // upper storeys about 30 % of sign slots carry large glyphs in one ink

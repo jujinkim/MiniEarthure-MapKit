@@ -29,7 +29,7 @@ func _init(size := 256, deferred_tiles := false) -> void:
 	pixels.set_pixel(1,0,Color(43200,0,1,64800))
 	texture = ImageTexture.create_from_image(pixels)
 	shader = Shader.new()
-	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code).replace('#include "material_detail.gdshaderinc"',DETAIL.code).replace('#include "facade_signs.gdshaderinc"',preload("./facade_signs.gdshaderinc").code)
+	shader.code = SURFACE.code.replace('#include "wet_surface.gdshaderinc"',preload("./wet_surface.gdshaderinc").code).replace('#include "material_detail.gdshaderinc"',DETAIL.code).replace('#include "facade_signs.gdshaderinc"',preload("./facade_signs.gdshaderinc").code).replace('#include "sky_hour.gdshaderinc"',preload("./sky_hour.gdshaderinc").code)
 	if not deferred_tiles:
 		while not prepare_tile(): pass
 

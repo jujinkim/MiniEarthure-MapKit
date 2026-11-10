@@ -270,7 +270,8 @@ Shop windows have their own frames and mullions (shop part 4) instead of reveals
 Glass (punched windows, curtain walls and shop windows alike) has roughness
 0.08–0.15 per record and specular 0.55. On medium/high in daylight its tint keeps
 45% of its strength and the glass adds what it reflects as emission: the procedural
-sky's zenith/horizon gradient and cloud grey along the reflected ray (street and
+sky's zenith/horizon gradient and cloud grey along the reflected ray, with the
+sky's golden-hour blend at a low sun ([Environment](ENVIRONMENT.md); street and
 opposite walls below the horizon), weighted by Schlick Fresnel from a 0.10 base and
 scaled by the environment's daylight and cloud cover (`environment_data` pixel 0:
 wet, snow, cloud cover, daylight), so dusk, overcast and night follow the sky; at

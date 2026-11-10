@@ -2,6 +2,7 @@ extends Node3D
 ## Public visual consumer. Receives resolved state; never advances a simulation.
 const SKY_SHADER := preload("./atmosphere_sky.gdshader")
 const PROFILE := preload("./environment_profile.gd")
+const SKY_HOUR := preload("./sky_hour.gd")
 const SPLASH_SHADER := preload("./rain_splash.gdshader")
 var splashes: MultiMeshInstance3D
 var splash_material: ShaderMaterial
@@ -162,20 +163,24 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	_clouds = lerpf(float(cover.get(state.previous_weather,0.18)),float(cover.get(state.weather,0.18)),state.blend())
 	_orient(sun,celestial.sun_direction)
 	_orient(moon,celestial.moon_direction)
+	# Golden hour (sky_hour.gd): every output below lerps towards its low-sun
+	# table by `golden`, which is 0 from 24° up, below -6° and under cloud.
+	var deg := rad_to_deg(float(celestial.altitude))
+	var golden := SKY_HOUR.golden(deg,_clouds)
 	# Direct light retains time-of-day colour; the shared LUT owns the art grade.
 	var elevation := maxf(0.0,sin(float(celestial.altitude)))
 	var high_sun := smoothstep(0.0,0.65,elevation)
-	sun.light_color = Color(1.0,0.85,0.66).lerp(Color(1.0,0.98,0.93),high_sun).lerp(Color(0.92,0.96,1.0),_snow*0.65)
+	sun.light_color = SKY_HOUR.blend(Color(1.0,0.85,0.66).lerp(Color(1.0,0.98,0.93),high_sun),SKY_HOUR.LOW_SUN_KEYS,SKY_HOUR.LOW_SUN,deg,golden).lerp(Color(0.92,0.96,1.0),_snow*0.65)
 	sun.light_energy = pow(elevation,0.65)*1.45*(1.0-_clouds*0.82)
 	moon.light_energy = maxf(0.0,sin(float(celestial.moon_altitude)))*float(celestial.moon_phase)*0.12*(1.0-_clouds*0.85)
 	sun.shadow_enabled = float(celestial.altitude) > 0.0
 	moon.shadow_enabled = not sun.shadow_enabled and moon.light_energy > 0.01
-	settings.ambient_light_color = night_color.lerp(Color(0.72,0.73,0.66),day)
+	settings.ambient_light_color = night_color.lerp(SKY_HOUR.blend(Color(0.72,0.73,0.66),SKY_HOUR.LOW_AMBIENT_KEYS,SKY_HOUR.LOW_AMBIENT,deg,golden),day)
 	settings.ambient_light_energy = lerpf(night_ambient,0.52,day)*(1.0-_clouds*0.38)
 	# Preserve night blacks and snow whites without a quality-dependent grade.
-	color_grade.update(day,clampf(_snow*2.0,0.0,1.0))
-	settings.adjustment_saturation = lerpf(1.0,.98,day*(1.0-_snow*2.0))
-	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(Color(0.48,0.49,0.46),day)
+	color_grade.update(day,clampf(_snow*2.0,0.0,1.0),golden)
+	settings.adjustment_saturation = lerpf(1.0,.98,day*(1.0-_snow*2.0))+0.05*golden
+	settings.fog_light_color = Color(0.004,0.007,0.015).lerp(SKY_HOUR.DAY_FOG.lerp(SKY_HOUR.fog(deg),golden),day)
 	_weather_fog_density = lerpf(0.0008,0.006,_clouds*float(state.config.intensity))
 	_weather_fog_energy = lerpf(0.04,0.6,day)
 	_apply_distance_fog()
@@ -187,6 +192,11 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 	sky_material.set_shader_parameter("cloud_motion",float(state.elapsed)*0.012)
 	sky_material.set_shader_parameter("ground_tint",Vector3(ground_tint.r,ground_tint.g,ground_tint.b))
 	sky_material.set_shader_parameter("ground_tint_weight",ground_tint_weight)
+	_set_sky_color("day_zenith",SKY_HOUR.blend(SKY_HOUR.DAY_ZENITH,SKY_HOUR.ZENITH_KEYS,SKY_HOUR.ZENITH,deg,golden))
+	_set_sky_color("day_horizon",SKY_HOUR.blend(SKY_HOUR.DAY_HORIZON,SKY_HOUR.HORIZON_KEYS,SKY_HOUR.HORIZON,deg,golden))
+	_set_sky_color("dusk_color",SKY_HOUR.blend(SKY_HOUR.DUSK_COLOR,SKY_HOUR.DUSK_KEYS,SKY_HOUR.DUSK,deg,golden))
+	_set_sky_color("halo_color",SKY_HOUR.blend(SKY_HOUR.HALO_COLOR,SKY_HOUR.HALO_KEYS,SKY_HOUR.HALO,deg,golden))
+	_set_sky_color("cloud_day",SKY_HOUR.blend(SKY_HOUR.CLOUD_DAY,SKY_HOUR.CLOUD_LIT_KEYS,SKY_HOUR.CLOUD_LIT,deg,golden))
 	var concept := str(design.get("climate",design.get("concept","metropolis")))
 	var night: int = PROFILE.night_index(state.seconds)
 	var aurora_event := PROFILE.stable_unit("aurora/%s/%d" % [state.seed,night]) < float(state.config.aurora_probability)
@@ -200,6 +210,9 @@ func update_environment(state: RefCounted, camera_position: Vector3, _vehicles: 
 		if _context != null: _context.update(state.seconds,_wet,_snow,float(celestial.altitude),int(celestial.get("sunset_minutes",state.config.sunset_minutes)),_clouds,day)
 	_update_precipitation(state,camera_position)
 	_update_static_lights(state,camera_position)
+
+func _set_sky_color(parameter: String, color: Color) -> void:
+	sky_material.set_shader_parameter(parameter,Vector3(color.r,color.g,color.b))
 
 func _orient(light: DirectionalLight3D, direction: Vector3) -> void:
 	light.basis = Basis.looking_at(-direction,Vector3.FORWARD if absf(direction.y)>0.99 else Vector3.UP)
