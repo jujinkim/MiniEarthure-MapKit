@@ -1,6 +1,6 @@
 extends SceneTree
 ## Generated building facades: key classification, twelve base colours and the
-## record palettes shared with the distant mesh, per-record wall finishes, floor pitch from the recorded
+## record palettes shared with the distant mesh, per-solid own looks (own_share), per-record wall finishes, floor pitch from the recorded
 ## map scale, shader uniforms, the solid top (CUSTOM0) binding, the
 ## commercial storey/shop-front layout, the procedural storefront signs
 ## (facade_signs.gdshaderinc) and window lettering, and the roof finishes
@@ -171,6 +171,38 @@ static func pcg(v: int) -> int:
 	var w := (((s >> ((s >> 28) + 4)) ^ s) * 277803737) & 0xFFFFFFFF
 	return ((w >> 22) ^ w) & 0xFFFFFFFF
 
+## GDScript mirror of facade_look (vertex(); mapkit-package distant.rs): the
+## 12-bit look of a 24-bit seed, its own solid bits for `share` of solids.
+static func look_of(bits: int, share: float) -> int:
+	var solid := bits & 4095
+	return solid if float(pcg(pcg(solid) ^ 1868014533) >> 8) / 16777216.0 < PackedFloat32Array([share])[0] else bits >> 12
+
+## A seed of `record` whose solid bits (2) keep the record's look at every share.
+static func record_seed(record: int) -> float: return float((record << 12) | 2) / 16777216.0
+
+## Own looks: a solid takes its own body, roof colour, pane variant and bay for
+## the key's own_share of solids (apartment complexes fewer); finish, glass,
+## accent, signs and frames stay per record. Known answers match the Rust
+## facade_look test (mapkit-package tests/distant.rs).
+func looks(job: Dictionary) -> void:
+	var code: String = MATERIALS.new().shader.code
+	check(code.contains("uniform float facade_own_share = 0.0;") and code.contains("varying flat int facade_look;"),"own-look share uniform and flat look varying")
+	check(code.contains("int bits = int(round(solid_seed*16777216.0));") and code.contains("facade_look = facade_unit(facade_pcg(uint(bits&4095))^1868014533u)<facade_own_share ? bits&4095 : bits>>12;"),"vertex() picks the look once per solid with the integer hash (mirrored here)")
+	check(code.contains("facade_body[look&7]") and code.contains("facade_roof[(look>>3)&7]") and code.contains("float((look>>3)&3)") and code.contains("float((look>>9)&7)/7.0"),"body, roof colour, pane variant and bay read the look")
+	check(code.contains("facade_accent[(record>>6)&7]") and code.contains("float((record>>6)&3)/4.0+0.1") and code.contains("facade_pcg(uint(record)^1478450703u)") and not code.contains("facade_body[record&7]") and not code.contains("facade_roof[(record>>3)&7]"),"accent, glass and signs stay per record")
+	check(look_of((77 << 12) | 1,0.35) == 1 and look_of((77 << 12) | 2048,0.35) == 2048 and look_of((77 << 12) | 2048,0.15) == 77 and look_of(77 << 12,0.35) == 77 and look_of((77 << 12) | 4095,0.35) == 77 and look_of((77 << 12) | 9,0.15) == 9,"own-look known answers")
+	check(look_of(2,0.35) == 0 and look_of(2,1.0) == 2 and look_of(2,0.0) == 0,"record_seed's solid bits keep the record's look below a full share")
+	var table: Dictionary = RENDER.FACADE_PALETTE.data
+	check(is_equal_approx(float(table.own_share.default),0.35) and is_equal_approx(float(table.own_share["concrete:residential"]),0.15),"own_share: 0.35, apartment complexes 0.15")
+	for share: float in [0.15,0.35]:
+		var own := 0
+		for solid in 4096: if look_of((4095 << 12) | solid,share) == solid: own += 1
+		check(absf(float(own)/4096.0-share) < 0.02,"own looks follow the share %.2f (%d of 4096)"%[share,own])
+	for key: String in ["concrete:residential","concrete:commercial","brick:residential","concrete:public"]:
+		var material: ShaderMaterial = RENDER._generated_material(job,key,{"facade_floor_cm":100})
+		var share := 0.15 if key == "concrete:residential" else 0.35
+		check(is_equal_approx(material.get_shader_parameter("facade_own_share"),share) and is_equal_approx(RENDER.facade_palette(key).own_share,share),"walls bind their own-look share: "+key)
+
 static func finish_of(look: PackedVector4Array, record: int) -> int:
 	var pick := float(pcg(record ^ 1759714724) >> 8) / 16777216.0
 	for i in look.size():
@@ -268,7 +300,7 @@ func finish_pixels(job: Dictionary, context: RefCounted) -> void:
 		var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(-1,1,0),Vector3(1,1,0),Vector3(1,3,0),Vector3(-1,1,0),Vector3(1,3,0),Vector3(-1,3,0)])
 		var normals := PackedVector3Array(); var seeds := PackedVector2Array()
-		for i in 6: normals.append(Vector3.BACK); seeds.append(Vector2((float(record)+0.5)/4096.0,1000.0))
+		for i in 6: normals.append(Vector3.BACK); seeds.append(Vector2(record_seed(record),1000.0))
 		arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_TEX_UV2] = seeds
 		var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
 		node.mesh = mesh
@@ -291,6 +323,23 @@ func finish_pixels(job: Dictionary, context: RefCounted) -> void:
 		if finish != "curtain": check(absf(near.x/maxf(sample["250/1"].x,0.01)-1.0) < 0.15,"%s wall keeps its brightness beyond the effect distance (%.3f near, %.3f far)"%[finish,near.x,sample["250/1"].x])
 		far.append(sample["250/1"])
 	for value: Vector2 in far: check(value.distance_to(far[0]) < 0.02,"far walls of every finish match")
+	# Record 0 with solid bits 14 takes its own look (body entry 6, a dark grey,
+	# instead of entry 0), at every distance.
+	var arrays := []; arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3(-1,1,0),Vector3(1,1,0),Vector3(1,3,0),Vector3(-1,1,0),Vector3(1,3,0),Vector3(-1,3,0)])
+	var own_normals := PackedVector3Array(); var own_seeds := PackedVector2Array()
+	for i in 6: own_normals.append(Vector3.BACK); own_seeds.append(Vector2(14.0/16777216.0,1000.0))
+	arrays[Mesh.ARRAY_NORMAL] = own_normals; arrays[Mesh.ARRAY_TEX_UV2] = own_seeds
+	var own_mesh := ArrayMesh.new(); own_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	node.mesh = own_mesh
+	check(look_of(14,0.35) == 14,"solid bits 14 take their own look")
+	camera.position = Vector3(0,2,250.0)
+	context.update(43200,0,0,0.8,1080,0.18,1.0)
+	for frame in 4: await process_frame
+	await RenderingServer.frame_post_draw
+	var own_far := band_luminance(root.get_texture().get_image(),1.02,1.09)
+	print("FACADE_OWN_LOOK far=%.3f record_far=%.3f" % [own_far,far[0].x])
+	check(own_far < 0.8*far[0].x,"an own-look solid draws its own body beyond the effect distance (%.3f vs %.3f)"%[own_far,far[0].x])
 	node.free()
 	scene.queue_free()
 	await process_frame
@@ -346,7 +395,7 @@ func roof_pixels(job: Dictionary, context: RefCounted) -> void:
 		var vertices := PackedVector3Array(); var normals := PackedVector3Array(); var seeds := PackedVector2Array(); var tops := PackedFloat32Array()
 		for c: Vector3 in corners:
 			vertices.append(Vector3(c.x,(8.0-c.z)*slope,c.z)); normals.append(normal)
-			seeds.append(Vector2((float(case[1])+0.5)/4096.0,1000.0-3.0))
+			seeds.append(Vector2(record_seed(case[1]),1000.0-3.0))
 			tops.append(-1003.0 if pitched else 4000.3)
 		arrays[Mesh.ARRAY_VERTEX] = vertices; arrays[Mesh.ARRAY_NORMAL] = normals; arrays[Mesh.ARRAY_TEX_UV2] = seeds; arrays[Mesh.ARRAY_CUSTOM0] = tops
 		var mesh := ArrayMesh.new(); mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays,[],{},RENDER.FACADE_TOP_FORMAT)
@@ -520,6 +569,7 @@ func run() -> void:
 	check(names.has("facade_finish") and names.has("facade_finish_look") and names.has("facade_finish_count") and names.has("facade_tiles") and names.has("facade_tiles_enabled"),"surface shader compiles with the finish and facade tile uniforms")
 	check(context.facades is Texture2DArray and context.facades.get_layers() == MATERIALS.FACADE_LAYERS.size(),"shared facade tile array")
 	finishes(job,context)
+	looks(job)
 	await finish_pixels(job,context)
 	await roof_pixels(job,context)
 	# Per-solid choices must not depend on interpolated values: flat seeds and an

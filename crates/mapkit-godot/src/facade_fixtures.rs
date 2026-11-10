@@ -11,16 +11,19 @@
 //! the network changes. Every choice is an integer PCG hash of the 12-bit
 //! record seed and integer slot, column or row indices (no float-order
 //! dependence); positions are computed from them in the wall's own frame.
+//! Bays and window rects follow the solid's 12-bit look
+//! (mapkit-package distant.rs `facade_look`: the solid's own seed for the
+//! key's `own_share` of solids, otherwise the record's), as in the shader.
 //!
 //! Coupling with `godot/atmosphere_surface.gdshader` (keep both in step):
 //! - wall frame: u = dot(p, t) with t = normalize(-n.z, 0, n.x) for the wall
 //!   normal n, v = height above the solid base (facade seed y - 1000);
-//! - bays: floor pitch × base(kind) × (0.8 + 0.5 × ((record >> 9) & 7) / 7);
+//! - bays: floor pitch × base(kind) × (0.8 + 0.5 × ((look >> 9) & 7) / 7);
 //!   sign slots are two bays wide and read along -u, so slot boundaries lie at
 //!   u = -k × slot width (blade signs stand on them);
 //! - commercial storeys: `facade_storeys` (a 1.5-floor shop storey, whole
 //!   storeys fitted below the solid top); other kinds use floor-pitch rows;
-//! - window rects per kind and record variant ((record >> 3) & 3), the sill
+//! - window rects per kind and look variant ((look >> 3) & 3), the sill
 //!   ledge (0.035 floors) and its shadow below it: air-conditioner units hang
 //!   in the wall band between the sill shadow and the window of the storey
 //!   below; curtain walls (the `facade_palette.json` finish pick) get none.
@@ -129,13 +132,20 @@ fn curtain(record: u32) -> bool {
     weights.last().is_some_and(|w| w.0 == "curtain")
 }
 
-/// The shader's window rect (x0, x1, y0, y1 in cell units) of a kind and record.
-fn pane(kind: u8, record: u32) -> [f32; 4] {
+/// The shader's window rect (x0, x1, y0, y1 in cell units) of a kind and look.
+fn pane(kind: u8, look: u32) -> [f32; 4] {
     let mut pane = match kind { 1 => [0.2, 0.75, 0.3, 0.75], 2 => [0.3, 0.7, 0.3, 0.7], 3 => [0.1, 0.9, 0.15, 0.85], 4 => [0.15, 0.85, 0.6, 0.85], _ => [0.3, 0.7, 0.2, 0.85] };
     if kind != 2 && kind != 4 {
-        pane = match (record >> 3) & 3 { 1 => [0.35, 0.65, 0.12, 0.86], 2 => [0.0, 1.0, 0.32, 0.76], 3 => [0.25, 0.75, 0.38, 0.80], _ => pane };
+        pane = match (look >> 3) & 3 { 1 => [0.35, 0.65, 0.12, 0.86], 2 => [0.0, 1.0, 0.32, 0.76], 3 => [0.25, 0.75, 0.38, 0.80], _ => pane };
     }
     pane
+}
+
+/// The 12-bit look of a 24-bit facade seed (record << 12 | solid) on a wall
+/// of facade kind `kind` (1, apartments, is concrete:residential).
+pub(crate) fn look(seed: u32, kind: u8) -> u32 {
+    let share = mapkit_package::distant::facade_own_share(if kind == 1 { "concrete:residential" } else { "default" });
+    mapkit_package::distant::facade_look(seed >> 12, seed & 0xFFF, share)
 }
 
 /// facade_storeys: (shop storey, fitted upper pitch; 0 for a plain parapet).
@@ -178,7 +188,7 @@ pub struct Placed {
     pub blocked: usize,
 }
 
-pub(crate) struct Plane { pub(crate) normal: Vector3, pub(crate) offset: f32, triangles: Vec<usize>, pub(crate) object: usize, pub(crate) seed: u32, record: u32, base: f32, height: f32, opposite: Vec<usize> }
+pub(crate) struct Plane { pub(crate) normal: Vector3, pub(crate) offset: f32, triangles: Vec<usize>, pub(crate) object: usize, pub(crate) seed: u32, record: u32, pub(crate) look: u32, base: f32, height: f32, opposite: Vec<usize> }
 
 /// A fixture box in its own frame (lo..hi; x right, y up, z out). Selection:
 /// by class (0 blade, 1 penthouse, 2 tank, 3 rim, 4 the rest), then rank and
@@ -213,7 +223,8 @@ fn planes(input: &Input) -> (Vec<Plane>, Vec<u32>) {
         let p = found.unwrap_or_else(|| {
             let seed_bits = (seed.x.clamp(0.0, 1.0) * 16_777_216.0).round() as u32;
             let base = seed.y - 1000.0;
-            planes.push(Plane { normal, offset, triangles: vec![], object: object as usize, seed: seed_bits, record: seed_bits >> 12, base, height: input.tops[t * 3].abs() - 1000.0 - base, opposite: vec![] });
+            let look = look(seed_bits, input.kinds[object as usize]);
+            planes.push(Plane { normal, offset, triangles: vec![], object: object as usize, seed: seed_bits, record: seed_bits >> 12, look, base, height: input.tops[t * 3].abs() - 1000.0 - base, opposite: vec![] });
             list.push(planes.len() - 1);
             planes.len() - 1
         });
@@ -322,7 +333,7 @@ fn blades(input: &Input, planes: &[Plane], index: usize, out: &mut Vec<Candidate
     let p = input.pitch;
     let (ground, upper) = storeys(plane.height, p);
     if upper <= 0.0 { return; }
-    let bay = p * 0.8 * (0.8 + 0.5 * ((plane.record >> 9) & 7) as f32 / 7.0);
+    let bay = p * 0.8 * (0.8 + 0.5 * ((plane.look >> 9) & 7) as f32 / 7.0);
     let slot = bay * 2.0;
     let tangent = Vector3::new(-plane.normal.z, 0.0, plane.normal.x);
     let (umin, umax) = extent(input, plane, tangent);
@@ -354,9 +365,9 @@ fn air_conditioners(input: &Input, planes: &[Plane], index: usize, concrete: boo
     let plane = &planes[index];
     let p = input.pitch;
     if kind == 3 && concrete && curtain(plane.record) { return; }
-    let window = pane(kind, plane.record);
+    let window = pane(kind, plane.look);
     let base_bay = match kind { 2 => 1.8, 3 => 0.8, _ => 1.5 };
-    let bay = p * base_bay * (0.8 + 0.5 * ((plane.record >> 9) & 7) as f32 / 7.0);
+    let bay = p * base_bay * (0.8 + 0.5 * ((plane.look >> 9) & 7) as f32 / 7.0);
     // Rows: (base, storey height) of each storey whose window sits below the top.
     let mut rows = Vec::new();
     if kind == 3 {
@@ -617,8 +628,8 @@ pub(crate) mod tests {
             let n = Vector3::new(f[3].sin(), 0.0, f[3].cos());
             let u = Vector3::new(f[0], f[1], f[2]).dot(Vector3::new(-n.z, 0.0, n.x));
             let seed = s.seeds[s.objects.iter().position(|&o| s.kinds[o as usize] == 3).unwrap() * 3].x;
-            let record = ((seed * 16_777_216.0).round() as u32) >> 12;
-            let slot = 2.0 * 0.8 * (0.8 + 0.5 * ((record >> 9) & 7) as f32 / 7.0);
+            let look = look((seed * 16_777_216.0).round() as u32, 3);
+            let slot = 2.0 * 0.8 * (0.8 + 0.5 * ((look >> 9) & 7) as f32 / 7.0);
             assert!(((-u / slot) - (-u / slot).round()).abs() < 1e-3, "on a slot boundary: {u} / {slot}");
         }
         for f in &walls(&placed.values) {

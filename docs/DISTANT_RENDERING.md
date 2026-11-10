@@ -40,8 +40,9 @@ GLB/texture instance is produced. The traversal is iterative. Building material 
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.
 
-Native buildings (every part) emit closed triangular prisms in the near renderer's
-twelve material/use wall colours and carry light role 3 (night-lit walls at average
+Native buildings (every part) emit closed triangular prisms in the body and roof
+colours of each solid's look (`facade_look`: the record's, or the solid's own for the
+key's `own_share`, keyed by the solid top as in the near packed seeds) and carry light role 3 (night-lit walls at average
 window emission, dark roofs) with the map/object seed; barrier faces take
 their near design's colour (`barrier_design.rs`: wall and hedge paint, a fence's
 paint over the far backdrop by its far opacity, the haze its near far faces

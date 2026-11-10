@@ -1,6 +1,7 @@
 {
   "version": 1,
-  "about": "Generated building colours (sRGB) chosen per record (one site and category) by its seed: near walls and roofs in atmosphere_surface.gdshader and distant meshes (mapkit-package distant.rs) read this one table. Keys are material:usage; brick and wood keep their own bodies for every usage.",
+  "about": "Generated building colours (sRGB) chosen per record (one site and category) by its seed: near walls and roofs in atmosphere_surface.gdshader and distant meshes (mapkit-package distant.rs) read this one table. Keys are material:usage; brick and wood keep their own bodies for every usage. own_share of a record's solids (by an integer PCG hash of their solid bits) take their own body, roof colour, pane variant and bay instead of the record's; apartment complexes (concrete:residential) keep closer to one look, and finishes, glass, accents and signs stay per record.",
+  "own_share": {"default": 0.35, "concrete:residential": 0.15},
   "body": {
     "concrete:residential": [[236,232,222],[226,229,232],[232,221,200],[214,214,210],[238,224,212],[221,227,214],[229,222,214],[242,238,228]],
     "concrete:commercial": [[184,190,196],[140,146,152],[206,196,176],[170,120,96],[120,140,160],[220,214,204],[96,100,108],[188,170,140]],

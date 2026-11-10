@@ -845,6 +845,7 @@ static func bind_facade(material: Material, key: String, presentation: Dictionar
 	material.set_shader_parameter("facade_body", palette.body)
 	material.set_shader_parameter("facade_roof", palette.roof)
 	material.set_shader_parameter("facade_accent", palette.accent)
+	material.set_shader_parameter("facade_own_share", palette.own_share)
 	material.set_shader_parameter("facade_palette", true)
 	var finishes := facade_finishes(key)
 	material.set_shader_parameter("facade_finish", finishes.finish)
@@ -880,7 +881,8 @@ static func facade_finishes(key: String) -> Dictionary:
 	return result
 
 ## Record palettes of a generated building key (sRGB 0..1), the same entries the
-## distant mesh uses (`facade_palette.json`, mapkit-package distant.rs).
+## distant mesh uses (`facade_palette.json`, mapkit-package distant.rs), and the
+## key's own-look share (`own_share`: the key's entry, else the default).
 static var _facade_palettes := {}
 static func facade_palette(key: String) -> Dictionary:
 	if _facade_palettes.has(key): return _facade_palettes[key]
@@ -893,7 +895,8 @@ static func facade_palette(key: String) -> Dictionary:
 		for rgb: Array in rows: out.append(Vector3(float(rgb[0]), float(rgb[1]), float(rgb[2])) / 255.0)
 		return out
 	var palette := {"body": unit.call(table.body[fields[0] if brick_or_wood else "concrete:" + usage]),
-		"roof": unit.call(table.roof[fields[0] if brick_or_wood else "concrete"]), "accent": unit.call(table.accent)}
+		"roof": unit.call(table.roof[fields[0] if brick_or_wood else "concrete"]), "accent": unit.call(table.accent),
+		"own_share": float(table.own_share.get(key, table.own_share.default))}
 	palette.make_read_only()
 	_facade_palettes[key] = palette
 	return palette

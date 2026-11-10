@@ -126,10 +126,11 @@ fn fits(input: &Input, roof: &Roof, centre: Vector3, right: Vector3, out: Vector
 }
 
 /// The 24-bit design bits of a rooftop fixture: bits 0..2 the palette key,
-/// 3..5 the record's body and 6..8 its roof palette entries, 9..10 the
+/// 3..5 the solid look's body and 6..8 its roof palette entries
+/// (facade_fixtures.rs `look`, as the walls and roof under it), 9..10 the
 /// mesh variant, 11..23 a design hash.
-fn design(key: u8, record: u32, variant: u32, hash: u32) -> u32 {
-    (key.min(7) as u32) | ((record & 7) << 3) | (((record >> 3) & 7) << 6) | ((variant & 3) << 9) | ((hash & 0x1FFF) << 11)
+fn design(key: u8, look: u32, variant: u32, hash: u32) -> u32 {
+    (key.min(7) as u32) | ((look & 7) << 3) | (((look >> 3) & 7) << 6) | ((variant & 3) << 9) | ((hash & 0x1FFF) << 11)
 }
 
 struct Slot<'a> { input: &'a Input<'a>, roof: &'a Roof, frame: &'a Frame, hash: u32, extent: [f32; 4] }
@@ -192,7 +193,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
         if out.len() >= max { return; }
         let kind = input.kinds[roof.object];
         let key = input.keys.get(roof.object).copied().unwrap_or(255);
-        let record = roof.seed >> 12;
+        let look = crate::facade_fixtures::look(roof.seed, kind);
         let frame = Frame::new(roof.frame);
         let storeys = (roof.height - roof.base) / p;
         // Extent in the frame and area.
@@ -221,7 +222,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
                 let tall = p * (0.88 + 0.04 * ((h >> 5) % 4) as f32);
                 let id = next_slot; next_slot += 1;
                 let list = slot.positions(0x5E17_0000 ^ s, w, d, s as f32 / count as f32, (s + 1) as f32 / count as f32, None).into_iter()
-                    .map(|(attempt, centre, facing)| slot.candidate(PENTHOUSE, centre, facing, [w, tall, d], design(key, record, 0, h >> 8), 1, 0x5E17_0000 ^ s, id, attempt, 0)).collect();
+                    .map(|(attempt, centre, facing)| slot.candidate(PENTHOUSE, centre, facing, [w, tall, d], design(key, look, 0, h >> 8), 1, 0x5E17_0000 ^ s, id, attempt, 0)).collect();
                 add(list, out);
             }
         }
@@ -246,7 +247,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
             };
             let id = next_slot; next_slot += 1;
             let list = slot.positions(0x7A11_0000 ^ s, w, d, 0.0, 1.0, None).into_iter()
-                .map(|(attempt, centre, facing)| slot.candidate(TANK, centre, facing, [w, tall, d], design(key, record, round as u32, h >> 13), 2, 0x7A11_0000 ^ s, id, attempt, 0)).collect();
+                .map(|(attempt, centre, facing)| slot.candidate(TANK, centre, facing, [w, tall, d], design(key, look, round as u32, h >> 13), 2, 0x7A11_0000 ^ s, id, attempt, 0)).collect();
             add(list, out);
         }
         // Condenser groups: a row of 2-5 units on commercial, public and
@@ -271,7 +272,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
                 let right = Vector3::new(facing.z, 0.0, -facing.x);
                 for k in 0..n {
                     let offset = p * CONDENSER_SPACING * (k as f32 - 0.5 * (n - 1) as f32);
-                    let bits = design(key, record, variant, pcg(h ^ k) >> 8);
+                    let bits = design(key, look, variant, pcg(h ^ k) >> 8);
                     list.push(slot.candidate(CONDENSER, centre + right * offset, facing, [p * CONDENSER_WIDTH, p * CONDENSER_HEIGHT, d], bits, 4, 0xC0DE_0000 ^ s, id, attempt, id));
                 }
             }
@@ -293,7 +294,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
                     let offset = p * SOLAR_ROW_SPACING * (k as f32 - 0.5 * (rows - 1) as f32);
                     // Rows are instanced from their left end (mesh x 0..1).
                     let right = Vector3::new(facing.z, 0.0, -facing.x);
-                    let mut c = slot.candidate(SOLAR, centre + facing * offset, facing, [length, p * SOLAR_HEIGHT, p * SOLAR_DEPTH], design(key, record, 0, pcg(h ^ k) >> 8), 4, 0x5014_0000, id, attempt, id);
+                    let mut c = slot.candidate(SOLAR, centre + facing * offset, facing, [length, p * SOLAR_HEIGHT, p * SOLAR_DEPTH], design(key, look, 0, pcg(h ^ k) >> 8), 4, 0x5014_0000, id, attempt, id);
                     c.origin -= right * (0.5 * length);
                     c.lo.x += 0.5 * length;
                     c.hi.x += 0.5 * length;
@@ -309,7 +310,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
             let side = p * MAST_FOOTPRINT;
             let id = next_slot; next_slot += 1;
             let list = slot.positions(0x3A57_0000, side, side, 0.0, 1.0, None).into_iter()
-                .map(|(attempt, centre, facing)| slot.candidate(MAST, centre, facing, [side, p * if dish { DISH_HEIGHT } else { ANTENNA_HEIGHT }, side], design(key, record, dish as u32, h >> 8), 4, 0x3A57_0000, id, attempt, 0)).collect();
+                .map(|(attempt, centre, facing)| slot.candidate(MAST, centre, facing, [side, p * if dish { DISH_HEIGHT } else { ANTENNA_HEIGHT }, side], design(key, look, dish as u32, h >> 8), 4, 0x3A57_0000, id, attempt, 0)).collect();
             add(list, out);
         }
         // Parapet rims on the perimeter edges, a guard railing on about 35 %
@@ -354,7 +355,7 @@ pub(crate) fn candidates(input: &Input, planes: &[Plane], out: &mut Vec<Candidat
                 let origin = a + along * if flip { s1 } else { s0 } + inward * (RIM_INSET * p);
                 let lo = Vector3::new(0.0, 0.005 * p, 0.0);
                 let hi = Vector3::new(piece, tall + MARGIN * p, (RIM_THICKNESS + MARGIN) * p);
-                let mut c = Candidate::new(crate::facade_fixtures::NO_PLANE, EDGE, origin, inward, tall, design(key, record, railing as u32, h >> 8), lo, hi);
+                let mut c = Candidate::new(crate::facade_fixtures::NO_PLANE, EDGE, origin, inward, tall, design(key, look, railing as u32, h >> 8), lo, hi);
                 c.width = piece;
                 c.class = 3;
                 c.rank = edge_rank;
@@ -617,12 +618,13 @@ mod tests {
         let s = scene(&chunk, &bounds);
         let placed = place(&input(&s, 1.0), MAX_FIXTURES);
         assert!(!fixtures(&placed.values).iter().any(|f| f[4] == PENTHOUSE), "two storeys: no stair penthouse");
-        let record = (((s.seeds[s.objects.iter().position(|&o| s.kinds[o as usize] == 4).unwrap() * 3].x * 16_777_216.0).round() as u32) >> 12) as u32;
+        let seed = (s.seeds[s.objects.iter().position(|&o| s.kinds[o as usize] == 4).unwrap() * 3].x * 16_777_216.0).round() as u32;
+        let look = crate::facade_fixtures::look(seed, 4);
         for f in fixtures(&placed.values).into_iter().filter(|f| f[4] >= PENTHOUSE) {
             let bits = f[7] as u32;
             assert_eq!(bits & 7, 2, "concrete industrial palette key");
-            assert_eq!((bits >> 3) & 7, record & 7);
-            assert_eq!((bits >> 6) & 7, (record >> 3) & 7);
+            assert_eq!((bits >> 3) & 7, look & 7);
+            assert_eq!((bits >> 6) & 7, (look >> 3) & 7);
         }
         assert_eq!(FLOATS, 10);
     }

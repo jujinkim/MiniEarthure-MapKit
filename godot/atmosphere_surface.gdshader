@@ -55,11 +55,15 @@ uniform float building_seed = 0.5;
 uniform int facade_kind = 0;
 uniform float floor_pitch = 3.0;
 // Record palettes (sRGB, facade_palette.json) bound per building material:
-// body (seed bits 0..2), roof (bits 3..5) and apartment accent (bits 6..8).
+// body (look bits 0..2), roof (look bits 3..5) and apartment accent (record
+// bits 6..8).
 uniform vec3 facade_body[8];
 uniform vec3 facade_roof[8];
 uniform vec3 facade_accent[8];
 uniform bool facade_palette = false;
+// Share of a record's solids that take their own look (facade_palette.json
+// own_share of the key; see facade_look).
+uniform float facade_own_share = 0.0;
 // Wall finishes of the building key (facade_palette.json `finishes`), one per
 // record by an integer hash of its seed: x facade tile layer (-1 none), y tile
 // size in floors, z roughness, w metallic (at most 0.1: walls keep their
@@ -95,6 +99,9 @@ varying flat float solid_height;
 varying flat float solid_coping;
 // The record's wall finish slot (-1 none), picked once per solid in vertex().
 varying flat int finish_slot;
+// The solid's 12-bit look (body, roof colour, pane variant, bay), picked once
+// per solid in vertex(): its own solid bits or its record's.
+varying flat int facade_look;
 // Flat roof faces of packed solids carry their roof frame in CUSTOM0.x (4000 +
 // the facade walls' direction modulo 90°, packed.rs roof_frame, read above
 // 3500) instead of a top:
@@ -397,6 +404,14 @@ void vertex() {
     solid_height = solid_seed>=0.0 && abs(CUSTOM0.x)>500.0 && CUSTOM0.x<=3500.0 ? (MODEL_MATRIX * vec4(0.0,abs(CUSTOM0.x)-1000.0,0.0,1.0)).y-solid_base : -1.0;
     solid_coping = solid_height>0.0 && CUSTOM0.x>0.0 ? 1.0 : 0.0;
     roof_frame = solid_seed>=0.0 && CUSTOM0.x>3500.0 ? CUSTOM0.x-4000.0 : 0.0;
+    // A solid takes its own look for facade_own_share of solids, by the PCG of
+    // its 12 solid bits (record ID and solid top, the same on both sides of a
+    // cell cut), else the record's (mapkit-package distant.rs facade_look).
+    facade_look = 0;
+    if(solid_seed>=0.0 && facade_palette) {
+        int bits = int(round(solid_seed*16777216.0));
+        facade_look = facade_unit(facade_pcg(uint(bits&4095))^1868014533u)<facade_own_share ? bits&4095 : bits>>12;
+    }
     // A record (one site and category) shares one wall finish: the integer PCG
     // of its 12-bit seed against the key's cumulative weights.
     finish_slot = -1;
@@ -426,10 +441,12 @@ void fragment() {
     float surface_roughness=roughness;
     float surface_metallic=metallic;
     float surface_specular=0.35;
-    // A record (one site and category) shares its palette and wall finish; the
-    // distant mesh picks the same body/roof entries, so colours never fade.
+    // A record (one site and category) shares its wall finish, glass, accent and
+    // signs; body, roof colour, pane variant and bay follow the solid's look,
+    // and the distant mesh picks the same body/roof entries, so colours never fade.
     bool facade_record = facade_palette && facade_kind>0 && !distant && solid_seed>=0.0;
     int record = facade_record ? int(floor(solid_seed*4096.0)) : 0;
+    int look = facade_record ? facade_look : 0;
     bool facade_surface = facade_kind>0 && !distant && abs(world_normal.y)<0.5;
     int finish = facade_record && facade_surface ? finish_slot : -1;
     // Curtain walls (commercial only) are glass and frames without a wall tile.
@@ -479,7 +496,7 @@ void fragment() {
     float solid_jitter = facade_record ? fract(solid_seed*4096.0) : seed;
     vec3 facade_base = max(base_color.rgb,vec3(0.02));
     if(facade_record && world_normal.y>=0.5) {
-        vec3 roof_palette = facade_roof[(record>>3)&7];
+        vec3 roof_palette = facade_roof[(look>>3)&7];
         color *= facade_linear(roof_palette,OUTPUT_IS_SRGB)/facade_base;
         // Roof finishes (roof_finish): coatings, slabs, membranes, gravel,
         // tiles, shingles or sheet metal, settling to the palette colour.
@@ -498,9 +515,9 @@ void fragment() {
         vec3 n = normalize(world_normal);
         // Older packed meshes without UV2 vary each wall plane instead.
         facade_seed = solid_seed>=0.0 ? solid_seed : facade_hash(vec2(round(dot(n,world_position)*4.0),round(n.x*8.0)+round(n.z*8.0)*17.0));
-        if(facade_record) color *= facade_linear(facade_body[record&7],OUTPUT_IS_SRGB)/facade_base;
+        if(facade_record) color *= facade_linear(facade_body[look&7],OUTPUT_IS_SRGB)/facade_base;
         if(effect_weight>0.0) {
-            float variant = facade_record ? float((record>>3)&3) : floor(fract(facade_seed*7.31)*4.0);
+            float variant = facade_record ? float((look>>3)&3) : floor(fract(facade_seed*7.31)*4.0);
             if(!facade_record) {
                 vec3 tone = variant<1.0 ? vec3(1.06,1.0,0.90) : (variant<2.0 ? vec3(0.93,0.98,1.06) : (variant<3.0 ? vec3(1.08,0.90,0.80) : vec3(1.07,1.07,1.05)));
                 color *= mix(vec3(1.0),tone*(0.92+0.16*fract(facade_seed*13.7)),effect_weight);
@@ -508,7 +525,7 @@ void fragment() {
             float u = dot(world_position,normalize(vec3(-n.z,0.0,n.x)));
             float v = world_position.y-solid_base;
             float bay = facade_kind==1 ? 1.3 : (facade_kind==2 ? 1.8 : (facade_kind==3 ? 0.8 : (facade_kind==4 ? 1.0 : 1.5)));
-            bay *= facade_record ? 0.8+0.5*float((record>>9)&7)/7.0 : 0.8+0.5*fract(facade_seed*3.17);
+            bay *= facade_record ? 0.8+0.5*float((look>>9)&7)/7.0 : 0.8+0.5*fract(facade_seed*3.17);
             // Commercial walls: the shop storey is cell row 0, whole storeys above.
             vec2 storeys = facade_storeys(facade_kind==3 ? solid_height : -1.0,floor_pitch);
             bool shop = facade_kind==3 && v<storeys.x;

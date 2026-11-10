@@ -129,7 +129,10 @@ fn native_building_walls_carry_record_palettes_and_a_seeded_window_role() {
         let (u, v) = ([b[0]-a[0], b[1]-a[1], b[2]-a[2]], [c[0]-a[0], c[1]-a[1], c[2]-a[2]]);
         let n = [(u[1]*v[2]-u[2]*v[1]) as f64, (u[2]*v[0]-u[0]*v[2]) as f64, (u[0]*v[1]-u[1]*v[0]) as f64];
         let roof = (n[1] / (n[0]*n[0]+n[1]*n[1]+n[2]*n[2]).sqrt()).abs() >= 0.5;
-        let expected = distant::facade_color(&building.material, &building.usage, distant::facade_record(&building.id), roof);
+        // One box per record: its solid seed hashes the ID and the 900 cm top.
+        let look = distant::facade_look(distant::facade_record(&building.id), distant::facade_solid(&building.id, 900),
+            distant::facade_own_share(&format!("{}:{}", building.material, building.usage)));
+        let expected = distant::facade_color(&building.material, &building.usage, look, roof);
         assert_eq!(far.colors[position*3], expected, "{} {} triangle {index}", building.material, building.usage);
         let light = far.light_data[position*3];
         assert_eq!(light[1], 3., "native walls use the distant building role");
@@ -165,6 +168,28 @@ fn record_palettes_follow_the_shared_table_and_seed_bits() {
     let record = distant::facade_record("import-x-building-1");
     assert!(record < 4096, "a 12-bit record seed");
     assert_eq!(record, distant::facade_record("import-x-building-1"), "stable per record ID");
+    // Own looks: the key's share of solids (apartment complexes fewer), by the
+    // shader's PCG of the solid bits; known answers pin the hash and salt.
+    assert_eq!(distant::facade_own_share("concrete:residential"), 0.15);
+    assert_eq!(distant::facade_own_share("concrete:commercial"), 0.35);
+    assert_eq!(distant::facade_own_share("brick:residential"), 0.35);
+    assert_eq!(table["own_share"]["default"].as_f64().unwrap() as f32, 0.35);
+    // The facade_validator known answers of the shader hash.
+    assert_eq!([distant::facade_pcg(1759714724), distant::facade_pcg(1 ^ 1759714724), distant::facade_pcg(4095 ^ 1759714724)], [3561045559, 1454332419, 462394992]);
+    // The same known answers as facade_validator.gd `looks`.
+    assert_eq!([distant::facade_look(77, 1, 0.35), distant::facade_look(77, 2048, 0.35), distant::facade_look(77, 2048, 0.15),
+        distant::facade_look(77, 0, 0.35), distant::facade_look(77, 4095, 0.35), distant::facade_look(77, 9, 0.15)], [1, 2048, 77, 77, 77, 9]);
+    for share in [0.15f32, 0.35] {
+        let own = (0..4096u32).filter(|&solid| distant::facade_look(4096 + 7, solid, share) == solid).count();
+        assert!((own as f32 / 4096.0 - share).abs() < 0.02, "own looks follow the share {share}: {own}");
+        for solid in 0..4096u32 {
+            let look = distant::facade_look(77, solid, share);
+            assert!(look == solid || look == 77, "a look is the solid's or the record's");
+            if share == 0.15 && look == solid { assert_eq!(distant::facade_look(77, solid, 0.35), solid, "a lower share keeps a subset"); }
+        }
+    }
+    assert_eq!(distant::facade_solid("b", 900), distant::facade_solid("b", 900));
+    assert_ne!(distant::facade_solid("b", 900), distant::facade_solid("b", 1200), "solids of other tops vary");
     for list in ["accent"] { assert_eq!(table[list].as_array().unwrap().len(), 8); }
     for (_, rows) in table["body"].as_object().unwrap().iter().chain(table["roof"].as_object().unwrap().iter()) {
         assert_eq!(rows.as_array().unwrap().len(), 8, "eight entries per palette");

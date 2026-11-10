@@ -197,41 +197,30 @@ pub(crate) fn roof_frame(sum_cos: f64, sum_sin: f64) -> f32 {
 /// roof_fixtures.rs align to.
 pub(crate) fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism_indices: &[i32]) -> (Vec<Vector2>, Vec<f32>) {
     let buildings: std::collections::BTreeSet<i32> = prism_indices.iter().copied().collect();
-    let mut parent: Vec<usize> = (0..chunk.triangles.len()).collect();
-    fn find(parent: &mut [usize], mut i: usize) -> usize {
-        while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i]; }
-        i
-    }
-    let mut owner = BTreeMap::<(i32, [i64; 3]), usize>::new();
+    // Connected solids and their 12-bit solid seeds, shared with the distant
+    // colours (mapkit-package distant.rs `facade_solids`).
+    let building: Vec<bool> = object_indices.iter().map(|o| buildings.contains(o)).collect();
+    let solids = mapkit_package::distant::facade_solids(&chunk.triangles, &building);
+    let root_of = |t: usize| solids[t].unwrap().0;
+    // The seed's high 12 bits are the record's palette seed and its low 12
+    // bits the solid seed (record ID and solid top), both shared with the
+    // distant mesh; base and top per solid.
+    let mut extent = BTreeMap::<usize, (i64, i64)>::new();
     for (t, triangle) in chunk.triangles.iter().enumerate() {
-        if !buildings.contains(&object_indices[t]) { continue; }
-        for v in triangle.vertices {
-            match owner.get(&(object_indices[t], v)) {
-                Some(&other) => { let (a, b) = (find(&mut parent, t), find(&mut parent, other)); if a != b { parent[a.max(b)] = a.min(b); } }
-                None => { owner.insert((object_indices[t], v), t); }
-            }
-        }
-    }
-    // The seed's high 12 bits are the record's palette seed (shared with the
-    // distant mesh, mapkit-package distant.rs); the low 12 bits hash the record
-    // ID and the solid's smallest vertex.
-    let mut smallest = BTreeMap::<usize, ([i64; 3], i64, i64)>::new();
-    for (t, triangle) in chunk.triangles.iter().enumerate() {
-        if !buildings.contains(&object_indices[t]) { continue; }
-        let root = find(&mut parent, t);
-        let low = triangle.vertices.iter().min().copied().unwrap();
+        if !building[t] { continue; }
+        let root = root_of(t);
         let base = triangle.vertices.iter().map(|v| v[1]).min().unwrap();
         let top = triangle.vertices.iter().map(|v| v[1]).max().unwrap();
-        smallest.entry(root).and_modify(|(v, b, h)| { if low < *v { *v = low; } *b = (*b).min(base); *h = (*h).max(top); }).or_insert((low, base, top));
+        extent.entry(root).and_modify(|(b, h)| { *b = (*b).min(base); *h = (*h).max(top); }).or_insert((base, top));
     }
     // Storeys end at the eaves: the lowest vertex of the solid's roof faces
     // (non-vertical faces wholly above its base; bottoms lie at the base), so a
     // gable ridge does not stretch them. Solids without roof faces keep their top.
     let mut eaves = BTreeMap::<usize, i64>::new();
     for (t, triangle) in chunk.triangles.iter().enumerate() {
-        if !buildings.contains(&object_indices[t]) { continue; }
-        let root = find(&mut parent, t);
-        let base = smallest[&root].1;
+        if !building[t] { continue; }
+        let root = root_of(t);
+        let base = extent[&root].0;
         let [a, b, c] = triangle.vertices.map(|v| v.map(|x| x as f64));
         let (e, f) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
         let n = [e[1] * f[2] - e[2] * f[1], e[2] * f[0] - e[0] * f[2], e[0] * f[1] - e[1] * f[0]];
@@ -253,13 +242,13 @@ pub(crate) fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism
     let (mut lo, mut hi) = ([i64::MAX; 2], [i64::MIN; 2]);
     for (t, triangle) in chunk.triangles.iter().enumerate() {
         for v in triangle.vertices { for (k, axis) in [0, 2].into_iter().enumerate() { lo[k] = lo[k].min(v[axis]); hi[k] = hi[k].max(v[axis]); } }
-        if !buildings.contains(&object_indices[t]) { continue; }
-        let root = find(&mut parent, t);
+        if !building[t] { continue; }
+        let root = root_of(t);
         let [a, b, c] = triangle.vertices.map(|v| v.map(|x| x as f64));
         let (e, f) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
         let n = [e[1] * f[2] - e[2] * f[1], e[2] * f[0] - e[0] * f[2], e[0] * f[1] - e[1] * f[0]];
         let low = triangle.vertices.iter().map(|v| v[1]).min().unwrap();
-        if n[0] == 0.0 && n[2] == 0.0 && n[1] != 0.0 && low > smallest[&root].1 {
+        if n[0] == 0.0 && n[2] == 0.0 && n[1] != 0.0 && low > extent[&root].0 {
             flat_roofs[t] = true;
             for i in 0..3 {
                 let (p, q) = (triangle.vertices[i], triangle.vertices[(i + 1) % 3]);
@@ -284,15 +273,12 @@ pub(crate) fn facade_seeds(chunk: &GeneratedChunk, object_indices: &[i32], prism
     let mut seeds = Vec::with_capacity(chunk.triangles.len() * 3);
     let mut tops = Vec::with_capacity(chunk.triangles.len() * 3);
     for (t, triangle) in chunk.triangles.iter().enumerate() {
-        let value = if buildings.contains(&object_indices[t]) {
-            let root = find(&mut parent, t);
+        let value = if let Some((root, solid)) = solids[t] {
             let seed = *values.entry(root).or_insert_with(|| {
-                let digest = mapkit_core::sha256(format!("{}|{:?}", triangle.object_id, smallest[&root].0).as_bytes());
-                let solid = u32::from_str_radix(&digest[..3], 16).unwrap();
                 let record = mapkit_package::distant::facade_record(&triangle.object_id);
                 ((record << 12) | solid) as f32 / 16_777_216.0
             });
-            let (_, base, top) = smallest[&root];
+            let (base, top) = extent[&root];
             let top = eaves.get(&root).copied().unwrap_or(top);
             let rises = triangle.vertices.iter().map(|v| v[1]).max().unwrap() > top;
             let offset = FACADE_BASE_OFFSET + top as f32 * scale;
@@ -614,6 +600,73 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn near_and_distant_solids_share_their_tops_and_looks_across_a_cell_cut() {
+        // One concrete commercial record of three solids, two of them crossing
+        // the edge of cell (0, 0) at x 12800 cm: heights picked so the record
+        // shows both an own look and the record's.
+        use mapkit_package::distant;
+        let mut d: mapkit_core::MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+        d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear();
+        d.bounds.max = [25600, 25600]; d.cell_size_cm = 12800;
+        let id = "site-1";
+        let record = distant::facade_record(id);
+        let share = distant::facade_own_share("concrete:commercial");
+        let own = |h: u32| distant::facade_look(record, distant::facade_solid(id, h as i64), share) != record;
+        let own_height = (3..40).map(|k| k * 300).find(|&h| own(h)).unwrap();
+        let record_heights: Vec<u32> = (3..40).map(|k| k * 300).filter(|&h| !own(h)).take(2).collect();
+        let rect = |x0: i64, x1: i64, y0: i64| vec![[x0, y0], [x1, y0], [x1, y0 + 1000], [x0, y0 + 1000]];
+        d.buildings.push(mapkit_core::Building { id: id.into(), footprint: rect(12000, 13600, 1000), holes: vec![], base_cm: 0,
+            height_cm: own_height, usage: "commercial".into(), material: "concrete".into(), roof: "flat".into(), entrances: vec![],
+            parts: vec![
+                mapkit_core::BuildingPart { footprint: rect(11500, 14000, 4000), holes: vec![], base_cm: None, height_cm: Some(record_heights[0]) },
+                mapkit_core::BuildingPart { footprint: rect(3000, 5000, 4000), holes: vec![], base_cm: None, height_cm: Some(record_heights[1]) },
+            ] });
+        let p = mapkit_package::read_bytes(&mapkit_package::pack_bytes(d, Default::default()).unwrap()).unwrap();
+        let mut sides = Vec::new();
+        for cell in [mapkit_core::Cell { x: 0, y: 0 }, mapkit_core::Cell { x: 1, y: 0 }] {
+            let chunk = p.generate(cell, 500_000).unwrap();
+            let mut ids: Vec<&str> = Vec::new();
+            let objects: Vec<i32> = chunk.triangles.iter().map(|t| match ids.iter().position(|id| *id == t.object_id) {
+                Some(i) => i as i32,
+                None => { ids.push(&t.object_id); ids.len() as i32 - 1 }
+            }).collect();
+            let prisms: Vec<i32> = chunk.building_prisms.iter().map(|p| ids.iter().position(|id| *id == p.object_id).unwrap() as i32).collect();
+            let (seeds, _) = facade_seeds(&chunk, &objects, &prisms);
+            let far = p.generate_distant(cell).unwrap();
+            // Solid bits per solid top, and every near wall and roof matched to
+            // its distant triangle takes the colour of the near look.
+            let mut tops = BTreeMap::<i64, u32>::new();
+            let mut matched = 0;
+            for (t, triangle) in chunk.triangles.iter().enumerate() {
+                if triangle.object_id != id { continue; }
+                let bits = (seeds[t * 3].x * 16_777_216.0).round() as u32;
+                assert_eq!(bits >> 12, record, "the record keeps its high bits");
+                let top = triangle.vertices.iter().map(|v| v[1]).max().unwrap();
+                if top > 0 { assert_eq!(*tops.entry(top).or_insert(bits & 0xFFF), bits & 0xFFF, "one solid seed per top in {cell:?}"); }
+                let vertex = [0, 2, 1].map(|i| { let v = triangle.vertices[i]; [v[0] as f32 * 0.01, v[1] as f32 * 0.01, -v[2] as f32 * 0.01] });
+                let Some(position) = far.vertices.chunks_exact(3).position(|v| v == vertex) else { continue };
+                let [a, b, c] = triangle.vertices;
+                let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+                let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
+                let roof = (n[1] / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()).abs() >= 0.5;
+                let look = crate::facade_fixtures::look(bits, 3);
+                assert_eq!(far.colors[position * 3], distant::facade_color("concrete", "commercial", look, roof), "{cell:?} triangle {t}");
+                matched += 1;
+            }
+            assert!(matched > 0, "distant triangles in {cell:?}");
+            sides.push(tops);
+        }
+        // The two crossing solids keep one seed on both sides of the cut.
+        for h in [own_height as i64, record_heights[0] as i64] {
+            assert_eq!(sides[0].get(&h), sides[1].get(&h), "solid of top {h} across the cut");
+            assert_eq!(sides[0][&h], distant::facade_solid(id, h));
+        }
+        assert!(!sides[1].contains_key(&(record_heights[1] as i64)) && sides[0].contains_key(&(record_heights[1] as i64)));
+        let looks: std::collections::BTreeSet<u32> = sides[0].values().map(|&s| crate::facade_fixtures::look((record << 12) | s, 3)).collect();
+        assert!(looks.len() == 2 && looks.contains(&record), "an own look and the record's: {looks:?}");
     }
 
     #[test]

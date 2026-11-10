@@ -105,8 +105,10 @@ Panes and bands are drawn procedurally from world position on vertical faces wit
 quality effect distance. Packed chunks carry `facade_seeds` (seed, 1000 + base metres)
 and `facade_tops` (one float, ±(1000 + top metres)) on every generated building solid
 (triangles of one record sharing a vertex): the seed's high 12 bits are the record seed
-(`sha256(record ID)`, shared with the distant mesh) and its low 12 bits hash the record
-ID and the solid's smallest vertex; the top is the eaves (the lowest vertex of the
+(`sha256(record ID)`, shared with the distant mesh) and its low 12 bits, the solid seed,
+hash the record ID and the solid's highest vertex, which both sides of a cell cut share
+(mapkit-package `distant::facade_solids`, which the distant mesh runs on the same
+triangles), so solids of one record and top share it; the top is the eaves (the lowest vertex of the
 solid's non-vertical faces above its base, so a gable ridge does not count), else the
 highest vertex. A triangle whose highest vertex rises above the top (a gable end, the
 taller part of a merged solid, a roof slope) carries the top negated. Flat roof faces
@@ -124,14 +126,17 @@ storey g = 1.5 floors (never taller than the solid), then n = max(1, ⌊(top −
 / floor⌋) storeys of (top − base − g) / n, so L ≥ 3 whole levels show the shop storey and
 L − 2 taller storeys; a remainder under 0.75 floors stays a plain parapet, and floor-pitch
 rows continue above the top (gable ends, taller parts of a merged solid). Meshes without
-CUSTOM0 keep one-floor storeys, the shop storey included. The record seed picks palette entries
-from `godot/facade_palette.json`, which the distant mesh (mapkit-package `distant.rs`)
+CUSTOM0 keep one-floor storeys, the shop storey included. Each solid has a 12-bit look:
+its solid seed for the key's `own_share` of solids (`godot/facade_palette.json`: 0.35,
+apartment complexes, concrete:residential, 0.15; `vertex()` compares one integer PCG of
+the solid seed with it), otherwise the record seed. The look picks palette entries from
+`facade_palette.json`, which the distant mesh (mapkit-package `distant::facade_look`)
 reads too: the wall body (bits 0–2; brick and wood keep their own bodies, concrete
 follows the use) and the roof (bits 3–5; concrete roofs green-painted or grey) at every
-distance, and within the effect distance the pane pattern, the glass tint, the bay
-width (0.8–1.3×) and, on apartment complexes, an accent colour (bits 6–8) on one bay
-column every 5–8 bays and on the base storey. The solid seed varies brightness by ±4 %
-and sets the night switch-off minute. Meshes without UV2 keep a per-plane seed, four
+distance, and within the effect distance the pane pattern and the bay width (0.8–1.3×).
+The glass tint, wall finish, window frames, signs and, on apartment complexes, an accent
+colour (record bits 6–8) on one bay column every 5–8 bays and on the base storey stay
+per record. The solid seed varies brightness by ±4 % and sets the night switch-off minute. Meshes without UV2 keep a per-plane seed, four
 faded tones and scene-height storeys. The shop storey is split into sign slots of two
 bays; in height fractions of g each slot has a darker stall riser (0–0.08), one door
 0.3 floors wide with a frame (0.08–0.72; left, centre or right by a PCG hash of the slot),
@@ -139,7 +144,7 @@ display windows (0.10–0.68) with two or three mullions per bay, a transom (0.7
 canopy shadow line and a fascia (0.78–0.98), a plain charcoal, off-white or darker-body
 panel. Shop glass lights at night in a soft warm white (all of it lit).
 
-Roofs keep the record's roof palette colour and, within the effect distance, draw a
+Roofs keep the look's roof palette colour and, within the effect distance, draw a
 finish (`roof_finish` in `atmosphere_surface.gdshader`) whose tint averages 1 over the
 roof (patterns are zero-mean or divided by their area share, and settle with the pixel
 footprint), so a roof far away shows the distant mesh's colour. Flat roofs run square
@@ -996,9 +1001,9 @@ formats stay v1.
   column, row or attempt indices. Wall positions mirror the facade shader's
   layout (`atmosphere_surface.gdshader`, kept in step by hand): the wall frame
   u = dot(p, normalize(-n.z, 0, n.x)), bays of floor pitch × base (house 1.8,
-  commercial 0.8, public 1.5) × (0.8 + 0.5 × record bits 9–11 / 7), two-bay
+  commercial 0.8, public 1.5) × (0.8 + 0.5 × look bits 9–11 / 7), two-bay
   sign slots read along -u, `facade_storeys` for commercial walls, the window
-  rect per kind and record variant and the 0.035-floor sill ledge. Curtain
+  rect per kind and look variant and the 0.035-floor sill ledge. Curtain
   walls (the record's finish pick against the ordered `facade_palette.json`
   weights) get no units.
 - Blade sign: on about 45 % of sign-slot boundaries, 0.12 floors above the
@@ -1064,8 +1069,8 @@ formats stay v1.
   blocks of a larger cell; presentation `facade_fixtures` lists them (10
   floats each: mount point, yaw, kind, scale, height, 24-bit design bits,
   width and depth) and `facade_fixtures_capped` counts those the cap dropped.
-  Rooftop design bits carry the building's palette key and body and roof
-  entries (bits 0–8) and the mesh variant (bits 9–10).
+  Rooftop design bits carry the building's palette key and its solid look's
+  body and roof entries (bits 0–8) and the mesh variant (bits 9–10).
 
 The meshes (blade near 168 triangles, far 24; unit near 140, far 32; penthouse
 94/22; tank 348/100; condenser 104/30; rim 354/10; solar row 96/12; mast 232/56)
@@ -1274,9 +1279,14 @@ luminance at detail/distance transitions. `test_richer_assets.py` reproduces
 library bytes and the racing, original, facade and leaf texture tiers. `facade_validator`
 checks the finish slots, the curtain-wall rule, the metallic cap, known PCG answers
 and the per-record pick against a GDScript mirror of the hash (shares within 3% of
-the weights over all 4096 records); rendered, it compares the shader's own pick on a
+the weights over all 4096 records), and the own-look pick, its bindings and its
+shares (within 2%) against a mirror whose known answers the Rust `facade_look` test
+shares; rendered, it compares the shader's own pick on a
 wall quad, daylight glass reflection, each finish's wall brightness near and beyond
-the effect distance (within 15%) and identical far walls. Render `generated_material_validator` to compare
+the effect distance (within 15%), identical far walls and an own-look solid's own far
+body. The mapkit-godot test `near_and_distant_solids_share_their_tops_and_looks_across_a_cell_cut`
+checks one solid seed per top on both sides of a cell cut and that every matched
+distant wall and roof takes the near look's colour. Render `generated_material_validator` to compare
 GPU uniforms and pixels before corrective quality updates, with prepared/unbatched
 geometry, cancellation and last-borrower retirement. Its optional
 `MAPKIT_SKIP_PIXEL_COMPARISON=1` explicitly skips only pixel comparison.

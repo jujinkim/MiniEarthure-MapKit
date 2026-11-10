@@ -354,6 +354,12 @@ impl Package {
         let mut decorations = DistantMesh::default();
         let mut omitted = BTreeSet::new();
         let internal = internal_building_faces(&self.document, triangles)?;
+        // Building solids over every building triangle (internal faces too),
+        // exactly as the near packed facade seeds see them.
+        let buildings: Vec<Option<&mapkit_core::Building>> = triangles.iter()
+            .map(|t| self.document.buildings.binary_search_by(|b| b.id.cmp(&t.object_id)).ok().map(|i| &self.document.buildings[i]))
+            .collect();
+        let solids = facade_solids(triangles, &buildings.iter().map(Option::is_some).collect::<Vec<_>>());
         // Barrier variants by barrier index: one design per barrier, the
         // map scale read once.
         let denominator = mapkit_core::osm_source_denominator(&self.document).unwrap_or(1);
@@ -377,15 +383,16 @@ impl Package {
             if internal.get(index).copied().unwrap_or(false) || omitted.contains(triangle.object_id.as_str()) {
                 continue;
             }
-            let building = self.document.buildings.binary_search_by(|b| b.id.cmp(&triangle.object_id))
-                .ok().map(|i| &self.document.buildings[i]);
+            let building = buildings[index];
             let color = if let Some(building) = building {
                 let [a, b, c] = triangle.vertices;
                 let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
                 let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
                 let length = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
                 let roof = length > 0.0 && (n[1] / length).abs() >= 0.5;
-                facade_color(&building.material, &building.usage, facade_record(&triangle.object_id), roof)
+                let solid = solids[index].map_or(0, |s| s.1);
+                let look = facade_look(facade_record(&triangle.object_id), solid, facade_own_share(&format!("{}:{}", building.material, building.usage)));
+                facade_color(&building.material, &building.usage, look, roof)
             } else if let Some(color) = self.document.placements.binary_search_by(|p| p.id.cmp(&triangle.object_id)).ok()
                 .and_then(|i| planting_color(&self.document.placements[i], triangle)) {
                 color
@@ -887,6 +894,7 @@ fn object_seed(map_id: &str, object_id: &str) -> f32 {
 struct FacadePalette {
     body: BTreeMap<String, Vec<[u8; 3]>>,
     roof: BTreeMap<String, Vec<[u8; 3]>>,
+    own_share: BTreeMap<String, f32>,
 }
 
 fn facade_palette() -> &'static FacadePalette {
@@ -900,9 +908,79 @@ pub fn facade_record(object_id: &str) -> u32 {
     u32::from_str_radix(&mapkit_core::sha256(object_id.as_bytes())[..3], 16).unwrap()
 }
 
-/// A record's generated wall (body: bits 0..2) or roof (bits 3..5) colour, the
-/// same entries the near facade shader picks.
-pub fn facade_color(material: &str, usage: &str, record: u32, roof: bool) -> [u8; 4] {
+/// The 12-bit solid seed of a building solid: its record ID and the solid's
+/// top (highest vertex, map cm), which both sides of a cell cut share, so a
+/// solid crossing a cell keeps one look. The packed facade UV2 of near cells
+/// (mapkit-godot packed.rs) carries it in its low 12 bits.
+pub fn facade_solid(object_id: &str, top_cm: i64) -> u32 {
+    u32::from_str_radix(&mapkit_core::sha256(format!("{object_id}|{top_cm}").as_bytes())[..3], 16).unwrap()
+}
+
+/// Connected building solids of generated triangles, shared by the near packed
+/// facade seeds (mapkit-godot packed.rs) and the distant colours: triangles of
+/// one building object (`building[t]`) that share a vertex form one solid. Per
+/// triangle: its solid (the smallest triangle index in it) and the solid's
+/// `facade_solid` seed; `None` for other triangles.
+pub fn facade_solids(triangles: &[Triangle], building: &[bool]) -> Vec<Option<(usize, u32)>> {
+    let mut parent: Vec<usize> = (0..triangles.len()).collect();
+    fn find(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i { parent[i] = parent[parent[i]]; i = parent[i]; }
+        i
+    }
+    let mut owner = BTreeMap::<(&str, [i64; 3]), usize>::new();
+    for (t, triangle) in triangles.iter().enumerate() {
+        if !building[t] { continue; }
+        for v in triangle.vertices {
+            match owner.get(&(triangle.object_id.as_str(), v)) {
+                Some(&other) => { let (a, b) = (find(&mut parent, t), find(&mut parent, other)); if a != b { parent[a.max(b)] = a.min(b); } }
+                None => { owner.insert((triangle.object_id.as_str(), v), t); }
+            }
+        }
+    }
+    let mut tops = BTreeMap::<usize, i64>::new();
+    for (t, triangle) in triangles.iter().enumerate() {
+        if !building[t] { continue; }
+        let root = find(&mut parent, t);
+        let top = triangle.vertices.iter().map(|v| v[1]).max().unwrap();
+        tops.entry(root).and_modify(|h| *h = (*h).max(top)).or_insert(top);
+    }
+    let mut seeds = BTreeMap::<usize, u32>::new();
+    (0..triangles.len()).map(|t| building[t].then(|| {
+        let root = find(&mut parent, t);
+        (root, *seeds.entry(root).or_insert_with(|| facade_solid(&triangles[t].object_id, tops[&root])))
+    })).collect()
+}
+
+/// The integer PCG hash of the facade shaders (`facade_pcg` and `facade_unit`
+/// in godot/facade_signs.gdshaderinc).
+pub fn facade_pcg(v: u32) -> u32 {
+    let s = v.wrapping_mul(747796405).wrapping_add(2891336453);
+    let w = ((s >> ((s >> 28) + 4)) ^ s).wrapping_mul(277803737);
+    (w >> 22) ^ w
+}
+pub fn facade_unit(v: u32) -> f32 { (facade_pcg(v) >> 8) as f32 / 16777216.0 }
+
+/// Salt of the own-look pick (atmosphere_surface.gdshader `facade_look`).
+const FACADE_OWN_SALT: u32 = 0x6F57_A3C5;
+
+/// The share of a `material:usage` key's solids taking their own look
+/// (`facade_palette.json` `own_share`: apartment complexes,
+/// concrete:residential, keep closer to one look; other keys the default).
+pub fn facade_own_share(key: &str) -> f32 {
+    let shares = &facade_palette().own_share;
+    shares.get(key).or_else(|| shares.get("default")).copied().unwrap_or(0.0)
+}
+
+/// The 12 look bits of a solid: its own solid seed for `own_share` of solids,
+/// otherwise the record's. Body, roof colour, pane variant and bay width read
+/// them; wall finish, glass, accent, signs and window frames stay per record.
+pub fn facade_look(record: u32, solid: u32, own_share: f32) -> u32 {
+    if facade_unit(facade_pcg(solid) ^ FACADE_OWN_SALT) < own_share { solid } else { record }
+}
+
+/// A look's generated wall (body: bits 0..2) or roof (bits 3..5) colour, the
+/// same entries the near facade shader picks (`facade_look`).
+pub fn facade_color(material: &str, usage: &str, look: u32, roof: bool) -> [u8; 4] {
     let palette = facade_palette();
     let entries = if roof {
         palette.roof.get(if material == "brick" || material == "wood" { material } else { "concrete" })
@@ -912,7 +990,7 @@ pub fn facade_color(material: &str, usage: &str, record: u32, roof: bool) -> [u8
         palette.body.get(&format!("concrete:{}", if ["commercial", "industrial", "public"].contains(&usage) { usage } else { "residential" }))
     };
     let entries = entries.expect("palette entry");
-    let [r, g, b] = entries[(if roof { record >> 3 } else { record } & 7) as usize];
+    let [r, g, b] = entries[(if roof { look >> 3 } else { look } & 7) as usize];
     [r, g, b, 255]
 }
 
