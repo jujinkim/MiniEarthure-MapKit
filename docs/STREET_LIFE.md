@@ -13,12 +13,15 @@ cells. It reads the non-vertical sidewalk tops (`<road>:sidewalk`) on a 2 m grid
 and joins tops that share a vertex into connected pieces.
 
 - **Lanes.** For each road with a sidewalk (`sidewalk_width_cm > 0`), each side
-  and each paint segment, a probe at the segment middle walks outward from the
-  carriageway half width in 0.1 m steps (to the sidewalk width + 1 m) to find
-  the top band. The lane runs at the band middle, sampled every 1 m; a sample
-  off the tops splits the run. Runs keep a vertex at least every 4 m and at
-  turns above 10°, drop below 2 m, take their height from the top under each
-  point and a half width of half the band less 8 cm (at least 10 cm).
+  and each paint segment, samples every 1 m on the segment's own grid over its
+  part near the cell. A run's first sample probes outward from the carriageway
+  half width in 0.1 m steps (to the sidewalk width + 1 m) over the road's own
+  tops for the band, at most the sidewalk width wide; the lane runs at its
+  middle. A sample off the tops ends the run and probes again (driveways,
+  corner gaps, the cell edge), so neighbouring cells meet within a sample.
+  Runs keep a vertex at least every 4 m and at turns above 10°, drop below
+  2 m, take their height from the top under each point and a half width of
+  half the band less 8 cm (at least 10 cm).
 - **Corner links.** A lane end links to the nearest end of another road on the
   same connected top within 6 m (ends within 1.5 m need none, the field merges
   them); the link follows the chord over the tops, or the nearest top centroid
@@ -27,8 +30,8 @@ and joins tops that share a vertex into connected pieces.
   with the sidewalk frames) gets two kerb mouths 0.15 m past the carriageway
   half width, at the height of the top under them; a crosswalk without a top
   under both mouths has no crossing. A signal head (`builtin:signal_h`,
-  `builtin:signal_v`) within 3 m (game scale) of the crosswalk centre marks it
-  signalled. Each mouth joins the nearest lane within 2.5 m: the lane is split
+  `builtin:signal_v`) within 3 m (game scale) of the crossing line carried on
+  over both sidewalks (importer poles stand past the kerb) marks it signalled. Each mouth joins the nearest lane within 2.5 m: the lane is split
   at the mouth's foot and a short link reaches the mouth.
 - **Density** (walkers per map metre, at the lane middle): 0.06, + 0.06 near a
   bus shelter, + 0.09 near a subway entrance or station sign, + 0.03 near a
@@ -52,14 +55,13 @@ Presentation keys (scene metres; only with lanes, except `ambience`):
 | `walk_lanes` | PackedVector4Array | (first point, count, half width, density) |
 | `walk_links` | PackedVector4Array | corner and mouth links, same encoding (density 0) |
 | `walk_crossings` | PackedVector3Array | two kerb mouths per crossing |
-| `walk_crossing_signals` | PackedByteArray | 1 per signalled crossing |
+| `walk_crossing_signals` | PackedByteArray | one byte per crossing: 1 signalled, 0 not |
 | `ambience` | Vector4 | area shares: grass, asphalt, building, water |
 
 Native decorate counts these bytes exactly in `presentation_bytes`: 12 B per
 point, 16 B per lane or link, 25 B per crossing (mouths and flag), 16 B for
-`ambience`. `presentation::cost` adds no bound (it also serves far plans and
-the MapEditor work estimate): a lane needs sidewalk tops and walls, and each
-triangle already reserves far more before generation.
+`ambience`. `presentation::cost` adds no bound: the sidewalk triangles a lane
+needs already reserve far more before generation.
 
 ## Field (`godot/street_life_field.gd`)
 
@@ -100,11 +102,11 @@ the switch and adaptive trims need no reload.
   makes it step aside at 0.3 m/s, up to 0.5 m past the lane when the vehicle is
   on the sidewalk; boxed in it stands and turns round after 2 s.
 - **Vehicles.** `render_resource_cache.street_life_obstacles(points,
-  velocities)` takes up to 8 vehicle display positions every frame; without
-  velocities they follow from the previous call, and a list older than 0.5 s
-  is dropped.
+  velocities)` takes up to 8 vehicle display positions per frame (velocities
+  default to the change since the last call; a list older than 0.5 s drops).
 - **Population.** min(`walker_count`, Σ lane length × density × time ×
-  weather) over lane segments whose middle is within `walker_distance`: time
+  weather) over lane segments whose middle is within `walker_distance` (cells
+  culled by the distance to their rectangle, 0 inside): time
   0.25 at night to 1 by day (environment context daylight), × 0.6 on wet or
   snowy streets. Walkers spawn 0.6–1.0 × that reach (out of view when
   possible), fade in over 0.5 s and are dropped past reach + 3 m. Seeds are
@@ -117,15 +119,15 @@ the switch and adaptive trims need no reload.
   at 2–4 m for 6–12 s and lands back.
 - **Ambience query.** `ambience_at(eye)` (also on the cache) returns
   `{grass, asphalt, built, water, walkers_near}`: an inverse-distance mix of
-  the registered cells within 96 m and the walkers within 6 m.
+  the registered cells within 96 m of their rectangles and the walkers within 6 m.
 
 ## Meshes
 
 `pedestrian_meshes.gd` builds voxel box figures once per process: a near
 walker of six boxes, a far walker of three and a pigeon of five. UV carries
-limb and colour slot, UV2 the pivot (exact floats; vertex COLOR is not exact on
-every renderer); `INSTANCE_CUSTOM` is (top and bottom palette
-index, gait phase, alpha), for pigeons (tone, flap, wing phase, alpha).
+limb and colour slot, UV2 the pivot (vertex COLOR is not exact on every
+renderer); `INSTANCE_CUSTOM` is (top and bottom palette index, gait phase,
+alpha), for pigeons (tone, flap, wing phase, alpha).
 `pedestrian.gdshader` (warmed when the scripts load) swings the limbs and
 picks clothes from a muted Korean street palette. Two walker MultiMeshes and
 one pigeon MultiMesh draw without shadows.
@@ -133,13 +135,14 @@ one pigeon MultiMesh draw without shadows.
 ## Validation
 
 - `cargo test -p mapkit-godot`: the `walk_lanes` tests on a synthetic two-road
-  junction (lanes, corner link, mouths, signals, bare road, cap note, bytes,
-  footfall radii) and the sidewalk frame test.
+  junction (lanes, corner link, mouths, signals incl. an importer-placed pole,
+  bare road, caps, bytes, footfall), a segment cut by the cell edge and a
+  driveway, and the sidewalk frame test.
 - `street_life_field_validator`, bundled with `grass_field_validator` and
   `sidewalk_paving_validator`: tiers, estimate, registration with the switch
   off, refused and low claims, reach, live toggle, give way, kerb holds,
-  signalled crossings, the crossing share, fades, pigeons, ambience, memory,
-  release and close.
+  signalled and hidden-cell crossings, the crossing share, fades, pigeons,
+  ambience, rectangle culling, memory, release and close.
 - Runtime `package_presentation_source_validator --fixture`.
 
 Walkers in each camera view, occlusion near the camera, pigeons and mobile

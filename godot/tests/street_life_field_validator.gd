@@ -6,9 +6,11 @@ extends SceneTree
 ## cell still renders), walker caps and reach per tier, the toggle and a
 ## zero walker_count drawing nothing while lanes stay registered and turning
 ## on again without a reload, give-way stepping aside, holding at the kerb
-## beside a vehicle, never entering a signalled crossing, pigeons flushing
-## and landing, fades, the ambience query, fixed memory inside MEMORY_BYTES,
-## and release/close dropping every pin, node and render instance. Seeded.
+## beside a vehicle, never entering a signalled crossing or a hidden cell's,
+## pigeons flushing and landing, fades, the ambience query, culling by the
+## cell rectangle (a camera far from a large cell's centre), fixed memory
+## inside MEMORY_BYTES, and release/close dropping every pin, node and render
+## resource. Seeded.
 const RENDER := preload("../chunk_renderer.gd")
 const FIELD := preload("../street_life_field.gd")
 const MESHES := preload("../pedestrian_meshes.gd")
@@ -113,6 +115,7 @@ func renderer() -> void:
 	check(PLAN.estimate(view, 0) - PLAN.estimate(bare, 0) == bytes, "the estimate holds the cell's graph")
 	var record_value := FIELD.record(view)
 	check(record_value.anchors.size() <= 1 and is_equal_approx(record_value.centre.x, 0.0) and is_equal_approx(record_value.centre.y, -5.0), "the record carries the cell centre and hashed anchors: %s" % record_value.centre)
+	check(record_value.rect.is_equal_approx(Rect2(-30, -15, 60, 20)), "the record carries the cell rectangle in scene x/z: %s" % record_value.rect)
 	for case: Array in [[2, true], [1, true], [0, true], [2, false]]:
 		var level: int = case[0]
 		var grant: bool = case[1]
@@ -142,6 +145,12 @@ func renderer() -> void:
 		parent.queue_free()
 		await process_frame
 	QUALITY.current = {}
+
+## Weak references to the field's MultiMeshes and material.
+func resources_of(field: RefCounted) -> Array:
+	var held: Array = field.parts.values().map(func(part: Dictionary) -> WeakRef: return weakref(part.multimesh))
+	held.append(weakref(field.material))
+	return held
 
 func walker_on(field: RefCounted, cell: RefCounted, edge: int, s: float, forward := true) -> int:
 	return field.add_walker(cell, edge, s, forward)
@@ -233,6 +242,18 @@ func field_behaviour(camera: Camera3D) -> void:
 	field._walk(w, 0.05)
 	check(field.w_waiting[w] < 0 and cell.kinds[field.w_edge[w]] == FIELD.CROSSING, "it crosses once the car has gone")
 	field._clear_walkers()
+	# A hidden cell: the walker waiting for its crossing turns round, and no route enters it.
+	field.set_obstacles(PackedVector3Array([Vector3(1.5, 0.0, -4.0)]), PackedVector3Array([Vector3.ZERO]))
+	w = walker_on(field, cell, 0, 30.0)
+	field._set_flag(w, FIELD.INTENT_FLAG, true)
+	field._arrive(w)
+	var waited: bool = field.w_waiting[w] >= 0
+	cell.visible = false
+	field._hold(w, 0.05)
+	check(waited and field.w_waiting[w] < 0 and field._route(cell, 6, 0) == 0 and field._route(cell, 0, 1) == 0, "a hidden cell's crossing is never entered")
+	cell.visible = true
+	check(field._route(cell, 6, 0) == 2, "a shown cell's free crossing is a route again")
+	field._clear_walkers()
 	# A car about to arrive also blocks the crossing.
 	field.set_obstacles(PackedVector3Array([Vector3(6.0, 0.0, -4.0)]), PackedVector3Array([Vector3(-3.0, 0, 0)]))
 	check(not field._crossing_clear(cell, 6), "a vehicle arriving within 1.5 s blocks the crossing")
@@ -282,6 +303,27 @@ func field_behaviour(camera: Camera3D) -> void:
 	var amb: Dictionary = field.ambience_at(camera.position)
 	check(is_equal_approx(amb.asphalt, 0.5) and is_equal_approx(amb.built, 0.3) and int(amb.walkers_near) >= 0, "ambience mixes the cells: %s" % amb)
 	check(cache.ambience_at(Vector3(500, 0, 500)).asphalt == 0.0, "no cell within reach mixes nothing")
+	# A 1,024 m cell whose lanes and anchor lie near a corner, 680 m from its
+	# centre: a camera there counts its lanes, sees its pigeons and its ambience.
+	var big := record()
+	var shift := Vector3(480, 0, 480)
+	for key: String in ["points", "crossings", "anchors"]:
+		var list: PackedVector3Array = big[key]
+		for i in list.size(): list[i] += shift
+		big[key] = list
+	big.centre = Vector2.ZERO
+	big.rect = Rect2(-512, -512, 1024, 1024)
+	big.ambience = Vector4(0.0, 0.0, 0.0, 1.0)
+	var big_cell: RefCounted = FIELD.register(big, parent, cache)
+	var corner := Vector3(480, 1.5, 476)
+	field._count_population(corner, 28.0, 80)
+	var flock_before: int = field.pigeon_count()
+	field.wet = false
+	field.daylight = 1.0
+	field._pigeons_step(0.05, corner, FIELD.live(on(2)))
+	check(field.population > 0 and field.pigeon_count() > flock_before and is_equal_approx(field.ambience_at(corner).water, 1.0), "a large cell culls by its rectangle: %d walkers, %d pigeons, %s" % [field.population, field.pigeon_count(), field.ambience_at(corner)])
+	big_cell.release()
+	check(int(cache.entries[FIELD.KEY].pins) == 1, "the large cell's pin returns")
 	# Fixed memory: three MultiMeshes (CPU and GPU, one retiring set), meshes and state.
 	var measured := 0
 	for part: Dictionary in field.parts.values(): measured += 2 * 2 * (part.multimesh as MultiMesh).instance_count * 64
@@ -298,12 +340,13 @@ func field_behaviour(camera: Camera3D) -> void:
 	check(walker_bytes <= FIELD.MAX_WALKERS * 256, "walker state stays small: %d B" % walker_bytes)
 	print("street life field: %d of %d B, peak tick %d usec" % [measured, FIELD.MEMORY_BYTES, field.stats.peak_tick_usec])
 	check(measured <= FIELD.MEMORY_BYTES, "the field stays inside its fixed claim: %d B" % measured)
-	# Release and close.
-	var instances: Array = field.parts.values().map(func(part): return part.instance)
+	# Release and close: the MultiMeshes and the material are freed with the
+	# parts (the RenderingServer offers no query of a freed instance RID).
+	var rendered := resources_of(field)
 	cell.release()
 	check(int(cache.entries[FIELD.KEY].pins) == 0 and field.cells.is_empty() and field.walker_count() == 0 and field.node_pos.is_empty(), "release unpins and drops walkers and nodes")
 	cache.shutdown()
-	check(field.closed and field.parts.is_empty() and instances.size() == 3, "close frees the render instances")
+	check(field.closed and field.parts.is_empty() and rendered.size() == 4 and rendered.all(func(ref: WeakRef) -> bool: return ref.get_ref() == null), "close frees the render resources")
 	parent.queue_free()
 	await process_frame
 

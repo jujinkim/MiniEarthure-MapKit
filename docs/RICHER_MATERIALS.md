@@ -1266,6 +1266,10 @@ owns its optional-cell transitions, margins and replacement lifetime.
 `surface_grit` (voxel ground grain, above) is 0 on every tier; only a consumer that
 sets it on the profile it applies turns it on, and distant terrain follows that
 profile through the quality targets.
+Street-life keys are in the profile too (`walker_count` 0/40/80, `walker_distance`
+14/20/28 m, `walker_near` 0/6/8 m, `pigeon_count` 0/16/32); `street_life` is false
+on every tier and the Client owns the switch
+([STREET_LIFE](STREET_LIFE.md#field-godotstreet_life_fieldgd)).
 The texture tier is captured by each new map resource cache; live changes update
 resolution, water, effects, shadows, LOD and optional low-tier occlusion.
 

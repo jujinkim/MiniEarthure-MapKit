@@ -93,7 +93,7 @@ const FLIGHT_RISE := Vector2(1.5, 3.0)
 const FLIGHT_RADIUS := Vector2(2.0, 4.0)
 const FLIGHT_SECONDS := Vector2(6.0, 12.0)
 const DAY_FROM := 0.5
-## Ambience query: cell reach, and the walker reach counted as near.
+## Ambience query: reach from a cell's rectangle, and the walker reach counted as near.
 const AMBIENCE_REACH := 96.0
 const AMBIENCE_WALKERS := 6.0
 const AABB_REACH := 34.0
@@ -119,6 +119,8 @@ class Cell extends RefCounted:
 	var anchors := PackedVector3Array()
 	var ambience := Vector4.ZERO
 	var centre := Vector2.ZERO
+	## Scene x/z rectangle: the cell bounds grown to every point and anchor.
+	var rect := Rect2()
 	var left_hand := false
 	var visible := true
 	var released := false
@@ -209,7 +211,7 @@ var wet := false
 var stats := {"ticks": 0, "peak_tick_usec": 0, "spawned": 0, "crossed": 0, "gave_way": 0, "held": 0, "turned": 0, "flushed": 0}
 
 ## Display record of a decorated chunk view: its walk arrays and ambience
-## (presentation), cell rectangle, driving side and pigeon anchors (a hashed
+## (presentation), cell centre and scene x/z rectangle, driving side and pigeon anchors (a hashed
 ## PIGEON_SHARE of its benches and bus shelters), or {} without either key.
 static func record(chunk: Dictionary) -> Dictionary:
 	var presentation: Dictionary = chunk.get("presentation", {})
@@ -217,10 +219,11 @@ static func record(chunk: Dictionary) -> Dictionary:
 	var result := {"ambience": presentation.get("ambience", Vector4.ZERO), "points": presentation.get("walk_points", PackedVector3Array()),
 		"lanes": presentation.get("walk_lanes", PackedVector4Array()), "links": presentation.get("walk_links", PackedVector4Array()),
 		"crossings": presentation.get("walk_crossings", PackedVector3Array()), "signals": presentation.get("walk_crossing_signals", PackedByteArray()),
-		"centre": Vector2.ZERO, "left_hand": false, "anchors": PackedVector3Array()}
+		"centre": Vector2.ZERO, "rect": Rect2(), "left_hand": false, "anchors": PackedVector3Array()}
 	var bounds: Variant = JSON.parse_string(str(presentation.get("cell_bounds_json", "")))
 	if bounds is Dictionary and bounds.has("min") and bounds.has("max"):
 		result.centre = Vector2(float(bounds.min[0]) + float(bounds.max[0]), -(float(bounds.min[1]) + float(bounds.max[1]))) * 0.005
+		result.rect = Rect2(float(bounds.min[0]) * 0.01, -float(bounds.max[1]) * 0.01, (float(bounds.max[0]) - float(bounds.min[0])) * 0.01, (float(bounds.max[1]) - float(bounds.min[1])) * 0.01)
 	for style: Variant in presentation.get("road_styles", {}).values():
 		if style is Dictionary and bool(style.get("left_hand", false)): result.left_hand = true
 	var anchors := PackedVector3Array()
@@ -266,6 +269,14 @@ func add(value: Dictionary, root: Node3D) -> Cell:
 	cell.left_hand = bool(value.get("left_hand", false))
 	cell.anchors = value.get("anchors", PackedVector3Array())
 	var points: PackedVector3Array = value.get("points", PackedVector3Array())
+	var rect: Rect2 = value.get("rect", Rect2())
+	var grown := rect.has_area()
+	if not grown: rect = Rect2(cell.centre, Vector2.ZERO)
+	for list: PackedVector3Array in [points, value.get("crossings", PackedVector3Array()), cell.anchors]:
+		for p: Vector3 in list:
+			rect = rect.expand(Vector2(p.x, p.z)) if grown else Rect2(p.x, p.z, 0.0, 0.0)
+			grown = true
+	cell.rect = rect
 	for group: Array in [[value.get("lanes", PackedVector4Array()), LANE], [value.get("links", PackedVector4Array()), LINK]]:
 		for entry: Vector4 in group[0]:
 			var start := int(entry.x)
@@ -398,14 +409,19 @@ func set_obstacles(points: PackedVector3Array, given := PackedVector3Array()) ->
 	velocities = speeds
 	obstacle_usec = now
 
+## Distance on the ground from `flat` to a cell's rectangle (0 inside it).
+static func cell_distance(cell: Cell, flat: Vector2) -> float:
+	var r := cell.rect
+	return Vector2(maxf(maxf(r.position.x - flat.x, flat.x - r.end.x), 0.0), maxf(maxf(r.position.y - flat.y, flat.y - r.end.y), 0.0)).length()
+
 ## Area shares around `eye` (an inverse-distance mix of the registered cells'
-## ambience within AMBIENCE_REACH) and the walkers within AMBIENCE_WALKERS.
+## ambience within AMBIENCE_REACH of their rectangles) and the walkers within AMBIENCE_WALKERS.
 func ambience_at(eye: Vector3) -> Dictionary:
 	var mix := Vector4.ZERO
 	var total := 0.0
 	var flat := Vector2(eye.x, eye.z)
 	for cell: Cell in cells:
-		var d := cell.centre.distance_to(flat)
+		var d := cell_distance(cell, flat)
 		if d > AMBIENCE_REACH: continue
 		var w := 1.0 / maxf(d, 4.0)
 		mix += cell.ambience * w
@@ -590,7 +606,7 @@ func _count_population(eye: Vector3, reach: float, cap: int) -> void:
 	var total := 0.0
 	for cell: Cell in cells:
 		if not cell.visible or cell.first.is_empty(): continue
-		if cell.centre.distance_to(Vector2(eye.x, eye.z)) > reach + 80.0: continue
+		if cell_distance(cell, Vector2(eye.x, eye.z)) > reach: continue
 		for e in cell.first.size():
 			if cell.kinds[e] != LANE or cell.lengths[e] <= 0.0: continue
 			var inside := 0.0
@@ -786,16 +802,17 @@ func _arrive(i: int) -> void:
 	stats.turned += 1
 
 ## How an edge leaving a node at its end `end` serves a walker: 0 not at all
-## (a signalled crossing, or a link ending only at one), 1 a lane or link,
-## 2 an unsignalled crossing, 3 a kerb link to one.
+## (a hidden cell's edge, a signalled crossing, or a link ending only at
+## those), 1 a lane or link, 2 an unsignalled crossing, 3 a kerb link to one.
 func _route(cell: Cell, e: int, end: int) -> int:
+	if not cell.visible: return 0
 	if cell.kinds[e] == CROSSING: return 2 if cell.signalled[e] == 0 else 0
 	if cell.kinds[e] == LANE: return 1
 	var far := cell.nodes[e * 2 + (1 - end)]
 	var onward := false
 	for ref: int in node_refs.get(far, PackedInt64Array()):
 		var other: Cell = by_uid.get(ref >> 21)
-		if other == null: continue
+		if other == null or not other.visible: continue
 		var k := (ref >> 1) & 0xFFFFF
 		if other == cell and k == e: continue
 		if other.kinds[k] == CROSSING:
@@ -824,12 +841,13 @@ func _enter(i: int, ref: int) -> void:
 	var shift := before - w_position[i]
 	w_shift[i] = shift if shift.length() <= MERGE * 2.0 else Vector3.ZERO
 
-## Waiting at the kerb: enter once the crossing is clear, walk on after CURB_WAIT.
+## Waiting at the kerb: enter once the crossing is clear, walk on after
+## CURB_WAIT; turn round when its cell is gone or hidden.
 func _hold(i: int, dt: float) -> void:
 	w_waited[i] += dt
 	var ref := w_waiting[i]
 	var cell: Cell = by_uid.get(ref >> 21)
-	if cell == null:
+	if cell == null or not cell.visible:
 		w_waiting[i] = -1
 		_turn(i)
 		return
@@ -882,7 +900,7 @@ func _pigeons_step(dt: float, eye: Vector3, caps: Dictionary) -> void:
 	if allowed:
 		for cell: Cell in cells:
 			if not cell.visible or cell.anchors.is_empty(): continue
-			if cell.centre.distance_to(Vector2(eye.x, eye.z)) > PIGEON_REACH + 80.0: continue
+			if cell_distance(cell, Vector2(eye.x, eye.z)) > PIGEON_REACH: continue
 			for a in cell.anchors.size():
 				var anchor := cell.anchors[a]
 				if Vector2(anchor.x - eye.x, anchor.z - eye.z).length() <= PIGEON_REACH: wanted["%d:%d" % [cell.uid, a]] = [cell, anchor]

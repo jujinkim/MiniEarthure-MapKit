@@ -3,7 +3,7 @@
 //! links through connected tops, junction crossings between kerb mouths and an
 //! ambience mix of the cell's ground. Presentation only: never collision,
 //! never Runtime state, never part of a generated hash.
-use crate::road_style::{crosswalk_centres, dot, inside, perp, scene, sub, unit, vertical, P2};
+use crate::road_style::{crosswalk_centres, dot, inside, perp, scene, segment_distance, sub, unit, vertical, P2};
 use godot::prelude::*;
 use mapkit_core::{Bounds, MapDocument, RoadPaint};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -33,7 +33,9 @@ const SHORTEST_RUN: f64 = 2.0;
 const LINK_REACH: f64 = 6.0;
 const MERGE: f64 = 1.5;
 /// Kerb mouth past the carriageway half width; a mouth joins the nearest lane
-/// within MOUTH_REACH; a signal head within SIGNAL_REACH marks the crossing.
+/// within MOUTH_REACH; a signal head within SIGNAL_REACH of the crossing line
+/// carried on over both sidewalks (the importer's poles stand past the kerb)
+/// marks the crossing.
 const MOUTH_OUT: f64 = 0.15;
 const MOUTH_REACH: f64 = 2.5;
 const SIGNAL_REACH: f64 = 3.0;
@@ -120,7 +122,7 @@ pub fn presentation_bytes(presentation: &VarDictionary) -> u64 {
     bytes(len("walk_points"), len("walk_lanes") + len("walk_links"), len("walk_crossing_signals"), presentation.contains_key("ambience"))
 }
 
-struct Top { corners: [P3; 3], flat: [P2; 3] }
+struct Top { corners: [P3; 3], flat: [P2; 3], road: String }
 impl Top {
     fn height(&self, p: P2) -> f64 {
         let [a, b, c] = self.flat;
@@ -147,9 +149,10 @@ impl Tops {
         let mut tops = Vec::new();
         let mut keys: Vec<[[i64; 3]; 3]> = Vec::new();
         for (i, v) in corners.iter().enumerate() {
-            if !ids[i].strip_suffix(":sidewalk").is_some_and(|r| roads.contains_key(r)) || vertical(v) { continue; }
+            let Some(road) = ids[i].strip_suffix(":sidewalk").filter(|r| roads.contains_key(r)) else { continue };
+            if vertical(v) { continue; }
             let c = v.map(|p| [p[0] as f64 / 100.0, p[1] as f64 / 100.0, -(p[2] as f64) / 100.0]);
-            tops.push(Top { corners: c, flat: v.map(scene) });
+            tops.push(Top { corners: c, flat: v.map(scene), road: road.to_string() });
             keys.push(*v);
         }
         let mut parent: Vec<usize> = (0..tops.len()).collect();
@@ -177,10 +180,12 @@ impl Tops {
         Tops { tops, component, grid }
     }
     /// The top under `p` (the highest where tops overlap) with its height.
-    fn at(&self, p: P2) -> Option<(usize, f64)> {
+    fn at(&self, p: P2) -> Option<(usize, f64)> { self.of(p, None) }
+    /// Likewise among the tops of `road` only, or of every road.
+    fn of(&self, p: P2, road: Option<&str>) -> Option<(usize, f64)> {
         let mut best: Option<(usize, f64)> = None;
         for &i in self.grid.get(&grid_cell(p))? {
-            if !inside(self.tops[i].flat, p) { continue; }
+            if road.is_some_and(|r| self.tops[i].road != r) || !inside(self.tops[i].flat, p) { continue; }
             let y = self.tops[i].height(p);
             if best.is_none_or(|b| y > b.1) { best = Some((i, y)); }
         }
@@ -235,7 +240,9 @@ impl Footfall {
     fn new(d: &MapDocument, bounds: &Bounds) -> Footfall {
         let denominator = mapkit_core::osm_source_denominator(d).map_or(DEFAULT_DENOMINATOR, |v| v as f64);
         let radius = [SHELTER_SOURCE_M, STATION_SOURCE_M, CROSSWALK_SOURCE_M, COMMERCIAL_SOURCE_M].map(|m| m * 100.0 / denominator);
-        let reach = radius.iter().copied().fold(SIGNAL_REACH * 100.0, f64::max);
+        // Signal heads stand up to the widest kerb plus SIGNAL_REACH from a crossing.
+        let kerb = d.roads.iter().map(|r| r.widths_cm.iter().copied().max().unwrap_or(0) as f64 / 2.0 + d.sidewalk_width_cm(r) as f64).fold(0.0, f64::max);
+        let reach = radius.iter().copied().fold(SIGNAL_REACH * 100.0 + kerb, f64::max);
         let near = |p: [f64; 2]| p[0] >= bounds.min[0] as f64 - reach && p[0] <= bounds.max[0] as f64 + reach && p[1] >= bounds.min[1] as f64 - reach && p[1] <= bounds.max[1] as f64 + reach;
         let mut f = Footfall { shelters: vec![], stations: vec![], shops: vec![], buildings: vec![], signals: vec![], radius };
         for p in &d.placements {
@@ -289,12 +296,21 @@ pub fn build(d: &MapDocument, paint: &RoadPaint, roads: &BTreeMap<&str, &mapkit_
     let mut out = WalkLanes { ambience: Some(ambience(d, roads, ids, corners, surfaces, bounds)), ..Default::default() };
     let tops = Tops::new(roads, ids, corners);
     if tops.tops.is_empty() { return out; }
-    // Lanes: the middle of each side's sidewalk band per paint segment.
+    // Lanes: the middle of each side's sidewalk band along each paint segment,
+    // sampled every SAMPLE_STEP on the segment's own grid (so neighbouring
+    // cells meet at one sample) over the part near this cell. The band (of the
+    // road's own tops: a corner apron of the crossing road is not its band) is
+    // probed at the first sample of every run and again where a sample leaves
+    // the tops (a driveway, a corner gap, the cell edge), splitting the run.
+    let near = |p: f64, lo: f64, hi: f64, m: f64| p >= lo - m && p <= hi + m;
+    let lo = [bounds.min[0] as f64 / 100.0, -(bounds.max[1] as f64) / 100.0];
+    let hi = [bounds.max[0] as f64 / 100.0, -(bounds.min[1] as f64) / 100.0];
     let mut runs: Vec<Run> = Vec::new();
     for (id, r) in roads {
         let Some(path) = paint.paths.get(*id) else { continue };
         let sidewalk = d.sidewalk_width_cm(r);
         if sidewalk == 0 { continue; }
+        let width = sidewalk as f64 / 100.0;
         for side in [1.0, -1.0] {
             let mut samples: Vec<Option<(P3, usize, f64)>> = Vec::new();
             let mut last: Option<P2> = None;
@@ -303,32 +319,63 @@ pub fn build(d: &MapDocument, paint: &RoadPaint, roads: &BTreeMap<&str, &mapkit_
                 let span = dot(sub(b, a), sub(b, a)).sqrt();
                 if span < 0.05 { continue; }
                 let (dir, n) = (unit(sub(b, a)), perp(unit(sub(b, a))));
-                let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
                 let curb = s.width_cm / 200.0;
-                let reach = curb + sidewalk as f64 / 100.0 + 1.0;
-                let mut band: Option<(f64, f64)> = None;
-                for step in 0..=((reach - curb) / PROBE_STEP + 1e-6) as usize {
-                    let o = curb + step as f64 * PROBE_STEP;
-                    let hit = tops.at([mid[0] + n[0] * side * o, mid[1] + n[1] * side * o]).is_some();
-                    match (hit, band) {
-                        (true, None) => band = Some((o, o)),
-                        (true, Some((inner, _))) => band = Some((inner, o)),
-                        (false, Some(_)) => break,
-                        _ => {}
+                let reach = curb + width + 1.0;
+                let probe = |c: P2| -> Option<(f64, f64)> {
+                    let mut band: Option<(f64, f64)> = None;
+                    for step in 0..=((reach - curb) / PROBE_STEP + 1e-6) as usize {
+                        let o = curb + step as f64 * PROBE_STEP;
+                        let hit = tops.of([c[0] + n[0] * side * o, c[1] + n[1] * side * o], Some(*id)).is_some();
+                        match (hit, band) {
+                            (true, None) => band = Some((o, o)),
+                            (true, Some((inner, _))) => band = Some((inner, o)),
+                            (false, Some(_)) => break,
+                            _ => {}
+                        }
                     }
+                    // A corner apron widens the band: keep the sidewalk's own width.
+                    band.map(|(inner, outer)| (inner, outer.min(inner + width)))
+                };
+                // The part of the segment whose band can reach this cell.
+                let margin = reach + SAMPLE_STEP;
+                let (mut t0, mut t1) = (0.0f64, span);
+                for k in 0..2 {
+                    if dir[k].abs() < 1e-12 {
+                        if !near(a[k], lo[k], hi[k], margin) { t1 = -1.0; }
+                        continue;
+                    }
+                    let (u, v) = ((lo[k] - margin - a[k]) / dir[k], (hi[k] + margin - a[k]) / dir[k]);
+                    t0 = t0.max(u.min(v));
+                    t1 = t1.min(u.max(v));
                 }
-                let Some((inner, outer)) = band else { samples.push(None); last = None; continue };
-                let offset = (inner + outer) * 0.5;
-                let half = ((outer - inner) * 0.5 - 0.08).max(0.10);
-                let continues = last.is_some_and(|q| { let e = sub(q, a); dot(e, e) < 1e-6 });
-                if !continues { samples.push(None); }
+                if t0 > t1 { samples.push(None); last = None; continue; }
                 let steps = (span / SAMPLE_STEP).ceil() as usize;
-                for k in usize::from(continues)..=steps {
+                let (k0, k1) = (((t0 / SAMPLE_STEP).floor() as usize).min(steps), ((t1 / SAMPLE_STEP).ceil() as usize).min(steps));
+                let continues = k0 == 0 && last.is_some_and(|q| { let e = sub(q, a); dot(e, e) < 1e-6 });
+                if !continues { samples.push(None); }
+                let on_band = |c: P2, (inner, outer): (f64, f64)| {
+                    let offset = (inner + outer) * 0.5;
+                    let half = ((outer - inner) * 0.5 - 0.08).max(0.10);
+                    let p = [c[0] + n[0] * side * offset, c[1] + n[1] * side * offset];
+                    tops.at(p).map(|(i, y)| ([p[0], y, p[1]], tops.component[i], half))
+                };
+                let mut band: Option<(f64, f64)> = None;
+                for k in k0 + usize::from(continues)..=k1 {
                     let t = (k as f64 * SAMPLE_STEP).min(span);
-                    let p = [a[0] + dir[0] * t + n[0] * side * offset, a[1] + dir[1] * t + n[1] * side * offset];
-                    samples.push(tops.at(p).map(|(i, y)| ([p[0], y, p[1]], tops.component[i], half)));
+                    let c = [a[0] + dir[0] * t, a[1] + dir[1] * t];
+                    let fresh = band.is_none();
+                    if fresh { band = probe(c); }
+                    let mut sample = band.and_then(|b| on_band(c, b));
+                    if sample.is_none() && !fresh {
+                        // The run ends here; a new one may start on a new band.
+                        samples.push(None);
+                        band = probe(c);
+                        sample = band.and_then(|b| on_band(c, b));
+                    }
+                    if sample.is_none() { band = None; }
+                    samples.push(sample);
                 }
-                last = Some(b);
+                last = if k1 == steps { Some(b) } else { None };
             }
             for group in samples.split(Option::is_none) {
                 let list: Vec<(P3, usize, f64)> = group.iter().map(|s| s.unwrap()).collect();
@@ -385,11 +432,13 @@ pub fn build(d: &MapDocument, paint: &RoadPaint, roads: &BTreeMap<&str, &mapkit_
     // Crossings: kerb mouths on the sidewalk tops either side of each painted
     // crosswalk, each joined to the nearest lane by a short link.
     let mut crossings: Vec<(P3, P3, u8)> = Vec::new();
-    for (centre, dir, half) in crosswalk_centres(paint, roads) {
+    for (centre, dir, half, road) in crosswalk_centres(paint, roads) {
         let across = perp(dir);
+        let kerb = half + roads.get(road).map_or(0.0, |r| d.sidewalk_width_cm(r) as f64 / 100.0);
         let mouth = |s: f64| { let p = [centre[0] + across[0] * s * (half + MOUTH_OUT), centre[1] + across[1] * s * (half + MOUTH_OUT)]; tops.at(p).map(|(_, y)| [p[0], y, p[1]]) };
         let (Some(a), Some(b)) = (mouth(1.0), mouth(-1.0)) else { continue };
-        let signalled = footfall.signals.iter().any(|q| { let e = sub(*q, centre); dot(e, e) <= SIGNAL_REACH * SIGNAL_REACH });
+        let (left, right) = ([centre[0] - across[0] * kerb, centre[1] - across[1] * kerb], [centre[0] + across[0] * kerb, centre[1] + across[1] * kerb]);
+        let signalled = footfall.signals.iter().any(|q| segment_distance(*q, left, right) <= SIGNAL_REACH);
         crossings.push((a, b, u8::from(signalled)));
     }
     for &(a, b, _) in &crossings {
@@ -513,7 +562,6 @@ mod tests {
         paint.paths.insert("a".into(), vec![segment([0, 0, 0], [2000, 0, 0], 2000.0)]);
         paint.paths.insert("b".into(), vec![segment([1700, 0, 300], [1700, 0, 2000], 1700.0)]);
         paint.paths.insert("bare".into(), vec![segment([0, 0, 4000], [2000, 0, 4000], 2000.0)]);
-        let quad = |x0: i64, z0: i64, x1: i64, z1: i64, y: i64| [[[x0, y, z0], [x1, y, z0], [x1, y, z1]], [[x0, y, z0], [x1, y, z1], [x0, y, z1]]];
         let mut faces: Vec<(&str, [[i64; 3]; 3])> = Vec::new();
         for t in quad(0, -300, 2000, 300, 0) { faces.push(("a", t)); }
         for t in quad(1400, 300, 2000, 2000, 0) { faces.push(("b", t)); }
@@ -532,14 +580,17 @@ mod tests {
         (d, paint, faces)
     }
     fn run(d: &MapDocument, paint: &RoadPaint, faces: &[(&str, [[i64; 3]; 3])], caps: &Caps) -> WalkLanes {
+        run_in(d, paint, faces, caps, Bounds { min: [0, -1000], max: [5000, 5000] })
+    }
+    fn run_in(d: &MapDocument, paint: &RoadPaint, faces: &[(&str, [[i64; 3]; 3])], caps: &Caps, bounds: Bounds) -> WalkLanes {
         let roads: BTreeMap<&str, &mapkit_core::Road> = d.roads.iter().map(|r| (r.id.as_str(), r)).collect();
         let ids: Vec<&str> = faces.iter().map(|f| f.0).collect();
         let corners: Vec<_> = faces.iter().map(|f| f.1).collect();
         let surfaces = vec![0u8; faces.len()];
-        let bounds = Bounds { min: [0, -1000], max: [5000, 5000] };
         build(d, paint, &roads, &ids, &corners, &surfaces, &bounds, caps)
     }
     fn polyline(w: &WalkLanes, e: [f64; 4]) -> &[P3] { &w.points[e[0] as usize..(e[0] + e[1]) as usize] }
+    fn quad(x0: i64, z0: i64, x1: i64, z1: i64, y: i64) -> [[[i64; 3]; 3]; 2] { [[[x0, y, z0], [x1, y, z0], [x1, y, z1]], [[x0, y, z0], [x1, y, z1], [x0, y, z1]]] }
 
     #[test]
     fn a_two_road_junction_walks_its_sidewalk_tops_round_the_corner_and_across() {
@@ -592,12 +643,51 @@ mod tests {
         d.placements.push(mapkit_core::Placement { id: "sig".into(), asset_id: "builtin:signal_h".into(), position: [1500, 0, 1900], quarter_turns: 0, yaw_offset_mdeg: 0 });
         let w = run(&d, &paint, &faces, &CAPS);
         assert_eq!(w.signals, [1], "a signal head within 3 m marks the crossing");
-        // Only the bare road and its carriageway: no walk keys, ambience kept.
-        let bare: Vec<_> = faces.iter().filter(|f| f.0 == "bare").copied().collect();
+        // A pole where osm_furniture.signals() stands it on b's arm: past the
+        // kerb by half width + sidewalk + (30 + 4 + 2) cm x 1/3, and
+        // sqrt(2) x 3 m + 12 cm from the node (b's trimmed end 2 m + 3 m on),
+        // over 4 m from the crossing's centre.
+        let pole = [1700 + 300 + 100 + 12, 0, 2500 - 424 - 12];
+        d.placements[0].position = pole;
+        assert!(((pole[0] - 1700) as f64).hypot((pole[2] - 1900) as f64) > 400.0);
+        assert_eq!(run(&d, &paint, &faces, &CAPS).signals, [1], "a pole beside the kerb marks the crossing");
+        d.placements[0].position = [pole[0] + 600, 0, pole[2]];
+        assert_eq!(run(&d, &paint, &faces, &CAPS).signals, [0], "a pole 6 m past the kerb does not");
+        // Only the bare road, its carriageway and tops tagged as its sidewalk:
+        // a road without a sidewalk width gets no walk keys, ambience kept.
+        let mut bare: Vec<_> = faces.iter().filter(|f| f.0 == "bare").copied().collect();
+        for t in quad(0, 4300, 2000, 4400, 3) { bare.push(("bare:sidewalk", t)); }
         let w = run(&d, &paint, &bare, &CAPS);
         assert!(w.points.is_empty() && w.lanes.is_empty() && w.links.is_empty() && w.crossings.is_empty());
         assert!(w.ambience.is_some());
         assert_eq!(w.bytes(), AMBIENCE_BYTES);
+    }
+
+    #[test]
+    fn long_segments_keep_their_lanes_across_cells_and_driveway_gaps() {
+        // Road a alone, one 20 m segment cut by the cell edge at x 6 m: the
+        // segment's middle lies in the east cell, where a driveway gap (x 9..11)
+        // also interrupts the north top.
+        let (d, mut paint, _) = junction();
+        paint.paths.retain(|id, _| id == "a");
+        let west: Vec<(&str, [[i64; 3]; 3])> = [("a", quad(0, -300, 600, 300, 0)), ("a:sidewalk", quad(0, 300, 600, 400, 3)), ("a:sidewalk", quad(0, -400, 600, -300, 3))]
+            .into_iter().flat_map(|(id, q)| q.map(|t| (id, t))).collect();
+        let east: Vec<(&str, [[i64; 3]; 3])> = [("a", quad(600, -300, 2000, 300, 0)), ("a:sidewalk", quad(600, 300, 900, 400, 3)), ("a:sidewalk", quad(1100, 300, 2000, 400, 3)),
+            ("a:sidewalk", quad(600, -400, 2000, -300, 3))].into_iter().flat_map(|(id, q)| q.map(|t| (id, t))).collect();
+        let w = run_in(&d, &paint, &west, &CAPS, Bounds { min: [0, -1000], max: [600, 1000] });
+        let e = run_in(&d, &paint, &east, &CAPS, Bounds { min: [600, -1000], max: [2000, 1000] });
+        let spans = |w: &WalkLanes, z: f64| -> Vec<(f64, f64)> {
+            let mut list: Vec<(f64, f64)> = w.lanes.iter().map(|&l| polyline(w, l)).filter(|l| l.iter().all(|p| (p[2] - z).abs() < 1e-6))
+                .map(|l| (l[0][0].min(l[l.len() - 1][0]), l[0][0].max(l[l.len() - 1][0]))).collect();
+            list.sort_by(|a, b| a.0.total_cmp(&b.0));
+            list
+        };
+        assert_eq!(spans(&w, -3.5), [(0.0, 6.0)], "west north: {:?}", w.points);
+        assert_eq!(spans(&w, 3.5), [(0.0, 6.0)], "west south: {:?}", w.points);
+        assert_eq!(spans(&e, -3.5), [(6.0, 9.0), (11.0, 20.0)], "east north splits at the driveway: {:?}", e.points);
+        assert_eq!(spans(&e, 3.5), [(6.0, 20.0)], "east south: {:?}", e.points);
+        // The neighbours' lane ends meet within the field's endpoint merge.
+        for z in [-3.5, 3.5] { assert!((spans(&e, z)[0].0 - spans(&w, z)[0].1).abs() <= MERGE); }
     }
 
     #[test]

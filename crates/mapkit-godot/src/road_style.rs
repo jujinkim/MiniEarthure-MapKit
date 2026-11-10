@@ -242,10 +242,10 @@ impl Line {
 
 /// Painted crosswalk centres: 1 m in from a crossed end of a road longer than
 /// 5 m (urban_surface.gdshader draws the bars 0.3–1.7 m in), with the road's
-/// unit direction there and its half width, in scene metres. Shared by the
+/// unit direction there, its half width (scene metres) and its id. Shared by the
 /// sidewalk frames (crossing mouths) and the street-life crossings (walk_lanes.rs).
-pub(crate) fn crosswalk_centres(paint: &RoadPaint, roads: &BTreeMap<&str, &mapkit_core::Road>) -> Vec<(P2, P2, f64)> {
-    let mut crossings: Vec<(P2, P2, f64)> = Vec::new();
+pub(crate) fn crosswalk_centres<'a>(paint: &RoadPaint, roads: &BTreeMap<&'a str, &mapkit_core::Road>) -> Vec<(P2, P2, f64, &'a str)> {
+    let mut crossings: Vec<(P2, P2, f64, &'a str)> = Vec::new();
     for (id, r) in roads {
         let Some(m) = &r.markings else { continue };
         let Some(path) = paint.paths.get(*id) else { continue };
@@ -257,7 +257,7 @@ pub(crate) fn crosswalk_centres(paint: &RoadPaint, roads: &BTreeMap<&str, &mapki
                 let target = if start { 100.0 } else { s.total_cm - 100.0 };
                 if s.total_cm <= 500.0 || length <= 0.0 || target < s.station_cm || target > s.station_cm + length { continue; }
                 let t = (target - s.station_cm) / length;
-                crossings.push(([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], unit(sub(b, a)), s.width_cm / 200.0));
+                crossings.push(([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], unit(sub(b, a)), s.width_cm / 200.0, *id));
                 break;
             }
         }
@@ -370,7 +370,7 @@ fn sidewalk_frames(
         // curb must run along the crossed road, as the pad lies along that curb.
         let mut crossing: Option<(P2, P2)> = None;
         let mut closest = f64::MAX;
-        for &(o, t, half) in &crossings {
+        for &(o, t, half, _) in &crossings {
             if dot(line.d, t).abs() < 0.85 { continue; }
             let along = points.map(|p| dot(sub(p, o), t));
             let lateral = points.map(|p| dot(sub(p, o), perp(t)).abs());
