@@ -85,6 +85,9 @@ safety furniture, placement intersection and regional influence margin.
   overlapping ceiling face; clipping the shared plan retains safe buried
   interiors without ignoring a rising portal or junction fan. The 8 million work limit (enough for about 11,000 dense 1:8 city
   buildings) and exact contact rules stay authoritative.
+- Sidewalk candidates from a spatial-index leaf are filtered by their own bounds
+  before polygon work. A rejected box costs one bounded comparison; nearby aprons
+  keep the same clipping order, terrain-conforming tops and curb boundaries.
 - Terrain tiles, surface overlap and face classification query ordered spatial
   indexes; dense arrangements, or faces beyond the 16-hole/512-vertex triangulation
   limit (many disjoint islands in one tile), split into quarters (depth ≤6) only at

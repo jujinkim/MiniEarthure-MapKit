@@ -956,9 +956,8 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crat
     if patches.is_empty() {
         return Ok(());
     }
-    let patch_index = crate::bounds_index::BoundsIndex::new(
-        &patches.iter().map(|(_,rings)| int_bounds(&rings[0])).collect::<Vec<_>>(),
-    );
+    let patch_bounds: Vec<_> = patches.iter().map(|(_,rings)| int_bounds(&rings[0])).collect();
+    let patch_index = crate::bounds_index::BoundsIndex::new(&patch_bounds);
     let exclusions: Vec<&Vec<Point>> = sidewalk_exclusions(d).collect();
     let mut clip_ring = Vec::new();
     // One ID set per cell, not a scan of every paint record per triangle.
@@ -978,6 +977,14 @@ pub(crate) fn sidewalks(d: &MapDocument, b: &mut Builder, exclusion_index: &crat
         let nearby = exclusion_index.query(&area, &mut work)?;
         let mut remaining = vec![vec![t.vertices.iter().map(|p| IntPoint::new(p[0], p[2])).collect()]];
         for i in patch_index.query(&area, &mut work)? {
+            // The broad phase returns a whole leaf (up to eight aprons).
+            // Reject each non-meeting box before walking its polygon rings;
+            // charge the box comparison, not overlays we never need to run.
+            tick(&mut work, 1)?;
+            let bounds = &patch_bounds[i];
+            if (0..2).any(|axis| area.max[axis] < bounds.min[axis] || area.min[axis] > bounds.max[axis]) {
+                continue;
+            }
             let (road,rings) = &patches[i];
             // Bounds overlap admits many aprons that never meet the remaining
             // ground. Their intersection is empty and their difference only

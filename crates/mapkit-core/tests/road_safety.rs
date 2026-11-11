@@ -440,3 +440,42 @@ fn diagonal_shelter_safety_uses_its_placed_yaw_collision() {
     assert_eq!(error.code,"E_GEOMETRY");
     assert!(error.message.contains("shelter"),"{}",error.message);
 }
+
+#[test]
+fn dense_terrain_does_not_spend_sidewalk_work_on_other_index_leaf_members() {
+    let mut d = source(RoadKind::Ground, vec![[500,0,0],[600,0,6400],[500,0,12800]]);
+    d.bounds.max = [25600,25600];
+    d.cell_size_cm = 25600;
+    let template = d.roads[0].clone();
+    d.roads.clear();
+    d.nodes.clear();
+    for i in 0..16 {
+        let mut road = template.clone();
+        road.id = format!("street-{i:02}");
+        road.from = format!("a-{i}");
+        road.to = format!("b-{i}");
+        for p in &mut road.points {p[0] = (p[0] + i * 780) * 2; p[2] *= 2;}
+        road.widths_cm.fill(400);
+        road.sidewalk_cm = Some(120);
+        road.markings = None;
+        d.nodes.extend([
+            RoadNode{id:road.from.clone(),position:road.points[0],level:0},
+            RoadNode{id:road.to.clone(),position:*road.points.last().unwrap(),level:0},
+        ]);
+        d.roads.push(road);
+    }
+    let cell = Cell{x:0,y:0};
+    d.heightmaps.push(Heightmap{cell,path:"terrain.png".into(),spacing_cm:200,offset_cm:0,step_cm:1,source_accuracy_cm:None});
+    let grid = HeightGrid{side:129,heights_cm:vec![0;129*129]};
+    let make = || generate(GenerationInput{document:&d,cell,heightgrid:Some(&grid),max_triangles:500_000});
+    let (reference, _) = profile::Profile::Authoring.run(make);
+    let reference = reference.unwrap();
+    let runtime = make().expect("distant aprons must not consume the runtime subdivision budget");
+    assert_eq!(runtime.hash().unwrap(),reference.hash().unwrap());
+    for i in 0..16 {
+        let id = format!("street-{i:02}:sidewalk");
+        assert!(runtime.spawn(&SpawnRequest{position_cm:[(500+i*780+140)*2,400],surface_id:id}).is_ok());
+    }
+    let limited = GenerationInput{document:&d,cell,heightgrid:Some(&grid),max_triangles:100};
+    assert_eq!(generate(limited).unwrap_err().code,"E_BUDGET");
+}
