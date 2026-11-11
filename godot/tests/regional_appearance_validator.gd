@@ -150,12 +150,14 @@ func render_sets() -> void:
 
 func compose(d: Dictionary, arch: String) -> void:
 	if arch == "venetian":
+		d.ground_style_id = "ground/stone_paving"
 		d.surface_areas = []
 		d.water_bodies = [{"id":"canal","polygon":[[0,1150],[3200,1150],[3200,1500],[0,1500]],"surface_cm":-20,"bottom_cm":-220,"flow_cm_s":[20,0]}]
 		d.nodes = [{"id":"south","position":[2600,70,950],"level":1},{"id":"north","position":[2600,70,1700],"level":1}]
 		d.roads = [{"id":"footbridge","from":"south","to":"north","points":[[2600,70,950],[2600,70,1700]],"widths_cm":[150],"surfaces":["concrete"],"kind":"bridge","sidewalk_cm":0,"style_id":"road/bridge/stone_paving"}]
 		d.barriers = [{"id":"quay","line":[[100,1120],[2400,1120]],"kind":"wall","height_cm":65,"thickness_cm":25,"style_id":"barrier/quay/stone"}]
 	elif arch == "cycladic":
+		d.ground_style_id = "ground/stone_paving"
 		d.buildings[1].base_cm = 100;d.buildings[2].base_cm = 200
 		d.buildings[0].style_id += "/vault/whitewash"
 		for index in [1,2]:
