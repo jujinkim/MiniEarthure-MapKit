@@ -108,7 +108,7 @@ mod tests {
         let n=wiggle.len()-1;
         let r=&mut d.roads[0];
         r.points=wiggle;r.widths_cm=vec![400;n];r.surfaces=vec![Surface::Asphalt;n];r.design=None;r.from="a".into();r.to="b".into();
-        r.markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:true,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0});
+        r.markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:true,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0, median_width_cm: 0, forward_lanes: 0});
         for (id,p) in [("a",r.points[0]),("b",*r.points.last().unwrap())] {d.nodes.push(RoadNode{id:id.into(),position:p,level:0});}
         assert!(!d.road_paint(&d.bounds).unwrap().overflow.is_empty(),"presentation degrades");
         let e=paint_budget(&d,&d.bounds).unwrap_err();
@@ -116,7 +116,7 @@ mod tests {
         d.roads[0].markings=None;
         paint_budget(&d,&d.bounds).unwrap();
         // Two degree-two halves within the cap whose joined path is over it.
-        d.roads[0].markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:false,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0});
+        d.roads[0].markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:false,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0, median_width_cm: 0, forward_lanes: 0});
         let mut b=d.roads[0].clone();
         let half=b.points.len()/2;
         b.id="b".into();b.from="m".into();b.points.drain(..half);b.widths_cm.truncate(b.points.len()-1);b.surfaces.truncate(b.points.len()-1);
@@ -136,7 +136,7 @@ mod tests {
         let wiggle:Vec<Vertex>=(0..=300).map(|i|{let x=500+i*30;[x,0,2500+(300.0*(x as f64*std::f64::consts::TAU/1000.0).sin()).round() as i64]}).collect();
         let r=&mut d.roads[0];
         r.points=wiggle.clone();r.from="a".into();r.to="b".into();r.kind=RoadKind::Ground;
-        r.markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:false,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0});
+        r.markings=Some(RoadMarkings{color:None,lanes:2,center_line:true,edge_lines:false,crosswalk_start:false,crosswalk_end:false,one_way:0,stop_lines:false,lane_width_cm:0, median_width_cm: 0, forward_lanes: 0});
         mapkit_core::road_design::compile(r,mapkit_core::road_design::from_points(&wiggle).unwrap(),400).unwrap();
         for (id,p) in [("a",r.points[0]),("b",*r.points.last().unwrap())] {d.nodes.push(RoadNode{id:id.into(),position:p,level:0});}
         let (package,_)=Profile::Authoring.run(||crate::Package::from_project(d,files));

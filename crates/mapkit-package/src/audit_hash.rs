@@ -280,8 +280,10 @@ record!(RoadMarkings, d, m, {
         crosswalk_start,
         edge_lines
     );
+    if d.forward_lanes != 0 {fields!(m,d,forward_lanes);}
     if d.lane_width_cm != 0 {fields!(m,d,lane_width_cm);}
     fields!(m, d, lanes);
+    if d.median_width_cm != 0 {fields!(m,d,median_width_cm);}
     if d.one_way != 0 {fields!(m,d,one_way);}
     if d.stop_lines {fields!(m,d,stop_lines);}
 });
@@ -549,7 +551,7 @@ mod tests {
             crosswalk_end: false,
             one_way: 0,
             stop_lines: false,
-            lane_width_cm: 0,
+            lane_width_cm: 100, median_width_cm: 200, forward_lanes: 2,
         });
         d.roads[0].sidewalk_cm = Some(0);
         d.roads[0].clearance_cm = Some(340);

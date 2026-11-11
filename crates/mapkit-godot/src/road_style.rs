@@ -110,7 +110,7 @@ pub fn decorate(
                 r.id, bounds.min[0], bounds.min[1], surface
             );
             if !styles.contains_key(key.as_str()) {
-                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 };
+                let unmarked = mapkit_core::RoadMarkings { color: None, lanes: 1, center_line: false, edge_lines: false, crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 , median_width_cm: 0, forward_lanes: 0};
                 let m = r.markings.as_ref().unwrap_or(&unmarked);
                 let mut paths = PackedVector4Array::new();
                 let mut metrics = PackedVector4Array::new();
@@ -177,6 +177,7 @@ pub fn decorate(
                     "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64,
                     "stop_start"=>turns(&r.from, false),"stop_end"=>turns(&r.to, true),"one_way"=>m.one_way as i64,"left_hand"=>left_hand,
                     "lane_width"=>m.lane_width_cm as f64 / 100.0,
+                    "median_width"=>m.median_width_cm as f64 / 100.0, "forward_lanes"=>m.forward_lanes as i64,
                     // Concrete carriageways keep cast slabs; kerbed marked roads draw a gutter.
                     "slabs"=>surface == 1,"curbed"=>r.markings.is_some() && d.sidewalk_width_cm(r) > 0};
                 if let Some(tint)=tint { style.set("base_color",tint); }
@@ -427,7 +428,7 @@ mod tests {
         let mut road = d.roads[0].clone();
         road.id = "r".into();
         road.markings = Some(mapkit_core::RoadMarkings { color: None, lanes: 2, center_line: true, edge_lines: false,
-            crosswalk_start: true, crosswalk_end: false, one_way: 0, stop_lines: true, lane_width_cm: 0 });
+            crosswalk_start: true, crosswalk_end: false, one_way: 0, stop_lines: true, lane_width_cm: 0 , median_width_cm: 0, forward_lanes: 0});
         let roads = std::collections::BTreeMap::from([("r", &road)]);
         let mut paint = RoadPaint::default();
         paint.paths.insert("r".into(), vec![RoadPaintSegment { a: [0, 0, 0], b: [2000, 0, 0], width_cm: 600.0,

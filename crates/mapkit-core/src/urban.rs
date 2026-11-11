@@ -51,10 +51,12 @@ pub(crate) fn validate(d: &MapDocument) -> Result<()> {
         if road
             .markings
             .as_ref()
-            .is_some_and(|m| !(1..=8).contains(&m.lanes) || !(-1..=1).contains(&m.one_way)
-                || !(m.lane_width_cm == 0 || (50..=1000).contains(&m.lane_width_cm)))
+            .is_some_and(|m| !(1..=16).contains(&m.lanes) || !(-1..=1).contains(&m.one_way)
+                || (m.forward_lanes > 0 && (m.one_way != 0 || m.forward_lanes >= m.lanes))
+                || (m.median_width_cm > 0 && (m.one_way != 0 || m.lane_width_cm == 0))
+                || !(m.lane_width_cm == 0 || (1..=1000).contains(&m.lane_width_cm)))
         {
-            return Err(error("E_GEOMETRY", "road markings require 1..8 lanes, one_way -1..1 and a lane width of 0 or 50..1000 cm"));
+            return Err(error("E_GEOMETRY", "road markings require 1..16 lanes, one_way -1..1, lane width 0 or 1..1000 cm; a directional split needs two-way lanes on both sides, and a median needs two-way explicit lane width"));
         }
     }
     paint_disjoint(d, &mut 0)

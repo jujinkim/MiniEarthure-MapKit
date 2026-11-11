@@ -90,6 +90,11 @@ func run() -> void:
 		print("road_marking_validator: FAIL (headless)")
 		quit(1)
 		return
+	root.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
+	root.content_scale_size = Vector2i.ZERO
+	root.msaa_3d = Viewport.MSAA_DISABLED
+	root.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED
+	root.use_taa = false
 	root.size = Vector2i(W,H)
 	var scene := Node3D.new(); root.add_child(scene)
 	var world := WorldEnvironment.new(); world.environment = Environment.new()
@@ -111,7 +116,7 @@ func run() -> void:
 	base_parameters = {"marked":true,"road_paths":paths,"road_metrics":metrics,"road_borders":borders,
 		"path_count":1,"edge_count":0,"lanes":4,"lane_width":1.2,"center_line":true,"edge_lines":false,
 		"crosswalk_start":true,"crosswalk_end":true,"stop_start":8|1|2,"stop_end":8|2|4,"one_way":0,
-		"left_hand":false,"surface_effect_distance":0.001,"detail_quality":0}
+		"forward_lanes":0,"median_width":0.0,"left_hand":false,"surface_effect_distance":0.001,"detail_quality":0}
 	use({})
 	var mesh := MeshInstance3D.new(); var plane := PlaneMesh.new(); plane.size = Vector2(60,12)
 	mesh.mesh = plane; mesh.material_override = material; mesh.position = Vector3(CENTER_X,0,0)
@@ -169,6 +174,20 @@ func run() -> void:
 	await capture("two-lane-edged")
 	two_lane_checks(false)
 	ppm = PPM; camera.size = H/PPM
+	# Five 1 m lanes, three forward and two backward, separated by a 1 m median.
+	# The split is z=-0.5; the median spans -1..0 and never carries paint.
+	use({"road_metrics":PackedVector4Array([Vector4(6.4,0,2.4,50)]), "lanes":5, "forward_lanes":3,
+		"lane_width":1.0, "median_width":1.0, "crosswalk_start":false, "crosswalk_end":false})
+	await capture("asymmetric-median")
+	check(fraction(Vector2(10,-0.5),Vector2(40,-0.5)) < 0.01, "median excludes all lane paint")
+	check(fraction(Vector2(49.385,0.2),Vector2(49.385,2.9)) > 0.95, "three forward lanes end at their stop line")
+	check(fraction(Vector2(0.615,-2.9),Vector2(0.615,-1.2)) > 0.95, "two backward lanes end at their stop line")
+	check(fraction(Vector2(10,1.0),Vector2(40,1.0)) > 0.3 and fraction(Vector2(10,2.0),Vector2(40,2.0)) > 0.3, "both forward dividers keep source lane space")
+	# The full supported lane count renders its outer dividers.
+	use({"road_metrics":PackedVector4Array([Vector4(8.4,0,2.4,50)]), "lanes":16, "lane_width":0.5,
+		"crosswalk_start":false, "crosswalk_end":false, "stop_start":0, "stop_end":0})
+	await capture("sixteen-lanes")
+	check(fraction(Vector2(10,3.5),Vector2(40,3.5)) > 0.3, "sixteenth-lane divider is rendered")
 	await detail_checks(camera)
 	scene.queue_free(); await process_frame; await process_frame
 	print("road_marking_validator: ","FAIL" if failed else "PASS")

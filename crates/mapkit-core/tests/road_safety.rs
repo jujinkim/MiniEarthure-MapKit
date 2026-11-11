@@ -39,7 +39,7 @@ fn source(kind: RoadKind, points: Vec<Vertex>) -> MapDocument {
             crosswalk_end: false,
             one_way: 0,
             stop_lines: false,
-            lane_width_cm: 0,
+            lane_width_cm: 0, median_width_cm: 0, forward_lanes: 0,
         }),
     };
     d

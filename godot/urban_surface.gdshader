@@ -17,6 +17,8 @@ uniform int lanes = 2;
 // Painted lane width in metres; 0 shares the road width between the lanes.
 // With it, lanes stay centred, edge lines bound them and the rest is shoulder.
 uniform float lane_width = 0.0;
+uniform float median_width = 0.0;
+uniform int forward_lanes = 0;
 uniform bool center_line = true;
 uniform bool edge_lines = true;
 uniform bool crosswalk_start = false;
@@ -441,8 +443,17 @@ void fragment() {
         if(curbed && body) color=gutter(color,half_width-abs(across),station,fa,fs,effect_weight);
         float white=0.0;
         float yellow=0.0;
-        float lane_half=lane_width>0.0 ? min(half_width,0.5*lane_width*float(max(lanes,1))) : half_width;
-        bool shoulder=lane_width>0.0 && lane_half<half_width-0.12;
+        float median=one_way==0 ? min(median_width,max(0.0,2.0*half_width-0.02)) : 0.0;
+        float lane_half=lane_width>0.0 ? min(half_width-0.5*median,0.5*lane_width*float(max(lanes,1))) : half_width;
+        int forwards=forward_lanes>0 ? forward_lanes : max(lanes/2,1);
+        int left_count=left_hand ? forwards : lanes-forwards;
+        float centre_x=one_way==0 && forward_lanes>0 ? -lane_half+2.0*lane_half*float(left_count)/float(max(lanes,1)) : 0.0;
+        float median_mask=median>0.0 ? 1.0-box_cover(across,centre_x-0.5*median,centre_x+0.5*median,fa) : 1.0;
+        // Remove the unpainted centre band from lane coordinates only. Gutter and
+        // physical road edges above keep their original coordinates.
+        float physical_across=across;
+        across-=sign(across-centre_x)*0.5*median;
+        bool shoulder=lane_width>0.0 && lane_half+0.5*median<half_width-0.12;
         if(edge_lines && !shoulder) {
             for(int i=0;i<128;i++) {
                 if(i>=edge_count) break;
@@ -459,12 +470,7 @@ void fragment() {
         if(body) {
             // Inbound half in the driver's frame r=h*across (right +); h is -1 at
             // the start, +1 at the end. One-way roads stop only at the travel end.
-            float r0=one_way!=0 || left_hand ? -lane_half : 0.0;
-            float r1=one_way!=0 || !left_hand ? lane_half : 0.0;
-            int count=one_way!=0 ? lanes : max(lanes/2,1);
-            float lane_span=(r1-r0)/float(count);
-            float stop_lo=r0+(one_way==0 && left_hand==false ? 0.1 : 0.03);
-            float stop_hi=r1-(one_way==0 && left_hand ? 0.1 : 0.03);
+
             // Arrows keep 4 cm clear of dividers, the double yellow and edge lines
             // (about 11 cm from a single yellow).
             float centre_clear=0.135;
@@ -482,6 +488,12 @@ void fragment() {
             bool stopped[2];
             for(int s=0;s<2;s++) {
                 float h=s==0 ? -1.0 : 1.0;
+                float r0=one_way!=0 || left_hand ? -lane_half : h*centre_x;
+                float r1=one_way!=0 || !left_hand ? lane_half : h*centre_x;
+                int count=one_way!=0 ? lanes : (forward_lanes>0 ? (s==1 ? forwards : lanes-forwards) : max(lanes/2,1));
+                float lane_span=(r1-r0)/float(max(count,1));
+                float stop_lo=r0+(one_way==0 && !left_hand ? 0.1 : 0.03);
+                float stop_hi=r1-(one_way==0 && left_hand ? 0.1 : 0.03);
                 float d=s==0 ? station : total-station;
                 bool crossed=crossed_end[s];
                 int mask=s==0 ? stop_start : stop_end;
@@ -501,12 +513,17 @@ void fragment() {
                     const float BAR=0.167;
                     float zone=box_cover(d,0.3,1.7,fs);
                     float limit=floor((half_width-0.2-0.5*BAR)/PITCH)*PITCH+0.5*BAR;
-                    float b=stripes(across/PITCH+0.5*BAR/PITCH,BAR/PITCH,fa/PITCH)*box_cover(across,-limit,limit,fa);
-                    float index=floor(across/PITCH+0.5);
+                    // Integrate the finite stripe train over the clipped footprint;
+                    // multiplying two filtered masks darkens the outer bar.
+                    float lo=max(physical_across-0.5*fa,-limit);
+                    float hi=min(physical_across+0.5*fa,limit);
+                    float span=max(0.0,hi-lo);
+                    float b=span/fa*stripes((0.5*(lo+hi)+0.5*BAR)/PITCH,BAR/PITCH,span/PITCH);
+                    float index=floor(physical_across/PITCH+0.5);
                     // Per-bar wear; chipped ends and edges; grime in the gaps.
                     b*=mix(1.0,0.82+0.18*urban_hash(vec2(index,total*0.37+float(s)*5.0)),effect_weight);
                     if(detail_quality>0 && fine_fade>0.0) {
-                        float inside=min(0.5*BAR-abs(across-index*PITCH),min(d-0.3,1.7-d));
+                        float inside=min(0.5*BAR-abs(physical_across-index*PITCH),min(d-0.3,1.7-d));
                         float chip=(1.0-smoothstep(0.0,0.04,inside))*smoothstep(0.58,0.74,value_noise(p*34.0+vec2(index*3.1,0.0)));
                         b*=1.0-chip*fine_fade*effect_weight;
                         color*=1.0-0.09*zone*(1.0-b)*(0.4+0.6*value_noise(p*9.0))*close;
@@ -529,8 +546,8 @@ void fragment() {
                             // Clear widths beside the lane centre: a lane's outer side
                             // meets the centre line (r 0; double or single yellow)
                             // or the edge line.
-                            float left_limit=k>0 ? r0+float(k)*lane_span+0.07 : (abs(r0)<0.001 ? centre_clear : -outer_clear);
-                            float right_limit=k<count-1 ? r0+float(k+1)*lane_span-0.07 : (abs(r1)<0.001 ? -centre_clear : outer_clear);
+                            float left_limit=k>0 ? r0+float(k)*lane_span+0.07 : (one_way==0 && abs(r0-h*centre_x)<0.001 ? r0+centre_clear : -outer_clear);
+                            float right_limit=k<count-1 ? r0+float(k+1)*lane_span-0.07 : (one_way==0 && abs(r1-h*centre_x)<0.001 ? r1-centre_clear : outer_clear);
                             float room_l=centre-left_limit;
                             float room_r=right_limit-centre;
                             // Arrows 0.5 m behind the stop line, repeated 7.5 m back on
@@ -557,28 +574,29 @@ void fragment() {
             const float DUTY=0.375;
             bool single_yellow=lanes==2 && !edge_lines;
             float dash=stripes(station/max(period,0.001)+0.5*DUTY,DUTY,fs/max(period,0.001));
-            for(int lane=1;lane<8;lane++) {
+            for(int lane=1;lane<16;lane++) {
                 if(lane>=lanes) break;
                 float x=-lane_half+2.0*lane_half*float(lane)/float(lanes);
-                if(center_line && lane*2==lanes) {
-                    float centre_paint=single_yellow ? box_cover(across,-0.025,0.025,fa) : box_cover(across,0.045,0.095,fa)+box_cover(across,-0.095,-0.045,fa);
+                if(center_line && (forward_lanes>0 ? lane==left_count : lane*2==lanes)) {
+                    float centre_paint=single_yellow ? box_cover(across-centre_x,-0.025,0.025,fa) : box_cover(across-centre_x,0.045,0.095,fa)+box_cover(across-centre_x,-0.095,-0.045,fa);
                     yellow=max(yellow,centre_paint*keep);
                 } else {
                     float pattern=dash;
                     for(int s=0;s<2;s++) {
                         float h=s==0 ? -1.0 : 1.0;
-                        if(stopped[s] && h*x>r0+0.01 && h*x<r1-0.01) pattern=max(pattern,box_cover(to_end[s],stop_bar[s],stop_bar[s]+solid_length,fs));
+                        if(stopped[s] && (one_way!=0 || (left_hand ? h*(x-centre_x)<-0.01 : h*(x-centre_x)>0.01))) pattern=max(pattern,box_cover(to_end[s],stop_bar[s],stop_bar[s]+solid_length,fs));
                     }
                     white=max(white,box_cover(across,x-0.028,x+0.028,fa)*pattern*keep);
                 }
             }
             // Reflective studs on the centre, one per two dash periods.
-            if(center_line && lanes%2==0) {
+            if(center_line && (forward_lanes>0 || lanes%2==0)) {
                 float spacing=2.0*max(period,0.001);
-                stud=stripes(station/spacing+0.02/spacing,0.04/spacing,fs/spacing)*box_cover(across,-0.02,0.02,fa)*keep*(1.0-crossing);
+                stud=stripes(station/spacing+0.02/spacing,0.04/spacing,fs/spacing)*box_cover(across-centre_x,-0.02,0.02,fa)*keep*(1.0-crossing);
             }
             white=max(white*(1.0-crossing),bars);
             yellow*=1.0-crossing;
+            white*=median_mask; yellow*=median_mask; stud*=median_mask;
         }
         // Worn paint: uneven coverage, scuffed by wheel tracks; aggregate and
         // cracks of the asphalt show through.

@@ -214,7 +214,12 @@ earlier documents keep their bytes, world hashes and generated geometry.
   horizontal|vertical}`, absent = right/horizontal; display convention for road
   markings ([ROAD_SAFETY](../docs/ROAD_SAFETY.md)) and street furniture authoring.
   `RoadMarkings.one_way` (-1..1, 0 omitted), `stop_lines` (false omitted) and
-  `lane_width_cm` (0 omitted, else 50..1000) are display-only markings fields.
+  `lane_width_cm` (0 omitted, else 1..1000) are display-only markings fields.
+  `lanes` accepts 1..16. Optional `forward_lanes` (zero omitted) gives the lanes
+  following the road points on a two-way road, strictly less than `lanes`;
+  omission keeps the even split. Optional `median_width_cm` (zero omitted)
+  reserves an unpainted central band outside explicit lane space, for two-way
+  roads with nonzero `lane_width_cm`. These fields do not change collision.
 - City street furniture builtins (game scale, local +x over the road):
   `builtin:signal_h` (solid pole; display-only arm over the road with a horizontal
   head on its end) and `builtin:signal_v` (solid pole, vertical head) with

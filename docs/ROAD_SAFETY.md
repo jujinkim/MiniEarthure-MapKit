@@ -37,7 +37,12 @@ safety furniture, placement intersection and regional influence margin.
   `MapDocument.traffic.driving_side` picks the inbound half (absent = right). All of
   it is shader paint from the road style; geometry and hashes of cells are unchanged.
   Mark shapes and sizes: [ROAD_DESIGN](ROAD_DESIGN.md#road-paint).
-- `RoadMarkings.lane_width_cm` (optional, 0 omitted, else 50..1000 map cm) keeps
+- Source roads support 1..16 painted lanes. Optional `forward_lanes` preserves
+  an asymmetric two-way split relative to the road points and the traffic side.
+  Optional `median_width_cm` leaves the central median unpainted, outside lane
+  space; stop lines and arrows use each direction's own lane count. Omitted
+  values preserve the existing split and no-median appearance.
+- `RoadMarkings.lane_width_cm` (optional, 0 omitted, else 1..1000 map cm) keeps
   every painted lane that wide, centred on the road (clamped to its width). Lane
   dividers, the center line, stop lines, arrows and wheel-track wear stay inside
   that band; with more than 12 cm left per side the edge lines bound the band and

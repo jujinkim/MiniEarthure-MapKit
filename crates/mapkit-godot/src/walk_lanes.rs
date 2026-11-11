@@ -542,7 +542,7 @@ mod tests {
         a.id = "a".into();
         a.sidewalk_cm = Some(100);
         a.markings = Some(mapkit_core::RoadMarkings { color: None, lanes: 2, center_line: true, edge_lines: false,
-            crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 });
+            crosswalk_start: false, crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 , median_width_cm: 0, forward_lanes: 0});
         let mut b = a.clone();
         b.id = "b".into();
         b.markings.as_mut().unwrap().crosswalk_end = true;

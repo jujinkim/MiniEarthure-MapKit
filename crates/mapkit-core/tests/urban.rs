@@ -172,7 +172,7 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
             crosswalk_end: true,
             one_way: 0,
             stop_lines: false,
-            lane_width_cm: 0,
+            lane_width_cm: 0, median_width_cm: 0, forward_lanes: 0,
         });
         assert_eq!(
             generate_cell(&d, 0).hash().unwrap(),
@@ -180,13 +180,31 @@ fn continuous_sidewalk_has_support_at_bend_and_around_prop() {
             "markings never change collision"
         );
         d.roads[0].markings.as_mut().unwrap().lane_width_cm = 120;
-        assert!(d.validate().is_ok(), "a painted lane width of 50..1000 cm is accepted");
+        assert!(d.validate().is_ok(), "a painted lane width of 1..1000 cm is accepted");
         assert_eq!(generate_cell(&d, 0).hash().unwrap(), c.hash().unwrap(), "lane width is display only");
-        for invalid in [1, 49, 1001] {
+        for invalid in [1001, 65535] {
             d.roads[0].markings.as_mut().unwrap().lane_width_cm = invalid;
             assert!(d.validate().is_err(), "lane width {invalid} cm is refused");
         }
         d.roads[0].markings.as_mut().unwrap().lane_width_cm = 0;
+        d.roads[0].markings.as_mut().unwrap().lanes = 16;
+        d.roads[0].markings.as_mut().unwrap().lane_width_cm = 41;
+        assert!(d.validate().is_ok(), "source lanes are not truncated to road-class limits");
+        d.roads[0].markings.as_mut().unwrap().forward_lanes = 7;
+        d.roads[0].markings.as_mut().unwrap().median_width_cm = 200;
+        assert!(d.validate().is_ok());
+        assert_eq!(generate_cell(&d, 0).hash().unwrap(), c.hash().unwrap(), "directional lanes and median are display only");
+        let json = serde_json::to_value(&d).unwrap();
+        let roundtrip: MapDocument = serde_json::from_value(json).unwrap();
+        assert_eq!(roundtrip.roads[0].markings, d.roads[0].markings);
+        d.roads[0].markings.as_mut().unwrap().forward_lanes = 16;
+        assert!(d.validate().is_err(), "two-way needs lanes in both directions");
+        d.roads[0].markings.as_mut().unwrap().forward_lanes = 7;
+        d.roads[0].markings.as_mut().unwrap().one_way = 1;
+        assert!(d.validate().is_err(), "directional split requires two-way");
+        d.roads[0].markings.as_mut().unwrap().one_way = 0;
+        d.roads[0].markings.as_mut().unwrap().lanes = 17;
+        assert!(d.validate().is_err());
         d.roads[0].markings.as_mut().unwrap().lanes = 0;
         assert!(d.validate().is_err());
     }

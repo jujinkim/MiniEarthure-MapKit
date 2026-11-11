@@ -2533,8 +2533,14 @@
         "edge_lines": {
           "type": "boolean"
         },
+        "forward_lanes": {
+          "description": "Lanes following the road points on a two-way road; omitted splits evenly.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
         "lane_width_cm": {
-          "description": "Painted lane width in map centimetres, 0 (omitted) or 50..1000: the lanes keep this width centred on the road, edge lines bound them and the rest of the width is shoulder. Omitted, lanes share the road width. Display only.",
+          "description": "Painted lane width in map centimetres, 0 (omitted) or 1..1000: the lanes keep this width centred on the road, edge lines bound them and the rest of the width is shoulder. Omitted, lanes share the road width. Display only.",
           "type": "integer",
           "format": "uint16",
           "maximum": 1000.0,
@@ -2543,6 +2549,12 @@
         "lanes": {
           "type": "integer",
           "format": "uint8",
+          "minimum": 0.0
+        },
+        "median_width_cm": {
+          "description": "Unpainted median width, separate from lane space; omitted means no median.",
+          "type": "integer",
+          "format": "uint16",
           "minimum": 0.0
         },
         "one_way": {

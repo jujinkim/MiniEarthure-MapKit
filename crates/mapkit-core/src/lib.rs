@@ -174,13 +174,20 @@ pub struct RoadMarkings {
     /// least three arms (omitted when false). Display only.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub stop_lines: bool,
-    /// Painted lane width in map centimetres, 0 (omitted) or 50..1000: the lanes
+    /// Painted lane width in map centimetres, 0 (omitted) or 1..1000: the lanes
     /// keep this width centred on the road, edge lines bound them and the rest
     /// of the width is shoulder. Omitted, lanes share the road width. Display only.
     #[serde(default, skip_serializing_if = "is_zero_u16")]
     #[schemars(range(max = 1000))]
     pub lane_width_cm: u16,
+    /// Unpainted median width, separate from lane space; omitted means no median.
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub median_width_cm: u16,
+    /// Lanes following the road points on a two-way road; omitted splits evenly.
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub forward_lanes: u8,
 }
+fn is_zero_u8(value: &u8) -> bool { *value == 0 }
 fn is_zero_i8(value: &i8) -> bool { *value == 0 }
 fn is_zero_u16(value: &u16) -> bool { *value == 0 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]

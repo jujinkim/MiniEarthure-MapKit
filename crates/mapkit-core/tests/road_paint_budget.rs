@@ -7,7 +7,7 @@ fn marked(id: &str, points: Vec<Vertex>) -> Road {
         points, widths_cm: vec![400; n], surfaces: vec![Surface::Asphalt; n], kind: RoadKind::Bridge,
         clearance_cm: None, sidewalk_cm: Some(80),
         markings: Some(RoadMarkings { color: None, lanes: 2, center_line: true, edge_lines: true, crosswalk_start: false,
-            crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 }) }
+            crosswalk_end: false, one_way: 0, stop_lines: false, lane_width_cm: 0 , median_width_cm: 0, forward_lanes: 0}) }
 }
 fn document(roads: Vec<Road>) -> MapDocument {
     let mut d: MapDocument =
