@@ -216,6 +216,24 @@ pub fn unbuildable_junctions(d: &MapDocument) -> Result<Vec<String>> {
 mod index_tests {
     use super::*;
 
+    #[test]
+    fn rounded_structure_boundary_collapses_same_plan_different_height() {
+        let mut d = fixture(false);
+        d.roads[0].kind = RoadKind::Bridge;
+        let arm = Arm { road: &d.roads[0], index: 0, segment: 0, end: 0,
+            point_index: 0, point: [0, 0, 0], other: [1000, 0, 0] };
+        let corners = |points: Vec<Vertex>| points.into_iter()
+            .map(|p| Corner { p, owner: 0, round: false, seam: false }).collect::<Vec<_>>();
+        let ring = corners(vec![[0, 0, 0], [10, 10, 0], [10, 11, 0],
+            [20, 20, 0], [20, 20, 20], [0, 0, 20], [0, 1, 0]]);
+        let result = rounded_ring(&ring, &[arm.clone()]).unwrap();
+        assert_eq!(result.len(), 5);
+        assert_eq!(result[1].p, [10, 11, 0]);
+        assert!((0..result.len()).all(|i| xy(result[i].p) != xy(result[(i + 1) % result.len()].p)));
+        let crossing = corners(vec![[0, 0, 0], [20, 0, 20], [0, 0, 20], [20, 0, 0]]);
+        assert!(rounded_ring(&crossing, &[arm]).is_err());
+    }
+
     fn fixture(designed: bool) -> MapDocument {
         let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/roads/document.json")).unwrap();
         let template = d.roads[0].clone();
@@ -1351,13 +1369,16 @@ fn rounded_ring(corners: &[Corner], arms: &[Arm]) -> Result<Vec<Corner>> {
             vec![c.p]
         };
         for p in points {
-            if out.last().is_some_and(|last: &Corner| last.p == p) {
+            // Independently interpolated slopes can give one rounded plan
+            // coordinate two heights. The zero-plan-length edge is not a
+            // separate boundary; retain the outgoing corner and its owner.
+            if out.last().is_some_and(|last: &Corner| xy(last.p) == xy(p)) {
                 out.pop();
             }
             out.push(Corner { p, ..c.clone() });
         }
     }
-    if out.len() > 1 && out[0].p == out.last().unwrap().p {
+    if out.len() > 1 && xy(out[0].p) == xy(out.last().unwrap().p) {
         out.pop();
     }
     // Centimetre rounding can collapse a sub-centimetre tangent into A-B-A.

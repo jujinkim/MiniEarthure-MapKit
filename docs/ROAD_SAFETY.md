@@ -16,7 +16,9 @@ safety furniture, placement intersection and regional influence margin.
   strict ground-structure join check.
 - Exterior corner radius is 15% of width, clamped to 20–100 cm; tangents ≤45% of
   each neighbouring edge. `libm` arcs use ≤10° steps and 1 cm sagitta, then
-  centimetre rounding.
+  centimetre rounding. Consecutive corners that round to the same plan position
+  share the outgoing corner and owner, including when slope interpolation gives
+  their heights different rounded values.
 - Overlapping ground approaches use an integer winding union; quantization slivers
   collapse within their rounding band. Disconnected regions, holes, polygon
   self-intersections, unresolved mouths and same-level centerline self-crossings
