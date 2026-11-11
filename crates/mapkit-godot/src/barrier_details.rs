@@ -125,7 +125,7 @@ impl Line {
             blocks.push(cum[n - 1]);
         }
         blocks.sort_by(f64::total_cmp);
-        let bits = design::design(&b.id, b.kind, b.height_cm, denominator);
+        let bits = design::for_barrier(b, denominator);
         let bay_cm = design::bay_m(bits) * 100.0 / f64::from(design::denominator(bits));
         Self { cum, blocks, turn, closed, gentle_closure, bits, bay_cm }
     }

@@ -33,6 +33,7 @@ func _initialize() -> void: run.call_deferred()
 func run() -> void:
 	meshes()
 	await renderer()
+	await rendered_palette()
 	QUALITY.current = {}
 	print("vegetation_scatter_validator: ", "FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
@@ -72,6 +73,9 @@ func meshes() -> void:
 			for variant in 3:
 				var a: ArrayMesh = first.result[kind][variant]
 				var b: ArrayMesh = second.result[kind][variant]
+				if part == "cards" and VEGETATION.REGIONAL.data.has(plant):
+					check(a.get_surface_count()==0 and b.get_surface_count()==0,"regional opaque crowns need no alpha cards")
+					continue
 				check(a.get_surface_count() == 1 and a.surface_get_arrays(0) == b.surface_get_arrays(0), "%s %d builds identically" % [kind, variant])
 				vertex_count += a.surface_get_array_len(0)
 				index_count += a.surface_get_array_index_len(0)
@@ -81,7 +85,11 @@ func meshes() -> void:
 	# and one mesh's build arrays stay inside SHARED_BYTES.
 	var mesh_bytes := 2 * (vertex_count * 56 + index_count * 4)
 	print("shared vegetation set: %d vertices, %d indices, %d B arrays of %d B" % [vertex_count, index_count, mesh_bytes, VEGETATION.SHARED_BYTES])
-	check(mesh_bytes + 2 * 350 * 1024 + 131072 <= VEGETATION.SHARED_BYTES, "the shared set's meshes and atlas fit its allowance: %d B" % mesh_bytes)
+	var templates := 0
+	for plant: Dictionary in VEGETATION.REGIONAL.data.values():
+		templates += 4096
+		for variant: Array in plant.variants: templates += variant.size()*512
+	check(mesh_bytes + 2 * 350 * 1024 + 131072 + templates <= VEGETATION.SHARED_BYTES, "the shared set's meshes, templates and atlas fit its allowance: %d B" % (mesh_bytes+templates))
 	# Every vertex at the largest scale plus its largest wind sway (high tier:
 	# SWAY_PEAK x TREE_SWAY x its weight, cards another FLUTTER) stays inside
 	# the placement footprint (street trees CITY_TREE_RADIUS 120 cm, zone trees
@@ -92,7 +100,9 @@ func meshes() -> void:
 		for variant in 3:
 			var points := PackedVector2Array() # (horizontal reach at scale 1, sway metres)
 			for part in VEGETATION.KINDS:
-				var arrays: Array = (first.result[plant + "_" + part][variant] as ArrayMesh).surface_get_arrays(0)
+				var mesh: ArrayMesh = first.result[plant+"_"+part][variant]
+				if mesh.get_surface_count()==0: continue
+				var arrays: Array = mesh.surface_get_arrays(0)
 				var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 				var marks: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
 				var weights: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
@@ -123,6 +133,16 @@ func meshes() -> void:
 			# Oval park crowns are narrower by design.
 			var least := 0.75 if set.plant == "wide" and variant == 1 else 0.85
 			check(reach <= radius / 100.0 + 0.001 and reach >= radius / 100.0 * least, "%s %d at %d cm reaches %.3f m with sway" % [set.plant, variant, radius, reach])
+	for style in ["conifer","palm","orchard","scrub","polar_scrub"]:
+		var tree: bool = style in ["conifer","palm","orchard"]
+		for radius in ([120,160,200] if tree else [42]):
+			var set := VEGETATION.regional_set("vegetation/"+style,tree,radius)
+			for variant in 3:
+				var reach: float = reach_at.call("%s_%d" % [set.plant,variant],float(set.factor)*set.span.y)
+				check(reach<=float(radius)/100.0,"regional crown and wind stay inside declared footprint: "+style)
+		var object := {"id":"regional-"+style,"asset_id":"builtin:city_tree" if tree else "builtin:shrub","position":[0,0,0],"quarter_turns":0}
+		var placed := RENDER.vegetation_placement(object,"",120,"vegetation/"+style)
+		check(placed.mesh == VEGETATION.regional_kind("vegetation/"+style,tree),"regional instance selects its source style")
 	# Wide crowns are barely squeezed (distinct widths) and keep square cards.
 	for variant in 3:
 		var shape: Dictionary = VEGETATION.crown("wide", variant)
@@ -147,11 +167,11 @@ func meshes() -> void:
 			check(far.surface_get_array_index_len(0) / 3 <= 120, "far %s %d is coarse" % [plant, variant])
 			var arrays: Array = body.surface_get_arrays(0)
 			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-			var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+			var colors: PackedFloat32Array = arrays[Mesh.ARRAY_CUSTOM0]
 			var marks: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
 			# The 14 cm collision box (half diagonal 0.099 m) stays inside the
 			# trunk up to 1.4 m at the set's smallest scale: every trunk ring
-			# (bark, COLOR.a 0) up to the first one above 1.4 m / that scale,
+			# (bark, CUSTOM0.a 0) up to the first one above 1.4 m / that scale,
 			# between which the tube is linear.
 			var smallest := VEGETATION.smallest_scale(plant)
 			var rings: Array = VEGETATION.trunk(plant)
@@ -163,7 +183,7 @@ func meshes() -> void:
 			check(top >= 1.4 / smallest, "%s trunk rings reach above the box at the smallest scale" % plant)
 			for i in vertices.size():
 				if marks[i].y > 0.0: underside = minf(underside, vertices[i].y)
-				if colors[i].a > 0.5 or vertices[i].y > top + 0.001 or vertices[i].y < 0.0: continue
+				if colors[i*4+3] > 0.5 or vertices[i].y > top + 0.001 or vertices[i].y < 0.0: continue
 				if not rings.any(func(ring): return absf(ring.x - vertices[i].y) < 0.0005): continue
 				narrowest = minf(narrowest, Vector2(vertices[i].x, vertices[i].z).length() * cos(PI / 8.0) * smallest)
 			check(narrowest >= 0.099, "%s trunk %d covers the collision box: %.3f m" % [plant, variant, narrowest])
@@ -171,7 +191,7 @@ func meshes() -> void:
 			# trunk axis lies under the hull.
 			var forks := 0
 			for i in vertices.size():
-				if colors[i].a < 0.5 and vertices[i].y < underside - 0.2 and Vector2(vertices[i].x, vertices[i].z).length() > 0.2: forks += 1
+				if colors[i*4+3] < 0.5 and vertices[i].y < underside - 0.2 and Vector2(vertices[i].x, vertices[i].z).length() > 0.2: forks += 1
 			check(forks >= 10, "%s %d shows branches under its crown: %d vertices" % [plant, variant, forks])
 			var aabb := body.get_aabb().merge(cards.get_aabb())
 			sizes.append("%s %d: %.2f m wide, %.2f m tall at scale 1, %d+%d triangles" % [plant, variant, 2.0 * widest["%s_%d" % [plant, variant]], aabb.end.y, triangles, card_triangles])
@@ -240,6 +260,8 @@ func renderer() -> void:
 				if kind == "tree":
 					trees[lod] += node.multimesh.instance_count
 					if lod == "body" and str(node.multimesh.mesh.resource_name).begins_with("mk_park_tree_"): wide += node.multimesh.instance_count
+				if RenderingServer.get_current_rendering_method() != "forward_plus" and lod in ["body","cards","far"]:
+					check((node.visibility_range_begin_margin if lod=="far" else node.visibility_range_end_margin)==0,"no fresh-cell hysteresis gap between canopy LODs")
 				check(node.get_meta("mapkit_decoration", false) and node.multimesh.use_custom_data, "vegetation nodes carry decoration ranges and instance data")
 				if lod in ["body", "cards"]:
 					check(node.visible == (lod == "body" or level > 0) and is_equal_approx(node.visibility_range_end, near), "near range per tier covers the whole group")
@@ -281,4 +303,33 @@ func renderer() -> void:
 	RENDER.cancel(job)
 	parent.queue_free()
 	denied.shutdown()
+	await process_frame
+
+## Exercise GPU attributes, including the Compatibility instance/mesh layout.
+func rendered_palette() -> void:
+	if DisplayServer.get_name() == "headless": return
+	var viewport := SubViewport.new();viewport.size=Vector2i(128,128);viewport.own_world_3d=true
+	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS;root.add_child(viewport)
+	var world := Node3D.new();viewport.add_child(world)
+	var environment := WorldEnvironment.new();environment.environment=Environment.new()
+	environment.environment.background_mode=Environment.BG_COLOR;environment.environment.background_color=Color.BLACK
+	environment.environment.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR;environment.environment.ambient_light_color=Color.WHITE;environment.environment.ambient_light_energy=1.0
+	world.add_child(environment)
+	var camera := Camera3D.new();world.add_child(camera);camera.projection=Camera3D.PROJECTION_ORTHOGONAL;camera.size=5
+	camera.position=Vector3(0,2,8);camera.look_at(Vector3(0,2,0));camera.current=true
+	var multi := MultiMesh.new();multi.transform_format=MultiMesh.TRANSFORM_3D;multi.use_custom_data=true
+	multi.mesh=VEGETATION.shared().tree_far[0];multi.instance_count=1;multi.set_instance_transform(0,Transform3D.IDENTITY)
+	multi.set_instance_custom_data(0,Color(0.08,0.4,0.03,1.0))
+	var node := MultiMeshInstance3D.new();node.multimesh=multi;world.add_child(node)
+	for frame in 3: await process_frame
+	await RenderingServer.frame_post_draw
+	var rendered := viewport.get_texture().get_image()
+	var green := 0;var red := 0
+	for y in 80:
+		for x in 128:
+			var pixel := rendered.get_pixel(x,y)
+			if pixel.g>0.05 and pixel.g>pixel.r*1.5 and pixel.g>pixel.b*1.5: green+=1
+			if pixel.r>0.05 and pixel.r>pixel.g*1.5: red+=1
+	check(green>100 and red<green/10,"rendered foliage retains its green instance tint: green=%d red=%d" % [green,red])
+	viewport.queue_free()
 	await process_frame

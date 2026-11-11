@@ -224,7 +224,10 @@ func instance_quality() -> void:
 			for part: Dictionary in group.groups:
 				var multi: MultiMesh=part.multi
 				check(multi.get_instance_transform(index).is_equal_approx(pose*part.transform),"every part retains nested reflection and placement transform")
-				check(multi.get_instance_color(index)==Color.WHITE and multi.get_instance_custom_data(index).is_equal_approx(Color(expected_seed,0,0,1)),"all parts retain the map/object seed and white tint")
+				# Compatibility stores custom channels as half floats; preserve the seed within one quantization step.
+				var custom := multi.get_instance_custom_data(index)
+				var seed_tolerance := 0.0005 if RenderingServer.get_current_rendering_method() == "gl_compatibility" else 0.000001
+				check(multi.get_instance_color(index)==Color.WHITE and absf(custom.r-expected_seed)<=seed_tolerance and custom.g==0.0 and custom.b==0.0 and custom.a==1.0,"all parts retain the map/object seed and white tint")
 				check(multi.visible_instance_count==index+1,"each part publishes the same populated count")
 				if not part.node.get_meta("mapkit_decoration"):
 					var occluder: OccluderInstance3D=part.node.get_child(index)

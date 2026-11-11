@@ -81,7 +81,7 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
     let styles = {
         p.document
             .estimate(cell, 500_000)
-            .map_or(0, |c| c.triangles * 256)
+            .map_or(0, |c| c.triangles * 768)
             + mapkit_core::road_style_bound(&p.document, cell)? * 16384
     };
     // The night light map of the cell's streetlights (lamp_map.rs), when any
@@ -90,6 +90,7 @@ pub fn cost(p: &Package, cell: Cell, cache: &mut Cache) -> Result<u64> {
     let (min, size) = crate::lamp_map::square(&p.document, &bounds);
     let lamps = if crate::lamp_map::lights(cache.lamps(p), min, size) { crate::lamp_map::map_bytes(&p.document) } else { 0 };
     Ok(environment_cost(&p.document)
+        + mapkit_core::regional_display::presentation_bound(&p.document,cell)?
         + styles
         + lamps
         + instances
@@ -117,6 +118,7 @@ pub fn decorate(p: &Package, data: VarDictionary, cache: &mut Cache) -> Result<V
     let assets = presentation.get("assets").unwrap().to::<VarDictionary>();
     let objects = chunk.get("objects").unwrap().to::<Array<VarDictionary>>();
     let mut bytes = environment_cost(&p.document)
+        + crate::appearance::bytes(&presentation)
         + presentation
             .get("road_materials")
             .unwrap()
@@ -317,6 +319,7 @@ fn decorate_inner(
     let mut presentation =
         vdict! {"assets"=>&assets,"hidden_proxies"=>&hidden,"proxy_materials"=>&materials};
     crate::road_style::decorate(document, &chunk, &mut presentation)?;
+    crate::appearance::decorate(document, &chunk, &mut presentation)?;
     if let Some(environment) = &document.environment {
         presentation.set(
             "environment_json",
@@ -340,7 +343,7 @@ fn decorate_inner(
     if let Some(geometry) = chunk.get("geometry").and_then(|v| v.try_to::<Gd<crate::packed::MapKitPackedGeometry>>().ok()) {
         let scale = mapkit_core::WORLD_SCALE as f32 / 100.0;
         let rect = [bounds.min[0] as f32 * scale, -bounds.max[1] as f32 * scale, bounds.max[0] as f32 * scale, -bounds.min[1] as f32 * scale];
-        let placed = geometry.bind().facade_fixtures(facade_floor_cm(document) as f32 * scale, rect);
+        let placed = geometry.bind().facade_fixtures(facade_floor_cm(document) as f32 * scale, rect, document);
         presentation.set("facade_fixtures", &PackedFloat32Array::from(placed.values.as_slice()));
         presentation.set("facade_fixtures_capped", placed.capped as i64);
         // Display-only city barrier detail (barrier_details.rs): runs and

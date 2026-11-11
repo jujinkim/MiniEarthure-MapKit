@@ -181,6 +181,15 @@ pub fn decorate(
                     // Concrete carriageways keep cast slabs; kerbed marked roads draw a gutter.
                     "slabs"=>surface == 1,"curbed"=>r.markings.is_some() && d.sidewalk_width_cm(r) > 0};
                 if let Some(tint)=tint { style.set("base_color",tint); }
+                if let Some(ground)=r.style_id.split('/').nth(2).and_then(|g|mapkit_core::appearance::catalog().ground.get(g)) {
+                    let c=ground.color;
+                    style.set("base_color",Color::from_rgb(c[0] as f32/255.,c[1] as f32/255.,c[2] as f32/255.));
+                    style.set("detail_kind",ground.detail.as_str());
+                    let name=r.style_id.split('/').nth(2).unwrap();
+                    style.set("appearance_mode",match name {"asphalt"=>1,"concrete"=>2,"pavers"=>3,"stone_paving"=>4,_=>5});
+                    style.set("paving",matches!(name,"concrete"|"pavers"|"stone_paving"));
+                    style.set("slabs",name=="concrete");
+                }
                 styles.set(key.as_str(),&style);
             }
         }

@@ -486,7 +486,7 @@ static func segment_sides(s: int, count: int, along_x: bool) -> int:
 ## Rounded box about `centre` with half size `half` and per-axis corner radii
 ## `round` on a subdivided cube (`counts` cells per axis); vertices pushed
 ## along their normals by up to `jitter` (a hash of the position, so shared
-## edges stay closed). Colour per vertex from `paint(point, normal)`; COLOR.a
+## edges stay closed). Colour per vertex from `paint(point, normal)`; CUSTOM0.a
 ## = `leaf`; sway weight from `sway_of(point)` when valid.
 static func rounded(b: VEG.Builder, centre: Vector3, half: Vector3, round: Vector3, counts: Vector3i, seed: int, jitter: float, leaf: float, paint: Callable, sway_of := Callable(), skip_bottom := true) -> void:
 	var core := (half - round).max(Vector3.ZERO)
@@ -1182,7 +1182,7 @@ static func rim(piece: String, style: int, materials: Dictionary) -> ArrayMesh:
 	return mesh
 
 ## Planting of a piece (see PLANTING_LEAVES): leaves tinted per instance
-## (COLOR.a 1, ambient occlusion in the vertex colour), flowers and liriope
+## (CUSTOM0.a 1, ambient occlusion in the vertex colour), flowers and liriope
 ## untinted.
 static func planting(piece: String, kind: int, materials: Dictionary) -> ArrayMesh:
 	var frame := bed_frame(piece)

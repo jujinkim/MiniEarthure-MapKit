@@ -32,6 +32,7 @@ uniform float surface_effect_distance = 96.0;
 // barrier_palette.json (sRGB): fence families x 4 slots, wall families x 4,
 // hedge tones; post or pier lattice per family; far opacities.
 uniform vec3 barrier_palette[40];
+uniform vec3 regional_palette[16];
 uniform float fence_bay[5];
 uniform float wall_bay[4];
 uniform float fence_far_opacity[5];
@@ -135,6 +136,8 @@ float barrier_noise3(vec3 p) {
 float barrier_bayer2(vec2 a) { a = floor(a); return fract(dot(a,vec2(0.5,a.y*0.75))); }
 float barrier_bayer4(vec2 a) { return barrier_bayer2(0.5*a)*0.25+barrier_bayer2(a)+1.0/32.0; }
 vec3 barrier_paint(uint bits) {
+    uint regional=(bits>>16u)&15u;
+    if(regional>0u) return regional_palette[int(regional-1u)];
     uint kind = bits&3u;
     uint family = (bits>>2u)&7u;
     uint slot = (bits>>5u)&7u;

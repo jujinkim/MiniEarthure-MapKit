@@ -307,7 +307,9 @@ impl Package {
     /// charged separately through the existing validated asset allowances.
     pub fn distant_triangle_bound(&self, cell: Cell) -> Result<u64> {
         let cost = self.document.estimate(cell, 500_000)?;
-        let mut maximum = 12;
+        let mut maximum = if self.document.zones.iter().any(|z| !z.style_id.is_empty()) {
+            mapkit_core::regional_plants::catalog().values().flat_map(|p|&p.variants).map(|v|v.len() as u64).max().unwrap_or(12).max(12)
+        } else {12};
         for asset in &self.document.assets {
             if !asset.path.ends_with(".glb") {
                 continue;
@@ -332,6 +334,7 @@ impl Package {
         Ok(cost
             .triangles
             .saturating_add(water)
+            .saturating_add(mapkit_core::regional_display::face_bound(&self.document,cell)?)
             .saturating_add(cost.objects.saturating_mul(maximum)))
     }
 
@@ -339,16 +342,17 @@ impl Package {
         checkpoint()?;
         let grid = self.generation_heightgrid(cell)?;
         let source = self.document.generate_distant_source(cell, grid.as_ref(), 500_000)?;
-        self.distant_from_parts(&source.triangles, &source.objects, &source.water_bodies)
+        self.distant_from_parts(cell, &source.triangles, &source.objects, &source.water_bodies)
     }
 
     pub fn distant_from_generated(&self, chunk: &GeneratedChunk) -> Result<DistantMesh> {
-        self.distant_from_parts(&chunk.triangles, &chunk.objects, &chunk.water_bodies)
+        self.distant_from_parts(chunk.cell, &chunk.triangles, &chunk.objects, &chunk.water_bodies)
     }
 
-    fn distant_from_parts(&self, triangles: &[Triangle], objects: &[GeneratedObject], water_bodies: &[WaterCell]) -> Result<DistantMesh> {
+    fn distant_from_parts(&self, cell:Cell, triangles: &[Triangle], objects: &[GeneratedObject], water_bodies: &[WaterCell]) -> Result<DistantMesh> {
         checkpoint()?;
         let mut result = DistantMesh::default();
+        let regional = mapkit_core::regional_display::generate(&self.document,cell)?;
         // Keep all small props contiguous: at most one additional display batch,
         // covered by the existing fixed display allowance, not one per object.
         let mut decorations = DistantMesh::default();
@@ -380,11 +384,12 @@ impl Package {
         }
         for (index, triangle) in triangles.iter().enumerate() {
             checkpoint()?;
-            if internal.get(index).copied().unwrap_or(false) || omitted.contains(triangle.object_id.as_str()) {
+            if regional.objects.contains(&triangle.object_id) || internal.get(index).copied().unwrap_or(false) || omitted.contains(triangle.object_id.as_str()) {
                 continue;
             }
             let building = buildings[index];
-            let color = if let Some(building) = building {
+            let style = mapkit_core::appearance::triangle_style(&self.document,&triangle.object_id,triangle.spawnable);
+            let color = if let Some(color) = (!style.starts_with("barrier/")).then(||mapkit_core::appearance::color(style,false)).flatten() { color } else if let Some(building) = building {
                 let [a, b, c] = triangle.vertices;
                 let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
                 let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
@@ -401,7 +406,7 @@ impl Package {
                 // paint, fences as the haze their far meshes settle to.
                 *barrier_colors.entry(i).or_insert_with(|| {
                     let b = &self.document.barriers[i];
-                    crate::barrier_design::distant_color(crate::barrier_design::design(&b.id, b.kind, b.height_cm, denominator))
+                    crate::barrier_design::distant_color(crate::barrier_design::for_barrier(b, denominator))
                 })
             } else {
                 match triangle.surface {
@@ -425,8 +430,20 @@ impl Package {
                 result.light_data.push(if building.is_some() {
                     [object_seed(&self.document.map_id, &triangle.object_id), 3.]
                 } else {
-                    [0., if matches!(triangle.surface, Surface::Grass | Surface::Dirt) { -1. } else { 0. }]
+                    let terrain = if let Some(ground) = style.strip_prefix("ground/").and_then(|name| mapkit_core::appearance::catalog().ground.get(name)) {
+                        if matches!(ground.detail.as_str(), "grass"|"earth"|"sand"|"rock"|"snow"|"ice") { -2. } else { 0. }
+                    } else if matches!(triangle.surface, Surface::Grass | Surface::Dirt) { -1. } else { 0. };
+                    [0., terrain]
                 });
+                result.decoration.push(0);
+            }
+        }
+        for face in regional.faces {
+            for i in [0,2,1] {
+                let p=face.vertices[i];
+                result.vertices.push([p[0] as f32*0.01,p[1] as f32*0.01,-p[2] as f32*0.01]);
+                result.colors.push(face.color);
+                result.light_data.push([face.seed,if face.key.starts_with("building/"){3.}else{0.}]);
                 result.decoration.push(0);
             }
         }
@@ -463,6 +480,15 @@ impl Package {
                     object.quarter_turns, object.yaw_offset_mdeg, 0.,
                 );
                 continue;
+            }
+            if matches!(object.asset_id.as_str(),"builtin:city_tree"|"builtin:shrub") {
+                let tree=object.asset_id=="builtin:city_tree";
+                let style=mapkit_core::regional_plants::zone_style(&self.document,&object.id);
+                if let Some(kind)=mapkit_core::regional_plants::kind(style,tree) {
+                    let radii=city_radii.get_or_insert_with(||mapkit_core::city_tree_zone_radii(&self.document));
+                    add_regional_plant(&mut result,object,kind,mapkit_core::city_tree_radius(radii,&object.id),tree);
+                    continue;
+                }
             }
             if object.asset_id == "builtin:city_tree" {
                 let radii = city_radii.get_or_insert_with(|| mapkit_core::city_tree_zone_radii(&self.document));
@@ -522,6 +548,21 @@ impl Package {
         result.decoration.append(&mut decorations.decoration);
         Ok(result)
     }
+}
+
+/// Identical templates, identity scale/yaw and fixed mean palette as vegetation_meshes.gd.
+fn add_regional_plant(out:&mut DistantMesh,o:&GeneratedObject,kind:&str,radius:i64,tree:bool) {
+    let pick=identity_unit(&o.id);
+    let variant=if tree {city_tree_variant(&o.id,o.position)}else{(pick*3.) as usize%3};
+    let scale=if tree {radius.clamp(120,200) as f32/120.*(0.85+0.30*(pick*7.).fract())}else{0.9+0.2*(pick*11.).fract()};
+    let yaw=std::f32::consts::TAU*(pick*if tree{13.}else{5.}).fract();
+    let (sin,cos)=(libm::sinf(yaw),libm::cosf(yaw));
+    let plant=&mapkit_core::regional_plants::catalog()[kind];
+    for face in &plant.variants[variant] {for p in face.vertices {
+        out.vertices.push([o.position[0] as f32*0.01+(cos*p[0]+sin*p[2])*scale,o.position[1] as f32*0.01+p[1]*scale,-o.position[2] as f32*0.01+(-sin*p[0]+cos*p[2])*scale]);
+        let c=if face.leaf{plant.color}else{[90,68,51]};
+        out.colors.push([c[0],c[1],c[2],255]);out.light_data.push([0.,0.]);out.decoration.push(u8::from(!tree));
+    }}
 }
 
 /// Shapes, size factor, scale span and trunk radii (foot, crown) of the city

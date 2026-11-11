@@ -72,19 +72,16 @@ const SHRUB_LEAVES := ["4d7a40", "5a7f3c", "3f6b43"]
 const BARK := "5a4433"
 ## The near hull sits at this share of the crown so cards stand outside it.
 const SHELL := 0.8
-## Memory allowance of one shared set (render_resource_cache): 8,292
-## vertices at <= 56 B and 21,108 indices at 4 B, counted in CPU arrays and GPU
-## buffers (1,097,568 B measured, vegetation_scatter_validator), the 256 px RGBA
-## leaf atlas with mipmaps as decoded image and texture (350 KiB each), and
-## 128 KiB for the two materials (the shaders are process-lifetime script
-## constants) and one mesh's build arrays.
-const SHARED_BYTES := 2 * 1024 * 1024
+## Shared reservation covers CPU/GPU mesh arrays, decoded/mipmapped leaf atlas,
+## original regional template data, materials and one mesh's build scratch.
+const SHARED_BYTES := 3 * 1024 * 1024
 const KINDS := ["body", "cards", "far"]
 ## MultiMesh floats per instance of the tree and shrub groups (chunk_renderer):
 ## 3x4 transform and the custom colour.
 const FLOATS := 16
 ## Mesh sets: narrow city trees, wide park trees, shrubs.
-const PLANTS := ["tree", "wide", "shrub"]
+const PLANTS := ["tree", "wide", "shrub", "conifer", "palm", "orchard", "scrub", "polar"]
+const REGIONAL := preload("./regional_plants.json")
 static var STEPS: PackedStringArray = _steps()
 static var _shared: Dictionary = {}
 static var _shared_job: Dictionary = {}
@@ -96,19 +93,19 @@ static func _steps() -> PackedStringArray:
 	for plant in PLANTS:
 		# Each variant's lobes and hulls (shape) and its cards and fit (crown)
 		# are steps of their own before its meshes.
-		for part in ["shape", "crown"] + KINDS:
+		for part in (KINDS if REGIONAL.data.has(plant) else ["shape", "crown"] + KINDS):
 			for variant in 3: result.append("%s_%s_%d" % [plant, part, variant])
 	return result
 
 class Builder:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
-	var colors := PackedColorArray()
+	var colors := PackedFloat32Array()
 	var uv := PackedVector2Array()
 	var uv2 := PackedVector2Array()
 	var indices := PackedInt32Array()
 	func add(point: Vector3, normal: Vector3, color: Color, texture: Vector2, weights: Vector2) -> int:
-		vertices.append(point); normals.append(normal); colors.append(color); uv.append(texture); uv2.append(weights)
+		vertices.append(point); normals.append(normal); colors.append_array([color.r,color.g,color.b,color.a]); uv.append(texture); uv2.append(weights)
 		return vertices.size() - 1
 	func triangle(a: int, b: int, c: int) -> void:
 		indices.append(a); indices.append(b); indices.append(c)
@@ -118,11 +115,11 @@ class Builder:
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = vertices
 		arrays[Mesh.ARRAY_NORMAL] = normals
-		arrays[Mesh.ARRAY_COLOR] = colors
+		arrays[Mesh.ARRAY_CUSTOM0] = colors
 		arrays[Mesh.ARRAY_TEX_UV] = uv
 		arrays[Mesh.ARRAY_TEX_UV2] = uv2
 		arrays[Mesh.ARRAY_INDEX] = indices
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 
 ## 32-bit integer hash (no floating point): identical on every platform.
@@ -624,6 +621,7 @@ static func smallest_scale(plant: String) -> float:
 	return TREE_SCALE.x if plant == "tree" else SHRUB_SCALE.x
 
 static func plant(kind: String, part: String, variant: int, materials: Dictionary) -> ArrayMesh:
+	if REGIONAL.data.has(kind): return regional_mesh(kind,part,variant,materials)
 	var data := crown(kind, variant)
 	var tree := kind != "shrub"
 	var wide := kind == "wide"
@@ -677,4 +675,34 @@ static func plant(kind: String, part: String, variant: int, materials: Dictionar
 	# `far` is the variant's last part (STEPS): its shape is not kept for the
 	# process lifetime (a later build recomputes it identically).
 	if part == "far": _crowns.erase("%s_%d" % [kind, variant])
+	return mesh
+
+## Fixed compact regional templates retain their silhouette on every quality tier.
+## The two-meter tree clearance remains physical; scrub templates serve shrub objects.
+static func regional_kind(style: String, tree: bool) -> String:
+	if tree and style.get_slice("/",1) in ["conifer","palm","orchard"]: return style.get_slice("/",1)
+	if not tree and style == "vegetation/scrub": return "scrub"
+	if not tree and style == "vegetation/polar_scrub": return "polar"
+	return ""
+static func regional_set(style: String, tree: bool, radius_cm: int) -> Dictionary:
+	var kind := regional_kind(style,tree)
+	if kind.is_empty(): return {}
+	return {"plant":kind,"factor":float(clampi(radius_cm,120,200))/120.0 if tree else 1.0,"span":TREE_SCALE if tree else SHRUB_SCALE}
+static func regional_mesh(kind: String, part: String, variant: int, materials: Dictionary) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	mesh.resource_name = "mk_regional_%s_%s_%d" % [kind,part,variant]
+	if part == "cards": return mesh
+	var builder := Builder.new()
+	var tree := kind in ["conifer","palm","orchard"]
+	for face: Dictionary in REGIONAL.data[kind].variants[variant]:
+		var points := PackedVector3Array()
+		for p: Array in face.vertices: points.append(Vector3(p[0],p[1],p[2]))
+		var normal := (points[2]-points[0]).cross(points[1]-points[0]).normalized()
+		var first := builder.vertices.size()
+		for point in points:
+			var color := Color(1,1,1,1) if face.leaf else linear(BARK)
+			color.a = 1.0 if face.leaf else 0.0
+			builder.add(point,normal,color,Vector2.ZERO,Vector2(clampf((point.y-1.5)/2.5,0.0,1.0)*0.4 if tree else 0.15,0))
+		builder.triangle(first,first+1,first+2)
+	builder.commit(mesh,materials.get("body"))
 	return mesh

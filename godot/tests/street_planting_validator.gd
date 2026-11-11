@@ -171,7 +171,7 @@ func beds(set: Dictionary) -> void:
 			if data.is_empty(): continue
 			var vertices: PackedVector3Array = data[Mesh.ARRAY_VERTEX]
 			var weights: PackedVector2Array = data[Mesh.ARRAY_TEX_UV2]
-			var colors: PackedColorArray = data[Mesh.ARRAY_COLOR]
+			var colors: PackedFloat32Array = data[Mesh.ARRAY_CUSTOM0]
 			var out := 0.0
 			var high := -INF
 			var lowest := INF
@@ -182,7 +182,7 @@ func beds(set: Dictionary) -> void:
 				out = maxf(out, maxf(absf(p.x) - size.x * 0.5, absf(p.z) - size.z * 0.5) + sway)
 				high = maxf(high, p.y)
 				lowest = minf(lowest, p.y)
-				var c := colors[i]
+				var c := Color(colors[i*4],colors[i*4+1],colors[i*4+2],colors[i*4+3])
 				if c.a < 0.5 and maxf(c.r, c.b) > c.g and maxf(c.r, maxf(c.g, c.b)) - minf(c.r, minf(c.g, c.b)) > 0.25 * maxf(c.r, maxf(c.g, c.b)): flowers += 1
 			check(out <= 0.03 and high <= float(STREET.PLANT_CAP[piece]) and lowest >= -0.021, "%s stays within its box + 3 cm (%.3f) and below %.2f m (%.3f)" % [name, out, STREET.PLANT_CAP[piece], high])
 			if name.contains("_rim_") or name.ends_with("_far"):

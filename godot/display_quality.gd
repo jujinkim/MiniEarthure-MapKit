@@ -103,6 +103,7 @@ static func apply_vegetation(node: GeometryInstance3D, value: Dictionary) -> voi
 	var near := float(value.get("vegetation_near",32.0)) * (0.6 if kind in ["shrub", "planter"] else 1.0) + GROUP_REACH
 	var shadows := int(value.get("vegetation_shadows",1)) if kind == "tree" else (1 if kind == "planter" and int(value.get("level",1)) >= 1 else 0)
 	var fade := range_fade(RenderingServer.get_current_rendering_method())
+	var margin := VEGETATION_MARGIN if fade != GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED else 0.0
 	var lod := str(node.get_meta("mapkit_vegetation_lod"))
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows >= (2 if lod == "cards" else 1) else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	match lod:
@@ -110,11 +111,11 @@ static func apply_vegetation(node: GeometryInstance3D, value: Dictionary) -> voi
 			node.visible = lod == "body" or bool(value.get("vegetation_cards",true))
 			node.visibility_range_begin = 0.0
 			node.visibility_range_end = near
-			node.visibility_range_end_margin = VEGETATION_MARGIN
+			node.visibility_range_end_margin = margin
 			node.visibility_range_fade_mode = fade
 		"far":
 			node.visibility_range_begin = near
-			node.visibility_range_begin_margin = VEGETATION_MARGIN
+			node.visibility_range_begin_margin = margin
 			node.visibility_range_fade_mode = fade
 			node.visibility_range_end = float(value.decoration_distance) if kind == "shrub" else 0.0
 			node.visibility_range_end_margin = 8.0 if kind == "shrub" else 0.0

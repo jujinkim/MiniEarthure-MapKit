@@ -25,10 +25,13 @@ uniform vec3 default_tint = vec3(0.105,0.185,0.075);
 // gap colour under the cards) grows back to the full crown around (0, UV.x, 0)
 // and takes the far hull's brightness.
 uniform bool cards_hidden = false;
+// Linear bark/AO and the leaf mask are explicit float attributes.
+varying vec4 plant_color;
 varying vec3 tint;
 varying vec3 world_position;
 
 void vertex() {
+    plant_color = CUSTOM0;
     // INSTANCE_CUSTOM: rgb leaf tint (linear), a = 1 + phase with phase in
     // [0,1). Zero = no data.
     bool has_custom = INSTANCE_CUSTOM.a >= 1.0;
@@ -60,8 +63,8 @@ void vertex() {
 }
 
 void fragment() {
-    vec3 albedo = COLOR.rgb;
-    float leaf = COLOR.a;
+    vec3 albedo = plant_color.rgb;
+    float leaf = plant_color.a;
     float yellowing = 0.0;
 #ifdef LEAF_CARDS
     vec4 texel = texture(leaf_atlas,UV);
@@ -115,6 +118,9 @@ void fragment() {
         float cover = weather.y*smoothstep(0.25,0.85,world_normal.y);
         albedo = mix(albedo,vec3(0.68,0.76,0.79),cover*0.85);
     }
+    // Instance tint and bark/AO are linear; Compatibility expects sRGB albedo,
+    // matching the native distant palette on the same renderer.
+    if(OUTPUT_IS_SRGB) albedo=mix(albedo*12.92,1.055*pow(max(albedo,vec3(0.0)),vec3(1.0/2.4))-0.055,step(vec3(0.0031308),albedo));
     ALBEDO = albedo;
     ROUGHNESS = roughness;
     SPECULAR = mix(0.3,0.18,leaf);

@@ -26,6 +26,7 @@ pub fn cell(text:&str,project:&Path,cell:Cell,max_triangles:i64)->Result<(MapDoc
     } else {None};
     // This is a disposable view. The source document and original PNGs stay intact.
     std::mem::swap(&mut d,&mut view);
+    d.normalize();
     let p=PreparedMap::new(d.clone())?;
     let cost=p.estimate(cell,max_triangles)?;
     mapkit_package::working::PREVIEW_WORK.check(cost.generation_scratch_bytes+cost.triangles*256,||error("E_BUDGET","preview cell work allowance"))?;

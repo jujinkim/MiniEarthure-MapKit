@@ -40,7 +40,14 @@ GLB/texture instance is produced. The traversal is iterative. Building material 
 asset lookup uses the prepared index. Authored silhouette bounds and small-prop
 classification are computed once per asset template within each conversion.
 
-Native buildings (every part) emit closed triangular prisms in the body and roof
+Classified buildings use the shared [regional display](REGIONAL_RENDERING.md)
+body, roof and module mesh with catalogue colours. Its face allowance joins the
+distant bound; source collision remains unchanged. Ground, surface paint and roads
+resolve the same optional appearance identities as the near renderer. Explicit
+natural cover carries role -2, retaining its mean palette at the local height
+origin and on slopes; unspecified terrain keeps role -1.
+
+Native buildings without an appearance ID (every part) emit closed triangular prisms in the body and roof
 colours of each solid's look (`facade_look`: the record's, or the solid's own for the
 key's `own_share`, keyed by the solid top as in the near packed seeds) and carry light role 3 (night-lit walls at average
 window emission, dark roofs) with the map/object seed; barrier faces take

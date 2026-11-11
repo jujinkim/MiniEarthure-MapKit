@@ -1,5 +1,7 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
 pub mod appearance;
+pub mod regional_display;
+pub mod regional_plants;
 pub mod water;
 pub mod poi;
 pub mod assembled_track;
@@ -911,10 +913,10 @@ impl MapDocument {
         }
         for z in &self.zones {
             let Some(tree) = &z.tree else { continue };
-            // City trees are the one builtin zone tree: its trunk stays inside
-            // any footprint of at least its radius.
-            if tree.asset_id == "builtin:city_tree" {
-                if !(placement::CITY_TREE_RADIUS..=200).contains(&i64::from(tree.radius_cm)) || tree.clearance_cm > 100_000 {
+            // Builtin regional trees and non-solid shrubs keep their declared visual footprint.
+            if matches!(tree.asset_id.as_str(),"builtin:city_tree"|"builtin:shrub") {
+                let minimum=if tree.asset_id=="builtin:shrub"{42}else{placement::CITY_TREE_RADIUS};
+                if !(minimum..=200).contains(&i64::from(tree.radius_cm)) || tree.clearance_cm > 100_000 {
                     return Err(error("E_ASSET", "invalid zone tree asset or footprint"));
                 }
                 continue;

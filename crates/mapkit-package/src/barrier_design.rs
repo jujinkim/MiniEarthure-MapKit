@@ -8,8 +8,8 @@ use mapkit_core::barrier::BarrierKind;
 
 /// Design bits: kind (0 hedge, 1 fence, 2 wall) in 0..2, family in 2..5,
 /// palette in 5..8, top style in 8..10, rail style in 10..12 and the map
-/// scale denominator D (1..15) in 12..16. Instances carry them in two
-/// 8-bit custom channels, exact on every renderer.
+/// scale denominator D (1..15) in 12..16; optional catalogue material in 16..20.
+/// Two integer custom channels preserve all bits exactly on every renderer.
 pub type Bits = u32;
 pub const KIND_HEDGE: u32 = 0;
 pub const KIND_FENCE: u32 = 1;
@@ -141,8 +141,23 @@ pub fn has_lattice(bits: Bits) -> bool {
 }
 /// Main paint or body colour (sRGB).
 pub fn color(bits: Bits) -> [u8; 3] {
+    if let Some((_,material))=mapkit_core::appearance::catalog().materials.iter().nth(((bits>>16)&15).wrapping_sub(1) as usize) { return material.color; }
     let entries = entries(kind(bits), family(bits));
     entries[(palette_index(bits) as usize).min(entries.len() - 1)]
+}
+/// Explicit regional type/material fixes the family; seeded choices only apply to unspecified styles.
+pub fn for_barrier(b:&mapkit_core::barrier::Barrier, denominator:u64)->Bits {
+    let fields:Vec<_>=b.style_id.split('/').collect();
+    if fields.len()!=3 {return design(&b.id,b.kind,b.height_cm,denominator);}
+    let material=fields[2];
+    let family=match b.kind {
+        BarrierKind::Fence=>if fields[1]=="rail"{PIPE_RAIL}else if material=="wood"{WOODEN}else{STEEL_BAR},
+        BarrierKind::Wall=>match material {"brick"=>BRICK,"stone"=>STONE,"concrete"=>PRECAST,_=>BLOCK},
+        BarrierKind::Hedge=>0,
+    };
+    let kind=match b.kind {BarrierKind::Fence=>KIND_FENCE,BarrierKind::Wall=>KIND_WALL,BarrierKind::Hedge=>KIND_HEDGE};
+    let slot=if kind==KIND_HEDGE{0}else{mapkit_core::appearance::catalog().materials.keys().position(|k|k==material).map_or(0,|i|i as u32+1)};
+    kind | family<<2 | (denominator.clamp(1,15) as u32)<<12 | slot<<16
 }
 /// Share of a fence's face its parts cover once its infill is unresolved
 /// (boards cover most of a wooden fence); walls and hedges are solid.

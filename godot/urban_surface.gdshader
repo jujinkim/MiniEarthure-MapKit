@@ -7,6 +7,7 @@ uniform float snow_retention_percent : hint_range(0.0,100.0) = 100.0;
 uniform bool environment_enabled = false;
 uniform sampler2D environment_data : filter_nearest, repeat_disable;
 uniform bool paving = false;
+uniform int appearance_mode = 0;
 uniform bool marked = false;
 uniform vec4 road_paths[128];
 uniform vec4 road_metrics[128];
@@ -333,7 +334,7 @@ void fragment() {
     float close=effect_weight*(1.0-smoothstep(6.0,24.0,view_distance));
     vec2 pave_slope=vec2(0.0);
     float pave_rough=0.9;
-    if(paving && !slabs) {
+    if(paving && !slabs && appearance_mode==0) {
         if(kind==1 || kind==2) {
             vec2 slope=vec2(0.0);
             // Palettes settle to the material's base colour (the distant mesh's
@@ -362,7 +363,7 @@ void fragment() {
     float rough_shift=0.0;
     float stone=0.0;
     float crack=0.0;
-    if(effect_weight>0.0) {
+    if(effect_weight>0.0 && appearance_mode<5) {
         float broad=value_noise(p*0.18)*0.6+value_noise(p*0.55+vec2(11.0,4.0))*0.4;
         float fine=value_noise(p*6.0);
         wear=value_noise(p*2.3+vec2(17.0,3.0));

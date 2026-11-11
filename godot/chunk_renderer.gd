@@ -1,6 +1,7 @@
 extends RefCounted
 ## Display only. Call advance() per admitted batch; the owner controls frame budgets.
 const ASSETS := preload("./asset_library.gd")
+const APPEARANCE := preload("./regional_appearance.gd")
 const DATA := preload("./chunk_data.gd")
 const COLORS := {"asphalt": Color("30343b"), "concrete": Color("b7b8b0"),
 	"dirt": Color("927456"), "gravel": Color("888477"), "grass": Color("738664")}
@@ -125,17 +126,23 @@ static func _street_detail(id: String, object: Dictionary, radius_cm := 0) -> No
 ## (and so its leaf colour family) is `city_tree_variant` (stands); a shrub's
 ## variant, and every scale, yaw and per-tree leaf hue/brightness jitter, follow
 ## the identity alone. Collision is the generated trunk box only.
-static func vegetation_placement(object: Dictionary, id := "", radius_cm := 0) -> Dictionary:
+static func vegetation_placement(object: Dictionary, id := "", radius_cm := 0, style := "") -> Dictionary:
 	var pick := _identity_unit(object.id)
 	var tree := (id if not id.is_empty() else str(object.get("asset_id", "builtin:city_tree"))) == "builtin:city_tree"
 	var variant := city_tree_variant(str(object.id), object.position) if tree else int(pick * 3.0) % 3
 	var set := VEGETATION.tree_set(radius_cm if radius_cm > 0 else 120) if tree else {"plant": "shrub", "factor": 1.0, "span": VEGETATION.SHRUB_SCALE}
+	var regional := VEGETATION.regional_set(style,tree,radius_cm if radius_cm > 0 else 120)
+	if not regional.is_empty(): set = regional
 	var span: Vector2 = set.span
 	var scale: float = float(set.factor) * (span.x + (span.y - span.x) * fmod(pick * (7.0 if tree else 11.0), 1.0))
 	var basis := Basis(Vector3.UP, TAU * fmod(pick * (13.0 if tree else 5.0), 1.0)).scaled(Vector3.ONE * scale)
 	var leaves: String = (VEGETATION.TREE_LEAVES if tree else VEGETATION.SHRUB_LEAVES)[variant]
+	var custom := VEGETATION.leaf_custom(leaves,pick)
+	if not regional.is_empty():
+		var rgb: Array = VEGETATION.REGIONAL.data[set.plant].color
+		custom = Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0).srgb_to_linear();custom.a = 1.0+fmod(pick*29.0,1.0)*0.999
 	return {"kind": "tree" if tree else "shrub", "mesh": set.plant, "variant": variant, "transform": Transform3D(basis, scene_position(object.position)),
-		"custom": VEGETATION.leaf_custom(leaves, pick)}
+		"custom": custom}
 
 ## Canopy variant of a city tree, integer-only so the distant proxy
 ## (mapkit-package distant.rs `city_tree_variant`) always matches: a tree whose
@@ -169,7 +176,7 @@ static func city_canopy_transform(object: Dictionary, radius_cm := 0) -> Diction
 ## MultiMeshes per group, attached one group per step after the object pass).
 static func _plan_vegetation(job: Dictionary, object: Dictionary) -> void:
 	var tree := str(object.get("asset_id", "")) == "builtin:city_tree"
-	var placement := vegetation_placement(object, "", city_tree_radius(job.get("chunk", {}), object) if tree else 0)
+	var placement := vegetation_placement(object, "", city_tree_radius(job.get("chunk", {}), object) if tree else 0,str(job.get("chunk",{}).get("presentation",{}).get("vegetation_styles",{}).get(str(object.id),"")))
 	var transform: Transform3D = placement.transform
 	var origin := transform.origin
 	var key := "%s/%d/%d,%d" % [placement.mesh, placement.variant, floori(origin.x / VEGETATION_GROUP_METRES), floori(origin.z / VEGETATION_GROUP_METRES)]
@@ -350,7 +357,7 @@ static func begin(chunk: Dictionary, parent: Node3D, reserve: Callable = Callabl
 				fail(job, "E_MEMORY_BUDGET", "Shared display resources exceed memory allowance: %s (%d bytes cached)" % [id,resources.bytes()])
 				return job
 			job.claims[id] = key
-		if not resources.begin_environment():
+		if not resources.require_environment_tiles(APPEARANCE.required_tiles(view)) or not resources.begin_environment():
 			fail(job, "E_MEMORY_BUDGET", "Shared material tiles exceed memory allowance")
 			return job
 		var lamp_assets := {}
@@ -511,6 +518,15 @@ static func _advance(job: Dictionary) -> bool:
 		track_resources(job, mesh)
 		job.root.add_child(mesh)
 		job.triangle = offset
+	elif not chunk.has("render_batches") and not job.get("regional_done",false):
+		if not job.has("regional_batches"): job.regional_batches = APPEARANCE.batches(presentation); job.regional_cursor = 0
+		if job.regional_cursor < job.regional_batches.size():
+			var saved: int = job.triangle
+			_prepared_batch(job,job.regional_batches[job.regional_cursor])
+			job.triangle = saved
+			job.regional_cursor += 1
+		else: job.regional_done = true; job.erase("regional_batches")
+		return false
 	elif int(job.water) < job.water_records.size():
 		job.last_phase = "water_upload"
 		var record: Dictionary = job.water_records[job.water]
@@ -816,6 +832,7 @@ static func dispose(job: Dictionary) -> void:
 	job.chunk = {}
 	job.erase("lamp_bindings")
 	job.erase("urban_shader")
+	job.erase("regional_batches")
 	for key in ["vegetation", "vegetation_plan", "grass", "grass_parts", "furniture", "furniture_plan", "signals", "signal_plan", "transit", "transit_plan", "road_signs", "road_sign_plan", "street_planting", "street_plan", "city_lamps", "city_lamp_plan", "lamp_texture", "fixtures", "fixture_plan", "barrier_set", "barrier_plan", "barrier_cursor", "barrier_low", "barrier_owners", "barriers_done", "barriers_failed", "hidden_objects"]: job.erase(key)
 	if job.get("lease") != null:
 		job.lease.seal()
@@ -827,6 +844,7 @@ static func fail(job: Dictionary, code: String, message: String) -> bool:
 	return true
 
 static func material_color(key: String) -> Color:
+	if not APPEARANCE.entry(key).is_empty(): return APPEARANCE.color(key)
 	if key.begins_with("builtin:"):
 		return {"builtin:tree": Color("745138"), "builtin:city_tree": Color("6b4c36"), "builtin:fence": Color("9b764f"), "builtin:streetlight": Color("555e63"),
 			"builtin:signal_h": Color("4a5055"), "builtin:signal_v": Color("4a5055"), "builtin:bus_shelter": Color("7aa0b8"),
@@ -845,6 +863,7 @@ static func material_color(key: String) -> Color:
 
 ## Generated building walls: 1 apartment, 2 house, 3 commercial, 4 industrial, 5 public; 0 none.
 static func facade_kind(key: String) -> int:
+	if key.begins_with("building/"): return APPEARANCE.facade_kind(key)
 	var fields := key.split(":")
 	if fields.size() != 2 or not BUILDING_BASE.has(fields[0]): return 0
 	match fields[1]:
@@ -868,6 +887,10 @@ static func bind_facade(material: Material, key: String, presentation: Dictionar
 	material.set_shader_parameter("facade_kind", kind)
 	material.set_shader_parameter("floor_pitch", float(presentation.get("facade_floor_cm", 300)) / 100.0)
 	material.set_shader_parameter("lighting_role", 1)
+	material.set_shader_parameter("signs_enabled", kind == 3)
+	if key.begins_with("building/"):
+		APPEARANCE.bind(material,key)
+		return
 	var palette := facade_palette(key)
 	material.set_shader_parameter("facade_body", palette.body)
 	material.set_shader_parameter("facade_roof", palette.roof)
@@ -966,7 +989,7 @@ static func attach(chunk: Dictionary, parent: Node3D) -> Node3D:
 	return job.root
 
 static func _leaf_material(job: Dictionary, defer_quality := false) -> Material:
-	var context: RefCounted = job.resources.environment_context() if job.get("resources") != null else null
+	var context: RefCounted = job.resources.material_context() if job.get("resources") != null else null
 	if context != null:
 		# Leaves keep the original source roughness, not the generated-face value.
 		# The shared shader already uses the wrapper's double-sided rendering.
@@ -980,9 +1003,11 @@ static func _leaf_material(job: Dictionary, defer_quality := false) -> Material:
 ## admitted call. Direct callers receive a complete material; reused bindings
 ## still receive unconditional node quality updates.
 static func _generated_material(job: Dictionary, key: String, presentation: Dictionary, defer_quality := false) -> Material:
-	var context: RefCounted = job.resources.environment_context() if job.get("resources") != null else null
+	var context: RefCounted = job.resources.material_context() if job.get("resources") != null else null
 	if context != null and not key.begins_with("rc:") and not _urban_surface(key,presentation):
 		var generated: ShaderMaterial = context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0,0.9,defer_quality)
+		if not APPEARANCE.entry(key).is_empty(): APPEARANCE.bind(generated,key)
+		generated.set_shader_parameter("regional_scale",300.0/float(presentation.get("facade_floor_cm",300)))
 		bind_facade(generated,key,presentation)
 		if facade_kind(key) == 3: context.bind_signs(generated)
 		return generated
@@ -999,7 +1024,7 @@ static func _generated_material(job: Dictionary, key: String, presentation: Dict
 	return bound
 
 static func _urban_surface(key: String, presentation: Dictionary) -> bool:
-	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete"])
+	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete","ground/asphalt","ground/concrete","ground/pavers","ground/stone_paving"])
 
 static func surface_material(key: String, presentation: Dictionary, shader: Shader) -> Material:
 	if key.begins_with("rc:"): return preload("./rc_venue.gd").material(key, int(presentation.track_seed))
@@ -1018,7 +1043,14 @@ static func surface_material(key: String, presentation: Dictionary, shader: Shad
 	material.set_shader_parameter("paving", concrete)
 	material.set_shader_parameter("marked", bool(style.get("marked", false)))
 	for name: String in style:
-		if name != "surface": material.set_shader_parameter(name, style[name])
+		if name not in ["surface","detail_kind"]: material.set_shader_parameter(name, style[name])
+	if style.has("detail_kind"): material.set_meta("regional_detail",style.detail_kind)
+	if key.begins_with("ground/"):
+		material.set_shader_parameter("base_color",APPEARANCE.color(key))
+		material.set_shader_parameter("appearance_mode",1 if key == "ground/asphalt" else 2)
+		material.set_shader_parameter("paving",key != "ground/asphalt")
+		material.set_shader_parameter("slabs",key == "ground/concrete")
+		material.set_meta("regional_detail",detail_kind(key))
 	return material
 
 static func _lamp_bindings(profile: Dictionary, assets: Dictionary) -> Dictionary:
@@ -1053,7 +1085,7 @@ static func _environment_lamp(job: Dictionary, id: String, placement: Transform3
 ## assets and imported wrappers keep their normal preparation and live updates.
 static func _environment_surface(job: Dictionary, material: Material, defer_quality := false) -> Material:
 	if job.get("resources") == null: return material
-	var context: RefCounted = job.resources.environment_context()
+	var context: RefCounted = job.resources.material_context()
 	if context == null: return material
 	if material is ShaderMaterial and material.shader == preload("./rc_surface.gdshader"):
 		material.set_shader_parameter("environment_enabled",true)
@@ -1063,7 +1095,7 @@ static func _environment_surface(job: Dictionary, material: Material, defer_qual
 	if material is ShaderMaterial and material.shader == job.get("urban_shader"):
 		material.set_shader_parameter("environment_enabled",true)
 		material.set_shader_parameter("environment_data",context.texture)
-		context.bind_detail(material,"concrete" if material.get_shader_parameter("paving") else "asphalt",not defer_quality)
+		context.bind_detail(material,str(material.get_meta("regional_detail","concrete" if material.get_shader_parameter("paving") else "asphalt")),not defer_quality)
 		return material
 	return context.surface_material(material,0)
 
@@ -1093,6 +1125,8 @@ static func _seed_fallback_materials(piece: MeshInstance3D, seed_value: float, l
 		piece.set_surface_override_material(index,copied[material])
 
 static func detail_kind(key: String) -> String:
+	var appearance := APPEARANCE.entry(key)
+	if not appearance.is_empty(): return str(appearance.detail)
 	return {"dirt":"earth","gravel":"stone","builtin:tree":"wood","builtin:city_tree":"wood","builtin:fence":"wood","builtin:streetlight":"metal","builtin:signal_h":"metal","builtin:signal_v":"metal","builtin:bus_shelter":"metal","builtin:subway_entrance":"metal","builtin:station_sign":"metal","builtin:guide_sign":"metal","safety:metal":"metal","barrier:hedge":"leaf","barrier:fence":"wood","barrier:wall":"stone","builtin:planter":"stone","builtin:planter_square":"stone","builtin:median_bed":"stone","builtin:median_bed_pine":"stone"}.get(key,"metal" if key.begins_with("builtin:sign_") or key.begins_with("builtin:city_streetlight") else ("wood" if key.begins_with("builtin:street_tree_") else key.get_slice(":",0)))
 
 static func occluding_surface(key: String) -> bool:

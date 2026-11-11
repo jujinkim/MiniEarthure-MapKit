@@ -457,6 +457,14 @@ static func material(context: RefCounted = null, mode := "opaque") -> ShaderMate
 				palette.append(Vector3(float(rgb[0]), float(rgb[1]), float(rgb[2])) / 255.0)
 	while palette.size() < 40: palette.append(palette[palette.size() - 1])
 	made.set_shader_parameter("barrier_palette", palette)
+	var names: Array = preload("./regional_catalog.json").data.materials.keys()
+	names.sort()
+	var regional := PackedVector3Array()
+	for name: String in names:
+		var rgb: Array = preload("./regional_catalog.json").data.materials[name].color
+		regional.append(Vector3(rgb[0],rgb[1],rgb[2])/255.)
+	while regional.size()<16: regional.append(Vector3.ONE)
+	made.set_shader_parameter("regional_palette",regional)
 	made.set_shader_parameter("fence_bay", PackedFloat32Array(table.bay_m.fence))
 	made.set_shader_parameter("wall_bay", PackedFloat32Array(table.bay_m.wall))
 	made.set_shader_parameter("fence_far_opacity", PackedFloat32Array(table.far_opacity))
@@ -610,7 +618,7 @@ static func plan_part(chunk: Dictionary, groups: Dictionary, first: int, last: i
 			var x := Vector3(list[i + 3], list[i + 4], list[i + 5])
 			var b := Basis(x, Vector3(0.0, list[i + 8], 0.0), Vector3(list[i + 6], 0.0, list[i + 7]))
 			var bits := int(list[i + 9])
-			var custom := Color(float(bits & 255), float((bits >> 8) & 255), list[i + 10], list[i + 11])
+			var custom := Color(float(bits & 255), float(bits >> 8), list[i + 10], list[i + 11])
 			var index := int(list[i + 12])
 			var id: String = names[index] if index >= 0 and index < names.size() else ""
 			var mid := origin + x * 0.5
@@ -639,7 +647,7 @@ static func plan_part(chunk: Dictionary, groups: Dictionary, first: int, last: i
 			var origin := Vector3(standing[i], standing[i + 1], standing[i + 2])
 			var b := Basis(Vector3(standing[i + 3], standing[i + 4], standing[i + 5]), Vector3(0.0, standing[i + 8], 0.0), Vector3(standing[i + 6], 0.0, standing[i + 7]))
 			var bits := int(standing[i + 9])
-			var custom := Color(float(bits & 255), float((bits >> 8) & 255), standing[i + 10], standing[i + 11])
+			var custom := Color(float(bits & 255), float(bits >> 8), standing[i + 10], standing[i + 11])
 			var index := int(standing[i + 12])
 			var id: String = names[index] if index >= 0 and index < names.size() else ""
 			# The square of the nearest run of the same barrier under the foot.

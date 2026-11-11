@@ -19,10 +19,12 @@ var materials: Dictionary = {}
 var shader: Shader
 var tile_size := 256
 var tile_cursor := 0
+var tile_kinds: Array = TILE_KINDS.duplicate()
 var tile_image: Image
 var load_failed := false
 
-func _init(size := 256, deferred_tiles := false) -> void:
+func _init(size := 256, deferred_tiles := false, requested: Array = TILE_KINDS) -> void:
+	tile_kinds = requested.duplicate()
 	tile_size = size
 	pixels = Image.create(2,1,false,Image.FORMAT_RGBAF)
 	pixels.set_pixel(0,0,Color(0,0,0.18,1))
@@ -34,13 +36,13 @@ func _init(size := 256, deferred_tiles := false) -> void:
 		while not prepare_tile(): pass
 
 func prepare_tile(lease: RefCounted = null) -> bool:
-	if tile_cursor >= TILE_KINDS.size() or load_failed: return true
-	var kind: String = TILE_KINDS[tile_cursor]
+	if tile_cursor >= tile_kinds.size() or load_failed: return true
+	var kind: String = tile_kinds[tile_cursor]
 	if tile_image == null:
 		# Facade layers stop at 256 px (display_quality.FACADE_TILE_MAX).
 		var facade := kind.begins_with("facade:")
 		var size := mini(tile_size,preload("./display_quality.gd").FACADE_TILE_MAX) if facade else tile_size
-		var path: String = get_script().resource_path.get_base_dir().path_join(("textures/facade/" if facade else "textures/racing/")+(str(size)+"/" if size != 256 else "")+kind.trim_prefix("facade:")+".png")
+		var path: String = get_script().resource_path.get_base_dir().path_join(("textures/facade/" if facade else "textures/regional/" if kind in ["sand","rock","tile","glass","pavers","snow","ice"] else "textures/racing/")+(str(size)+"/" if size != 256 else "")+kind.trim_prefix("facade:")+".png")
 		# Trusted engine import remapping also works in exports. Decode and GPU
 		# upload are separate admitted steps; never preload texture owners.
 		var tile := ResourceLoader.load(path,"Texture2D",ResourceLoader.CACHE_MODE_IGNORE) as Texture2D
@@ -52,7 +54,7 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 			_facade_missing = true
 			_facade_images.clear()
 			tile_cursor += 1
-			return tile_cursor >= TILE_KINDS.size()
+			return tile_cursor >= tile_kinds.size()
 		load_failed = tile_image == null or tile_image.is_empty()
 		if lease != null and tile_image != null: lease.track(tile_image)
 		return load_failed
@@ -68,13 +70,13 @@ func prepare_tile(lease: RefCounted = null) -> bool:
 				if lease != null: lease.track(facades)
 			_facade_images.clear()
 		tile_cursor += 1
-		return tile_cursor >= TILE_KINDS.size()
+		return tile_cursor >= tile_kinds.size()
 	var uploaded := ImageTexture.create_from_image(tile_image)
 	tiles[kind] = uploaded
 	if lease != null: lease.track(uploaded)
 	tile_image = null
 	tile_cursor += 1
-	return tile_cursor >= TILE_KINDS.size()
+	return tile_cursor >= tile_kinds.size()
 
 ## Environment pixels: (wet, snow, cloud cover, daylight) and (seconds, night,
 ## sun altitude, sunset seconds). Cloud cover and daylight drive the glass
@@ -155,7 +157,7 @@ func _finish_surface(result: ShaderMaterial, kind: String, defer_quality := fals
 	result.set_shader_parameter("vegetation",kind == "leaf")
 	if not defer_quality:
 		preload("./display_quality.gd").apply_material(result,preload("./display_quality.gd").active())
-	result.set_shader_parameter("terrain_surface",kind in ["grass","earth"])
+	result.set_shader_parameter("terrain_surface",kind in ["grass","earth","sand","rock","snow","ice"])
 	result.set_shader_parameter("lawn",kind == "grass")
 	if kind.begins_with("water_"):
 		result.set_shader_parameter("water_kind",1 if kind == "water_flow" else 2)

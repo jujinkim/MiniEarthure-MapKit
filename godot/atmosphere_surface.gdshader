@@ -53,6 +53,10 @@ uniform float building_seed = 0.5;
 // Procedural facades on generated building walls: 1 apartment, 2 house,
 // 3 commercial, 4 industrial, 5 public. Floor pitch is in scene metres (3 m ÷ D).
 uniform int facade_kind = 0;
+uniform int regional_ground = 0;
+uniform float regional_scale = 1.0;
+uniform int regional_arch = 0;
+uniform vec4 regional_trim : source_color = vec4(0.12,0.28,0.5,1.0);
 uniform float floor_pitch = 3.0;
 // Record palettes (sRGB, facade_palette.json) bound per building material:
 // body (look bits 0..2), roof (look bits 3..5) and apartment accent (record
@@ -476,6 +480,23 @@ void fragment() {
         float grain = fract(sin(dot(floor(world_position.xz*36.0+world_position.y*17.0),vec2(12.9898,78.233)))*43758.5453);
         color *= 1.0 + (0.016*grain-0.008)*effect_weight;
     }
+    // Broad cover keeps its mean colour at distance; rows, stones and clumps
+    // distinguish land-cover appearances without changing traction or geometry.
+    if(regional_ground>0 && effect_weight>0.0 && abs(world_normal.y)>0.4) {
+        vec2 p=world_position.xz*regional_scale;
+        float detail=1.0-smoothstep(12.0,48.0,view_distance);
+        float patch=sin(p.x*0.71+sin(p.y*0.43))*cos(p.y*0.61);
+        float grain=fract(sin(dot(floor(p*9.0),vec2(37.1,19.7)))*43758.5453)-0.5;
+        float modulation=0.0;
+        if(regional_ground==13 || regional_ground==14) {
+            float rows=sin(p.x*7.85398);
+            modulation=rows*(regional_ground==13 ? 0.13 : 0.055);
+            surface_roughness=clamp(surface_roughness+rows*0.035,0.0,1.0);
+        } else if(regional_ground==5) modulation=grain*0.12;
+        else if(regional_ground==10 || regional_ground==11 || regional_ground==12 || regional_ground==15) modulation=patch*0.065+grain*0.035;
+        else if(regional_ground==9) modulation=sin(p.x*0.9)*0.018;
+        color*=1.0+modulation*detail*effect_weight;
+    }
     // Generated walls: floor bands, window panes and a per-building seed.
     // Palette and window variants fade with effect weight, so far near walls
     // keep the distant mesh's colour. Roofs, bottoms, distant meshes and
@@ -547,8 +568,26 @@ void fragment() {
             }
             // Curtain walls: glass between slim mullions over a spandrel band.
             if(curtain) pane = vec4(0.04,0.96,0.14,0.97);
+            if(regional_arch>=1 && regional_arch<=3 && !shop) pane=vec4(0.25,0.75,0.18,0.83);
+            if(regional_arch>=4 && regional_arch<=6) pane=vec4(0.20,0.80,0.25,0.75);
+            if(regional_arch==7) pane=vec4(0.28,0.72,0.20,0.68);
+            if(regional_arch==8) pane=vec4(0.25,0.75,0.45,0.70);
             // Pane and spandrel shares are box-filtered over the pixel footprint.
             float window = facade_span(cell.x,pane.x,pane.y,cell_fw.x)*facade_span(cell.y,pane.z,pane.w,cell_fw.y);
+            if(regional_arch>=1 && regional_arch<=3 && !shop) {
+                vec2 radius=vec2((pane.y-pane.x)*0.5,0.22);
+                vec2 offset=vec2(f.x-(pane.x+pane.y)*0.5,max(0.0,f.y-(pane.w-radius.y)))/radius;
+                float aa=max(cell_fw.x/radius.x,cell_fw.y/radius.y);
+                window*=1.0-smoothstep(1.0-aa,1.0+aa,length(offset));
+            }
+            if(regional_arch>=4 && regional_arch<=6) {
+                float lattice=facade_span(cell.x*5.0,0.0,0.08,cell_fw.x*5.0);
+                window*=1.0-lattice;
+            }
+            if(regional_arch==7) {
+                float outer=facade_span(cell.x,pane.x-0.035,pane.y+0.035,cell_fw.x)*facade_span(cell.y,pane.z-0.035,pane.w+0.035,cell_fw.y);
+                color=mix(color,regional_trim.rgb,max(outer-window,0.0)*effect_weight);
+            }
             float spandrel = curtain ? facade_span(cell.y,0.0,pane.z,cell_fw.y) : 0.0;
             // Bays a wall leaves blank: apartment base storeys, every other
             // industrial bay, commercial parapets.
@@ -941,10 +980,14 @@ void fragment() {
                 color*=1.0-0.05*(1.0-blades)*lawn_relief/0.025;
             }
         }
-        float rock=1.0-smoothstep(0.70,0.94,world_normal.y);
-        color=mix(color,vec3(0.40,0.37,0.30),rock*0.55);
-        float shore=1.0-smoothstep(0.15,0.85,world_position.y);
-        color=mix(color,vec3(0.42,0.39,0.29),shore*0.6);
+        // Classified cover owns its colour, including snow/ice at local zero.
+        // Distant role -2 carries the same explicit-cover choice.
+        if(regional_ground==0 && !(distant && UV.y < -1.5)) {
+            float rock=1.0-smoothstep(0.70,0.94,world_normal.y);
+            color=mix(color,vec3(0.40,0.37,0.30),rock*0.55);
+            float shore=1.0-smoothstep(0.15,0.85,world_position.y);
+            color=mix(color,vec3(0.42,0.39,0.29),shore*0.6);
+        }
         // Voxel grain: one amplitude for near and distant terrain, so the ring
         // handover keeps its contrast; the footprint ladder is its anti-alias.
         if(surface_grit>0.0) {

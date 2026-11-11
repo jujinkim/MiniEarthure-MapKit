@@ -266,6 +266,7 @@ static func prepare_batches(chunk: Dictionary, cancelled: Callable = Callable())
 				var framed := sidewalk_arrays(chunk, indices.slice(first, first + count / 3), uv)
 				if not framed.is_empty(): uv = framed[0]; uv2 = framed[1]
 			result.append({"key": key.get_slice("|",0), "vertices": vertices, "normals": normals, "uv": uv, "uv2": uv2, "custom0": custom0})
+	result.append_array(preload("./regional_appearance.gd").batches(chunk.get("presentation",{}),cancelled))
 	return result
 
 ## Display-only sidewalk frames (mapkit-godot road_style.rs) on the shared
@@ -302,6 +303,7 @@ static func sidewalk_arrays(chunk: Dictionary, triangles: PackedInt32Array, uv: 
 ## (on walls that end at it: the top is negated on triangles rising above it); flat
 ## roof faces carry the solid's roof frame (4000 + the angle) instead of the top.
 static func facade_arrays(key: String) -> int:
+	if key.begins_with("building/"): return 1
 	var fields := key.split(":")
 	if fields.size() != 2 or not fields[0] in ["brick","wood","concrete"] or not fields[1] in ["residential","commercial","industrial","public"]: return 0
 	return 1
@@ -335,7 +337,7 @@ static func estimate(chunk: Dictionary, asset_bytes: int) -> int:
 	for record: Dictionary in preload("./water_query.gd").records(chunk): water_bytes += 32768 + record.surface.size()*1024
 	var grind_bytes := 0
 	for line: Dictionary in preload("./grind_geometry.gd").records(chunk): grind_bytes += 32768 + line.get("samples",[]).size()*8192
-	return fixture_bytes(chunk) + barrier_bytes(chunk) + street_life_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
+	return regional_bytes(chunk) + fixture_bytes(chunk) + barrier_bytes(chunk) + street_life_bytes(chunk) + grass_bytes(grass_triangles) + grind_bytes + water_bytes + 65536 + (65536 if chunk.get("presentation", {}).get("urban_surfaces", false) else 0) + visible_triangles * 768 + batches * 12288 + chunk.objects.size() * 65536 + asset_bytes + chunk.get("presentation", {}).get("road_styles", {}).size() * 16384
 
 
 static func material_key(chunk: Dictionary, triangle: int) -> String:
@@ -346,7 +348,18 @@ static func material_key(chunk: Dictionary, triangle: int) -> String:
 		if not track_key.is_empty(): return track_key
 	var road_keys: PackedStringArray = presentation.get("road_materials", PackedStringArray())
 	if triangle < road_keys.size() and not road_keys[triangle].is_empty(): return road_keys[triangle]
+	var appearance := str(presentation.get("appearance_styles",{}).get(DATA.object_id(chunk,triangle),""))
+	if not appearance.is_empty(): return appearance
 	var id := str(presentation.get("proxy_materials", {}).get(DATA.object_id(chunk, triangle), ""))
 	if not id.is_empty():
 		return "asset:" + id if presentation.get("assets", {}).has(id) else id
 	return DATA.material_key(chunk, triangle)
+
+static func regional_bytes(chunk: Dictionary) -> int:
+	var p: Dictionary = chunk.get("presentation",{})
+	var n: int = p.get("regional_keys",PackedStringArray()).size()
+	if n == 0: return 0
+	var batches: int = 0
+	if not chunk.has("render_batches"):
+		batches = preload("./regional_appearance.gd").batch_count(p)
+	return n*768+batches*12288

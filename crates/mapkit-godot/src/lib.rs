@@ -1,4 +1,5 @@
 mod barrier_details;
+mod appearance;
 mod distant;
 mod facade_fixtures;
 mod lamp_map;
@@ -162,7 +163,7 @@ impl MapKitBridge {
             // The reusable track preview owns its meshes and attached gizmos.
             c.triangles.retain(|t|!t.object_id.starts_with("assembled-"));c.gimmicks.clear();c.grind_lines.clear();
             let (files,cost)=source_preview::assets(&d,&c,Path::new(&project.to_string()))?;
-            let signature=mapkit_core::sha256(&serde_json::to_vec(&(c.hash()?,&d.environment,&d.assets,files.iter().map(|(p,b)|(p,mapkit_core::sha256(b))).collect::<Vec<_>>())).unwrap());
+            let signature=mapkit_core::sha256(&serde_json::to_vec(&(c.hash()?,mapkit_core::sha256(&mapkit_core::canonical(&d)?),&d.environment,&d.assets,files.iter().map(|(p,b)|(p,mapkit_core::sha256(b))).collect::<Vec<_>>())).unwrap());
             let mut data=presentation::decorate_document(&d,&files,packed::pack(c)?)?;
             data.set("preview_bytes",cost as i64);
             data.set("preview_signature",signature.as_str());

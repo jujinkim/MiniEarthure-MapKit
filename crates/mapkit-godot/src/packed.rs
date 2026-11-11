@@ -97,9 +97,9 @@ impl MapKitPackedGeometry {
     /// Display-only facade fixtures of this cell (facade_fixtures.rs) for a
     /// floor pitch in scene metres and the cell rect (scene min x, min z, max
     /// x, max z): the packed list and the count dropped by the cap.
-    pub(crate) fn facade_fixtures(&self, pitch: f32, bounds: [f32; 4]) -> crate::facade_fixtures::Placed {
-        let kinds: Vec<u8> = (0..self.materials.len()).map(|i| crate::facade_fixtures::facade_kind(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())).collect();
-        let concrete: Vec<bool> = (0..self.materials.len()).map(|i| self.materials.get(i).unwrap_or_default() == "concrete").collect();
+    pub(crate) fn facade_fixtures(&self, pitch: f32, bounds: [f32; 4], d: &mapkit_core::MapDocument) -> crate::facade_fixtures::Placed {
+        let kinds: Vec<u8> = (0..self.materials.len()).map(|i| if d.buildings.binary_search_by(|b|b.id.as_str().cmp(&self.ids.get(i).unwrap_or_default().to_string())).is_ok_and(|k|!d.buildings[k].style_id.is_empty()) {0} else {crate::facade_fixtures::facade_kind(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())}).collect();
+        let concrete: Vec<bool> = (0..self.materials.len()).map(|i| kinds[i]>0 && self.materials.get(i).unwrap_or_default() == "concrete").collect();
         let keys: Vec<u8> = (0..self.materials.len()).map(|i| crate::roof_fixtures::palette_key(&self.materials.get(i).unwrap_or_default().to_string(), &self.usages.get(i).unwrap_or_default().to_string())).collect();
         let shares: Vec<f32> = (0..self.materials.len()).map(|i| mapkit_package::distant::facade_own_share(&format!("{}:{}", self.materials.get(i).unwrap_or_default(), self.usages.get(i).unwrap_or_default()))).collect();
         crate::facade_fixtures::place(&crate::facade_fixtures::Input {

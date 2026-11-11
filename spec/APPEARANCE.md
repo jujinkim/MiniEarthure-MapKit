@@ -9,7 +9,7 @@ Names are stable identifiers, not file paths or national style assignments.
 | --- | --- |
 | `ground_style_id`, surface-area `style_id`, road `sidewalk_style_id` | `ground/<ground>` |
 | Road `style_id` | `road/<road_type>/<ground>` |
-| Building `style_id` | `building/<architecture>/<building_type>/<material>` |
+| Building `style_id` | `building/<architecture>/<building_type>/<material>[/<roof_shape>/<roof_material>]` |
 | Zone `style_id` | `vegetation/<vegetation_type>` |
 | Barrier `style_id` | `barrier/<barrier_type>/<material>` |
 
@@ -24,13 +24,20 @@ a style never changes authored physics. Building parts inherit the record style.
 Styles participate in world identity, canonical serialization, source-region
 selection and retained-memory accounting. Native generated collision bytes remain
 identical for appearance-only changes. A producer must preserve style boundaries
-when grouping building solids or road segments. Display implementation consumes
+when grouping building solids or road segments. The shared [regional display](../docs/REGIONAL_RENDERING.md) consumes
 these identities separately from the coarse physical/material fields.
 
 The environment profile and its ordered regions accept catalogue architecture,
 climate and settlement names, plus optional `terrain`. Empty dimensions keep
 concept defaults. Regions retain first-match precedence. Weather remains map-wide.
 Object source facts and explicit author selection take precedence over defaults.
+
+The two optional building roof components are supplied together. Omitted roof
+components use the architecture catalogue. Shapes are flat, gabled, hipped,
+pyramidal, skillion, dome and vault. `blue_tile` roofs require a Cycladic
+religious building with explicit `dome`; other uses cannot select that combination.
+The Editor records whether roof selections came from author, source, auxiliary
+data or the profile. Source roof facts survive regional profile edits.
 
 Ground types include asphalt, concrete, pavers, stone paving, gravel, compacted
 earth, sand, rock, managed lawn, grassland, scrub, forest floor, cropland, orchard,
@@ -50,3 +57,7 @@ to replace source footprints or add religious domes without source support.
 unchanged collision and part inheritance. Canonical hash and retained-memory
 unit checks include styles. `environment_contract` covers expanded axes and
 invalid regional authoring. All fixture geometry is synthetic.
+
+Regional shrub zones use `builtin:shrub` with a footprint radius of 42–200cm;
+city trees use `builtin:city_tree` at 120–200cm. The chosen object retains its
+physical behavior independently of the vegetation appearance ID.

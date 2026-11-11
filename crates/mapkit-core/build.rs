@@ -18,7 +18,7 @@ fn collect(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
 fn main() {
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../..");
     let mut files = vec![PathBuf::from("Cargo.toml"), PathBuf::from("Cargo.lock")];
-    files.extend(["spec/document.schema.json", "spec/manifest.schema.json"].map(PathBuf::from));
+    files.extend(["spec/document.schema.json", "spec/manifest.schema.json", "godot/regional_catalog.json", "godot/regional_plants.json"].map(PathBuf::from));
     collect(&root, &root.join("crates"), &mut files);
     files.sort_by_key(|path| path.to_str().unwrap().replace('\\', "/"));
     let mut hash = Sha256::new();

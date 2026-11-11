@@ -39,6 +39,11 @@ var _environment: RefCounted
 var _environment_pending := false
 var _environment_failed := false
 var _environment_lease: RefCounted
+var _tile_kinds: Array = []
+var _tiles_selected := false
+var _environment_bytes := 0
+var _tile_extra: Array = []
+var _tile_owners: Dictionary = {}
 var environment_profile: Dictionary = {}
 var quality_profile: Dictionary = preload("./display_quality.gd").active()
 
@@ -51,7 +56,8 @@ func bytes() -> int:
 	if _shader_lease != null: total += int(_shader_lease.bytes)
 	elif _shader != null: total += 65536
 	if _environment_lease != null: total += int(_environment_lease.bytes)
-	elif _environment != null: total += _context_bytes()
+	elif _environment != null: total += _environment_bytes
+	for item: Dictionary in _tile_extra: total += int(item.bytes)
 	for item: Dictionary in entries.values(): total += int(item.bytes)
 	for lease: RefCounted in retiring: total += int(lease.bytes)
 	return total
@@ -468,6 +474,10 @@ func shutdown() -> void:
 		_environment_lease.seal()
 		retiring.append(_environment_lease)
 		_environment_lease = null
+	for item: Dictionary in _tile_extra:
+		if item.lease != null: item.lease.seal(); retiring.append(item.lease)
+	_tile_extra.clear()
+	_tile_owners.clear()
 	trim()
 	_shader = null
 	if _shader_lease != null:
@@ -524,9 +534,10 @@ func begin_environment() -> bool:
 	if _environment != null: return true
 	if bytes() + _context_bytes() > limit_bytes: trim()
 	if bytes() + _context_bytes() > limit_bytes: return false
+	_environment_bytes = _context_bytes()
 	_environment_lease = reserve.call(_context_bytes()) if reserve.is_valid() else null
 	if reserve.is_valid() and _environment_lease == null: return false
-	_environment = ENVIRONMENT.new(int(quality_profile.texture_size),true)
+	_environment = ENVIRONMENT.new(int(quality_profile.texture_size),true,_tile_kinds if _tiles_selected else ENVIRONMENT.TILE_KINDS)
 	_environment.track(_environment_lease)
 	_environment_pending = true
 	return true
@@ -536,7 +547,8 @@ func prepare_environment() -> bool:
 	if not _environment_pending: return true
 	var phase := "texture_load" if _environment.tile_image == null else "mipmap_upload"
 	var started := Time.get_ticks_usec()
-	var done: bool = _environment.prepare_tile(_environment_lease)
+	var kind: String = _environment.tile_kinds[_environment.tile_cursor] if _environment.tile_cursor < _environment.tile_kinds.size() else ""
+	var done: bool = _environment.prepare_tile(_tile_owners.get(kind,_environment_lease))
 	var elapsed := Time.get_ticks_usec() - started
 	preparation_usec[phase] = int(preparation_usec.get(phase,0)) + elapsed
 	preparation_peak_usec[phase] = maxi(int(preparation_peak_usec.get(phase,0)),elapsed)
@@ -565,4 +577,38 @@ static func wet_urban_shader() -> Shader:
 	return result
 
 func _context_bytes() -> int:
-	return preload("./display_quality.gd").tile_bytes(int(quality_profile.texture_size), ENVIRONMENT.TILE_KINDS.size())
+	return 1048576 + _tiles_bytes(_tile_kinds if _tiles_selected else ENVIRONMENT.TILE_KINDS)
+
+func _tiles_bytes(kinds: Array) -> int:
+	var total := 0
+	for kind: String in kinds:
+		var size := mini(int(quality_profile.texture_size),QUALITY.FACADE_TILE_MAX) if kind.begins_with("facade:") else int(quality_profile.texture_size)
+		total += size*size*24
+	return total
+
+## Admit all missing tiles before changing the shared queue. A failed reservation
+## leaves existing cells and their immutable material bindings intact.
+func require_environment_tiles(kinds: Array) -> bool:
+	if closed or _environment_failed: return false
+	if not _tiles_selected and _environment != null: _tile_kinds = ENVIRONMENT.TILE_KINDS.duplicate()
+	var missing: Array = []
+	for kind: String in kinds:
+		if not kind in _tile_kinds and not kind in missing: missing.append(kind)
+	if _environment != null and not missing.is_empty():
+		var amount := _tiles_bytes(missing)
+		if bytes()+amount>limit_bytes: trim()
+		if bytes()+amount>limit_bytes: return false
+		var lease: RefCounted = reserve.call(amount) if reserve.is_valid() else null
+		if reserve.is_valid() and lease == null: return false
+		_tile_extra.append({"bytes":amount,"lease":lease})
+		for kind: String in missing: _tile_owners[kind] = lease
+		_environment.tile_kinds.append_array(missing)
+		_environment_pending = true
+	_tile_kinds.append_array(missing)
+	_tiles_selected = true
+	return true
+
+## Already admitted cells may bind their loaded tiles while another cell queues
+## a different tile. This accessor never advances preparation.
+func material_context() -> RefCounted:
+	return _environment

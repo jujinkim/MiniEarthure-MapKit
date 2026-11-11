@@ -26,7 +26,7 @@
         157,
         141
       ],
-      "detail": "stone"
+      "detail": "pavers"
     },
     "stone_paving": {
       "surface": "concrete",
@@ -80,7 +80,7 @@
         134,
         100
       ],
-      "detail": "lawn"
+      "detail": "grass"
     },
     "grassland": {
       "surface": "grass",
@@ -89,7 +89,7 @@
         143,
         100
       ],
-      "detail": "lawn"
+      "detail": "grass"
     },
     "scrub": {
       "surface": "grass",
@@ -125,7 +125,7 @@
         131,
         83
       ],
-      "detail": "lawn"
+      "detail": "grass"
     },
     "wetland": {
       "surface": "dirt",
@@ -143,7 +143,7 @@
         228,
         232
       ],
-      "detail": "rock"
+      "detail": "snow"
     },
     "ice": {
       "surface": "concrete",
@@ -152,7 +152,7 @@
         208,
         218
       ],
-      "detail": "rock"
+      "detail": "ice"
     }
   },
   "materials": {
@@ -305,6 +305,21 @@
       "roughness_per_mille": 800,
       "metallic_per_mille": 0,
       "detail": "tile"
+    },
+    "blue_tile": {
+      "color": [
+        48,
+        109,
+        170
+      ],
+      "roof_color": [
+        42,
+        101,
+        164
+      ],
+      "roughness_per_mille": 750,
+      "metallic_per_mille": 0,
+      "detail": "tile"
     }
   },
   "architectures": {
@@ -315,7 +330,8 @@
         "parapet",
         "window_band",
         "balcony"
-      ]
+      ],
+      "roof_material": "concrete"
     },
     "korean_modern": {
       "material": "concrete",
@@ -324,7 +340,8 @@
         "parapet",
         "balcony",
         "shop_canopy"
-      ]
+      ],
+      "roof_material": "concrete"
     },
     "japanese_modern": {
       "material": "plaster",
@@ -333,7 +350,8 @@
         "balcony",
         "shop_canopy",
         "rail"
-      ]
+      ],
+      "roof_material": "concrete"
     },
     "korean_traditional": {
       "material": "wood",
@@ -342,7 +360,8 @@
         "tiled_eaves",
         "ridge",
         "timber_frame"
-      ]
+      ],
+      "roof_material": "dark_tile"
     },
     "japanese_traditional": {
       "material": "wood",
@@ -351,7 +370,8 @@
         "deep_eaves",
         "timber_frame",
         "veranda"
-      ]
+      ],
+      "roof_material": "dark_tile"
     },
     "chinese_courtyard": {
       "material": "plaster",
@@ -360,7 +380,8 @@
         "tiled_eaves",
         "ridge",
         "courtyard_gate"
-      ]
+      ],
+      "roof_material": "dark_tile"
     },
     "south_asian": {
       "material": "plaster",
@@ -369,7 +390,8 @@
         "balcony",
         "shop_canopy",
         "shade_arcade"
-      ]
+      ],
+      "roof_material": "concrete"
     },
     "southeast_asian": {
       "material": "plaster",
@@ -378,7 +400,8 @@
         "shop_canopy",
         "veranda",
         "stilts"
-      ]
+      ],
+      "roof_material": "clay_tile"
     },
     "middle_eastern": {
       "material": "stone",
@@ -387,7 +410,8 @@
         "shade_arcade",
         "courtyard_gate",
         "parapet"
-      ]
+      ],
+      "roof_material": "concrete"
     },
     "european_stone": {
       "material": "stone",
@@ -396,7 +420,8 @@
         "window_reveal",
         "cornice",
         "arch"
-      ]
+      ],
+      "roof_material": "clay_tile"
     },
     "european_brick": {
       "material": "brick",
@@ -405,7 +430,8 @@
         "window_reveal",
         "cornice",
         "chimney"
-      ]
+      ],
+      "roof_material": "clay_tile"
     },
     "nordic_timber": {
       "material": "wood",
@@ -414,7 +440,8 @@
         "deep_eaves",
         "timber_frame",
         "chimney"
-      ]
+      ],
+      "roof_material": "dark_tile"
     },
     "mediterranean": {
       "material": "plaster",
@@ -423,7 +450,8 @@
         "tiled_eaves",
         "balcony",
         "arch"
-      ]
+      ],
+      "roof_material": "clay_tile"
     },
     "north_american_suburb": {
       "material": "wood",
@@ -432,7 +460,8 @@
         "porch",
         "deep_eaves",
         "chimney"
-      ]
+      ],
+      "roof_material": "dark_tile"
     },
     "farm": {
       "material": "wood",
@@ -441,7 +470,8 @@
         "barn_door",
         "deep_eaves",
         "vent"
-      ]
+      ],
+      "roof_material": "metal"
     },
     "polar_station": {
       "material": "metal",
@@ -450,7 +480,8 @@
         "stilts",
         "service_door",
         "vent"
-      ]
+      ],
+      "roof_material": "metal"
     },
     "venetian": {
       "material": "plaster",
@@ -460,7 +491,8 @@
         "arch",
         "balcony",
         "cornice"
-      ]
+      ],
+      "roof_material": "clay_tile"
     },
     "cycladic": {
       "material": "whitewash",
@@ -469,7 +501,8 @@
         "blue_shutter",
         "rounded_parapet",
         "vault"
-      ]
+      ],
+      "roof_material": "whitewash"
     },
     "rural": {
       "material": "wood",
@@ -477,7 +510,8 @@
       "modules": [
         "porch",
         "deep_eaves"
-      ]
+      ],
+      "roof_material": "metal"
     },
     "adobe": {
       "material": "plaster",
@@ -485,7 +519,8 @@
       "modules": [
         "shade_arcade",
         "parapet"
-      ]
+      ],
+      "roof_material": "concrete"
     },
     "timber": {
       "material": "wood",
@@ -493,7 +528,8 @@
       "modules": [
         "timber_frame",
         "deep_eaves"
-      ]
+      ],
+      "roof_material": "dark_tile"
     },
     "tropical": {
       "material": "wood",
@@ -501,7 +537,8 @@
       "modules": [
         "veranda",
         "stilts"
-      ]
+      ],
+      "roof_material": "metal"
     }
   },
   "building_types": {
@@ -724,5 +761,14 @@
     "coast",
     "river",
     "canal"
+  ],
+  "roof_shapes": [
+    "flat",
+    "gabled",
+    "hipped",
+    "pyramidal",
+    "skillion",
+    "dome",
+    "vault"
   ]
 }

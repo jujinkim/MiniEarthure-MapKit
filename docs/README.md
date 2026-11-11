@@ -38,6 +38,7 @@ essential validation; edit existing sections instead of appending dated logs.
 | --- | --- |
 | Environment, weather and lighting | [ENVIRONMENT](ENVIRONMENT.md) |
 | Water and arcade presentation | [WATER](WATER.md) |
+| Regional material and architecture compositions | [REGIONAL_RENDERING](REGIONAL_RENDERING.md) |
 | Materials and display quality | [RICHER_MATERIALS](RICHER_MATERIALS.md) |
 | Distant display products | [DISTANT_RENDERING](DISTANT_RENDERING.md) |
 | Street life: walk lanes, walkers, pigeons | [STREET_LIFE](STREET_LIFE.md) |

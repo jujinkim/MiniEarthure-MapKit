@@ -1,5 +1,9 @@
 # Shared world materials and display quality
 
+Optional regional IDs use the shared [regional materials and architecture](REGIONAL_RENDERING.md)
+composition; its explicit materials and roof modules take precedence over the
+unclassified facade palettes described here.
+
 Original MIT models use angular silhouettes, broad painted faces and restrained
 street graphics. Architecture keeps window reveals, foundations, roof fascia and
 real openings. Near/far models share their palette and structural envelopes;
@@ -57,10 +61,11 @@ import; pending bindings retain the same bitmap and context leases. Textures loa
 after admission through Godot resource remapping with mipmaps,
 never script preloads. The five facade layers load one per admitted step after the
 racing tiles (the last step uploads the array); storefront signs are procedural and
-load nothing. Shared context reservations are 6.625/23.5/68.5MiB for
-128/256/512px tiers (`display_quality.tile_bytes`: `1MiB + 10 × size² × 24` racing
-tiles + `5 × min(size, 256)² × 24` facade layers), including
-CPU/GPU/mipmap/retirement overlap. Cache and
+load nothing. Cell material requests select the shared tiles; each additional
+selection is admitted before loading. Reservations use `1MiB + Σ(size² × 24)`
+for requested tiles, with facade layers capped at 256px, including
+CPU/GPU/mipmap/retirement overlap. The synchronous standalone context without
+a selection uses the original racing and facade set. Cache and
 consumer limits still govern admission; borrowers retain charges after shutdown.
 
 ## Track and authored scenery
@@ -391,15 +396,15 @@ MultiMesh with custom data. Display quality measures every range to a group's
 centre and adds its 23 m half diagonal, so a plant within `vegetation_near`
 (24/32/48 m, shrubs 0.6×) always draws its near meshes. Body and cards hand over
 to the far mesh at that distance with 6 m of margin, a dithered crossfade on
-Forward+ and hysteresis on Mobile (which does not fade). Low draws bodies without
+Forward+. Mobile and Compatibility switch vegetation at the boundary without
+independent hysteresis bands, so a freshly attached cell always has a crown. Low draws bodies without
 cards. Far trees have no end range, like the canopies they replace, so every tree
 of a loaded cell keeps a crown; far shrubs end at the decoration distance. Tree
 shadows follow `vegetation_shadows`: none on low, bodies and far crowns on medium,
 also cards on high; shrubs and the grass field cast none. The meshes, two
 materials and the atlas are one shared set per resource cache (`claim_vegetation`,
-2 MiB: about 8,300 vertices and 21,100 indices counted in CPU arrays and GPU
-buffers, 1.10 MB,
-plus the atlas as image and texture and the materials; built
+3 MiB covering CPU/GPU arrays, the atlas as image and texture, regional template
+data and materials; built
 one part per admitted step: the atlas, each material, each variant's lobes and
 hulls, its cards and fit, each mesh; a variant's shape is released after its last
 mesh); cells without a
