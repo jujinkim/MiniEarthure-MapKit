@@ -19,6 +19,7 @@ func check(value: bool, label: String) -> void:
 	if not value: failed = true; push_error(label)
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
+	clipped_faces()
 	for size in [128,256,512]:
 		var cache := CACHE.new(func(n): return Lease.new(n))
 		cache.environment_profile = PROFILE.defaults()
@@ -43,6 +44,21 @@ func run() -> void:
 	QUALITY.current = {}
 	print("regional_appearance_validator: ","FAIL" if failed else "PASS")
 	quit(1 if failed else 0)
+func clipped_faces() -> void:
+	var doc := document("modern")
+	doc.bounds = {"min":[0,0],"max":[6400,6400]}; doc.cell_size_cm = 3200
+	doc.surface_areas = []; doc.barriers = []; doc.zones = []
+	doc.buildings = [building("corner",3000,3000,"modern","shop",20)]
+	doc.buildings[0].footprint = [[3000,3000],[3200,3000],[3200,3200],[3000,3200]]
+	var native: RefCounted = ClassDB.instantiate("MapKitBridge")
+	for cell in [Vector2i(0,0),Vector2i(1,0),Vector2i(0,1),Vector2i(1,1)]:
+		var result: Dictionary = native.source_preview_packed(JSON.stringify(doc),ProjectSettings.globalize_path("res://"),cell.x,cell.y)
+		check(result.get("ok",false),"clipped regional corner "+str(cell)+": "+str(result.get("error",{})))
+		if not result.get("ok",false): continue
+		var display: Dictionary = DATA.view(result.data.chunk).presentation
+		check(display.regional_vertices.size() == display.regional_normals.size(),"clipped normal count")
+		for normal: Vector3 in display.regional_normals:
+			check(normal.is_finite() and normal.is_normalized(),"clipped source-precision normal")
 func building(id: String, x: int, y: int, arch: String, kind: String, height := 700) -> Dictionary:
 	var material: String = APPEARANCE.CATALOG.data.architectures[arch].material
 	return {"id":id,"footprint":[[x,y],[x+600,y],[x+600,y+500],[x,y+500]],"base_cm":0,"height_cm":height,"usage":"residential","material":"concrete","roof":"flat","style_id":"building/%s/%s/%s" % [arch,kind,material]}

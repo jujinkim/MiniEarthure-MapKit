@@ -7,6 +7,16 @@ pub const MODULE_LIMIT: usize = 8192;
 pub const FACE_LIMIT: usize = 131072;
 #[derive(Clone, Debug)]
 pub struct Face { pub vertices: [V; 3], pub key: String, pub color: [u8; 4], pub seed: f32, pub base_cm: f32, pub eaves_cm: f32 }
+impl Face {
+    /// Source-space unit normal before the renderer converts positions to f32.
+    pub fn normal(&self) -> Option<V> {
+        let u: V=std::array::from_fn(|i|self.vertices[1][i]-self.vertices[0][i]);
+        let v: V=std::array::from_fn(|i|self.vertices[2][i]-self.vertices[0][i]);
+        let cross=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+        let length=libm::hypot(libm::hypot(cross[0],cross[1]),cross[2]);
+        (length>0. && length.is_finite()).then(||cross.map(|x|x/length))
+    }
+}
 #[derive(Default)]
 pub struct Display { pub faces: Vec<Face>, pub objects: BTreeSet<String>, pub omitted_modules: usize }
 struct Builder<'a> { out: Display, bounds: &'a Bounds, key: String, color: [u8; 4], seed: f32, eaves: f32, base: f32, ceiling: f64, module: bool, modules: usize }
@@ -30,9 +40,13 @@ impl Builder<'_> {
             poly=next;
         }
         for k in 1..poly.len().saturating_sub(1) {
+            let face=Face { vertices:[poly[0],poly[k],poly[k+1]],key:self.key.clone(),color:self.color,seed:self.seed,base_cm:self.base,eaves_cm:self.eaves };
+            // A clipping-plane corner or a clamped decorative face can have no
+            // area. It contributes neither geometry nor decoration allowance.
+            if face.normal().is_none() { continue; }
             if self.module && self.modules >= MODULE_LIMIT { self.out.omitted_modules += 1; continue; }
             if self.out.faces.len() >= FACE_LIMIT { return Err(crate::error("E_BUDGET","Regional display exceeds cell face allowance")); }
-            self.out.faces.push(Face { vertices:[poly[0],poly[k],poly[k+1]],key:self.key.clone(),color:self.color,seed:self.seed,base_cm:self.base,eaves_cm:self.eaves });
+            self.out.faces.push(face);
             if self.module { self.modules += 1; }
         }
         Ok(())

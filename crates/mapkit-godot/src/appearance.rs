@@ -11,7 +11,10 @@ pub fn decorate(d:&MapDocument, chunk:&VarDictionary, presentation:&mut VarDicti
     let mut vertices=Vec::new();let mut normals=Vec::new();let mut keys=PackedStringArray::new();let mut seeds=Vec::new();let mut tops=Vec::new();
     for face in &display.faces {
         let p=face.vertices.map(|v|Vector3::new(v[0] as f32*0.01,v[1] as f32*0.01,-v[2] as f32*0.01));
-        let mut n=(p[1]-p[0]).cross(p[2]-p[0]).normalized();
+        let normal=face.normal().ok_or_else(||mapkit_core::error("E_GEOMETRY","Regional display contains a zero-area face"))?;
+        // Reflecting map Z reverses winding. Derive the normal before absolute
+        // scene positions lose precision, including very thin boundary faces.
+        let mut n=Vector3::new(-normal[0] as f32,-normal[1] as f32,normal[2] as f32);
         if face.key.starts_with("roof/") && n.y<0. {n=-n;}
         for i in [0,2,1] {vertices.push(p[i]);normals.push(n);seeds.push(Vector2::new(face.seed,1000.+face.base_cm*0.01));tops.push(1000.+face.eaves_cm*0.01);}
         keys.push(&GString::from(face.key.as_str()));

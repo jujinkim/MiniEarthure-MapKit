@@ -17,7 +17,9 @@ within the original footprint. Courtyard buildings retain their open roof rings.
 The physical source envelope bounds roof heights: a native gable retains its rise;
 a regional roof over a flat source fits inside the declared height. Body and roof
 faces use the same cell clipping planes on both sides of a seam. Decorative edge
-pieces participate in neighbouring cells within their bounded reach.
+pieces participate in neighbouring cells within their bounded reach. Clipping
+contacts and height-clamped decoration with zero area produce no display face.
+Normals use source precision before positions are converted for the renderer.
 
 Architecture and use combine reusable eaves, cornices, plinths, timber framing,
 arches, shutters, balconies, rails, entrance panels, canopies, columns, vents and

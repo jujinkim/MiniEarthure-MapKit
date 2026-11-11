@@ -42,6 +42,34 @@ fn roofs_preserve_courtyards_and_agree_at_cell_seams() {
     }
 }
 #[test]
+fn clipped_corner_and_short_modules_keep_nonzero_faces() {
+    let mut d=document();d.nodes.clear();d.roads.clear();d.zones.clear();d.free_roam=true;
+    d.bounds=Bounds{min:[0,0],max:[6400,6400]};d.cell_size_cm=3200;
+    let b=&mut d.buildings[0];
+    b.footprint=vec![[3000,3000],[3200,3000],[3200,3200],[3000,3200]];
+    b.base_cm=0;b.height_cm=20;
+    b.style_id="building/modern/shop/concrete".into();
+    d.normalize();d.validate().unwrap();
+    for cell in [Cell{x:0,y:0},Cell{x:1,y:0},Cell{x:0,y:1},Cell{x:1,y:1}] {
+        let mesh=display::generate(&d,cell).unwrap();
+        for f in mesh.faces {
+            let u: [f64;3]=std::array::from_fn(|i|f.vertices[1][i]-f.vertices[0][i]);
+            let v: [f64;3]=std::array::from_fn(|i|f.vertices[2][i]-f.vertices[0][i]);
+            let cross=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]];
+            assert!(cross.iter().any(|x|*x!=0.),"zero-area face in {cell:?}: {:?}",f.vertices);
+        }
+    }
+}
+#[test]
+fn face_normals_keep_source_precision_before_scene_conversion() {
+    let mut face=display::Face{vertices:[[20_000_000.,10.,20_000_000.],[20_000_001.,10.,20_000_000.],[20_000_000.,10.,20_000_001.]],key:"roof/concrete".into(),color:[255;4],seed:0.,base_cm:0.,eaves_cm:10.};
+    assert_eq!(face.normal(),Some([0.,-1.,0.]));
+    // The first two corners coincide if absolute coordinates are cast first.
+    assert_eq!(face.vertices[0][0] as f32,face.vertices[1][0] as f32);
+    face.vertices[1]=face.vertices[0];
+    assert_eq!(face.normal(),None);
+}
+#[test]
 fn explicit_roof_contract_and_cancel_are_strict() {
     use appearance::Domain;
     assert!(appearance::valid("building/cycladic/religious/whitewash/dome/blue_tile",Domain::Building));
