@@ -278,7 +278,10 @@ earlier documents keep their bytes, world hashes and generated geometry.
   16 simple outer rings `[[x,y],...]` of 3..512 in-bounds vertices (`E_PLAY_AREA`
   otherwise). It is world metadata: it changes no generated cell, and the regional
   index and `open_index` carry it. Consumers stop vehicles whose footprint leaves
-  every ring (as at the rectangle) and draw the edge along the rings.
+  every ring (as at the rectangle) and draw the edge along the rings. The shared
+  boundary is a 12m translucent cyan hologram with emissive rims and repeated
+  no-entry symbols. Its inner face follows the ring; collision thickness extends
+  outward, with zero bounce and sliding contact.
 
 ## Courses and completion references
 

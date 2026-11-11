@@ -7,11 +7,10 @@ extends RefCounted
 ## Box depth outward of the ring; the inner face lies on the ring itself.
 const THICKNESS_M := 0.3
 ## Visible striped panel height above the ground (edge stage).
-const VISIBLE_HEIGHT_M := 2.4
+const VISIBLE_HEIGHT_M := 12.0
 ## Collision top above the highest ground in a cell, and the depth below the lowest.
 const COLLISION_HEIGHT_M := 12.0
 const SINK_M := 2.0
-const POST_SPACING_M := 4.0
 ## Guard allowance beyond the ring: a footprint corner further out has passed the fence.
 const CONTACT_MARGIN_M := 0.01
 const OBJECT_ID := "play-area-fence"

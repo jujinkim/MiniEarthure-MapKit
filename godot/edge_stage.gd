@@ -20,41 +20,30 @@ const RING_SEGMENT_BYTES := 4 * (12 + 8) + 6 * 4
 ## larger play area exactly).
 const RESERVATION_BYTES := 256 * 1024
 const INCLUDED_RING_SEGMENTS := 768
-## Ring fence: one quad per ring segment from SINK_M below the floor to
-## WALL_HEIGHT_M. The shader paints a constant-alpha no-entry panel up to
-## FENCE.VISIBLE_HEIGHT_M with posts every FENCE.POST_SPACING_M, a lit top rail
-## and a faint curtain above it, so the fence costs no extra geometry.
+## One translucent hologram quad per edge, with emissive rims and repeated
+## no-entry symbols. UVs are metres and continuous around each ring.
 const STRIPE_M := 3.0
 const SINK_M := FENCE.SINK_M
-const FENCE_ALPHA := 0.35
-const CURTAIN_ALPHA := 0.12
+const FENCE_ALPHA := 0.30
 const STRIPE_SHADER := """shader_type spatial;
 render_mode unshaded, cull_disabled, blend_mix, depth_draw_never, shadows_disabled;
 uniform float stripe_m = 3.0;
-uniform float alpha = 0.35;
-uniform float curtain_alpha = 0.12;
-uniform float panel_m = 2.4;
+uniform float alpha = 0.30;
 uniform float wall_m = 12.0;
-uniform float post_m = 4.0;
-varying float along;
-varying float rise;
-void vertex() { along = UV.x; rise = UV.y; }
+varying vec2 metres;
+void vertex() { metres = UV; }
 void fragment() {
-	float post = abs(fract(along / post_m + 0.5) - 0.5) * post_m;
-	if (post < 0.05 && rise < panel_m + 0.12) {
-		ALBEDO = vec3(0.2, 0.21, 0.23);
-		ALPHA = 0.85;
-	} else if (rise >= panel_m - 0.09 && rise < panel_m) {
-		ALBEDO = vec3(1.0, 0.86, 0.32);
-		ALPHA = 0.9;
-	} else if (rise < panel_m) {
-		bool red = fract((along + rise) / (2.0 * stripe_m)) < 0.5;
-		ALBEDO = red ? vec3(0.9, 0.12, 0.1) : vec3(0.95, 0.95, 0.92);
-		ALPHA = alpha;
-	} else {
-		ALBEDO = vec3(0.55, 0.85, 1.0);
-		ALPHA = curtain_alpha * clamp(1.0 - (rise - panel_m) / max(wall_m - panel_m, 0.01), 0.0, 1.0);
-	}
+    vec2 p = vec2(mod(metres.x + stripe_m, 2.0 * stripe_m) - stripe_m,
+                  mod(metres.y + 2.0, 4.0) - 2.0);
+    float distance = length(p);
+    float circle = 1.0 - smoothstep(0.055, 0.10, abs(distance - 0.65));
+    float bar = (1.0 - smoothstep(0.06, 0.10, abs(p.y))) * (1.0 - smoothstep(0.50, 0.60, abs(p.x)));
+    float rim = 1.0 - smoothstep(0.04, 0.12, min(abs(metres.y), abs(wall_m - metres.y)));
+    float symbol = max(circle, bar);
+    vec3 cyan = vec3(0.04, 0.88, 0.94);
+    ALBEDO = cyan;
+    EMISSION = cyan * (0.25 + 1.8 * max(rim, symbol));
+    ALPHA = mix(alpha, 0.9, max(rim, symbol));
 }
 """
 
@@ -258,10 +247,7 @@ static func _ring_wall(outline: Array, floors: Array) -> MeshInstance3D:
 	paint.shader = shader
 	paint.set_shader_parameter("stripe_m", STRIPE_M)
 	paint.set_shader_parameter("alpha", FENCE_ALPHA)
-	paint.set_shader_parameter("curtain_alpha", CURTAIN_ALPHA)
-	paint.set_shader_parameter("panel_m", FENCE.VISIBLE_HEIGHT_M)
 	paint.set_shader_parameter("wall_m", WALL_HEIGHT_M)
-	paint.set_shader_parameter("post_m", FENCE.POST_SPACING_M)
 	var wall := MeshInstance3D.new()
 	wall.name = "EdgeWall"
 	wall.mesh = mesh
