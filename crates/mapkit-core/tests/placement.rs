@@ -408,3 +408,29 @@ fn zone_trees_grow_on_painted_grass_and_dirt_but_not_other_paint() {
         assert!(cost.objects >= objects.len() as u64);
     }
 }
+
+#[test]
+fn building_above_tunnel_keeps_exact_ceiling_clearance_and_portal_separation() {
+    let mut d=document();
+    d.buildings.clear();d.zones.clear();d.placements.clear();d.repetitions.clear();
+    d.buildings=serde_json::from_value(serde_json::json!([{"id":"above","footprint":[[9800,5800],[10200,5800],[10200,6200],[9800,6200]],
+        "base_cm":0,"height_cm":550,"usage":"residential","material":"concrete","roof":"flat"}])).unwrap();
+    d.roads[0].kind=RoadKind::Tunnel;d.roads[0].clearance_cm=Some(150);
+    for p in &mut d.roads[0].points {p[1]=-200;}
+    for n in &mut d.nodes {n.position[1]=-200;}
+    d.validate().unwrap();
+    let c=generated(&d,Cell{x:0,y:0});
+    assert!(c.chunk.building_prisms.iter().any(|p|p.object_id=="above"));
+    d.buildings[0].base_cm=-1;
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+    d.buildings[0].base_cm=0;
+    d.roads[0].kind=RoadKind::Underpass;
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+    d.roads[0].kind=RoadKind::Tunnel;d.roads[0].clearance_cm=Some(250);
+    d.roads[0].points=vec![[6000,-400,6000],[14000,-200,6000]];
+    d.nodes[0].position=d.roads[0].points[0];d.nodes[1].position=d.roads[0].points[1];
+    d.buildings[0].base_cm=5;
+    d.validate().unwrap(); // The far endpoint is higher; only the overlap counts.
+    d.buildings[0].base_cm=4;
+    assert_eq!(d.validate().unwrap_err().code,"E_GEOMETRY");
+}

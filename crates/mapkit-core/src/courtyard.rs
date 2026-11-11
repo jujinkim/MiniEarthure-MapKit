@@ -97,6 +97,19 @@ fn canonical(p: &[Point], positive: bool) -> Vec<Point> {
     p.rotate_left(start);
     p
 }
+// At duplicated bridge/touch vertices, each occurrence bounds a different
+// interior sector. New edges must enter the occurrence's free sector.
+fn locally_inside(ring: &[Point], i: usize, c: Point) -> bool {
+    let a = ring[i];
+    let prev = ring[(i + ring.len() - 1) % ring.len()];
+    let next = ring[(i + 1) % ring.len()];
+    if cross(prev, a, next) > 0 {
+        cross(a, c, next) <= 0 && cross(a, prev, c) <= 0
+    } else {
+        cross(a, c, prev) > 0 || cross(a, next, c) > 0
+    }
+}
+
 pub(crate) fn triangulate(b: &Building, work: &mut usize) -> Result<Vec<[Point; 3]>> {
     triangulate_rings(&b.footprint, &b.holes, work)
 }
@@ -124,7 +137,12 @@ pub(crate) fn triangulate_rings(
         // Integer arrangements can have a hole touching its outer boundary at
         // one exact graph vertex. Join at that vertex, without inventing a
         // crossing visibility bridge or losing its (possibly 1 cm²) area.
-        if let Some((i,j))=ring.iter().enumerate().find_map(|(i,p)|hole.iter().position(|q|p==q).map(|j|(i,j))) {
+        if let Some((i,j))=ring.iter().enumerate().find_map(|(i,p)| {
+            hole.iter().position(|q|p==q).filter(|&j|
+                locally_inside(&ring,i,hole[(j+1)%hole.len()])
+                && locally_inside(&ring,i,hole[(j+hole.len()-1)%hole.len()])
+            ).map(|j|(i,j))
+        }) {
             let mut merged=ring[..=i].to_vec();
             merged.extend((1..=hole.len()).map(|k|hole[(j+k)%hole.len()]));
             merged.extend_from_slice(&ring[i+1..]);
@@ -141,14 +159,7 @@ pub(crate) fn triangulate_rings(
                 tick(work)?;
                 // A duplicated bridge endpoint has multiple local sectors. Choose
                 // the occurrence whose interior cone contains the new bridge.
-                let prev = ring[(i + ring.len() - 1) % ring.len()];
-                let next = ring[(i + 1) % ring.len()];
-                let local = if cross(prev, a, next) > 0 {
-                    cross(a, c, next) <= 0 && cross(a, prev, c) <= 0
-                } else {
-                    cross(a, c, prev) > 0 || cross(a, next, c) > 0
-                };
-                if !local {
+                if !locally_inside(&ring, i, c) {
                     continue;
                 }
                 let length = (a[0] - c[0]) as i128 * (a[0] - c[0]) as i128
@@ -296,5 +307,29 @@ impl PointGrid {
             }
         }
         Ok(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn touching_holes_choose_the_free_sector_at_a_visibility_bridge() {
+        let outer = vec![[0,0],[40,0],[40,40],[0,40]];
+        let holes = vec![vec![[5,5],[9,5],[9,7]],vec![[5,5],[7,9],[5,9]]];
+        for turns in 0..4 {
+            for reflected in [false,true] {
+                let transform = |r: &[Point]| r.iter().map(|&p| {
+                    let mut p=if reflected {[-p[0],p[1]]} else {p};
+                    for _ in 0..turns {p=[-p[1],p[0]];}
+                    p
+                }).collect::<Vec<_>>();
+                let outer=transform(&outer);
+                let holes=holes.iter().rev().map(|h|transform(h)).collect::<Vec<_>>();
+                let triangles = triangulate_rings(&outer,&holes,&mut 0).unwrap();
+                assert!(triangles.iter().all(|t|area(t)>0));
+                assert_eq!(triangles.iter().map(|t|area(t)).sum::<i128>(),area(&outer).abs()-holes.iter().map(|h|area(h).abs()).sum::<i128>());
+            }
+        }
     }
 }

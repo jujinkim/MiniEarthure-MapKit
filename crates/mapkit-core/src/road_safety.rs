@@ -156,17 +156,25 @@ fn piece(
         }
     }
     for p in &d.placements {
-        for proxy in crate::placement::proxies(d, p) {
-            let min: Vertex =
-                std::array::from_fn(|i| proxy.center[i] - proxy.size_cm[i] as i64 / 2);
-            let max: Vertex = std::array::from_fn(|i| min[i] + proxy.size_cm[i] as i64);
-            if min[1] < max_y
-                && max[1] > min_y
-                && min[0] < area.max[0]
-                && max[0] > area.min[0]
-                && min[2] < area.max[1]
-                && max[2] > area.min[1]
-                && intersects_box(&shape, min, max)
+        let custom = d.assets.iter().find(|a| a.id == p.asset_id);
+        let proxies = crate::placement::local_proxies(d, p).into_iter().filter(|proxy| {
+            // Reject distant boxes before allocating their rotated vertices.
+            // The sum of half extents encloses every yaw, including rounding.
+            let center=p.transform_point(proxy.center);
+            let radius=(i64::from(proxy.size_cm[0])+i64::from(proxy.size_cm[2])+1)/2+2;
+            let bottom=center[1]-i64::from(proxy.size_cm[1]/2);
+            bottom < max_y && bottom+i64::from(proxy.size_cm[1]) > min_y
+                && center[0]-radius < area.max[0] && center[0]+radius > area.min[0]
+                && center[2]-radius < area.max[1] && center[2]+radius > area.min[1]
+        }).map(|proxy| proxy.placed(p))
+            .chain(custom.into_iter().flat_map(|a| a.convex_collision.iter()).map(|c| c.placed(p)));
+        for proxy in proxies {
+            let other = proxy.bounds();
+            if proxy.vertices.iter().any(|v| v[1] < max_y)
+                && proxy.vertices.iter().any(|v| v[1] > min_y)
+                && other.min[0] < area.max[0] && other.max[0] > area.min[0]
+                && other.min[1] < area.max[1] && other.max[1] > area.min[1]
+                && intersects_convex(&shape, &proxy)
             {
                 return Err(error(
                     "E_PLACEMENT",
@@ -213,6 +221,31 @@ fn intersects_box(shape: &CollisionConvex, min: Vertex, max: Vertex) -> bool {
         let (a, b) = range(&shape.vertices);
         let (c, d) = range(&vertices);
         a < d && c < b
+    })
+}
+
+// Include both face normals and every edge cross product. The placed vertices
+// are the collision generator's centimetre-rounded yaw geometry, including
+// authored convex assets; an unrotated box is not their occupancy.
+fn intersects_convex(a: &CollisionConvex, b: &CollisionConvex) -> bool {
+    let edges = |s: &CollisionConvex| -> BTreeSet<[i128; 3]> {
+        s.faces.iter().flat_map(|f| (0..3).map(move |i| {
+            let (u,v) = (s.vertices[f[i] as usize],s.vertices[f[(i+1)%3] as usize]);
+            std::array::from_fn(|j| i128::from(v[j])-i128::from(u[j]))
+        })).collect()
+    };
+    let (ae,be)=(edges(a),edges(b));
+    let mut axes: BTreeSet<_> = a.planes().chain(b.planes()).map(|(n,_)|n).collect();
+    for u in &ae { for v in &be {
+        axes.insert([u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]);
+    }}
+    axes.into_iter().filter(|n|*n != [0;3]).all(|n| {
+        let range = |s: &CollisionConvex| {
+            s.vertices.iter().map(|v|(0..3).map(|i|n[i]*i128::from(v[i])).sum::<i128>())
+                .fold((i128::MAX,i128::MIN),|(lo,hi),d|(lo.min(d),hi.max(d)))
+        };
+        let ((lo,hi),(other_lo,other_hi))=(range(a),range(b));
+        lo < other_hi && other_lo < hi
     })
 }
 

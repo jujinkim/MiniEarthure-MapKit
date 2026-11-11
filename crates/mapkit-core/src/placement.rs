@@ -422,7 +422,7 @@ pub(crate) fn builtin(id: &str) -> Option<Vec<CollisionBox>> {
         _ => None,
     }
 }
-fn local_proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
+pub(crate) fn local_proxies(d: &MapDocument, p: &Placement) -> Vec<CollisionBox> {
     builtin(&p.asset_id)
         .unwrap_or_else(|| {
             d.assets
@@ -555,6 +555,50 @@ fn building_below_deck(b: &Building, r: &Road, work: &mut usize) -> Result<bool>
         near = true;
         // Deck height is linear along the segment, so its lowest point is at an end.
         if [t0, t1].iter().any(|t| (s[0][1] as f64 + (s[1][1] - s[0][1]) as f64 * t) < top) { return Ok(false); }
+    }
+    Ok(near)
+}
+
+/// A building may remain above a buried tunnel when every overlapping planned
+/// ceiling face is at least 50 cm below its base. Clip against the actual plan,
+/// including junction fans, so portal heights outside the footprint do not
+/// reject a safely buried interior and sloping ceilings cannot pass by centre.
+fn building_above_tunnel(b: &Building, r: &Road, patches: &[crate::road_plan::Patch], work: &mut usize) -> Result<bool> {
+    if r.kind != RoadKind::Tunnel { return Ok(false); }
+    let mut near = false;
+    for patch in patches.iter().filter(|p| p.road.id == r.id) {
+        let triangle=patch.v.map(xy);
+        let orientation=cross(triangle[0],triangle[1],triangle[2]);
+        if orientation==0 { continue; }
+        let sign=if orientation>0 {1.0} else {-1.0};
+        let mut ring:Vec<[f64;2]>=b.footprint.iter().map(|p|[p[0] as f64,p[1] as f64]).collect();
+        for i in 0..3 {
+            tick(work,ring.len())?;
+            let a=triangle[i];let c=triangle[(i+1)%3];
+            let side=|p:[f64;2]|sign*((c[0]-a[0]) as f64*(p[1]-a[1] as f64)-(c[1]-a[1]) as f64*(p[0]-a[0] as f64));
+            let mut next=Vec::with_capacity(ring.len()+2);
+            for j in 0..ring.len() {
+                let (p,q)=(ring[j],ring[(j+1)%ring.len()]);
+                let (ps,qs)=(side(p),side(q));
+                if ps>=0.0 { next.push(p); }
+                if (ps>=0.0)!=(qs>=0.0) {
+                    let t=ps/(ps-qs);
+                    next.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]);
+                }
+            }
+            ring=next;
+            if ring.is_empty() { break; }
+        }
+        if ring.is_empty() { continue; }
+        near=true;
+        let [a,c,e]=patch.v;
+        let (ux,uz,vx,vz)=((c[0]-a[0]) as f64,(c[2]-a[2]) as f64,(e[0]-a[0]) as f64,(e[2]-a[2]) as f64);
+        let determinant=ux*vz-uz*vx;
+        for p in ring {
+            let (x,z)=(p[0]-a[0] as f64,p[1]-a[2] as f64);
+            let height=a[1] as f64+(x*vz-z*vx)/determinant*(c[1]-a[1]) as f64+(ux*z-uz*x)/determinant*(e[1]-a[1]) as f64;
+            if height+f64::from(r.clearance_cm.unwrap())+BUILDING_DECK_CLEARANCE_CM as f64 > b.base_cm as f64+1e-9 { return Ok(false); }
+        }
     }
     Ok(near)
 }
@@ -1404,7 +1448,8 @@ fn validate_indexed(d: &MapDocument, road_bounds: &[Bounds], work: &mut usize) -
             // space. Testing it against the exact rings avoids triangulating
             // the same building again for every neighbouring road/triangle.
             let hit = measured!(2, planned_overlap(&plan, road, work, |poly, work| building_shapes[i].overlaps(poly, work)));
-            if hit && !measured!(2, building_below_deck(b, road, work)) {
+            if hit && !measured!(2, building_below_deck(b, road, work))
+                && !measured!(2, building_above_tunnel(b, road, &plan.0, work)) {
                 return Err(error(
                     "E_GEOMETRY",
                     format!(

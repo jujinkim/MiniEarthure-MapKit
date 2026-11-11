@@ -139,7 +139,10 @@ This page lists the domain invariants and links each feature's owner.
   at least 1 cm below every interpolated deck segment over the footprint, and a
   building only when its roof (including a gable rise) is at least 50 cm below the
   deck wherever a segment's corridor and safety strip cover the footprint.
-  Ground/tunnel/underpass corridors stay excluded.
+  A building may also overlap a tunnel in plan when every overlapping planned
+  ceiling face is at least 50 cm below its base, including graded segments and
+  junction fans. Ground/underpass corridors stay excluded; manual placement
+  exceptions remain limited to supports below bridge/elevated decks.
 - Surface-area overlap uses exact integer triangle separation: touching edges and
   disjoint concave polygons pass; any positive-area overlap fails. Pieces and
   triangles whose bounds only touch (zero-area contact) cannot overlap and are

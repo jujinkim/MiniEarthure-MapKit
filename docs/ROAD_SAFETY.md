@@ -69,7 +69,9 @@ safety furniture, placement intersection and regional influence margin.
   occupancy. IDs end in `:safety:metal` or `:safety:base` and are reserved. They are
   not spawn/recovery surfaces; metal is a renderer material only.
 - Manual facilities are preserved; intersections fail with road, facility and
-  position diagnostics. Sloping/diagonal pieces use SAT after AABB checks.
+  position diagnostics. Sloping/diagonal pieces use SAT after AABB checks. Placement
+  boxes and custom convexes use their full authored yaw and the same rounded
+  vertices as generated collision.
 
 ## Work and memory
 
@@ -79,13 +81,17 @@ safety furniture, placement intersection and regional influence margin.
   over the 128-segment shader cap only drops that road's paint in the cell.
 - Placement validation builds one transient road bounds/endpoint index per
   document; courtyard checks compare corridor polygons directly with building
-  rings. The 8 million work limit (enough for about 11,000 dense 1:8 city
+  rings. Buildings above tunnels require 50 cm between their base and every
+  overlapping ceiling face; clipping the shared plan retains safe buried
+  interiors without ignoring a rising portal or junction fan. The 8 million work limit (enough for about 11,000 dense 1:8 city
   buildings) and exact contact rules stay authoritative.
 - Terrain tiles, surface overlap and face classification query ordered spatial
   indexes; dense arrangements, or faces beyond the 16-hole/512-vertex triangulation
   limit (many disjoint islands in one tile), split into quarters (depth ≤6) only at
   that local limit. Exact predicates, surface order and cumulative budgets are
-  unchanged.
+  unchanged. Touching arrangement holes attach at the free interior sector of
+  a shared vertex, including when a visibility bridge duplicates that vertex;
+  triangulation preserves their exact integer area.
 
 ## Validation
 

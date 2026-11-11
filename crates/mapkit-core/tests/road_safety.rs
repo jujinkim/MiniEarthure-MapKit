@@ -425,3 +425,18 @@ fn narrow_ground_retrace_generates_a_supported_terminal_surface() {
         assert!(c.chunk.spawn(&SpawnRequest { position_cm, surface_id: "road".into() }).is_ok(), "missing road at {position_cm:?}");
     }
 }
+
+#[test]
+fn diagonal_shelter_safety_uses_its_placed_yaw_collision() {
+    let mut d = source(RoadKind::Bridge,vec![[1000,0,1000],[6000,0,6000]]);
+    d.roads[0].sidewalk_cm=None;
+    d.placements.push(Placement { id:"shelter".into(),asset_id:"builtin:bus_shelter".into(),
+        position:[2802,0,3198],quarter_turns:0,yaw_offset_mdeg:45000 });
+    // The rotated narrow shelter is 55 cm clear of the deck; a cardinal
+    // surrogate incorrectly extends into its rails.
+    generated(&d,Cell{x:0,y:0});
+    d.placements[0].position=[2832,0,3168];
+    let error=generate(GenerationInput{document:&d,cell:Cell{x:0,y:0},heightgrid:None,max_triangles:200000}).unwrap_err();
+    assert_eq!(error.code,"E_GEOMETRY");
+    assert!(error.message.contains("shelter"),"{}",error.message);
+}
