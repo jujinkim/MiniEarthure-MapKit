@@ -9,7 +9,7 @@ fn generate_cell(d: &MapDocument, cell: Cell, grid: Option<&HeightGrid>) -> Gene
     generate_with_occupancy(GenerationInput { document: d, cell, heightgrid: grid, max_triangles: 500_000 }, MAX_OCCUPIED_SOLIDS).unwrap()
 }
 fn barrier(id: &str, kind: BarrierKind, line: Vec<Point>) -> Barrier {
-    Barrier { id: id.into(), kind, line, height_cm: 120, thickness_cm: 20 }
+    Barrier { style_id: String::new(), id: id.into(), kind, line, height_cm: 120, thickness_cm: 20 }
 }
 fn part(footprint: Vec<Point>, height: Option<u32>) -> BuildingPart {
     BuildingPart { footprint, holes: vec![], base_cm: None, height_cm: height }
@@ -45,7 +45,7 @@ fn absent_fields_keep_canonical_bytes_and_round_trip() {
 #[test]
 fn default_ground_surface_replaces_unpainted_terrain_only() {
     let mut d = minimal();
-    d.surface_areas.push(SurfaceArea { id: "park".into(), polygon: rect(40000, 40000, 45000, 45000), surface: Surface::Grass });
+    d.surface_areas.push(SurfaceArea { style_id: String::new(), id: "park".into(), polygon: rect(40000, 40000, 45000, 45000), surface: Surface::Grass });
     let before = generate_cell(&d, Cell { x: 0, y: 0 }, None).chunk;
     assert!(before.triangles.iter().filter(|t| t.object_id == "terrain").all(|t| t.surface == Surface::Grass));
     d.ground_surface = Some(Surface::Concrete);
@@ -118,7 +118,7 @@ fn barrier_bases_follow_the_cell_heightmap() {
     d.buildings.clear();
     d.zones.clear();
     d.heightmaps.push(Heightmap { cell: Cell { x: 1, y: 1 }, path: "h.png".into(), spacing_cm: 25600, offset_cm: 0, step_cm: 1, source_accuracy_cm: None });
-    d.barriers.push(Barrier { id: "slope-wall".into(), kind: BarrierKind::Wall, line: vec![[52000, 60000], [100000, 90000]], height_cm: 300, thickness_cm: 40 });
+    d.barriers.push(Barrier { style_id: String::new(), id: "slope-wall".into(), kind: BarrierKind::Wall, line: vec![[52000, 60000], [100000, 90000]], height_cm: 300, thickness_cm: 40 });
     d.validate().unwrap();
     // Heights rise with x: 0, 512, 1024 cm per sample column.
     let grid = HeightGrid { side: 3, heights_cm: (0..9).map(|i| (i % 3) as i64 * 512).collect() };
@@ -177,7 +177,7 @@ fn barrier_piece_budget_refuses_runtime_and_warns_authoring() {
     for i in 0..126 {
         let y = 1000 + i * 800;
         let line = (0..4001).map(|k| [1000 + k * 20, y + if k % 2 == 0 { 0 } else { 300 }]).collect();
-        d.barriers.push(Barrier { id: format!("zig-{i}"), kind: BarrierKind::Fence, line, height_cm: 100, thickness_cm: 5 });
+        d.barriers.push(Barrier { style_id: String::new(), id: format!("zig-{i}"), kind: BarrierKind::Fence, line, height_cm: 100, thickness_cm: 5 });
     }
     let error = d.validate().unwrap_err();
     assert_eq!(error.code, "E_LIMIT");
@@ -244,7 +244,7 @@ fn building_parts_follow_building_rules() {
     d.buildings[0].parts[1].footprint = vec![[36000, 30000], [38000, 30000], [36000, 32000], [38000, 32000]];
     assert_eq!(d.validate().unwrap_err().code, "E_GEOMETRY", "self-intersecting part");
     let mut d = parted();
-    d.buildings.push(Building { id: "neighbour".into(), footprint: rect(37000, 31000, 39000, 33000), holes: vec![], base_cm: 0,
+    d.buildings.push(Building { style_id: String::new(), id: "neighbour".into(), footprint: rect(37000, 31000, 39000, 33000), holes: vec![], base_cm: 0,
         height_cm: 500, usage: "public".into(), material: "brick".into(), roof: "flat".into(), entrances: vec![], parts: vec![] });
     assert!(d.validate().unwrap_err().message.contains("overlapping building"), "another record overlapping a part");
     let mut d = parted();
@@ -335,7 +335,7 @@ fn structures_gate_only_barriers_at_their_level() {
     let mut d = minimal();
     // The bridge deck is at 700 cm over x = 25600 (600 cm wide).
     d.barriers.push(barrier("low-fence", BarrierKind::Fence, vec![[20000, 10000], [31000, 10000]]));
-    d.barriers.push(Barrier { id: "tall-wall".into(), kind: BarrierKind::Wall, line: vec![[20000, 12000], [31000, 12000]], height_cm: 1000, thickness_cm: 40 });
+    d.barriers.push(Barrier { style_id: String::new(), id: "tall-wall".into(), kind: BarrierKind::Wall, line: vec![[20000, 12000], [31000, 12000]], height_cm: 1000, thickness_cm: 40 });
     d.validate().unwrap();
     let g = generate_cell(&d, Cell { x: 0, y: 0 }, None);
     let under = |id: &str| g.chunk.asset_convexes.iter().filter(|c| c.object_id == id)
@@ -351,7 +351,7 @@ fn bases_stay_below_cross_slopes_and_pieces_stay_short() {
     let mut d = minimal();
     let cell = Cell { x: 1, y: 1 };
     sloped(&mut d, cell, 400);
-    d.barriers.push(Barrier { id: "terrace".into(), kind: BarrierKind::Wall, line: vec![[52000, 60000], [100000, 60010]], height_cm: 200, thickness_cm: 100 });
+    d.barriers.push(Barrier { style_id: String::new(), id: "terrace".into(), kind: BarrierKind::Wall, line: vec![[52000, 60000], [100000, 60010]], height_cm: 200, thickness_cm: 100 });
     d.validate().unwrap();
     // Steep 50 % rise with y across the wall's thickness.
     let side = 51200 / 400 + 1;
@@ -394,7 +394,7 @@ fn structure_gate_work_is_charged_at_validation() {
     // tests every nearby structure for every bounded piece.
     let points: Vec<Vertex> = (0..=18_000).map(|i| [i * 5, 700, 10400]).collect();
     d.nodes = vec![RoadNode { id: "w".into(), position: points[0], level: 1 }, RoadNode { id: "e".into(), position: *points.last().unwrap(), level: 1 }];
-    d.roads.push(Road { design: None, snow_retention_percent: 100, id: "deck".into(), from: "w".into(), to: "e".into(),
+    d.roads.push(Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None, snow_retention_percent: 100, id: "deck".into(), from: "w".into(), to: "e".into(),
         widths_cm: vec![600; points.len() - 1], surfaces: vec![Surface::Concrete; points.len() - 1], points, kind: RoadKind::Bridge,
         clearance_cm: None, sidewalk_cm: None, markings: None });
     for (i, y) in [10000, 10020, 10040, 10060, 10080, 10100].into_iter().enumerate() {
@@ -412,7 +412,7 @@ fn bases_stay_below_creased_terrain() {
     sloped(&mut d, cell, 400);
     let lines = [([52000, 60000], [99000, 71000]), ([60000, 99000], [61000, 53000]), ([53000, 80000], [98000, 80000])];
     for (i, (a, b)) in lines.into_iter().enumerate() {
-        d.barriers.push(Barrier { id: format!("crease-{i}"), kind: BarrierKind::Wall, line: vec![a, b], height_cm: 200, thickness_cm: 100 });
+        d.barriers.push(Barrier { style_id: String::new(), id: format!("crease-{i}"), kind: BarrierKind::Wall, line: vec![a, b], height_cm: 200, thickness_cm: 100 });
     }
     d.validate().unwrap();
     // Deterministic rough terrain: tile creases in every direction.

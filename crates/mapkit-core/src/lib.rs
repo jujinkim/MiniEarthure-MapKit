@@ -1,4 +1,5 @@
 //! Engine-, filesystem-, network- and clock-independent map domain and generation.
+pub mod appearance;
 pub mod water;
 pub mod poi;
 pub mod assembled_track;
@@ -135,6 +136,13 @@ pub struct RoadNode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Road {
+    /// Optional display catalogue ID; independent of physical surface and collision.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub style_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub sidewalk_style_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub design: Option<road_design::Design>,
     /// Percentage of weather snow retained on this road, including its paint.
@@ -193,6 +201,10 @@ fn is_zero_u16(value: &u16) -> bool { *value == 0 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SurfaceArea {
+    /// Optional display catalogue ID; independent of physical surface and collision.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub style_id: String,
     pub id: String,
     pub polygon: Vec<Point>,
     pub surface: Surface,
@@ -200,6 +212,10 @@ pub struct SurfaceArea {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Building {
+    /// Optional display catalogue ID; independent of physical surface and collision.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub style_id: String,
     pub id: String,
     pub footprint: Vec<Point>,
     /// Strictly interior, disjoint open courtyards; flat roof.
@@ -243,6 +259,7 @@ impl Building {
             return std::borrow::Cow::Borrowed(self);
         };
         std::borrow::Cow::Owned(Building {
+            style_id: self.style_id.clone(),
             id: self.id.clone(),
             footprint: p.footprint.clone(),
             holes: p.holes.clone(),
@@ -277,6 +294,10 @@ pub enum ZoneKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Zone {
+    /// Optional display catalogue ID; independent of physical surface and collision.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub style_id: String,
     pub id: String,
     pub polygon: Vec<Point>,
     pub kind: ZoneKind,
@@ -423,6 +444,9 @@ pub struct MapDocument {
     /// Surface of unpainted terrain; absent means grass.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ground_surface: Option<Surface>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub ground_style_id: String,
     /// Hedges, fences and walls; cut automatically at road corridors.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub barriers: Vec<barrier::Barrier>,
@@ -657,6 +681,7 @@ impl MapDocument {
 
         self.provenance.validate()?;
         urban::validate(self)?;
+        appearance::validate(self)?;
         for (index, attribution) in self.attributions.iter().enumerate() {
             attribution.validate(&format!("attributions[{index}]"))?;
         }

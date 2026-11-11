@@ -58,7 +58,7 @@ fn city(ponds: usize, vertices: usize, step: i64) -> MapDocument {
             surface_cm: -8, bottom_cm: -68, flow_cm_s: [0, 0] });
     }
     // A fence through every pond row adds keep-outs and their shores.
-    d.barriers = (0..ponds.div_ceil(20)).map(|row| barrier::Barrier { id: format!("fence-{row}"), kind: barrier::BarrierKind::Fence,
+    d.barriers = (0..ponds.div_ceil(20)).map(|row| barrier::Barrier { style_id: String::new(), id: format!("fence-{row}"), kind: barrier::BarrierKind::Fence,
         line: vec![[1000, 2000 + row as i64 * step], [2000 + 20 * step, 2000 + row as i64 * step]], height_cm: 40, thickness_cm: 10 }).collect();
     d.normalize();
     d.validate().unwrap();

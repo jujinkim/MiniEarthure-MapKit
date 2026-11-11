@@ -235,8 +235,7 @@ fn dense_city() -> MapDocument {
     d.buildings.clear();
     d.zones.clear();
     let node = |id: String, p: Vertex, level: i32| RoadNode { id, position: p, level };
-    let road = |id: String, from: String, to: String, points: Vec<Vertex>, kind: RoadKind, sidewalk: Option<u32>, marked: bool| Road {
-        design: None,
+    let road = |id: String, from: String, to: String, points: Vec<Vertex>, kind: RoadKind, sidewalk: Option<u32>, marked: bool| Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None,
         snow_retention_percent: 100,
         id,
         from,
@@ -284,17 +283,16 @@ fn dense_city() -> MapDocument {
     // Paint: 20 islands inside one block (more rings than one face may hold) and a 64-gon crossing roads.
     for k in 0..20 {
         let (x, z) = (16500 + (k % 5) * 900, 16500 + (k / 5) * 900);
-        d.surface_areas.push(SurfaceArea { id: format!("island{k}"), polygon: vec![[x, z], [x + 400, z], [x + 400, z + 400], [x, z + 400]], surface: Surface::Dirt });
+        d.surface_areas.push(SurfaceArea { style_id: String::new(), id: format!("island{k}"), polygon: vec![[x, z], [x + 400, z], [x + 400, z + 400], [x, z + 400]], surface: Surface::Dirt });
     }
     let ring: Vec<Point> = (0..64).map(|k| {
         let a = k as f64 / 64.0 * std::f64::consts::TAU;
         [25600 + (6000.0 * a.cos()) as i64, 25600 + (6000.0 * a.sin()) as i64]
     }).collect();
-    d.surface_areas.push(SurfaceArea { id: "plaza".into(), polygon: ring, surface: Surface::Gravel });
+    d.surface_areas.push(SurfaceArea { style_id: String::new(), id: "plaza".into(), polygon: ring, surface: Surface::Gravel });
     // Buildings beside roads, one with parts and one across a cell border.
     for (k, (x, z)) in [(4500, 4500), (10900, 10900), (12300, 23000), (30000, 8000), (23000, 30000)].iter().enumerate() {
-        d.buildings.push(Building {
-            id: format!("bld{k}"),
+        d.buildings.push(Building { style_id: String::new(), id: format!("bld{k}"),
             footprint: vec![[*x, *z], [x + 1600, *z], [x + 1600, z + 1200], [*x, z + 1200]],
             holes: vec![],
             base_cm: 0,
@@ -306,9 +304,9 @@ fn dense_city() -> MapDocument {
             parts: if k == 0 { vec![BuildingPart { footprint: vec![[x + 1800, *z], [x + 2600, *z], [x + 2600, z + 800], [x + 1800, z + 800]], holes: vec![], base_cm: None, height_cm: Some(600) }] } else { vec![] },
         });
     }
-    d.zones.push(Zone { id: "forest".into(), polygon: vec![[17000, 4000], [31000, 4000], [31000, 8800], [17000, 8800]], kind: ZoneKind::Forest, spacing_cm: 700, density_per_mille: 1000, exclusions: vec![], tree: None });
-    d.barriers.push(mapkit_core::barrier::Barrier { id: "fence".into(), kind: mapkit_core::barrier::BarrierKind::Fence, line: vec![[4200, 7500], [20000, 7500], [20000, 14000]], height_cm: 120, thickness_cm: 10 });
-    d.barriers.push(mapkit_core::barrier::Barrier { id: "wall".into(), kind: mapkit_core::barrier::BarrierKind::Wall, line: vec![[30000, 12000], [30000, 20000]], height_cm: 200, thickness_cm: 30 });
+    d.zones.push(Zone { style_id: String::new(), id: "forest".into(), polygon: vec![[17000, 4000], [31000, 4000], [31000, 8800], [17000, 8800]], kind: ZoneKind::Forest, spacing_cm: 700, density_per_mille: 1000, exclusions: vec![], tree: None });
+    d.barriers.push(mapkit_core::barrier::Barrier { style_id: String::new(), id: "fence".into(), kind: mapkit_core::barrier::BarrierKind::Fence, line: vec![[4200, 7500], [20000, 7500], [20000, 14000]], height_cm: 120, thickness_cm: 10 });
+    d.barriers.push(mapkit_core::barrier::Barrier { style_id: String::new(), id: "wall".into(), kind: mapkit_core::barrier::BarrierKind::Wall, line: vec![[30000, 12000], [30000, 20000]], height_cm: 200, thickness_cm: 30 });
     d.normalize();
     d.validate().unwrap();
     d
@@ -401,9 +399,9 @@ fn random_city_basins_stay_within_estimates() {
             d.water_bodies.push(body);
             if d.validate().is_err() { d.water_bodies.pop(); }
         }
-        d.barriers.push(barrier::Barrier { id: "fence-2".into(), kind: barrier::BarrierKind::Wall,
+        d.barriers.push(barrier::Barrier { style_id: String::new(), id: "fence-2".into(), kind: barrier::BarrierKind::Wall,
             line: vec![[rng.next(6000), rng.next(3000)], [rng.next(6000) + 100, rng.next(3000) + 100]], height_cm: 60, thickness_cm: 20 });
-        d.surface_areas.push(SurfaceArea { id: "lawn".into(), surface: Surface::Grass,
+        d.surface_areas.push(SurfaceArea { style_id: String::new(), id: "lawn".into(), surface: Surface::Grass,
             polygon: vec![[rng.next(3000), rng.next(1500)], [3200 + rng.next(3000), rng.next(1500)], [3200 + rng.next(3000), 1700 + rng.next(1400)], [rng.next(3000), 1700 + rng.next(1400)]] });
         if d.validate().is_err() { d.barriers.pop(); d.surface_areas.clear(); }
         assert!(d.water_bodies.len() >= 2, "seed {seed}");

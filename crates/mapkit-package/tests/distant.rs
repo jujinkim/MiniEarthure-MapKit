@@ -58,7 +58,7 @@ fn native_building_reduction_preserves_roofs_courtyards_and_cell_cuts() {
             d.nodes.clear(); d.roads.clear(); d.zones.clear(); d.buildings.clear();
             d.bounds.max = [25600,25600]; d.cell_size_cm = 12800;
             let moved = |ring: &Vec<[i64;2]>| ring.iter().map(|p| [p[0]+shift,p[1]+shift]).collect();
-            let building = Building { id:"native".into(), footprint:moved(&footprint),
+            let building = Building { style_id: String::new(), id:"native".into(), footprint:moved(&footprint),
                 holes:holes.iter().map(moved).collect(), base_cm:100, height_cm:1500,
                 usage:"public".into(), material:"brick".into(), roof:roof.into(), entrances:vec![],parts:vec![] };
             d.buildings.push(building.clone());
@@ -111,7 +111,7 @@ fn native_building_walls_carry_record_palettes_and_a_seeded_window_role() {
     let kinds = [("concrete","residential"),("brick","residential"),("wood","industrial"),("concrete","commercial"),("concrete","public")];
     for (index, (material, usage)) in kinds.iter().enumerate() {
         let x = 1000 + index as i64 * 2000;
-        d.buildings.push(Building { id: format!("b{index}"), footprint: vec![[x,1000],[x+1000,1000],[x+1000,2000],[x,2000]],
+        d.buildings.push(Building { style_id: String::new(), id: format!("b{index}"), footprint: vec![[x,1000],[x+1000,1000],[x+1000,2000],[x,2000]],
             holes: vec![], base_cm: 0, height_cm: 900, usage: usage.to_string(), material: material.to_string(),
             roof: "flat".into(), entrances: vec![], parts: vec![] });
     }
@@ -205,7 +205,7 @@ fn city_trees_become_bounded_silhouettes() {
     // A street-size zone and a park zone with the widest city-tree footprint.
     for (index, kind) in [ZoneKind::Forest, ZoneKind::Orchard].into_iter().enumerate() {
         let x = 1000 + index as i64 * 12000;
-        d.zones.push(Zone { id: format!("park-{index}"), polygon: vec![[x, 1000], [x + 11000, 1000], [x + 11000, 23000], [x, 23000]],
+        d.zones.push(Zone { style_id: String::new(), id: format!("park-{index}"), polygon: vec![[x, 1000], [x + 11000, 1000], [x + 11000, 23000], [x, 23000]],
             kind, spacing_cm: 700, density_per_mille: 750, exclusions: vec![],
             tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: [120, 200][index], clearance_cm: 30 }) });
     }

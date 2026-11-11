@@ -17,7 +17,7 @@ fn doc(height: i64) -> MapDocument {
             level: 0,
         },
     ];
-    d.roads = vec![Road { design: None,
+    d.roads = vec![Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None,
         snow_retention_percent: 100,
         id: "road".into(),
         from: "a".into(),
@@ -73,8 +73,7 @@ fn exact_overlap_removed_but_one_centimetre_cover_and_clearance_survive() {
 fn paving_partitions_ground_preserves_road_material_and_rejects_overlap() {
     for recipe in [1] {
         let mut d = doc_recipe(-1, recipe);
-        d.surface_areas.push(SurfaceArea {
-            id: "soil".into(),
+        d.surface_areas.push(SurfaceArea { style_id: String::new(), id: "soil".into(),
             polygon: vec![[0, 0], [1600, 0], [1600, 1600], [0, 1600]],
             surface: Surface::Dirt,
         });
@@ -108,7 +107,7 @@ fn concave_frontage_and_yard_with_centimetre_gap_do_not_overlap() {
         ("entry", vec![[13339,5469],[13679,4987],[13554,4898],[13758,4898],[13758,3702],[13362,3702],[13362,4898],[13380,4898],[13098,5298]]),
         ("yard", vec![[11762,8098],[15358,8098],[15358,4102],[13760,4102],[13760,4900],[13560,4900],[13682,4987],[13339,5472],[13095,5298],[13376,4900],[13360,4900],[13360,4102],[11762,4102]]),
     ] {
-        d.surface_areas.push(SurfaceArea { id: id.into(), polygon, surface: Surface::Grass });
+        d.surface_areas.push(SurfaceArea { style_id: String::new(), id: id.into(), polygon, surface: Surface::Grass });
     }
     d.validate().unwrap();
     // Reversing winding and moving across the origin must not change the result.
@@ -125,8 +124,8 @@ fn paving_allows_touching_but_rejects_one_centimetre_interior_overlap() {
     let first = vec![[100,100],[500,100],[500,500],[100,500]];
     for offset in [401,400,399,0] {
         d.surface_areas = vec![
-            SurfaceArea { id:"first".into(), polygon:first.clone(), surface:Surface::Grass },
-            SurfaceArea { id:"second".into(), polygon:first.iter().map(|p|[p[0]+offset,p[1]]).collect(), surface:Surface::Dirt },
+            SurfaceArea { style_id: String::new(), id:"first".into(), polygon:first.clone(), surface:Surface::Grass },
+            SurfaceArea { style_id: String::new(), id:"second".into(), polygon:first.iter().map(|p|[p[0]+offset,p[1]]).collect(), surface:Surface::Dirt },
         ];
         assert_eq!(d.validate().is_ok(),offset>=400,"offset {offset}");
     }
@@ -291,8 +290,7 @@ fn paving_and_sidewalks_share_the_sloping_terrain_plane() {
         }
         d.roads[0].kind = RoadKind::Ground;
         d.roads[0].sidewalk_cm = Some(100);
-        d.surface_areas.push(SurfaceArea {
-            id: "paving".into(),
+        d.surface_areas.push(SurfaceArea { style_id: String::new(), id: "paving".into(),
             polygon: vec![[3, 2], [3200, 15], [3200, 3200], [3, 3200]],
             surface: Surface::Concrete,
         });

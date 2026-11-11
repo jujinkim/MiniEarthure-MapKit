@@ -151,7 +151,7 @@ mod tests {
     }
 
     fn square(id: &str, x: i64, y: i64, size: i64) -> SurfaceArea {
-        SurfaceArea { id: id.into(), polygon: vec![[x, y], [x + size, y], [x + size, y + size], [x, y + size]], surface: Surface::Concrete }
+        SurfaceArea { style_id: String::new(), id: id.into(), polygon: vec![[x, y], [x + size, y], [x + size, y + size], [x, y + size]], surface: Surface::Concrete }
     }
     /// Index build plus traversal charges: the work left when no pair is charged.
     fn index_only(d: &MapDocument) -> usize {
@@ -175,8 +175,8 @@ mod tests {
         // Box-overlapping pieces that only touch along a diagonal are still
         // tested exactly and charged; a shared interior is still refused.
         d.surface_areas = vec![
-            SurfaceArea { id: "a".into(), polygon: vec![[0, 0], [3200, 0], [0, 3200]], surface: Surface::Grass },
-            SurfaceArea { id: "b".into(), polygon: vec![[3200, 0], [3200, 3200], [0, 3200]], surface: Surface::Dirt },
+            SurfaceArea { style_id: String::new(), id: "a".into(), polygon: vec![[0, 0], [3200, 0], [0, 3200]], surface: Surface::Grass },
+            SurfaceArea { style_id: String::new(), id: "b".into(), polygon: vec![[3200, 0], [3200, 3200], [0, 3200]], surface: Surface::Dirt },
         ];
         let mut work = 0;
         paint_disjoint(&d, &mut work).unwrap();

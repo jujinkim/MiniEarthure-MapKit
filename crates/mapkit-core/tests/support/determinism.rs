@@ -163,7 +163,7 @@ pub fn fixtures() -> Vec<Fixture> {
                 level: 1,
             },
         ];
-        d.roads = vec![Road { design: None,
+        d.roads = vec![Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None,
             snow_retention_percent: 100,
             id: "oblique".into(),
             from: "a".into(),

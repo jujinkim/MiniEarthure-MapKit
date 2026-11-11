@@ -619,7 +619,7 @@ mod tests {
         let own_height = (3..40).map(|k| k * 300).find(|&h| own(h)).unwrap();
         let record_heights: Vec<u32> = (3..40).map(|k| k * 300).filter(|&h| !own(h)).take(2).collect();
         let rect = |x0: i64, x1: i64, y0: i64| vec![[x0, y0], [x1, y0], [x1, y0 + 1000], [x0, y0 + 1000]];
-        d.buildings.push(mapkit_core::Building { id: id.into(), footprint: rect(12000, 13600, 1000), holes: vec![], base_cm: 0,
+        d.buildings.push(mapkit_core::Building { style_id: String::new(), id: id.into(), footprint: rect(12000, 13600, 1000), holes: vec![], base_cm: 0,
             height_cm: own_height, usage: "commercial".into(), material: "concrete".into(), roof: "flat".into(), entrances: vec![],
             parts: vec![
                 mapkit_core::BuildingPart { footprint: rect(11500, 14000, 4000), holes: vec![], base_cm: None, height_cm: Some(record_heights[0]) },

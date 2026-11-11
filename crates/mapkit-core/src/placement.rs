@@ -1493,7 +1493,7 @@ mod city_tests {
     #[test]
     fn parts_sharing_walls_charge_only_the_index() {
         let rect = |x: i64, w: i64| vec![[x, 0], [x + w, 0], [x + w, 1000], [x, 1000]];
-        let mut b = Building { id: "row".into(), footprint: rect(0, 1000), holes: vec![], base_cm: 0, height_cm: 900,
+        let mut b = Building { style_id: String::new(), id: "row".into(), footprint: rect(0, 1000), holes: vec![], base_cm: 0, height_cm: 900,
             usage: "residential".into(), material: "brick".into(), roof: "flat".into(), entrances: vec![],
             parts: (1..40).map(|i| BuildingPart { footprint: rect(i * 1000, 1000), holes: vec![], base_cm: None, height_cm: Some(300 + i as u32) }).collect() };
         let triangles: Vec<_> = b.rings().flat_map(|(f, h)| crate::courtyard::triangulate_rings(f, h, &mut 0).unwrap()).collect();

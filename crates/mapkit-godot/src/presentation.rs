@@ -426,8 +426,7 @@ mod tests {
     fn wide_city_trees_name_the_zone_trees_with_a_wider_footprint() {
         let mut d: mapkit_core::MapDocument =
             serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
-        let zone = |id: &str, asset: &str, radius: u32| mapkit_core::Zone {
-            id: id.into(), polygon: vec![[0, 0], [1000, 0], [1000, 1000]], kind: mapkit_core::ZoneKind::Forest,
+        let zone = |id: &str, asset: &str, radius: u32| mapkit_core::Zone { style_id: String::new(), id: id.into(), polygon: vec![[0, 0], [1000, 0], [1000, 1000]], kind: mapkit_core::ZoneKind::Forest,
             spacing_cm: 500, density_per_mille: 500, exclusions: vec![],
             tree: Some(mapkit_core::ZoneTree { asset_id: asset.into(), radius_cm: radius, clearance_cm: 30 }) };
         d.zones = vec![zone("park", "builtin:city_tree", 200), zone("lawn", "builtin:city_tree", 120), zone("wood", "oak", 180)];

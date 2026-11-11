@@ -1839,6 +1839,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
         gimmicks: objects,
         courses: vec![],
         environment: Some(environment::EnvironmentProfile {
+            terrain: String::new(),
             version: 1,
             concept: "countryside".into(),
             architecture: "".into(),
@@ -1867,6 +1868,7 @@ pub fn document_from_assembly(a: Assembly) -> Result<MapDocument> {
         nodes: vec![],
         roads: vec![],
         surface_areas: vec![],
+        ground_style_id: String::new(),
         ground_surface: None,
         play_area: vec![],
         traffic: None,

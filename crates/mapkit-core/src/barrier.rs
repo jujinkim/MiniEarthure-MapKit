@@ -52,6 +52,9 @@ impl BarrierKind {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Barrier {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(length(max = 128))]
+    pub style_id: String,
     pub id: String,
     pub kind: BarrierKind,
     /// Centreline `[x, y]` in local centimetres; consecutive points differ.

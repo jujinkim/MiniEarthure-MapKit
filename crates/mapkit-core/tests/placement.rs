@@ -396,7 +396,7 @@ fn zone_trees_grow_on_painted_grass_and_dirt_but_not_other_paint() {
     assert!(!bare.is_empty(), "the forest grows on terrain");
     for (surface, grows) in [(Surface::Grass, true), (Surface::Dirt, true), (Surface::Asphalt, false), (Surface::Concrete, false)] {
         let mut d = base();
-        d.surface_areas = vec![SurfaceArea { id: "park".into(), polygon: vec![[2000, 2000], [8000, 2000], [8000, 8000], [2000, 8000]], surface }];
+        d.surface_areas = vec![SurfaceArea { style_id: String::new(), id: "park".into(), polygon: vec![[2000, 2000], [8000, 2000], [8000, 8000], [2000, 8000]], surface }];
         let objects = generated(&d, Cell { x: 0, y: 0 }).chunk.objects;
         if grows {
             assert_eq!(objects.len(), bare.len(), "{surface:?} paint keeps every tree");

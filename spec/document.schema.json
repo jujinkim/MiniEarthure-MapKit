@@ -107,6 +107,10 @@
         "$ref": "#/definitions/GrindLine"
       }
     },
+    "ground_style_id": {
+      "type": "string",
+      "maxLength": 128
+    },
     "ground_surface": {
       "description": "Surface of unpainted terrain; absent means grass.",
       "anyOf": [
@@ -660,6 +664,10 @@
           "maxItems": 4096,
           "minItems": 2
         },
+        "style_id": {
+          "type": "string",
+          "maxLength": 128
+        },
         "thickness_cm": {
           "type": "integer",
           "format": "uint32",
@@ -786,6 +794,11 @@
         },
         "roof": {
           "type": "string"
+        },
+        "style_id": {
+          "description": "Optional display catalogue ID; independent of physical surface and collision.",
+          "type": "string",
+          "maxLength": 128
         },
         "usage": {
           "type": "string"
@@ -1254,6 +1267,9 @@
           "format": "uint16",
           "minimum": 0.0
         },
+        "terrain": {
+          "type": "string"
+        },
         "utc_offset_minutes": {
           "type": "integer",
           "format": "int32"
@@ -1299,6 +1315,9 @@
           }
         },
         "settlement": {
+          "type": "string"
+        },
+        "terrain": {
           "type": "string"
         }
       },
@@ -2440,12 +2459,21 @@
           "format": "uint32",
           "minimum": 0.0
         },
+        "sidewalk_style_id": {
+          "type": "string",
+          "maxLength": 128
+        },
         "snow_retention_percent": {
           "description": "Percentage of weather snow retained on this road, including its paint.",
           "type": "integer",
           "format": "uint8",
           "maximum": 100.0,
           "minimum": 0.0
+        },
+        "style_id": {
+          "description": "Optional display catalogue ID; independent of physical surface and collision.",
+          "type": "string",
+          "maxLength": 128
         },
         "surfaces": {
           "type": "array",
@@ -3012,6 +3040,11 @@
             "minItems": 2
           }
         },
+        "style_id": {
+          "description": "Optional display catalogue ID; independent of physical surface and collision.",
+          "type": "string",
+          "maxLength": 128
+        },
         "surface": {
           "$ref": "#/definitions/Surface"
         }
@@ -3262,6 +3295,11 @@
           "type": "integer",
           "format": "uint32",
           "minimum": 0.0
+        },
+        "style_id": {
+          "description": "Optional display catalogue ID; independent of physical surface and collision.",
+          "type": "string",
+          "maxLength": 128
         },
         "tree": {
           "description": "Declared visual footprint and shared asset for generated trees.",

@@ -1,6 +1,7 @@
 extends RefCounted
 ## Public, rendering-independent environment math. No clock, I/O or game authority.
 const VERSION := 1
+const CATALOG := preload("./regional_catalog.json")
 const CONCEPTS := ["polar", "metropolis", "countryside", "middle-eastern", "desert", "jungle", "southeast-asian"]
 const WEIGHTS := [[25,35,0,40], [45,30,20,5], [45,25,25,5], [65,25,10,0], [80,18,2,0], [25,30,45,0], [30,25,45,0]]
 
@@ -110,18 +111,18 @@ static func design_defaults(concept: String) -> Dictionary:
 		"countryside":["rural","temperate","village"],"middle-eastern":["adobe","arid","urban"],
 		"desert":["adobe","arid","wilderness"],"jungle":["tropical","tropical","wilderness"],
 		"southeast-asian":["tropical","tropical","village"]}.get(concept,["modern","temperate","urban"])
-	return {"architecture":values[0],"climate":values[1],"settlement":values[2]}
+	return {"architecture":values[0],"climate":values[1],"settlement":values[2],"terrain":"plain"}
 
 static func design_at(profile: Dictionary, point: Vector2) -> Dictionary:
 	var design := design_defaults(str(profile.get("concept","metropolis")))
 	for key: String in profile:
-		if key not in ["architecture","climate","settlement"] or not str(profile[key]).is_empty(): design[key]=profile[key]
+		if key not in ["architecture","climate","settlement","terrain"] or not str(profile[key]).is_empty(): design[key]=profile[key]
 	for region: Dictionary in profile.get("regions", []):
 		var polygon := PackedVector2Array()
 		for vertex: Array in region.polygon: polygon.append(Vector2(vertex[0], vertex[1]) / 100.0)
 		if Geometry2D.is_point_in_polygon(point,polygon):
 			design.merge(design_defaults(str(region.concept)),true)
 			for key: String in region:
-				if key not in ["architecture","climate","settlement"] or not str(region[key]).is_empty(): design[key]=region[key]
+				if key not in ["architecture","climate","settlement","terrain"] or not str(region[key]).is_empty(): design[key]=region[key]
 			break
 	return design

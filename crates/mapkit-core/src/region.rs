@@ -253,6 +253,7 @@ pub fn source_metadata(d: &MapDocument) -> MapDocument {
         nodes: vec![],
         roads: vec![],
         surface_areas: vec![],
+        ground_style_id: d.ground_style_id.clone(),
         ground_surface: d.ground_surface,
         barriers: vec![],
         play_area: d.play_area.clone(),

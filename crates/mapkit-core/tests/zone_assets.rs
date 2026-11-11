@@ -14,8 +14,7 @@ fn document() -> MapDocument {
             CollisionBox { center: [0,100,0], size_cm: [16,180,16] }],
         convex_collision: vec![], material: None,
     });
-    d.zones.push(Zone {
-        id: "garden".into(), polygon: vec![[100,100],[3100,100],[3100,1500],[100,1500]],
+    d.zones.push(Zone { style_id: String::new(), id: "garden".into(), polygon: vec![[100,100],[3100,100],[3100,1500],[100,1500]],
         kind: ZoneKind::Orchard, spacing_cm: 500, density_per_mille: 1000, exclusions: vec![],
         tree: Some(ZoneTree { asset_id: "shared-tree".into(), radius_cm: 150, clearance_cm: 5 }),
     });

@@ -3,7 +3,7 @@ use mapkit_core::*;
 
 fn marked(id: &str, points: Vec<Vertex>) -> Road {
     let n = points.len() - 1;
-    Road { design: None, snow_retention_percent: 100, id: id.into(), from: format!("{id}:a"), to: format!("{id}:b"),
+    Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None, snow_retention_percent: 100, id: id.into(), from: format!("{id}:a"), to: format!("{id}:b"),
         points, widths_cm: vec![400; n], surfaces: vec![Surface::Asphalt; n], kind: RoadKind::Bridge,
         clearance_cm: None, sidewalk_cm: Some(80),
         markings: Some(RoadMarkings { color: None, lanes: 2, center_line: true, edge_lines: true, crosswalk_start: false,

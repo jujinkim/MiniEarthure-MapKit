@@ -479,7 +479,7 @@ mod tests {
         d.zones.clear();
         d.attributions.push(mapkit_core::Attribution { source: "osm#layer".into(), license: "ODbL-1.0".into(),
             notice: r#"{"adapter":"osm-extract-v1","authored_units":{"metres_per_unit":1,"source_denominator":3}}"#.into() });
-        let barrier = |id: &str, kind, line: Vec<Point>, height_cm, thickness_cm| Barrier { id: id.into(), kind, line, height_cm, thickness_cm };
+        let barrier = |id: &str, kind, line: Vec<Point>, height_cm, thickness_cm| Barrier { style_id: String::new(), id: id.into(), kind, line, height_cm, thickness_cm };
         d.barriers = vec![
             // Crosses the ground road (a gate) and the cell seam at y = 51200.
             barrier("fence-gate", BarrierKind::Fence, vec![[10000, 20000], [10000, 60000]], 40, 5),

@@ -8,14 +8,14 @@ fn custom_canopies_avoid_roads_buildings_and_authored_placements() {
     d.nodes.clear();d.roads.clear();d.buildings.clear();d.zones.clear();d.assets.clear();d.placements.clear();
     d.nodes.push(RoadNode { id:"a".into(),position:[0,0,1000],level:0 });
     d.nodes.push(RoadNode { id:"b".into(),position:[3200,0,1000],level:0 });
-    d.roads.push(Road { design: None, snow_retention_percent: 100, id:"road".into(), from:"a".into(),to:"b".into(),points:vec![[0,0,1000],[3200,0,1000]],widths_cm:vec![200],surfaces:vec![Surface::Asphalt],kind:RoadKind::Ground,sidewalk_cm:Some(0),clearance_cm:None,..road });
+    d.roads.push(Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None, snow_retention_percent: 100, id:"road".into(), from:"a".into(),to:"b".into(),points:vec![[0,0,1000],[3200,0,1000]],widths_cm:vec![200],surfaces:vec![Surface::Asphalt],kind:RoadKind::Ground,sidewalk_cm:Some(0),clearance_cm:None,..road });
     d.assets.push(Asset { distant_path: None, id:"tree".into(),path:"tree.glb".into(),
         attribution:Attribution { source:"synthetic".into(),license:"MIT".into(),notice:"Original fixture".into() },
         collision:vec![CollisionBox { center:[0,100,0],size_cm:[100,200,100] }],convex_collision:vec![],material:None });
     d.placements.push(Placement { id:"fixture".into(),asset_id:"tree".into(),position:[1000,0,2000],quarter_turns:0, yaw_offset_mdeg: 0,
 });
-    d.buildings.push(Building { id:"building".into(),footprint:vec![[1900,1900],[2100,1900],[2100,2100],[1900,2100]],holes:vec![],base_cm:0,height_cm:300,usage:"public".into(),material:"concrete".into(),roof:"flat".into(),entrances:vec![],parts:vec![] });
-    d.zones.push(Zone { id:"garden".into(),polygon:vec![[100,100],[3100,100],[3100,3100],[100,3100]],kind:ZoneKind::Orchard,spacing_cm:500,density_per_mille:1000,exclusions:vec![],tree:Some(ZoneTree { asset_id:"tree".into(),radius_cm:150,clearance_cm:50 }) });
+    d.buildings.push(Building { style_id: String::new(), id:"building".into(),footprint:vec![[1900,1900],[2100,1900],[2100,2100],[1900,2100]],holes:vec![],base_cm:0,height_cm:300,usage:"public".into(),material:"concrete".into(),roof:"flat".into(),entrances:vec![],parts:vec![] });
+    d.zones.push(Zone { style_id: String::new(), id:"garden".into(),polygon:vec![[100,100],[3100,100],[3100,3100],[100,3100]],kind:ZoneKind::Orchard,spacing_cm:500,density_per_mille:1000,exclusions:vec![],tree:Some(ZoneTree { asset_id:"tree".into(),radius_cm:150,clearance_cm:50 }) });
     let g=generate(GenerationInput { document:&d,cell:Cell { x:0,y:0 },heightgrid:None,max_triangles:500_000 }).unwrap();
     let trees:Vec<_>=g.objects.iter().filter(|p| p.id.starts_with("garden:")).collect();
     assert!(!trees.is_empty());

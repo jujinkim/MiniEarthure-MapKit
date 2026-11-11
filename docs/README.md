@@ -13,6 +13,7 @@ essential validation; edit existing sections instead of appending dated logs.
 | Regional source storage | [REGIONAL_SOURCE](../spec/REGIONAL_SOURCE.md) |
 | Determinism and known vector mismatch | [DETERMINISM](../spec/DETERMINISM.md) |
 | Public error catalog | [ERRORS](../spec/ERRORS.md) |
+| Regional appearance IDs and catalogue | [APPEARANCE](../spec/APPEARANCE.md) |
 | World library, placement yaw, sign surface | [WORLD_ASSETS](../spec/WORLD_ASSETS.md) |
 
 ## Generation and geometry

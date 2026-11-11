@@ -5,7 +5,7 @@ fn document() -> MapDocument {
     let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
     d.recipe_version = 1;
     d.environment = Some(serde_json::from_value(serde_json::json!({"version":1,"concept":"countryside",
-        "architecture":"timber","climate":"polar","settlement":"sparse",
+        "architecture":"venetian","climate":"mediterranean","settlement":"city_center","terrain":"canal",
         "latitude_mdeg":78000,"longitude_mdeg":16000,"utc_offset_minutes":60,
         "sunrise_minutes":360,"sunset_minutes":1080,"regions":[{"id":"town","concept":"metropolis","polygon":[[0,0],[10000,0],[10000,10000]]}],"lights":[]})).unwrap());
     d

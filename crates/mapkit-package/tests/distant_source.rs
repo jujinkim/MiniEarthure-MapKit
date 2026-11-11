@@ -10,7 +10,7 @@ fn scenarios() -> Vec<(&'static str, MapDocument, BTreeMap<String, Vec<u8>>)> {
     dense.bounds.max = [25600,25600]; dense.cell_size_cm = 12800;
     for y in 0..16 { for x in 0..16 {
         let x = 300+x*1550; let y = 300+y*1550;
-        dense.buildings.push(Building { id:format!("building-{x}-{y}"),
+        dense.buildings.push(Building { style_id: String::new(), id:format!("building-{x}-{y}"),
             footprint:vec![[x,y],[x+1200,y],[x+1200,y+1200],[x,y+1200]], holes:vec![],
             base_cm:0,height_cm:1500,usage:"public".into(),
             material:if x%2==0 {"wood"} else {"brick"}.into(),

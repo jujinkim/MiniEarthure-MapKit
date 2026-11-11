@@ -209,12 +209,14 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     for item in surface_attachments {retained.string(&item.id)?;retained.string(&item.kind)?;retained.string(&item.surface.surface_id)?;}
     retained.string(map_id)?;
     retained.string(theme)?;
+    retained.string(&document.ground_style_id)?;
     if let Some(backdrop) = &document.backdrop { retained.string(backdrop)?; }
     if let Some(environment) = &document.environment {
         retained.string(&environment.concept)?;
         retained.string(&environment.architecture)?;
         retained.string(&environment.climate)?;
         retained.string(&environment.settlement)?;
+        retained.string(&environment.terrain)?;
         retained.vector(&environment.regions)?;
         for region in &environment.regions {
             retained.string(&region.id)?;
@@ -222,6 +224,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
             retained.string(&region.architecture)?;
             retained.string(&region.climate)?;
             retained.string(&region.settlement)?;
+            retained.string(&region.terrain)?;
             retained.vector(&region.polygon)?;
         }
         retained.vector(&environment.lights)?;
@@ -263,6 +266,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     retained.vector(roads)?;
     for Road {
+        style_id,
+        sidewalk_style_id,
         design,
         snow_retention_percent: _,
         id,
@@ -277,6 +282,8 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         markings,
     } in roads
     {
+        retained.string(style_id)?;
+        retained.string(sidewalk_style_id)?;
         retained.string(id)?;
         retained.string(from)?;
         retained.string(to)?;
@@ -299,16 +306,19 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     retained.vector(surface_areas)?;
     for SurfaceArea {
+        style_id,
         id,
         polygon,
         surface: _,
     } in surface_areas
     {
+        retained.string(style_id)?;
         retained.string(id)?;
         retained.vector(polygon)?;
     }
     retained.vector(buildings)?;
     for Building {
+        style_id,
         id,
         footprint,
         holes,
@@ -321,6 +331,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         parts,
     } in buildings
     {
+        retained.string(style_id)?;
         retained.string(id)?;
         retained.vector(footprint)?;
         retained.polygons(holes)?;
@@ -336,12 +347,14 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
     }
     retained.polygons(play_area)?;
     retained.vector(barriers)?;
-    for mapkit_core::barrier::Barrier { id, kind: _, line, height_cm: _, thickness_cm: _ } in barriers {
+    for mapkit_core::barrier::Barrier { style_id, id, kind: _, line, height_cm: _, thickness_cm: _ } in barriers {
+        retained.string(style_id)?;
         retained.string(id)?;
         retained.vector(line)?;
     }
     retained.vector(zones)?;
     for Zone {
+        style_id,
         id,
         polygon,
         kind: _,
@@ -351,6 +364,7 @@ pub(crate) fn document_retained_bytes(document: &MapDocument) -> Result<u64> {
         tree,
     } in zones
     {
+        retained.string(style_id)?;
         retained.string(id)?;
         retained.vector(polygon)?;
         retained.polygons(exclusions)?;
@@ -542,8 +556,7 @@ mod tests {
         );
         d.buildings = vector(
             3,
-            Building {
-                id: string(151),
+            Building { style_id: String::new(), id: string(151),
                 footprint: vector(11, [i64::MAX, i64::MIN]),
                 holes: vector(5, vector(13, [i64::MAX, i64::MIN])),
                 base_cm: i64::MIN,
@@ -557,8 +570,7 @@ mod tests {
         );
         d.zones = vector(
             19,
-            Zone {
-                tree: Some(mapkit_core::ZoneTree {
+            Zone { style_id: String::new(), tree: Some(mapkit_core::ZoneTree {
                     asset_id: string(177),
                     radius_cm: 58,
                     clearance_cm: 5,
@@ -704,7 +716,7 @@ mod tests {
         );
         d.roads = vector(
             5,
-            Road { design: None,
+            Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None,
                 snow_retention_percent: 100,
                 id: string(107),
                 from: string(109),
@@ -730,8 +742,7 @@ mod tests {
         );
         d.surface_areas = vector(
             17,
-            SurfaceArea {
-                id: string(127),
+            SurfaceArea { style_id: String::new(), id: string(127),
                 polygon: vector(19, [0; 2]),
                 surface: Surface::Dirt,
             },
@@ -810,8 +821,7 @@ mod tests {
         let holes_bytes = allocation(holes.capacity(), size_of::<Vec<Point>>());
         d.buildings = vector(
             5,
-            Building {
-                id: String::new(),
+            Building { style_id: String::new(), id: String::new(),
                 footprint: Vec::new(),
                 holes,
                 base_cm: i64::MIN,
@@ -956,6 +966,18 @@ mod tests {
     }
 
     #[test]
+    fn style_allocations_are_retained() {
+        let mut d: MapDocument = serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
+        let before = document_retained_bytes(&d).unwrap();
+        d.ground_style_id = "ground/rock".into();
+        d.buildings[0].style_id = "building/modern/office/glass".into();
+        d.roads[0].style_id = "road/street/asphalt".into();
+        d.roads[0].sidewalk_style_id = "ground/pavers".into();
+        let extra = [&d.ground_style_id, &d.buildings[0].style_id, &d.roads[0].style_id, &d.roads[0].sidewalk_style_id].iter().map(|s| allocation(s.capacity(), 1)).sum::<u64>();
+        assert_eq!(document_retained_bytes(&d).unwrap(), before + extra);
+    }
+
+    #[test]
     fn public_document_schema_requires_an_explicit_ownership_decision() {
         let schema = schemars::schema_for!(MapDocument);
         let actual: BTreeSet<_> = schema
@@ -994,6 +1016,7 @@ mod tests {
             "placements",
             "repetitions",
             "ground_surface",
+            "ground_style_id",
             "barriers",
             "play_area",
             "traffic",

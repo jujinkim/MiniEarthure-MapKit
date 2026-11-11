@@ -1,0 +1,728 @@
+{
+  "version": 1,
+  "ground": {
+    "asphalt": {
+      "surface": "asphalt",
+      "color": [
+        48,
+        52,
+        59
+      ],
+      "detail": "asphalt"
+    },
+    "concrete": {
+      "surface": "concrete",
+      "color": [
+        183,
+        184,
+        176
+      ],
+      "detail": "concrete"
+    },
+    "pavers": {
+      "surface": "concrete",
+      "color": [
+        169,
+        157,
+        141
+      ],
+      "detail": "stone"
+    },
+    "stone_paving": {
+      "surface": "concrete",
+      "color": [
+        156,
+        151,
+        137
+      ],
+      "detail": "stone"
+    },
+    "gravel": {
+      "surface": "gravel",
+      "color": [
+        136,
+        132,
+        119
+      ],
+      "detail": "earth"
+    },
+    "compacted_earth": {
+      "surface": "dirt",
+      "color": [
+        146,
+        116,
+        86
+      ],
+      "detail": "earth"
+    },
+    "sand": {
+      "surface": "dirt",
+      "color": [
+        200,
+        175,
+        124
+      ],
+      "detail": "sand"
+    },
+    "rock": {
+      "surface": "gravel",
+      "color": [
+        155,
+        135,
+        112
+      ],
+      "detail": "rock"
+    },
+    "managed_lawn": {
+      "surface": "grass",
+      "color": [
+        115,
+        134,
+        100
+      ],
+      "detail": "lawn"
+    },
+    "grassland": {
+      "surface": "grass",
+      "color": [
+        132,
+        143,
+        100
+      ],
+      "detail": "lawn"
+    },
+    "scrub": {
+      "surface": "grass",
+      "color": [
+        128,
+        133,
+        92
+      ],
+      "detail": "earth"
+    },
+    "forest_floor": {
+      "surface": "dirt",
+      "color": [
+        98,
+        100,
+        70
+      ],
+      "detail": "earth"
+    },
+    "cropland": {
+      "surface": "dirt",
+      "color": [
+        145,
+        127,
+        81
+      ],
+      "detail": "earth"
+    },
+    "orchard": {
+      "surface": "grass",
+      "color": [
+        118,
+        131,
+        83
+      ],
+      "detail": "lawn"
+    },
+    "wetland": {
+      "surface": "dirt",
+      "color": [
+        94,
+        115,
+        90
+      ],
+      "detail": "earth"
+    },
+    "snow": {
+      "surface": "grass",
+      "color": [
+        217,
+        228,
+        232
+      ],
+      "detail": "rock"
+    },
+    "ice": {
+      "surface": "concrete",
+      "color": [
+        180,
+        208,
+        218
+      ],
+      "detail": "rock"
+    }
+  },
+  "materials": {
+    "brick": {
+      "color": [
+        163,
+        104,
+        78
+      ],
+      "roof_color": [
+        116,
+        79,
+        61
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "brick"
+    },
+    "concrete": {
+      "color": [
+        189,
+        188,
+        179
+      ],
+      "roof_color": [
+        137,
+        140,
+        136
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "concrete"
+    },
+    "plaster": {
+      "color": [
+        221,
+        211,
+        190
+      ],
+      "roof_color": [
+        153,
+        132,
+        110
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "whitewash": {
+      "color": [
+        235,
+        234,
+        221
+      ],
+      "roof_color": [
+        222,
+        225,
+        216
+      ],
+      "roughness_per_mille": 920,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "stone": {
+      "color": [
+        178,
+        166,
+        145
+      ],
+      "roof_color": [
+        130,
+        123,
+        110
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "stone"
+    },
+    "wood": {
+      "color": [
+        139,
+        104,
+        72
+      ],
+      "roof_color": [
+        97,
+        80,
+        62
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "metal": {
+      "color": [
+        162,
+        170,
+        172
+      ],
+      "roof_color": [
+        121,
+        133,
+        141
+      ],
+      "roughness_per_mille": 420,
+      "metallic_per_mille": 100,
+      "detail": "metal"
+    },
+    "glass": {
+      "color": [
+        113,
+        151,
+        163
+      ],
+      "roof_color": [
+        113,
+        132,
+        143
+      ],
+      "roughness_per_mille": 180,
+      "metallic_per_mille": 50,
+      "detail": "glass"
+    },
+    "clay_tile": {
+      "color": [
+        182,
+        105,
+        76
+      ],
+      "roof_color": [
+        170,
+        94,
+        66
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "tile"
+    },
+    "dark_tile": {
+      "color": [
+        109,
+        114,
+        115
+      ],
+      "roof_color": [
+        80,
+        88,
+        92
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "tile"
+    }
+  },
+  "architectures": {
+    "modern": {
+      "material": "concrete",
+      "roof": "flat",
+      "modules": [
+        "parapet",
+        "window_band",
+        "balcony"
+      ]
+    },
+    "korean_modern": {
+      "material": "concrete",
+      "roof": "flat",
+      "modules": [
+        "parapet",
+        "balcony",
+        "shop_canopy"
+      ]
+    },
+    "japanese_modern": {
+      "material": "plaster",
+      "roof": "flat",
+      "modules": [
+        "balcony",
+        "shop_canopy",
+        "rail"
+      ]
+    },
+    "korean_traditional": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "tiled_eaves",
+        "ridge",
+        "timber_frame"
+      ]
+    },
+    "japanese_traditional": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "deep_eaves",
+        "timber_frame",
+        "veranda"
+      ]
+    },
+    "chinese_courtyard": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "tiled_eaves",
+        "ridge",
+        "courtyard_gate"
+      ]
+    },
+    "south_asian": {
+      "material": "plaster",
+      "roof": "flat",
+      "modules": [
+        "balcony",
+        "shop_canopy",
+        "shade_arcade"
+      ]
+    },
+    "southeast_asian": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "shop_canopy",
+        "veranda",
+        "stilts"
+      ]
+    },
+    "middle_eastern": {
+      "material": "stone",
+      "roof": "flat",
+      "modules": [
+        "shade_arcade",
+        "courtyard_gate",
+        "parapet"
+      ]
+    },
+    "european_stone": {
+      "material": "stone",
+      "roof": "gabled",
+      "modules": [
+        "window_reveal",
+        "cornice",
+        "arch"
+      ]
+    },
+    "european_brick": {
+      "material": "brick",
+      "roof": "gabled",
+      "modules": [
+        "window_reveal",
+        "cornice",
+        "chimney"
+      ]
+    },
+    "nordic_timber": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "deep_eaves",
+        "timber_frame",
+        "chimney"
+      ]
+    },
+    "mediterranean": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "tiled_eaves",
+        "balcony",
+        "arch"
+      ]
+    },
+    "north_american_suburb": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "porch",
+        "deep_eaves",
+        "chimney"
+      ]
+    },
+    "farm": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "barn_door",
+        "deep_eaves",
+        "vent"
+      ]
+    },
+    "polar_station": {
+      "material": "metal",
+      "roof": "flat",
+      "modules": [
+        "stilts",
+        "service_door",
+        "vent"
+      ]
+    },
+    "venetian": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "stone_plinth",
+        "arch",
+        "balcony",
+        "cornice"
+      ]
+    },
+    "cycladic": {
+      "material": "whitewash",
+      "roof": "flat",
+      "modules": [
+        "blue_shutter",
+        "rounded_parapet",
+        "vault"
+      ]
+    },
+    "rural": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "porch",
+        "deep_eaves"
+      ]
+    },
+    "adobe": {
+      "material": "plaster",
+      "roof": "flat",
+      "modules": [
+        "shade_arcade",
+        "parapet"
+      ]
+    },
+    "timber": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "timber_frame",
+        "deep_eaves"
+      ]
+    },
+    "tropical": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "veranda",
+        "stilts"
+      ]
+    }
+  },
+  "building_types": {
+    "detached": {
+      "facade_kind": 2,
+      "modules": [
+        "door",
+        "window"
+      ]
+    },
+    "terraced": {
+      "facade_kind": 2,
+      "modules": [
+        "door",
+        "window"
+      ]
+    },
+    "lowrise": {
+      "facade_kind": 1,
+      "modules": [
+        "entrance",
+        "balcony"
+      ]
+    },
+    "apartment": {
+      "facade_kind": 1,
+      "modules": [
+        "entrance",
+        "balcony"
+      ]
+    },
+    "residential_tower": {
+      "facade_kind": 1,
+      "modules": [
+        "entrance",
+        "window_band"
+      ]
+    },
+    "shop": {
+      "facade_kind": 3,
+      "modules": [
+        "shopfront",
+        "canopy"
+      ]
+    },
+    "mixed_use": {
+      "facade_kind": 3,
+      "modules": [
+        "shopfront",
+        "balcony"
+      ]
+    },
+    "office": {
+      "facade_kind": 3,
+      "modules": [
+        "lobby",
+        "window_band"
+      ]
+    },
+    "hotel": {
+      "facade_kind": 5,
+      "modules": [
+        "lobby",
+        "canopy"
+      ]
+    },
+    "shopping": {
+      "facade_kind": 3,
+      "modules": [
+        "shopfront",
+        "service_door"
+      ]
+    },
+    "school": {
+      "facade_kind": 5,
+      "modules": [
+        "entrance",
+        "window_band"
+      ]
+    },
+    "university": {
+      "facade_kind": 5,
+      "modules": [
+        "entrance",
+        "colonnade"
+      ]
+    },
+    "hospital": {
+      "facade_kind": 5,
+      "modules": [
+        "entrance",
+        "ambulance_canopy"
+      ]
+    },
+    "civic": {
+      "facade_kind": 5,
+      "modules": [
+        "steps",
+        "colonnade"
+      ]
+    },
+    "religious": {
+      "facade_kind": 5,
+      "modules": [
+        "portal",
+        "arch"
+      ]
+    },
+    "station": {
+      "facade_kind": 5,
+      "modules": [
+        "entrance",
+        "platform_canopy"
+      ]
+    },
+    "factory": {
+      "facade_kind": 4,
+      "modules": [
+        "service_door",
+        "vent"
+      ]
+    },
+    "warehouse": {
+      "facade_kind": 4,
+      "modules": [
+        "loading_bay",
+        "vent"
+      ]
+    },
+    "farmhouse": {
+      "facade_kind": 2,
+      "modules": [
+        "porch",
+        "door"
+      ]
+    },
+    "barn": {
+      "facade_kind": 4,
+      "modules": [
+        "barn_door",
+        "vent"
+      ]
+    },
+    "utility": {
+      "facade_kind": 4,
+      "modules": [
+        "service_door",
+        "vent"
+      ]
+    },
+    "research": {
+      "facade_kind": 5,
+      "modules": [
+        "service_door",
+        "window_band"
+      ]
+    }
+  },
+  "road_types": [
+    "motorway",
+    "trunk",
+    "primary",
+    "secondary",
+    "tertiary",
+    "street",
+    "alley",
+    "living_street",
+    "driveway",
+    "parking_aisle",
+    "unpaved",
+    "footway",
+    "steps",
+    "cycleway",
+    "plaza",
+    "bridge",
+    "elevated",
+    "tunnel"
+  ],
+  "vegetation_types": [
+    "deciduous",
+    "conifer",
+    "palm",
+    "orchard",
+    "scrub",
+    "polar_scrub"
+  ],
+  "barrier_types": [
+    "wall",
+    "fence",
+    "retaining_wall",
+    "rail",
+    "quay",
+    "hedge"
+  ],
+  "climates": [
+    "temperate",
+    "polar",
+    "cold",
+    "mediterranean",
+    "arid",
+    "tropical",
+    "humid"
+  ],
+  "settlements": [
+    "urban",
+    "village",
+    "sparse",
+    "wilderness",
+    "city_center",
+    "city",
+    "suburb",
+    "town",
+    "rural",
+    "industrial"
+  ],
+  "terrains": [
+    "plain",
+    "mountain",
+    "canyon",
+    "coast",
+    "river",
+    "canal"
+  ]
+}

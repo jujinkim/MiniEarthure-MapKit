@@ -32,7 +32,7 @@ pub fn city(osm: bool) -> MapDocument {
     d.roads = serde_json::from_value(serde_json::json!([{"id": "crossing", "from": "south", "to": "north",
         "points": [[4800, 0, 200], [4800, 0, 3000]], "widths_cm": [300], "surfaces": ["asphalt"],
         "kind": "ground", "clearance_cm": null, "sidewalk_cm": 0}])).unwrap();
-    d.barriers = vec![barrier::Barrier { id: "fence".into(), kind: barrier::BarrierKind::Fence,
+    d.barriers = vec![barrier::Barrier { style_id: String::new(), id: "fence".into(), kind: barrier::BarrierKind::Fence,
         line: vec![[2000, 1000], [2400, 1000]], height_cm: 40, thickness_cm: 10 }];
     d
 }

@@ -222,6 +222,7 @@ impl Serialize for Document<'_> {
         fields!(m, d, free_roam);
         if !d.gimmicks.is_empty() {m.serialize_entry("gimmicks", &Normalized(&d.gimmicks,self.1))?;}
         if !d.grind_lines.is_empty() {m.serialize_entry("grind_lines", &Normalized(&d.grind_lines,self.1))?;}
+        if !d.ground_style_id.is_empty() { fields!(m, d, ground_style_id); }
         // Normalization spells the grass default as an absent field.
         if d.ground_surface.is_some_and(|g| g != Surface::Grass) { fields!(m, d, ground_surface); }
         m.serialize_entry("heightmaps", &Normalized(&d.heightmaps, self.1))?;
@@ -268,7 +269,10 @@ record!(Road, d, m, {
     if let Some(markings) = &d.markings {
         m.serialize_entry("markings", &Canonical(markings))?;
     }
-    fields!(m, d, points, sidewalk_cm, surfaces, to, widths_cm);
+    fields!(m, d, points, sidewalk_cm);
+    if !d.sidewalk_style_id.is_empty() { fields!(m, d, sidewalk_style_id); }
+    if !d.style_id.is_empty() { fields!(m, d, style_id); }
+    fields!(m, d, surfaces, to, widths_cm);
 });
 record!(RoadMarkings, d, m, {
     fields!(m,d,center_line);
@@ -288,7 +292,9 @@ record!(RoadMarkings, d, m, {
     if d.stop_lines {fields!(m,d,stop_lines);}
 });
 record!(SurfaceArea, d, m, {
-    fields!(m, d, id, polygon, surface);
+    fields!(m, d, id, polygon);
+    if !d.style_id.is_empty() { fields!(m, d, style_id); }
+    fields!(m, d, surface);
 });
 record!(Building, d, m, {
     fields!(m, d, base_cm);
@@ -303,7 +309,9 @@ record!(Building, d, m, {
     if !d.parts.is_empty() {
         m.serialize_entry("parts", &Parts(d))?;
     }
-    fields!(m, d, roof, usage);
+    fields!(m, d, roof);
+    if !d.style_id.is_empty() { fields!(m, d, style_id); }
+    fields!(m, d, usage);
 });
 /// Parts with normalization's inherited-value omission (a value equal to the
 /// record's is the absent default).
@@ -331,7 +339,9 @@ impl Serialize for Parts<'_> {
     }
 }
 record!(mapkit_core::barrier::Barrier, d, m, {
-    fields!(m, d, height_cm, id, kind, line, thickness_cm);
+    fields!(m, d, height_cm, id, kind, line);
+    if !d.style_id.is_empty() { fields!(m, d, style_id); }
+    fields!(m, d, thickness_cm);
 });
 record!(Zone, d, m, {
     fields!(
@@ -344,6 +354,7 @@ record!(Zone, d, m, {
         polygon,
         spacing_cm
     );
+    if !d.style_id.is_empty() { fields!(m, d, style_id); }
 });
 record!(Heightmap, d, m, {
     m.serialize_entry("cell", &Canonical(&d.cell))?;
@@ -440,6 +451,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn appearance_fields_match_canonical_identity() {
+        let mut d = minimal();
+        d.ground_style_id = "ground/rock".into();
+        d.buildings[0].style_id = "building/cycladic/detached/whitewash".into();
+        d.roads[0].style_id = "road/street/asphalt".into();
+        d.roads[0].sidewalk_style_id = "ground/stone_paving".into();
+        for z in &mut d.zones { z.style_id = "vegetation/conifer".into(); }
+        d.surface_areas = vec![SurfaceArea { id: "plaza".into(), polygon: vec![[0,0],[100,0],[100,100]], surface: Surface::Concrete, style_id: "ground/pavers".into() }];
+        d.barriers = vec![mapkit_core::barrier::Barrier { id: "wall".into(), kind: mapkit_core::barrier::BarrierKind::Wall, line: vec![[0,0],[100,100]], height_cm: 100, thickness_cm: 20, style_id: "barrier/retaining_wall/stone".into() }];
+        d.environment = Some(serde_json::from_value(serde_json::json!({"version":1,"concept":"countryside","architecture":"cycladic","terrain":"coast","latitude_mdeg":37000,"longitude_mdeg":25000,"utc_offset_minutes":120,"sunrise_minutes":360,"sunset_minutes":1080,"regions":[{"id":"channel","concept":"metropolis","terrain":"canal","polygon":[[0,0],[100,0],[100,100]]}],"lights":[]})).unwrap());
+        compare(&d, &BTreeMap::new());
+    }
+
     fn reverse_collections(d: &mut MapDocument) {
         d.heightmaps.reverse();
         d.nodes.reverse();
@@ -483,9 +508,9 @@ mod tests {
         let before = crate::content_hash(&d, &files).unwrap();
         d.ground_surface = Some(Surface::Concrete);
         d.barriers = vec![
-            mapkit_core::barrier::Barrier { id: "z-wall".into(), kind: mapkit_core::barrier::BarrierKind::Wall,
+            mapkit_core::barrier::Barrier { style_id: String::new(), id: "z-wall".into(), kind: mapkit_core::barrier::BarrierKind::Wall,
                 line: vec![[10, 10], [500, 900], [10, 10]], height_cm: 300, thickness_cm: 40 },
-            mapkit_core::barrier::Barrier { id: "a-hedge".into(), kind: mapkit_core::barrier::BarrierKind::Hedge,
+            mapkit_core::barrier::Barrier { style_id: String::new(), id: "a-hedge".into(), kind: mapkit_core::barrier::BarrierKind::Hedge,
                 line: vec![[5, 5], [9, 9]], height_cm: 80, thickness_cm: 60 },
         ];
         d.buildings[0].parts = vec![
@@ -558,8 +583,7 @@ mod tests {
         d.buildings[0].holes = vec![vec![[3, 5], [7, 1], [0, 2]], vec![[9, 3], [6, 1], [2, 8]]];
         d.buildings[0].entrances = vec![vec![[9, 2], [8, 7], [1, 5]]];
         d.zones[0].exclusions = d.buildings[0].holes.clone();
-        d.surface_areas = vec![SurfaceArea {
-            id: "ground".into(),
+        d.surface_areas = vec![SurfaceArea { style_id: String::new(), id: "ground".into(),
             polygon: vec![[4, 1], [0, 2], [3, 5]],
             surface: Surface::Grass,
         }];
@@ -726,10 +750,10 @@ record!(mapkit_core::environment::EnvironmentProfile, d, m, {
         m,
         d,
         sunrise_minutes,
-        sunset_minutes,
-        utc_offset_minutes,
-        version
+        sunset_minutes
     );
+    if !d.terrain.is_empty() { fields!(m, d, terrain); }
+    fields!(m, d, utc_offset_minutes, version);
 });
 record!(mapkit_core::environment::EnvironmentRegion, d, m, {
     if !d.architecture.is_empty() {
@@ -742,6 +766,7 @@ record!(mapkit_core::environment::EnvironmentRegion, d, m, {
     if !d.settlement.is_empty() {
         fields!(m, d, settlement);
     }
+    if !d.terrain.is_empty() { fields!(m, d, terrain); }
 });
 record!(mapkit_core::environment::LightBinding, d, m, {
     fields!(

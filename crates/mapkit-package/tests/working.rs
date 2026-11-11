@@ -266,7 +266,7 @@ fn bounded_cell_admission_reuses_snapshot_without_mutating_or_caching_old_geomet
     assert!(s.validate_cells(&vec![cells[0];257]).is_err());
     assert!(s.validate_cells(&[cells[0],cells[0]]).is_err());
     assert!(s.validate_cells(&[Cell{x:2,y:0}]).is_err());
-    s.document.buildings.push(Building { id:"invalid-after-validation".into(),
+    s.document.buildings.push(Building { style_id: String::new(), id:"invalid-after-validation".into(),
         footprint:vec![[100,100],[200,200],[100,200],[200,100]], holes:vec![],
         base_cm:0,height_cm:300,usage:"residential".into(),material:"concrete".into(),
         roof:"flat".into(),entrances:vec![],parts:vec![] });

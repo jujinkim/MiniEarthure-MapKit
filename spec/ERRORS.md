@@ -87,6 +87,7 @@ results. This is a presentation-job error, not a CLI package-acceptance result.
 Consumers must reject readiness and retain any already committed driving region.
 
 Current v1 also reports `E_INDEX` for malformed regional directories or identities,
+`E_APPEARANCE` for an invalid or mismatched appearance catalogue ID,
 `E_CANCELLED` when an owning request is retired, and `E_ENVIRONMENT` for invalid map environment profiles.
 
 Panel authoring errors: `E_TRACK_PANEL_SUPPORT` means no supported production road

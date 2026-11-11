@@ -209,7 +209,7 @@ fn explicit_ground_portal_connects_and_rejects_an_incompatible_apron() {
             position: [0, 0, 4000],
             level: 0,
         });
-        d.roads.push(Road { design: None,
+        d.roads.push(Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None,
             snow_retention_percent: 100,
             id: "approach".into(),
             from: "underpass-from".into(),
@@ -437,8 +437,7 @@ fn remote_surface_polygons_do_not_spend_every_terrain_tiles_work_budget() {
     for i in 0..4096 {
         let x = 60000 + (i % 64) * 500;
         let y = (i / 64) * 500;
-        d.surface_areas.push(SurfaceArea {
-            id: format!("remote-{i}"), surface: Surface::Gravel,
+        d.surface_areas.push(SurfaceArea { style_id: String::new(), id: format!("remote-{i}"), surface: Surface::Gravel,
             polygon: vec![[x,y],[x+100,y],[x+100,y+100],[x,y+100]],
         });
     }

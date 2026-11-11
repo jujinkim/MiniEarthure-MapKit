@@ -151,6 +151,9 @@ This page lists the domain invariants and links each feature's owner.
 All four are optional; absent/empty values are omitted from canonical JSON, so
 earlier documents keep their bytes, world hashes and generated geometry.
 
+- Optional per-record appearance style IDs and `ground_style_id` follow the
+  [regional appearance contract](APPEARANCE.md). They preserve detailed display
+  types independently of physical `Surface`; omitted values retain their meaning.
 - `MapDocument.ground_surface` (`asphalt|concrete|dirt|gravel|grass`, absent =
   grass; normalization drops an explicit `grass`) labels unpainted terrain faces
   (`terrain`, contact class 1): render material, contact surface and distant

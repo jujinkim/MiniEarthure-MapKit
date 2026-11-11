@@ -269,7 +269,7 @@ pub(super) fn propose(d: &MapDocument, request: &Request, route: &Route, starts:
                 || out.document.nodes.iter().any(|n| [&entry_node, &exit_node, &lift_node, &drop_node].contains(&&n.id)) { continue; }
             let Some((ia, ib)) = split(&d.roads[inn.road], a, &entry_node, &second(&d.roads[inn.road])) else { continue; };
             let Some((oa, ob)) = split(&d.roads[next.road], b, &exit_node, &second(&d.roads[next.road])) else { continue; };
-            let ground = |id: &str, from: &str, to: &str, points: Vec<Vertex>| Road { design: None, snow_retention_percent: d.roads[inn.road].snow_retention_percent,
+            let ground = |id: &str, from: &str, to: &str, points: Vec<Vertex>| Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None, snow_retention_percent: d.roads[inn.road].snow_retention_percent,
                 id: id.into(), from: from.into(), to: to.into(), points, widths_cm: vec![width],
                 surfaces: vec![d.roads[inn.road].surfaces.first().copied().unwrap_or(crate::Surface::Asphalt)],
                 kind: crate::RoadKind::Ground, clearance_cm: None, sidewalk_cm: None, markings: None };

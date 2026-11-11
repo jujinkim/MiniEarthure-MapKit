@@ -16,6 +16,8 @@ pub struct EnvironmentRegion {
     pub climate: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub settlement: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub terrain: String,
     pub polygon: Vec<Point>,
 }
 
@@ -41,6 +43,8 @@ pub struct EnvironmentProfile {
     pub climate: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub settlement: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub terrain: String,
     /// Authored starting time; authority preferences can override it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_minutes: Option<u16>,
@@ -58,7 +62,7 @@ pub struct EnvironmentProfile {
 impl EnvironmentProfile {
     pub fn validate(&self, bounds: &Bounds, assets: &[crate::Asset]) -> Result<()> {
         let bad = || error("E_ENVIRONMENT", "Invalid or excessive environment profile");
-        if self.start_minutes.is_some_and(|v|v>=1440) || !dimensions(&self.architecture, &self.climate, &self.settlement) || self.version != 1 || !CONCEPTS.contains(&self.concept.as_str())
+        if self.start_minutes.is_some_and(|v|v>=1440) || !dimensions(&self.architecture, &self.climate, &self.settlement, &self.terrain) || self.version != 1 || !CONCEPTS.contains(&self.concept.as_str())
             || !(-90000..=90000).contains(&self.latitude_mdeg)
             || !(-180000..=180000).contains(&self.longitude_mdeg)
             || !(-720..=840).contains(&self.utc_offset_minutes)
@@ -67,7 +71,7 @@ impl EnvironmentProfile {
             || self.regions.len() > 64 || self.lights.len() > 256 { return Err(bad()); }
         let mut ids = std::collections::BTreeSet::new();
         for region in &self.regions {
-            if !dimensions(&region.architecture, &region.climate, &region.settlement) || region.id.is_empty() || region.id.len() > 128 || !ids.insert(&region.id)
+            if !dimensions(&region.architecture, &region.climate, &region.settlement, &region.terrain) || region.id.is_empty() || region.id.len() > 128 || !ids.insert(&region.id)
                 || !CONCEPTS.contains(&region.concept.as_str())
                 || !(3..=64).contains(&region.polygon.len())
                 || !crate::polygon_valid(&region.polygon, bounds) { return Err(bad()); }
@@ -85,8 +89,10 @@ impl EnvironmentProfile {
     }
 }
 
-fn dimensions(architecture: &str, climate: &str, settlement: &str) -> bool {
-    ["", "modern", "rural", "adobe", "timber", "tropical"].contains(&architecture)
-        && ["", "temperate", "polar", "arid", "tropical"].contains(&climate)
-        && ["", "urban", "village", "sparse", "wilderness"].contains(&settlement)
+fn dimensions(architecture: &str, climate: &str, settlement: &str, terrain: &str) -> bool {
+    let c = crate::appearance::catalog();
+    (architecture.is_empty() || c.architectures.contains_key(architecture))
+        && (climate.is_empty() || c.climates.iter().any(|v| v == climate))
+        && (settlement.is_empty() || c.settlements.iter().any(|v| v == settlement))
+        && (terrain.is_empty() || c.terrains.iter().any(|v| v == terrain))
 }

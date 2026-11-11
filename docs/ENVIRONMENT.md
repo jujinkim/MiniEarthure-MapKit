@@ -9,7 +9,8 @@ standalone Editor previews use their own state.
 ## Authoring and shared resources
 
 - Concepts: polar, metropolis, countryside, middle-eastern, desert, jungle and
-  southeast-asian. Architecture, climate and settlement are independent axes;
+  southeast-asian. Architecture, climate, settlement and terrain are independent axes from the
+  [regional catalogue](../spec/APPEARANCE.md);
   an empty dimension follows the concept. Bounded region polygons use centimetres,
   first match wins, and weather remains map-wide.
 - GLB light bindings refer to material indices rather than mesh surface order.

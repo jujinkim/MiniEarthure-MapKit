@@ -297,7 +297,7 @@ fn tree_anchor_matches_current_surface_quantization() {
     let mut d = document();
     d.cell_size_cm = 1200;
     d.bounds = Bounds { min: [0,0], max: [1200,1200] };
-    d.zones.push(Zone { tree: None, id: "orchard".into(),
+    d.zones.push(Zone { style_id: String::new(), tree: None, id: "orchard".into(),
         polygon: vec![[0,0],[1200,0],[1200,1200],[0,1200]], kind: ZoneKind::Orchard,
         spacing_cm: 400, density_per_mille: 1000, exclusions: vec![] });
     d.heightmaps.push(Heightmap { cell: Cell { x:0,y:0 }, path: "terrain/h.png".into(),

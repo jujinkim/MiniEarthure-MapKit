@@ -44,7 +44,7 @@ fn vegetation_keeps_water_islands_gimmick_exclusions_and_custom_tree_ownership()
     let mut d:MapDocument=serde_json::from_str(include_str!("../../../examples/minimal/document.json")).unwrap();
     d.nodes.clear();d.roads.clear();d.buildings.clear();d.zones.clear();
     d.bounds.max=[12800,12800];d.cell_size_cm=6400;
-    d.zones.push(Zone {id:"orchard".into(),polygon:vec![[100,100],[12700,100],[12700,12700],[100,12700]],
+    d.zones.push(Zone { style_id: String::new(), id:"orchard".into(),polygon:vec![[100,100],[12700,100],[12700,12700],[100,12700]],
         kind:ZoneKind::Orchard,spacing_cm:800,density_per_mille:1000,exclusions:vec![],tree:None});
     d.water_bodies.push(water::WaterBody{id:"lake".into(),polygon:vec![[1000,1000],[4000,1000],[4000,4000],[1000,4000]],
         islands:vec![vec![[2000,2000],[3000,2000],[3000,3000],[2000,3000]]],surface_cm:100,bottom_cm:-100,flow_cm_s:[30,-20]});

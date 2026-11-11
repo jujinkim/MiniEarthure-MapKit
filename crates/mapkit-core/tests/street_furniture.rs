@@ -71,7 +71,7 @@ fn city_trees_have_a_proportionate_trunk_footprint_and_zone_use() {
     crowded.validate().unwrap();
     // A forest zone may grow city trees within a footprint of at least 120 cm.
     let mut forest = doc();
-    forest.zones = vec![Zone { id: "wood".into(), polygon: vec![[400, 400], [2800, 400], [2800, 2800], [400, 2800]], kind: ZoneKind::Forest,
+    forest.zones = vec![Zone { style_id: String::new(), id: "wood".into(), polygon: vec![[400, 400], [2800, 400], [2800, 2800], [400, 2800]], kind: ZoneKind::Forest,
         spacing_cm: 300, density_per_mille: 1000, exclusions: vec![],
         tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: 120, clearance_cm: 30 }) }];
     forest.validate().unwrap();
@@ -87,7 +87,7 @@ fn city_trees_have_a_proportionate_trunk_footprint_and_zone_use() {
 fn city_tree_radius_follows_the_zone_that_grew_it() {
     let mut d = doc();
     d.placements = vec![place("tree", "builtin:city_tree", 800, 800, 0)];
-    d.zones = vec![Zone { id: "park:west".into(), polygon: vec![[1200, 200], [3000, 200], [3000, 3000], [1200, 3000]], kind: ZoneKind::Forest,
+    d.zones = vec![Zone { style_id: String::new(), id: "park:west".into(), polygon: vec![[1200, 200], [3000, 200], [3000, 3000], [1200, 3000]], kind: ZoneKind::Forest,
         spacing_cm: 500, density_per_mille: 1000, exclusions: vec![],
         tree: Some(ZoneTree { asset_id: "builtin:city_tree".into(), radius_cm: 200, clearance_cm: 30 }) }];
     d.placements[0].position = [500, 0, 500];
@@ -143,7 +143,7 @@ fn road_signs_are_solid_posts_with_display_only_plates_and_boards() {
     // corridor while the display-only arm overhangs the carriageway.
     let mut road = doc();
     road.nodes = vec![RoadNode { id: "w".into(), position: [0, 0, 1600], level: 0 }, RoadNode { id: "e".into(), position: [3200, 0, 1600], level: 0 }];
-    road.roads = vec![Road { design: None, snow_retention_percent: 100, id: "street".into(), from: "w".into(), to: "e".into(),
+    road.roads = vec![Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None, snow_retention_percent: 100, id: "street".into(), from: "w".into(), to: "e".into(),
         points: vec![[0, 0, 1600], [3200, 0, 1600]], widths_cm: vec![400], surfaces: vec![Surface::Asphalt], kind: RoadKind::Ground,
         clearance_cm: None, sidewalk_cm: Some(0), markings: None }];
     road.placements = vec![place("guide", "builtin:guide_sign", 1600, 1820, 1)];
@@ -170,7 +170,7 @@ fn sidewalk_road(degrees: f64) -> (MapDocument, f64, [f64; 2]) {
     let b = [libm::round(1600.0 + 1500.0 * c) as i64, libm::round(1600.0 + 1500.0 * s) as i64];
     let mut d = doc();
     d.nodes = vec![RoadNode { id: "a".into(), position: [a[0], 0, a[1]], level: 0 }, RoadNode { id: "b".into(), position: [b[0], 0, b[1]], level: 0 }];
-    d.roads = vec![Road { design: None, snow_retention_percent: 100, id: "avenue".into(), from: "a".into(), to: "b".into(),
+    d.roads = vec![Road { style_id: String::new(), sidewalk_style_id: String::new(), design: None, snow_retention_percent: 100, id: "avenue".into(), from: "a".into(), to: "b".into(),
         points: vec![[a[0], 0, a[1]], [b[0], 0, b[1]]], widths_cm: vec![540], surfaces: vec![Surface::Asphalt], kind: RoadKind::Ground,
         clearance_cm: None, sidewalk_cm: Some(67), markings: None }];
     let angle = libm::atan2((b[1] - a[1]) as f64, (b[0] - a[0]) as f64);
@@ -274,7 +274,7 @@ fn street_tree_pits_turn_with_the_road_beside_the_curb() {
 fn street_species_are_not_zone_trees() {
     for asset in STREET_SPECIES {
         let mut d = doc();
-        d.zones = vec![Zone { id: "wood".into(), polygon: vec![[400, 400], [2800, 400], [2800, 2800], [400, 2800]], kind: ZoneKind::Forest,
+        d.zones = vec![Zone { style_id: String::new(), id: "wood".into(), polygon: vec![[400, 400], [2800, 400], [2800, 2800], [400, 2800]], kind: ZoneKind::Forest,
             spacing_cm: 300, density_per_mille: 1000, exclusions: vec![],
             tree: Some(ZoneTree { asset_id: asset.into(), radius_cm: 120, clearance_cm: 30 }) }];
         assert!(d.validate().is_err(), "{asset} as a zone tree");
