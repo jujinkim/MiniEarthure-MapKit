@@ -156,7 +156,7 @@ generation output only (formats stay v1).
   point run it; per-cell vertex heights (step lips included) charge the road
   work limit. Distant sources share the same ground.
 - Display: the chunk renderer gives each near earth (`dirt`) mesh of a cell with
-  water that cell's highest water surface (`shore_level_m` instance uniform), and
+  water that cell's highest water surface (`shore_level_m` on the cell-owned dirt material), and
   the ground shader darkens earth below about 15 cm above it (×0.56 colour,
   roughness 0.34) as a wet bank; other ground and distant cells are unchanged. In
   a cell holding several levels (stepped stretches) earth below the highest one

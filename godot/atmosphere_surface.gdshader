@@ -28,8 +28,8 @@ uniform bool vegetation = false;
 uniform float wind_strength = 0.5;
 uniform bool terrain_surface = false;
 // Highest water surface of the cell in mesh space (set per earth mesh by the
-// chunk renderer); below about 15 cm above it the earth reads wet.
-instance uniform float shore_level_m = -100000.0;
+// chunk renderer on its cell-owned material); below about 15 cm above it the earth reads wet.
+uniform float shore_level_m = -100000.0;
 // Grass ground: broad lush/dry patches, mown clumps and fine blades in world space.
 uniform bool lawn = false;
 // Reach of the grass field's blades and the shade under them, set by the

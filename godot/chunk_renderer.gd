@@ -761,7 +761,10 @@ static func _wet_bank(job: Dictionary, mesh: GeometryInstance3D, key: String) ->
 		for record: Dictionary in job.water_records:
 			level = maxf(level, float(record.body.surface_cm) * .01)
 		job.shore_level = level
-	if float(job.shore_level) > -10000.0: mesh.set_instance_shader_parameter("shore_level_m", float(job.shore_level))
+	if float(job.shore_level) > -10000.0 and mesh.material_override is ShaderMaterial:
+		# Generated dirt materials belong to this cell. A material parameter
+		# avoids allocating a global instance block for every distant/near mesh.
+		mesh.material_override.set_shader_parameter("shore_level_m", float(job.shore_level))
 
 ## An occluding batch derives its occluder faces from the vertex array it was
 ## built from: reading a just-uploaded surface back waits for the GPU (Metal,
