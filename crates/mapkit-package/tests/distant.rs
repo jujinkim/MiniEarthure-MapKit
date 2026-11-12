@@ -1,5 +1,8 @@
 use mapkit_package::*;
 use std::path::Path;
+#[path = "support/distant.rs"]
+#[allow(dead_code)]
+mod support;
 
 #[test]
 fn distant_display_is_bounded_deterministic_and_preserves_generation() {
@@ -32,9 +35,12 @@ fn distant_display_is_bounded_deterministic_and_preserves_generation() {
                 hash,
                 package.generate(cell, 500_000).unwrap().hash().unwrap()
             );
-            // Assets use independent visual proxies. Pure road/terrain surfaces
-            // retain the exact reflected integer-centimetre triangle boundaries.
+            // Assets use independent visual proxies. Without a heightmap (no
+            // coarse distant ground) pure road/terrain surfaces retain the exact
+            // reflected integer-centimetre triangle boundaries; coarse heightmap
+            // ground is checked by coarse_distant_ground_is_watertight_*.
             if original.objects.is_empty() && package.document.assets.is_empty() && package.document.buildings.is_empty() {
+                assert!(package.document.heightmaps.is_empty());
                 assert_eq!(view.vertices.len(), original.triangles.len() * 3);
             }
         }
@@ -292,4 +298,115 @@ fn real_package_distant_meshes_stay_within_their_bounds() {
         trees += p.generate(cell, 500_000).map_or(0, |c| c.objects.iter().filter(|o| o.asset_id == "builtin:city_tree").count());
     }
     println!("cells {} far triangles {actual} bound {bound} city trees {trees} smallest headroom {:.1}%", p.document.cells().len(), tightest * 100.);
+}
+
+fn coarse_terrain() -> Package {
+    let (d, files) = support::heightmap_terrain();
+    read_bytes(&pack_bytes(d, files).unwrap()).unwrap()
+}
+
+#[test]
+fn coarse_distant_ground_is_watertight_bounded_and_matches_detail_borders() {
+    let package = coarse_terrain();
+    let key = |p: &[f32; 3]| p.map(|v| (v * 100.).round() as i64);
+    for cell in package.document.cells() {
+        let chunk = package.generate(cell, 500_000).unwrap();
+        let far = package.generate_distant(cell).unwrap();
+        let view = package.distant_from_generated(&chunk).unwrap();
+        assert_eq!((&view.vertices, &view.colors, &view.light_data, &view.decoration), (&far.vertices, &far.colors, &far.light_data, &far.decoration));
+        let plan = package.document.coarse_ground(cell, distant::COARSE_GROUND_STRIDE).unwrap().unwrap();
+        assert!(plan.coarse.contains(&true), "{cell:?} has coarse blocks");
+        let triangles = far.vertices.len() as u64 / 3;
+        let bound = package.distant_triangle_bound(cell).unwrap();
+        assert!(triangles <= bound);
+        assert!(triangles < chunk.triangles.len() as u64, "coarse ground has fewer faces than the full detail");
+        if plan.coarse.iter().all(|c| *c) {
+            // Every ground face is coarse: the bound is the exact output.
+            assert_eq!(bound, triangles, "{cell:?}");
+            assert_eq!(triangles, plan.faces());
+        }
+        let area = package.document.cell_bounds(cell).unwrap();
+        // Coarse blocks hold exactly their planned faces; every other ground
+        // face is the detail chunk's own face, unchanged (mixed cells included).
+        let block = |c: [i64; 3]| plan.is_coarse((c[0] - plan.origin[0]).div_euclid(plan.spacing * plan.stride as i64),
+            (c[2] - plan.origin[1]).div_euclid(plan.spacing * plan.stride as i64));
+        let centroid = |v: &[[i64; 3]]| [0, 1, 2].map(|k| v.iter().map(|p| p[k]).sum::<i64>().div_euclid(3));
+        let sorted = |mut v: Vec<[i64; 3]>| { v.sort(); v };
+        let mut far_detail = Vec::new();
+        let mut far_coarse = 0u64;
+        for (v, light) in far.vertices.chunks_exact(3).zip(far.light_data.chunks_exact(3)) {
+            if light[0][1] >= -0.5 { continue; }
+            let v: Vec<_> = v.iter().map(|p| { let k = key(p); [k[0], k[1], -k[2]] }).collect();
+            if block(centroid(&v)) { far_coarse += 1; } else { far_detail.push(sorted(v)); }
+        }
+        let ground_id = |id: &str| id == "terrain" || package.document.surface_areas.iter().any(|a| a.id == id);
+        let mut detail: Vec<_> = chunk.triangles.iter().filter(|t| t.spawnable && ground_id(&t.object_id) && !block(centroid(&t.vertices)))
+            .map(|t| sorted(t.vertices.to_vec())).collect();
+        far_detail.sort();
+        detail.sort();
+        assert_eq!(far_coarse, plan.faces(), "{cell:?} coarse faces");
+        assert_eq!(far_detail, detail, "{cell:?} full-detail ground");
+        let border = |p: [i64; 3]| p[0] == area.min[0] || p[0] == area.max[0] || -p[2] == area.min[1] || -p[2] == area.max[1];
+        // Watertight: every interior edge of a ground face is shared, with the
+        // same heights, by another solid face; no T-junction crack remains.
+        let mut edges = std::collections::BTreeMap::<([i64; 3], [i64; 3]), u32>::new();
+        let faces: Vec<_> = far.vertices.chunks_exact(3).zip(far.light_data.chunks_exact(3)).zip(far.decoration.chunks_exact(3))
+            .filter(|(_, kind)| kind[0] == 0).map(|((v, light), _)| (v.iter().map(key).collect::<Vec<_>>(), light[0][1])).collect();
+        for (v, _) in &faces {
+            for i in 0..3 {
+                let (a, b) = (v[i], v[(i + 1) % 3]);
+                *edges.entry(if a < b { (a, b) } else { (b, a) }).or_default() += 1;
+            }
+        }
+        let mut far_border = std::collections::BTreeSet::new();
+        for (v, role) in faces.iter().filter(|(_, role)| *role < -0.5) {
+            for i in 0..3 {
+                let (a, b) = (v[i], v[(i + 1) % 3]);
+                let on_border = (0..3).any(|axis| axis != 1 && a[axis] == b[axis] && border(a) && border(b));
+                assert!(on_border || edges[&if a < b { (a, b) } else { (b, a) }] >= 2, "{cell:?} open edge {a:?} {b:?} role {role}");
+                if border(a) { far_border.insert(a); }
+            }
+            // Ground faces keep the terrain winding (upward packed normals).
+            let p = |i: usize| [v[i][0] as f64, v[i][1] as f64, v[i][2] as f64];
+            let (u, w) = ([0, 1, 2].map(|k| p(2)[k] - p(0)[k]), [0, 1, 2].map(|k| p(1)[k] - p(0)[k]));
+            assert!(u[2] * w[0] - u[0] * w[2] > 0., "{cell:?} upward ground face");
+        }
+        // Cell borders keep every full-resolution ground sample of the detail cell.
+        let ground = |id: &str| id == "terrain" || package.document.surface_areas.iter().any(|a| a.id == id);
+        let detail_border: std::collections::BTreeSet<_> = chunk.triangles.iter().filter(|t| t.spawnable && ground(&t.object_id))
+            .flat_map(|t| t.vertices).map(|p| [p[0], p[1], -p[2]]).filter(|p| border(*p)).collect();
+        assert_eq!(far_border, detail_border, "{cell:?} border samples");
+        if cell == (mapkit_core::Cell { x: 0, y: 0 }) {
+            let grassland = mapkit_core::appearance::catalog().ground["grassland"].color;
+            assert!(far.colors.iter().zip(&far.light_data).any(|(c, l)| *c == [grassland[0], grassland[1], grassland[2], 255] && l[1] == -3.), "block-aligned paint keeps its colour and role");
+            assert!(far.light_data.iter().any(|l| l[1] == -1.), "unstyled terrain keeps role -1");
+        }
+    }
+}
+
+#[test]
+fn coarse_distant_bound_keeps_the_sidewalk_allowance_where_a_sidewalk_reaches() {
+    let (mut d, files) = support::heightmap_terrain();
+    d.roads[0].sidewalk_cm = Some(300);
+    d.buildings = serde_json::from_value(serde_json::json!([
+        {"id":"shop-a","footprint":[[4000,4400],[4800,4400],[4800,5200],[4000,5200]],"base_cm":2000,"height_cm":900,"usage":"commercial","material":"concrete","roof":"flat"},
+        {"id":"shop-b","footprint":[[5200,4400],[5900,4400],[5900,5300],[5200,5300]],"base_cm":2000,"height_cm":900,"usage":"commercial","material":"concrete","roof":"flat"}])).unwrap();
+    let package = read_bytes(&pack_bytes(d, files).unwrap()).unwrap();
+    let mut reached = 0;
+    for cell in package.document.cells() {
+        let plan = package.document.coarse_ground(cell, distant::COARSE_GROUND_STRIDE).unwrap().unwrap();
+        let far = package.generate_distant(cell).unwrap();
+        let triangles = far.vertices.len() as u64 / 3;
+        let bound = package.distant_triangle_bound(cell).unwrap();
+        assert!(triangles <= bound, "{cell:?}: {triangles} > {bound}");
+        // A reached cell gives back only the coarse tiles' ground count; its
+        // sidewalk re-cut allowance stays whole for the remaining tiles.
+        if plan.sidewalk_recut {
+            reached += 1;
+            assert_eq!(plan.charged_faces(), plan.fine_faces, "{cell:?}");
+        } else {
+            assert_eq!(plan.charged_faces(), plan.fine_faces * 5, "{cell:?}");
+        }
+    }
+    assert!(reached > 0 && reached < package.document.cells().len(), "the sidewalk reaches some cells only");
 }

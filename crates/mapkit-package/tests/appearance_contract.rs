@@ -50,6 +50,18 @@ fn catalogue_compositions_are_strict_and_omissions_are_unchanged() {
         assert!(appearance::valid(&format!("building/{a}/{k}/{}", c.architectures[a].material), Domain::Building));
     }}
     for k in c.ground.keys() { assert!(appearance::valid(&format!("ground/{k}"), Domain::Ground)); }
+    // Display palettes name catalogue climates, terrains and grounds only.
+    for (climate, table) in &c.climate_ground {
+        assert!(c.climates.contains(climate));
+        assert!(table.keys().all(|k| c.ground.contains_key(k)));
+    }
+    for (terrain, table) in &c.terrain_ground {
+        assert!(c.terrains.contains(terrain));
+        assert!(table.keys().all(|k| c.ground.contains_key(k)));
+    }
+    for k in c.ground.keys() {
+        assert_eq!(appearance::ground_color_for(&format!("ground/{k}"), "temperate", "plain"), appearance::color(&format!("ground/{k}"), false));
+    }
     for bad in ["building/unknown/school/stone", "building/venetian/anything/stone", "building/cycladic/religious/blue_dome", "ground/asphalt", "building/modern/school/../../file"] {
         let mut d = styled(); d.buildings[0].style_id = bad.into();
         assert_eq!(d.validate().unwrap_err().code, "E_APPEARANCE");

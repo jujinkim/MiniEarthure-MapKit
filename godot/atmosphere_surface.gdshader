@@ -32,6 +32,11 @@ uniform bool terrain_surface = false;
 uniform float shore_level_m = -100000.0;
 // Grass ground: broad lush/dry patches, mown clumps and fine blades in world space.
 uniform bool lawn = false;
+// Bare rock on steep vegetated cover (near regional_ground 9..15, distant role
+// -3), bound per map terrain from the catalogue's terrain_slope_rock
+// (regional_appearance.gd bind_slope_rock); weight 0 keeps the cover colour.
+uniform vec3 slope_rock_color : source_color = vec3(0.67,0.41,0.28);
+uniform float cover_slope_weight = 0.0;
 // Reach of the grass field's blades and the shade under them, set by the
 // field on its cells' lawn materials (grass_field.gd; 0 while it shows none):
 // the lawn darkens toward the camera as the blades' shade.
@@ -188,6 +193,12 @@ float lawn_noise(vec2 p) {
     float a=facade_hash(i), b=facade_hash(i+vec2(1.0,0.0)), c=facade_hash(i+vec2(0.0,1.0)), d=facade_hash(i+vec2(1.0,1.0));
     return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
 }
+// Vegetated cover turns to rock from about 32 degrees (normal y 0.85) to fully
+// at about 57 degrees (0.55); horizontal strata bands (amplitude, metres per
+// band) fade where a pixel spans a third of a band.
+const vec2 COVER_SLOPE_NORMAL = vec2(0.55,0.85);
+const float COVER_STRATA = 0.10;
+const float COVER_STRATA_M = 2.5;
 // Voxel ground grain (display only, off unless the Client turns surface_grit
 // on): tones of world-lattice cubes, square from above and a column from the
 // side (GRIT_Y scales their height). The cell edge doubles with the pixel
@@ -980,9 +991,18 @@ void fragment() {
                 color*=1.0-0.05*(1.0-blades)*lawn_relief/0.025;
             }
         }
-        // Classified cover owns its colour, including snow/ice at local zero.
-        // Distant role -2 carries the same explicit-cover choice.
-        if(regional_ground==0 && !(distant && UV.y < -1.5)) {
+        // Vegetated cover (distant role -3) may show the terrain's bare rock on
+        // steep faces; other classified cover owns its colour, including
+        // snow/ice at local zero (distant role -2 carries the same choice).
+        // Neither takes the shore blend.
+        if((regional_ground>=9 && regional_ground<=15) || (distant && UV.y < -2.5)) {
+            if(cover_slope_weight>0.0) {
+                float steep=1.0-smoothstep(COVER_SLOPE_NORMAL.x,COVER_SLOPE_NORMAL.y,world_normal.y);
+                float band_footprint=(abs(position_dx.y)+abs(position_dy.y))/COVER_STRATA_M;
+                float strata=1.0+COVER_STRATA*sin(world_position.y*6.2831853/COVER_STRATA_M)*(1.0-smoothstep(0.3,0.6,band_footprint));
+                color=mix(color,slope_rock_color*strata,steep*cover_slope_weight);
+            }
+        } else if(regional_ground==0 && !(distant && UV.y < -1.5)) {
             float rock=1.0-smoothstep(0.70,0.94,world_normal.y);
             color=mix(color,vec3(0.40,0.37,0.30),rock*0.55);
             float shore=1.0-smoothstep(0.15,0.85,world_position.y);

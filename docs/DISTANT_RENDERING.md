@@ -10,8 +10,8 @@ convex sidecars, contact classification and proxies discarded by the conversion.
 Water and gimmick exclusions still govern vegetation placement. Authored GLBs,
 generated objects and neighbouring-cell proxies keep their existing ownership rules.
 `DistantSource` exposes only triangles, objects and water; it has no serialization,
-hash, archive or collision-query API. Ground, roads and native building geometry retain
-original coordinates and boundaries. GLB collision proxies are omitted and
+hash, archive or collision-query API. Roads, native building geometry and ground
+outside coarse blocks retain original coordinates and boundaries. GLB collision proxies are omitted and
 replaced by coloured bounds grouped per scene mesh/material, including node and
 placement transforms. Built-in trees use a canopy volume; a city tree is a
 three-sided trunk under a hexagonal crown frustum and cone (24 triangles: darker
@@ -43,9 +43,24 @@ classification are computed once per asset template within each conversion.
 Classified buildings use the shared [regional display](REGIONAL_RENDERING.md)
 body, roof and module mesh with catalogue colours. Its face allowance joins the
 distant bound; source collision remains unchanged. Ground, surface paint and roads
-resolve the same optional appearance identities as the near renderer. Explicit
-natural cover carries role -2, retaining its mean palette at the local height
-origin and on slopes; unspecified terrain keeps role -1.
+resolve the same optional appearance identities and climate/terrain palette as
+the near renderer. Explicit non-vegetated natural cover (gravel, compacted earth,
+sand, rock, snow, ice) carries role -2: its mean palette at the local height
+origin and on slopes. Vegetated cover carries role -3 and may show the terrain's
+steep-face rock. Paved styles carry role 0 and keep their colour outside the
+terrain branch; unspecified terrain keeps role -1.
+
+Heightmap cells without an assembled track use coarse distant ground
+(`mapkit_core::CoarseGround`, `COARSE_GROUND_STRIDE` 2 terrain tiles per block
+side). A block is coarse when all its tiles lie inside the cell and no road reach
+(road influence margin + 1,000 cm + the widest sidewalk) or water basin touches
+them. Its terrain and paint faces become one surface over the generation corner
+heights in their area-weighted mean sRGB colour and largest role: two faces, or
+a centre fan when an edge faces a full-detail tile or another cell. Such edges
+keep every full-resolution sample, so cell borders match detail cells and
+neighbouring distant cells exactly and no T-junction crack or skirt is needed.
+Both conversion paths replace the same blocks. Collision, generated archives and
+near cells are unchanged.
 
 Native buildings without an appearance ID (every part) emit closed triangular prisms in the body and roof
 colours of each solid's look (`facade_look`: the record's, or the solid's own for the
@@ -64,6 +79,13 @@ source triangle before generation; documents without native buildings require
 no matching workspace. Triangle/output bounds remain conservative upper limits.
 
 `distant_triangle_bound` supplies a conservative pre-generation triangle bound.
+Regional plants charge the largest variant of the kinds that zones touching the
+cell use. Coarse blocks replace what the cell's cost estimate charges for their
+tiles by their exact face count. The charge is their ground count, plus its
+sidewalk re-cut share only when no sidewalked road reaches the cell (that share
+is an empirical cell-wide allowance, so a reached cell keeps it whole). The
+ground share of an all-coarse cell's bound therefore equals its ground output;
+water, regional and object charges stay conservative.
 The Godot bridge exposes `estimate_far_chunk(x,y)` (ordinary generation and asset
 workspace estimates plus `distant_triangles`) and `generate_far_chunk(x,y)`.
 The latter returns an immutable `MapKitFarGeometry` owner with a COW `view()` of
@@ -87,7 +109,8 @@ Validation: for distant conversion changes, run package targets `distant`,
 `distant_assets`, `distant_source` and the affected regional `indexed` checks.
 Core source-generation changes also require core `distant_source` and affected
 generation/placement/occupancy targets. Compare every display array in order, frozen ordinary and display
-digests, roof/courtyard and cell boundaries, reflected/rotated GLBs and openings,
+digests (including a coarse heightmap canyon scenario), roof/courtyard and cell
+boundaries, coarse ground watertightness, detail-border samples and bound, reflected/rotated GLBs and openings,
 repeated placement, water/islands, vegetation exclusions, output limits and cancellation.
 The ignored `short_distant_measurement` test provides bounded synthetic dense-building,
 reused-GLB and open-terrain timings, separating load, estimate, generation and

@@ -17,7 +17,10 @@ dirt and repair noise; grass, earth and leaf keep a faint grain of their own (la
 blades, soil crumbs, leaf veins) within the same bounds. The original tiles remain
 available as source artifacts. Generated grass ground (`lawn`) adds world-space lush
 and dry patches (about 10 m) at every distance and clumps, blades and clover within
-the effect distance.
+the effect distance; arid vegetated cover binds it off. Steep vegetated cover
+mixes toward the terrain's bare-rock colour (`slope_rock_color`,
+`cover_slope_weight`, [regional rendering](REGIONAL_RENDERING.md)) with faint
+2.5 m horizontal strata that fade when a pixel spans a third of a band.
 Voxel ground grain (`surface_grit`, 0–1, off by default) gives all terrain, near and
 distant, the tones of world-lattice cubes: square from above, a column from the side.
 The cube edge follows the pixel footprint so a cube never spans fewer than about

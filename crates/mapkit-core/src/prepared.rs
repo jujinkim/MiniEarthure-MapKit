@@ -96,6 +96,18 @@ impl PreparedMap {
         self.generate_with_occupancy(cell, grid, limit, None)
             .map(|v| v.chunk)
     }
+    /// Display-only coarse distant ground plan of a cell ([`crate::CoarseGround`]);
+    /// `None` without a heightmap, with an assembled track or when no block fits.
+    pub fn coarse_ground(&self, cell: Cell, stride: usize) -> Result<Option<crate::CoarseGround>> {
+        if self.region.is_some_and(|r| !r.contains(cell)) {
+            return Err(error("E_CELL", "cell outside prepared source region"));
+        }
+        crate::roads::coarse_ground(&self.document, cell, stride, &self.placements)
+    }
+    /// Terrain tile corner heights exactly as ground generation samples them.
+    pub fn ground_corner_heights(&self, cell: Cell, grid: Option<&HeightGrid>) -> Result<Vec<i64>> {
+        crate::roads::ground_corner_heights(&self.document, cell, grid)
+    }
     /// Same cell geometry and placement ownership, without collision sidecars.
     /// Keeps ordinary admission estimates and limits; the result is display-only.
     pub fn generate_distant_source(

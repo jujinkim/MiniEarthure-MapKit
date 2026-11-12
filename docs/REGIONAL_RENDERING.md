@@ -47,9 +47,21 @@ material detail rather than the physical surface's default visual.
 
 Ground materials include aggregate, joints, ripples, strata, lawn grain, crop and
 orchard rows, forest/scrub patches, wetland, snow and ice. Their fine variation fades
-to the shared distant mean colour. Explicit cover keeps its palette at the local
-height origin and on slopes; the same distant role preserves that choice.
-Appearance alone does not change traction.
+to the shared distant mean colour. Ground and road styles take the catalogue's
+optional climate and terrain palettes for the map-wide resolved climate/terrain
+(authored values, else concept defaults; regions do not select ground colours):
+`terrain_ground` wins over `climate_ground`, absent entries keep the `ground`
+colour. Arid natural cover reads as dry tan ground (no green lawn patches or
+clover), canyon bare rock red-buff; other climates and terrains keep the catalogue
+colours. Explicit cover keeps its palette at the local height origin and receives
+no shore blend. Non-vegetated natural cover (gravel, compacted earth, sand, rock,
+snow, ice; distant role -2) also keeps it on slopes; paved styles keep their
+colour outside the terrain shading (distant role 0). Vegetated cover (managed lawn, grassland, scrub, forest floor,
+cropland, orchard, wetland; distant role -3) shows the terrain's
+`terrain_slope_rock` colour on faces steeper than about 32°, fully from about 57°,
+with faint horizontal strata, at the bound weight (canyon 0.85); terrains without
+an entry bind weight 0 and keep the cover colour. Vegetation objects keep their
+own colours. Appearance alone does not change traction.
 
 Explicit barrier type and material fix the fence/wall family and paint. Both near
 barrier detail and distant opacity use that selection; unspecified barriers retain

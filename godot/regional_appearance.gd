@@ -10,14 +10,33 @@ static func entry(key: String) -> Dictionary:
 	if p[0] == "barrier" and p.size() == 3: return CATALOG.data.materials.get(p[2], {})
 	if p[0] in ["material","roof"] and p.size() == 2: return CATALOG.data.materials.get(p[1], {})
 	return {}
-static func color(key: String) -> Color:
+## Natural cover whose steep faces may show bare rock (mapkit-core appearance::vegetated_ground).
+const VEGETATED := ["managed_lawn","grassland","scrub","forest_floor","cropland","orchard","wetland"]
+## Mean sRGB of a style. `design` (environment_profile.gd ground_design) selects
+## the catalogue's terrain_ground, then climate_ground palette for ground and
+## road styles, as mapkit-core appearance::ground_color_for does at distance.
+static func color(key: String, design: Dictionary = {}) -> Color:
 	var record := entry(key)
 	var rgb: Array = record.get("roof_color" if key.begins_with("roof/") else "color", [128,128,128])
+	if not design.is_empty() and not record.is_empty() and (key.begins_with("ground/") or key.begins_with("road/")):
+		var kind := key.get_slice("/",key.get_slice_count("/")-1)
+		var climate: Dictionary = CATALOG.data.get("climate_ground",{}).get(str(design.get("climate","")),{})
+		var terrain: Dictionary = CATALOG.data.get("terrain_ground",{}).get(str(design.get("terrain","")),{})
+		rgb = terrain.get(kind,climate.get(kind,rgb))
 	return Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0)
+## Bare rock on steep vegetated cover (shader cover_slope_weight/slope_rock_color,
+## near ground and distant role -3) from the catalogue's terrain_slope_rock; a
+## terrain without an entry binds weight 0 and keeps the cover's colour.
+static func bind_slope_rock(material: ShaderMaterial, design: Dictionary) -> void:
+	var slope: Dictionary = CATALOG.data.get("terrain_slope_rock",{}).get(str(design.get("terrain","")),{})
+	material.set_shader_parameter("cover_slope_weight",float(slope.get("weight_per_mille",0))/1000.0)
+	if slope.has("color"):
+		var rgb: Array = slope.color
+		material.set_shader_parameter("slope_rock_color",Color(float(rgb[0])/255.0,float(rgb[1])/255.0,float(rgb[2])/255.0))
 static func facade_kind(key: String) -> int:
 	var p := key.split("/")
 	return int(CATALOG.data.building_types[p[2]].facade_kind) if p[0] == "building" and p.size() in [4,6] else 0
-static func bind(material: ShaderMaterial, key: String) -> void:
+static func bind(material: ShaderMaterial, key: String, design: Dictionary = {}) -> void:
 	var record := entry(key)
 	material.set_shader_parameter("roughness",float(record.get("roughness_per_mille",900))/1000.0)
 	material.set_shader_parameter("metallic",float(record.get("metallic_per_mille",0))/1000.0)
@@ -25,6 +44,10 @@ static func bind(material: ShaderMaterial, key: String) -> void:
 		material.set_shader_parameter("regional_ground",GROUNDS.find(key.get_slice("/",1))+1)
 		if key == "ground/ice": material.set_shader_parameter("roughness",0.22)
 		elif key == "ground/wetland": material.set_shader_parameter("roughness",0.7)
+		if key.get_slice("/",1) in VEGETATED:
+			bind_slope_rock(material,design)
+			# Arid cover is dry ground: no green lawn patches or clover.
+			if str(design.get("climate","")) == "arid": material.set_shader_parameter("lawn",false)
 	if not key.begins_with("building/"): return
 	var architecture := key.get_slice("/",1)
 	material.set_shader_parameter("regional_arch",["venetian","middle_eastern","european_stone","korean_traditional","japanese_traditional","chinese_courtyard","cycladic","polar_station"].find(architecture)+1)

@@ -36,6 +36,8 @@ static func advance(job: Dictionary) -> bool:
 		if context != null:
 			job.material = context.surface_material(job.material,0)
 			job.material.set_shader_parameter("distant",true)
+			# Steep vegetated cover (role -3) shows the map terrain's bare rock, as near.
+			preload("./regional_appearance.gd").bind_slope_rock(job.material,preload("./environment_profile.gd").ground_design(job.resources.environment_profile))
 			job.lease.track(job.material)
 		job.environment_ready = true
 		return false

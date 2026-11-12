@@ -411,6 +411,142 @@ pub(crate) fn estimate_ground(d: &MapDocument, bounds: &Bounds, patches: &[Patch
     Ok(count)
 }
 
+/// Display-only coarse terrain plan of one heightmap cell without an assembled
+/// track, for distant products. Square blocks of `stride` x `stride` terrain
+/// tiles are coarse when every tile lies inside the cell and no road reach
+/// (road influence margin, which holds its patches, + 1,000 cm + the widest
+/// sidewalk: the sidewalk re-cut plan) or water basin touches it: their ground is then exactly the terrain corner planes cut
+/// by paint. Generation and collision never read this plan.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoarseGround {
+    pub origin: [i64; 2],
+    pub spacing: i64,
+    pub stride: usize,
+    /// Blocks per axis; block (x, y) covers tiles `x*stride..` and `y*stride..`.
+    pub blocks: usize,
+    /// Row-major (y, then x) coarse blocks.
+    pub coarse: Vec<bool>,
+    /// Ground faces the cost estimate counts for every tile of the coarse blocks.
+    pub fine_faces: u64,
+    /// Some sidewalked road reaches the cell, so its estimate's sidewalk
+    /// re-cut allowance stays whole (it is only an empirical cell-wide share).
+    pub sidewalk_recut: bool,
+}
+
+impl CoarseGround {
+    pub fn is_coarse(&self, x: i64, y: i64) -> bool {
+        x >= 0 && y >= 0 && (x as usize) < self.blocks && (y as usize) < self.blocks
+            && self.coarse[y as usize * self.blocks + x as usize]
+    }
+    /// Block edges (-y, +x, +y, -x) that keep every full-resolution sample:
+    /// their neighbour is a full-detail tile or another cell.
+    pub fn detailed_edges(&self, x: i64, y: i64) -> [bool; 4] {
+        [!self.is_coarse(x, y - 1), !self.is_coarse(x + 1, y), !self.is_coarse(x, y + 1), !self.is_coarse(x - 1, y)]
+    }
+    /// Faces of a coarse block: two over its corners, or a centre fan over its
+    /// corners and the samples of its detailed edges.
+    pub fn block_faces(&self, x: i64, y: i64) -> u64 {
+        let detailed = self.detailed_edges(x, y).iter().filter(|e| **e).count() as u64;
+        if detailed == 0 { 2 } else { 4 + detailed * (self.stride as u64 - 1) }
+    }
+    /// Faces of every coarse block.
+    pub fn faces(&self) -> u64 {
+        (0..self.blocks * self.blocks).filter(|&i| self.coarse[i])
+            .map(|i| self.block_faces((i % self.blocks) as i64, (i / self.blocks) as i64)).sum()
+    }
+    /// What the cell's cost estimate charges for those tiles' ground and no
+    /// output uses: the counted faces, plus their sidewalk re-cut share when no
+    /// sidewalk reaches the cell (otherwise that cell-wide allowance is kept).
+    pub fn charged_faces(&self) -> u64 {
+        if self.sidewalk_recut { self.fine_faces }
+        else { self.fine_faces.saturating_mul(1 + crate::cost::SIDEWALK_GROUND_ALLOWANCE) }
+    }
+}
+
+pub(crate) fn coarse_ground(d: &MapDocument, cell: Cell, stride: usize, prepared: &crate::placement::PreparedPlacements) -> Result<Option<CoarseGround>> {
+    let area = d.cell_bounds(cell)?;
+    let Some(descriptor) = d.heightmaps.iter().find(|h| h.cell == cell) else { return Ok(None) };
+    if d.assembled_track.is_some() || stride < 2 { return Ok(None); }
+    let spacing = descriptor.spacing_cm as i64;
+    let side = (d.cell_size_cm as i64 / spacing + 1) as usize;
+    let blocks = (side - 1) / stride;
+    if blocks == 0 { return Ok(None); }
+    let reach = crate::road_plan::influence_margin(d) + 1000 + 2
+        + d.roads.iter().map(|r| crate::placement::sidewalk_width(d, r) as i64).max().unwrap_or(0);
+    let mut work = 0;
+    let mut near_roads = Vec::new();
+    for road in &d.roads {
+        for pair in road.points.windows(2) {
+            tick(&mut work, 1)?;
+            if hit(pair, &area, reach) { near_roads.push(pair); }
+        }
+    }
+    // A road's patches lie within its influence margin of its segments (the
+    // plan selects roads by that margin), so the reach also excludes them.
+    let paint_index = prepared.paint(d);
+    let basins = prepared.basins(d)?;
+    let fitter = crate::road_design::Fitter::new(d, &area);
+    let height = |x: usize, y: usize| fitter.height(
+        [area.min[0]+x as i64*spacing,area.min[1]+y as i64*spacing],
+        crate::terrain_height(&area,spacing,side,None,d.terrain_base_cm,[area.min[0]+x as i64*spacing,area.min[1]+y as i64*spacing]));
+    let tiles = blocks * stride;
+    let mut faces: Vec<Option<u64>> = vec![None; tiles * tiles];
+    for y in 0..tiles {
+        for x in 0..tiles {
+            let px = area.min[0] + x as i64 * spacing;
+            let py = area.min[1] + y as i64 * spacing;
+            if px + spacing > area.max[0] || py + spacing > area.max[1] { continue; }
+            let tile_bounds = Bounds { min: [px - 2, py - 2], max: [px + spacing + 2, py + spacing + 2] };
+            if near_roads.iter().any(|pair| hit(pair, &tile_bounds, reach))
+                || basins.touches(&tile_bounds)? || !basins.lines_in(&tile_bounds, &mut work)?.is_empty() { continue; }
+            let v = [
+                [px, height(x, y), py],
+                [px + spacing, height(x + 1, y), py],
+                [px + spacing, height(x + 1, y + 1), py + spacing],
+                [px, height(x, y + 1), py + spacing],
+            ];
+            let local_paint: Vec<_> = paint_index.query(&tile_bounds, &mut work)?.into_iter()
+                .map(|i| &d.surface_areas[i]).collect();
+            // The same arrangement count as estimate_ground for this tile.
+            let mut count = 0;
+            ground_tile(v, &[], &local_paint, &[], basins, &[], &area, &mut TileSink::Count(&mut count), &mut work)?;
+            faces[y * tiles + x] = Some(count);
+        }
+    }
+    let mut coarse = vec![false; blocks * blocks];
+    let mut fine_faces = 0u64;
+    for by in 0..blocks {
+        for bx in 0..blocks {
+            let block: Option<u64> = (0..stride * stride)
+                .map(|i| faces[(by * stride + i / stride) * tiles + bx * stride + i % stride]).sum();
+            if let Some(count) = block {
+                coarse[by * blocks + bx] = true;
+                fine_faces = fine_faces.saturating_add(count);
+            }
+        }
+    }
+    Ok(Some(CoarseGround { origin: area.min, spacing, stride, blocks, coarse, fine_faces,
+        sidewalk_recut: crate::cost::sidewalk_recut(d, &area) }))
+}
+
+/// Terrain corner heights of a cell's tiles exactly as ground generation
+/// samples them (`side` x `side`, row-major), heightmap and auto-fit included.
+pub(crate) fn ground_corner_heights(d: &MapDocument, cell: Cell, grid: Option<&HeightGrid>) -> Result<Vec<i64>> {
+    let area = d.cell_bounds(cell)?;
+    let spacing = d.heightmaps.iter().find(|h| h.cell == cell).map_or(d.cell_size_cm, |h| h.spacing_cm) as i64;
+    let side = (d.cell_size_cm as i64 / spacing + 1) as usize;
+    let fitter = crate::road_design::Fitter::new(d, &area);
+    let mut heights = Vec::with_capacity(side * side);
+    for y in 0..side {
+        crate::cancellation::checkpoint()?;
+        for x in 0..side {
+            let p = [area.min[0] + x as i64 * spacing, area.min[1] + y as i64 * spacing];
+            heights.push(fitter.height(p, crate::terrain_height(&area, spacing, side, grid, d.terrain_base_cm, p)));
+        }
+    }
+    Ok(heights)
+}
+
 // Dense city terrain is divided spatially before an arrangement can exceed its
 // local edge/intersection budget. Every leaf samples the original two terrain
 // planes; subdivision never bilinearly invents a different slope or elevation.

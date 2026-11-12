@@ -101,14 +101,50 @@ fn regional_plants_preserve_footprints_physics_and_shared_faces() {
     }
 }
 
+fn cover(ground: &str, environment: Option<serde_json::Value>) -> distant::DistantMesh {
+    let mut d=document();d.buildings.clear();d.nodes.clear();d.roads.clear();d.zones.clear();d.free_roam=true;
+    d.ground_style_id=format!("ground/{ground}");
+    d.environment=environment.map(|e|serde_json::from_value(e).unwrap());
+    let p=read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
+    p.generate_distant(Cell{x:0,y:0}).unwrap()
+}
+fn environment(concept: &str, climate: &str, terrain: &str) -> Option<serde_json::Value> {
+    Some(serde_json::json!({"version":1,"concept":concept,"climate":climate,"terrain":terrain,"latitude_mdeg":36000,"longitude_mdeg":-112000,
+        "utc_offset_minutes":-420,"sunrise_minutes":360,"sunset_minutes":1080,"regions":[],"lights":[]}))
+}
 #[test]
 fn explicit_cover_keeps_its_palette_at_local_zero_near_and_far() {
-    for ground in ["snow","ice","rock","sand","managed_lawn"] {
-        let mut d=document();d.buildings.clear();d.nodes.clear();d.roads.clear();d.zones.clear();d.free_roam=true;
-        d.ground_style_id=format!("ground/{ground}");
-        let p=read_bytes(&pack_bytes(d,BTreeMap::new()).unwrap()).unwrap();
-        let far=p.generate_distant(Cell{x:0,y:0}).unwrap();
+    // Classified cover owns its colour (role -2); vegetated cover keeps it too
+    // but carries role -3, where a map terrain may bind steep-face bare rock.
+    for ground in ["snow","ice","rock","sand","managed_lawn","grassland","scrub","forest_floor"] {
+        let far=cover(ground,None);
         let c=appearance::catalog().ground[ground].color;
-        assert!(far.colors.iter().zip(&far.light_data).any(|(color,tag)|*color==[c[0],c[1],c[2],255] && tag[1]==-2.),"explicit cover role {ground}");
+        let role=if appearance::vegetated_ground(ground) {-3.} else {-2.};
+        assert!(far.colors.iter().zip(&far.light_data).any(|(color,tag)|*color==[c[0],c[1],c[2],255] && tag[1]==role),"explicit cover role {ground}");
     }
+}
+#[test]
+fn arid_and_canyon_palettes_recolour_natural_ground_only_where_authored() {
+    let c=appearance::catalog();
+    let rgb=|v:[u8;3]|[v[0],v[1],v[2],255];
+    // Grand Canyon: arid climate, canyon terrain. Cover reads tan, bare rock red-buff.
+    let canyon=environment("desert","arid","canyon");
+    for (ground,expected) in [("grassland",c.climate_ground["arid"]["grassland"]),("scrub",c.climate_ground["arid"]["scrub"]),
+        ("forest_floor",c.climate_ground["arid"]["forest_floor"]),("rock",c.terrain_ground["canyon"]["rock"])] {
+        let far=cover(ground,canyon.clone());
+        assert!(far.colors.iter().all(|v|*v==rgb(expected)),"canyon {ground}");
+        assert_eq!(appearance::ground_color_for(&format!("ground/{ground}"),"arid","canyon"),Some(rgb(expected)));
+        assert_ne!(expected,c.ground[ground].color,"{ground} palette differs from the temperate catalogue");
+    }
+    // An empty climate resolves through the concept default, as near.
+    assert!(cover("grassland",environment("desert","","")).colors.iter().all(|v|*v==rgb(c.climate_ground["arid"]["grassland"])));
+    // Other climates and terrains keep the catalogue colour; unlisted kinds keep it under arid too.
+    for (concept,climate,terrain) in [("metropolis","temperate","plain"),("countryside","","mountain"),("polar","polar","coast"),("jungle","","river")] {
+        for ground in ["grassland","rock","forest_floor"] {
+            assert!(cover(ground,environment(concept,climate,terrain)).colors.iter().all(|v|*v==rgb(c.ground[ground].color)),"{concept} {climate} {terrain} {ground}");
+        }
+    }
+    assert!(cover("asphalt",canyon).colors.iter().all(|v|*v==rgb(c.ground["asphalt"].color)));
+    assert_eq!(appearance::ground_color_for("road/street/scrub","arid","plain"),Some(rgb(c.climate_ground["arid"]["scrub"])));
+    assert_eq!(appearance::ground_color_for("building/modern/hotel/concrete","arid","canyon"),appearance::color("building/modern/hotel/concrete",false));
 }

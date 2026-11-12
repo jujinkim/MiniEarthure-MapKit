@@ -1255,6 +1255,7 @@ mod bounds_index;
 mod placement;
 mod road_arrangement;
 mod roads;
+pub use roads::CoarseGround;
 mod road_plan;
 mod road_paint;
 pub use road_paint::{RoadPaint, RoadPaintSegment};

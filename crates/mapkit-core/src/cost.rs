@@ -24,6 +24,27 @@ pub struct GenerationCost {
     pub max_object_id_bytes: u64,
 }
 
+/// Sidewalk re-cut allowance per counted ground face of a cell without a track
+/// (with ring points and footprint vertices). Coarse distant ground removes the
+/// ground count of its tiles, and this share only when no sidewalk reaches the
+/// cell ([`sidewalk_recut`]).
+pub(crate) const SIDEWALK_GROUND_ALLOWANCE: u64 = 4;
+
+/// A sidewalked road segment whose unioned hull (the cell plan widened by
+/// 1,000 cm) can re-cut this cell's ground.
+fn sidewalk_hull_reaches(points: &[[i64; 3]], road_margin: i64, area: &Bounds) -> bool {
+    clip_factor(&bounds(points.iter().map(|p| [p[0], p[2]]), road_margin + 1000), area) != 0
+}
+
+/// Whether the cost estimate of a cell without a track charges sidewalk
+/// re-cuts at all (some sidewalked segment reaches it). Without one its
+/// `SIDEWALK_GROUND_ALLOWANCE` share is slack no output uses.
+pub(crate) fn sidewalk_recut(d: &crate::MapDocument, area: &Bounds) -> bool {
+    let road_margin = crate::roads::influence_margin(d);
+    d.roads.iter().filter(|r| crate::placement::sidewalk_width(d, r) > 0)
+        .any(|r| r.points.windows(2).any(|points| sidewalk_hull_reaches(points, road_margin, area)))
+}
+
 fn bounds(points: impl Iterator<Item = Point>, margin: i64) -> Bounds {
     let mut out = Bounds {
         min: [i64::MAX; 2],
@@ -233,8 +254,7 @@ pub(crate) fn estimate_validated(
                     );
                 }
             }
-            if flat && width > 0
-                && clip_factor(&bounds(points.iter().map(|p| [p[0], p[2]]), road_margin + 1000), &area) != 0 {
+            if flat && width > 0 && sidewalk_hull_reaches(points, road_margin, &area) {
                 sidewalk_segments += 1;
                 add(0, r.id.len() + 9);
             }
@@ -252,7 +272,7 @@ pub(crate) fn estimate_validated(
             .filter(|poly| clip_factor(&bounds(poly.iter().copied(), 0), &area) != 0)
             .map(|poly| poly.len() as u64)
             .sum();
-        add(4 * (16 * sidewalk_segments + ground + exclusion_vertices), 7);
+        add(SIDEWALK_GROUND_ALLOWANCE * (16 * sidewalk_segments + ground + exclusion_vertices), 7);
     }
     // The shared exterior plan gives bounded safety counts, including arcs and
     // posts whose centers lie outside this cell. No memory/cell caps change.

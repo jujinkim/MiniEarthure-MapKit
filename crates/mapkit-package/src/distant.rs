@@ -63,6 +63,9 @@ const STREET_TREE_COLORS: [[[u8; 4]; 3]; 5] = [
 /// per-object `maximum` (>= 12) of `distant_triangle_bound`.
 const MEDIAN_PINE_TRIANGLES: u64 = 12;
 const _: () = assert!(MEDIAN_PINE_TRIANGLES <= 12);
+/// Terrain tiles per coarse distant ground block side (display-only LOD of
+/// heightmap cells; see `CoarseGround`). 2 turns 4 m samples into 8 m blocks.
+pub const COARSE_GROUND_STRIDE: usize = 2;
 /// Flower-bed proxy faces (planters and median beds, near
 /// street_planting_meshes.gd `FAR_SIDE` and `FAR_TOP`): granite sides and a
 /// planted top; the median pine's trunk box in pine bark.
@@ -307,9 +310,15 @@ impl Package {
     /// charged separately through the existing validated asset allowances.
     pub fn distant_triangle_bound(&self, cell: Cell) -> Result<u64> {
         let cost = self.document.estimate(cell, 500_000)?;
-        let mut maximum = if self.document.zones.iter().any(|z| !z.style_id.is_empty()) {
-            mapkit_core::regional_plants::catalog().values().flat_map(|p|&p.variants).map(|v|v.len() as u64).max().unwrap_or(12).max(12)
-        } else {12};
+        let area = self.document.cell_bounds(cell)?;
+        // Regional plants charge the largest variant of the kinds that zones
+        // planting into this cell use (an anchor cell meets its zone's bounds).
+        let plants = mapkit_core::regional_plants::catalog();
+        let mut maximum = self.document.zones.iter()
+            .filter(|z| !z.style_id.is_empty() && (0..2).all(|a| z.polygon.iter().any(|p| p[a] <= area.max[a]) && z.polygon.iter().any(|p| p[a] >= area.min[a])))
+            .filter_map(|z| z.tree.as_ref().filter(|t| matches!(t.asset_id.as_str(), "builtin:city_tree" | "builtin:shrub"))
+                .and_then(|t| mapkit_core::regional_plants::kind(&z.style_id, t.asset_id == "builtin:city_tree")))
+            .flat_map(|kind| &plants[kind].variants).map(|v| v.len() as u64).max().unwrap_or(12).max(12);
         for asset in &self.document.assets {
             if !asset.path.ends_with(".glb") {
                 continue;
@@ -328,11 +337,15 @@ impl Package {
                 .sum();
             maximum = maximum.max(count as u64);
         }
-        let area = self.document.cell_bounds(cell)?;
         let water: u64 = self.document.water_bodies.iter().filter(|b| b.intersects(&area))
             .map(|b| (b.vertices() + 2 * b.islands.len() - 2) as u64 * 5).sum();
+        // Coarse ground blocks replace what the estimate charges for their tiles.
+        let (charged, coarse) = self.document.coarse_ground(cell, COARSE_GROUND_STRIDE)?
+            .map_or((0, 0), |g| (g.charged_faces(), g.faces()));
         Ok(cost
             .triangles
+            .saturating_sub(charged)
+            .saturating_add(coarse)
             .saturating_add(water)
             .saturating_add(mapkit_core::regional_display::face_bound(&self.document,cell)?)
             .saturating_add(cost.objects.saturating_mul(maximum)))
@@ -342,14 +355,15 @@ impl Package {
         checkpoint()?;
         let grid = self.generation_heightgrid(cell)?;
         let source = self.document.generate_distant_source(cell, grid.as_ref(), 500_000)?;
-        self.distant_from_parts(cell, &source.triangles, &source.objects, &source.water_bodies)
+        self.distant_from_parts(cell, Some(grid.as_ref()), &source.triangles, &source.objects, &source.water_bodies)
     }
 
     pub fn distant_from_generated(&self, chunk: &GeneratedChunk) -> Result<DistantMesh> {
-        self.distant_from_parts(chunk.cell, &chunk.triangles, &chunk.objects, &chunk.water_bodies)
+        self.distant_from_parts(chunk.cell, None, &chunk.triangles, &chunk.objects, &chunk.water_bodies)
     }
 
-    fn distant_from_parts(&self, cell:Cell, triangles: &[Triangle], objects: &[GeneratedObject], water_bodies: &[WaterCell]) -> Result<DistantMesh> {
+    /// `grid` is the cell's already decoded generation heightgrid, when known.
+    fn distant_from_parts(&self, cell:Cell, grid: Option<Option<&mapkit_core::HeightGrid>>, triangles: &[Triangle], objects: &[GeneratedObject], water_bodies: &[WaterCell]) -> Result<DistantMesh> {
         checkpoint()?;
         let mut result = DistantMesh::default();
         let regional = mapkit_core::regional_display::generate(&self.document,cell)?;
@@ -368,6 +382,9 @@ impl Package {
         // map scale read once.
         let denominator = mapkit_core::osm_source_denominator(&self.document).unwrap_or(1);
         let mut barrier_colors: BTreeMap<usize, [u8; 4]> = BTreeMap::new();
+        // Ground and road styles follow the map's resolved climate and terrain palette.
+        let (climate, terrain) = self.document.environment.as_ref().map_or(("temperate", "plain"), |e| e.ground_design());
+        let mut coarse = CoarseBlocks::new(self, cell, grid)?;
         for placement in &self.document.placements {
             if self.document.asset(&placement.asset_id).is_some_and(|a| a.path.ends_with(".glb"))
             {
@@ -389,7 +406,7 @@ impl Package {
             }
             let building = buildings[index];
             let style = mapkit_core::appearance::triangle_style(&self.document,&triangle.object_id,triangle.spawnable);
-            let color = if let Some(color) = (!style.starts_with("barrier/")).then(||mapkit_core::appearance::color(style,false)).flatten() { color } else if let Some(building) = building {
+            let color = if let Some(color) = (!style.starts_with("barrier/")).then(||mapkit_core::appearance::ground_color_for(style,climate,terrain)).flatten() { color } else if let Some(building) = building {
                 let [a, b, c] = triangle.vertices;
                 let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
                 let n = [(u[1] * v[2] - u[2] * v[1]) as f64, (u[2] * v[0] - u[0] * v[2]) as f64, (u[0] * v[1] - u[1] * v[0]) as f64];
@@ -418,26 +435,34 @@ impl Package {
                         .map(|c| [c[0],c[1],c[2],255]).unwrap_or([115,134,100,255]),
                 }
             };
+            // Terrain keeps the same large-scale shading in both paths.
+            // Negative roles are display tags, never emissive bindings: -1
+            // unstyled terrain, -2 classified cover owning its colour, -3
+            // vegetated cover that may show bare rock on steep faces. Role 3
+            // lights native building walls at night with a per-object seed.
+            let light = if building.is_some() {
+                [object_seed(&self.document.map_id, &triangle.object_id), 3.]
+            } else {
+                let role = if let Some((name, ground)) = style.strip_prefix("ground/").and_then(|name| mapkit_core::appearance::catalog().ground.get(name).map(|g| (name, g))) {
+                    if !matches!(ground.detail.as_str(), "grass"|"earth"|"sand"|"rock"|"snow"|"ice") { 0. }
+                    else if mapkit_core::appearance::vegetated_ground(name) { -3. } else { -2. }
+                } else if matches!(triangle.surface, Surface::Grass | Surface::Dirt) { -1. } else { 0. };
+                [0., role]
+            };
+            if building.is_none() && coarse.absorb(&self.document, triangle, color, light[1]) {
+                continue;
+            }
             for i in [0, 2, 1] {
                 let p = triangle.vertices[i];
                 result
                     .vertices
                     .push([p[0] as f32 * 0.01, p[1] as f32 * 0.01, -p[2] as f32 * 0.01]);
                 result.colors.push(color);
-                // Terrain keeps the same large-scale shading in both paths.
-                // Negative roles are display tags, never emissive bindings; role 3
-                // lights native building walls at night with a per-object seed.
-                result.light_data.push(if building.is_some() {
-                    [object_seed(&self.document.map_id, &triangle.object_id), 3.]
-                } else {
-                    let terrain = if let Some(ground) = style.strip_prefix("ground/").and_then(|name| mapkit_core::appearance::catalog().ground.get(name)) {
-                        if matches!(ground.detail.as_str(), "grass"|"earth"|"sand"|"rock"|"snow"|"ice") { -2. } else { 0. }
-                    } else if matches!(triangle.surface, Surface::Grass | Surface::Dirt) { -1. } else { 0. };
-                    [0., terrain]
-                });
+                result.light_data.push(light);
                 result.decoration.push(0);
             }
         }
+        coarse.emit(&mut result);
         for face in regional.faces {
             for i in [0,2,1] {
                 let p=face.vertices[i];
@@ -547,6 +572,97 @@ impl Package {
         result.light_data.append(&mut decorations.light_data);
         result.decoration.append(&mut decorations.decoration);
         Ok(result)
+    }
+}
+
+/// Coarse distant ground of a heightmap cell (`mapkit_core::CoarseGround`):
+/// the plain terrain and paint faces of each coarse block become one surface
+/// over the block's generation corner heights, in the faces' area-weighted
+/// mean sRGB colour and their largest display role. Edges facing full-detail
+/// tiles or another cell keep every full-resolution sample (a centre fan), so
+/// coarse and detailed ground share their boundary vertices without cracks.
+struct CoarseBlocks {
+    plan: Option<(mapkit_core::CoarseGround, Vec<i64>, usize)>,
+    /// Per block: area, area-weighted sRGB and area per role (-3, -2, -1, 0).
+    sums: Vec<Option<(f64, [f64; 3], [f64; 4])>>,
+}
+
+impl CoarseBlocks {
+    fn new(package: &Package, cell: Cell, grid: Option<Option<&mapkit_core::HeightGrid>>) -> Result<Self> {
+        let Some(plan) = package.document.coarse_ground(cell, COARSE_GROUND_STRIDE)?.filter(|g| g.coarse.contains(&true))
+        else { return Ok(Self { plan: None, sums: Vec::new() }) };
+        let heights = match grid {
+            Some(grid) => package.document.ground_corner_heights(cell, grid)?,
+            None => package.document.ground_corner_heights(cell, package.generation_heightgrid(cell)?.as_ref())?,
+        };
+        let side = package.document.cell_size_cm as usize / plan.spacing as usize + 1;
+        let sums = vec![None; plan.blocks * plan.blocks];
+        Ok(Self { plan: Some((plan, heights, side)), sums })
+    }
+
+    /// Takes a ground face whose centroid lies in a coarse block.
+    fn absorb(&mut self, d: &mapkit_core::MapDocument, t: &Triangle, color: [u8; 4], role: f32) -> bool {
+        let Some((plan, _, _)) = &self.plan else { return false };
+        if !t.spawnable || (t.object_id != "terrain" && d.surface_areas.binary_search_by(|a| a.id.cmp(&t.object_id)).is_err()) { return false; }
+        let block = |axis: usize, vertex: usize| {
+            let sum: i64 = t.vertices.iter().map(|v| v[vertex]).sum();
+            (sum - 3 * plan.origin[axis]).div_euclid(3 * plan.spacing * plan.stride as i64)
+        };
+        let (x, y) = (block(0, 0), block(1, 2));
+        if !plan.is_coarse(x, y) { return false; }
+        let [a, b, c] = t.vertices;
+        let area = (((b[0] - a[0]) as f64) * ((c[2] - a[2]) as f64) - ((b[2] - a[2]) as f64) * ((c[0] - a[0]) as f64)).abs();
+        let entry = self.sums[y as usize * plan.blocks + x as usize].get_or_insert((0., [0.; 3], [0.; 4]));
+        entry.0 += area;
+        for i in 0..3 { entry.1[i] += area * f64::from(color[i]); }
+        entry.2[((role + 3.).round() as usize).min(3)] += area;
+        true
+    }
+
+    fn emit(&self, out: &mut DistantMesh) {
+        let Some((plan, heights, side)) = &self.plan else { return };
+        let stride = plan.stride as i64;
+        let point = |i: i64, j: i64| [plan.origin[0] + i * plan.spacing, heights[j as usize * side + i as usize], plan.origin[1] + j * plan.spacing];
+        for (index, sum) in self.sums.iter().enumerate() {
+            let Some((area, rgb, roles)) = sum else { continue };
+            if *area <= 0. { continue; }
+            let (bx, by) = ((index % plan.blocks) as i64, (index / plan.blocks) as i64);
+            let color = [0, 1, 2].map(|i| (rgb[i] / area).round().clamp(0., 255.) as u8);
+            let color = [color[0], color[1], color[2], 255];
+            // Largest share; ties keep the earlier of -3, -2, -1, 0.
+            let role = (0..4).fold(0, |best, i| if roles[i] > roles[best] { i } else { best }) as f32 - 3.;
+            let (x0, y0) = (bx * stride, by * stride);
+            let corners = [point(x0, y0), point(x0 + stride, y0), point(x0 + stride, y0 + stride), point(x0, y0 + stride)];
+            let edges = plan.detailed_edges(bx, by);
+            let mut faces = Vec::new();
+            if !edges.contains(&true) {
+                faces.push([corners[0], corners[1], corners[2]]);
+                faces.push([corners[0], corners[2], corners[3]]);
+            } else {
+                // Counter-clockwise ring (the terrain faces' winding) with the
+                // samples of every detailed edge, fanned from the block centre.
+                let mut ring = Vec::with_capacity(4 * plan.stride);
+                for k in 0..stride { if k == 0 || edges[0] { ring.push(point(x0 + k, y0)); } }
+                for k in 0..stride { if k == 0 || edges[1] { ring.push(point(x0 + stride, y0 + k)); } }
+                for k in 0..stride { if k == 0 || edges[2] { ring.push(point(x0 + stride - k, y0 + stride)); } }
+                for k in 0..stride { if k == 0 || edges[3] { ring.push(point(x0, y0 + stride - k)); } }
+                let centre = if stride % 2 == 0 { point(x0 + stride / 2, y0 + stride / 2) } else {
+                    [plan.origin[0] + x0 * plan.spacing + stride * plan.spacing / 2, corners.iter().map(|c| c[1]).sum::<i64>() / 4,
+                        plan.origin[1] + y0 * plan.spacing + stride * plan.spacing / 2]
+                };
+                for i in 0..ring.len() { faces.push([centre, ring[i], ring[(i + 1) % ring.len()]]); }
+            }
+            debug_assert_eq!(faces.len() as u64, plan.block_faces(bx, by));
+            for face in faces {
+                for i in [0, 2, 1] {
+                    let p = face[i];
+                    out.vertices.push([p[0] as f32 * 0.01, p[1] as f32 * 0.01, -p[2] as f32 * 0.01]);
+                    out.colors.push(color);
+                    out.light_data.push([0., role]);
+                    out.decoration.push(0);
+                }
+            }
+        }
     }
 }
 

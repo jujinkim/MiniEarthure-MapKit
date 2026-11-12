@@ -113,6 +113,16 @@ static func design_defaults(concept: String) -> Dictionary:
 		"southeast-asian":["tropical","tropical","village"]}.get(concept,["modern","temperate","urban"])
 	return {"architecture":values[0],"climate":values[1],"settlement":values[2],"terrain":"plain"}
 
+## Map-wide climate and terrain of the ground palette: authored values, else the
+## concept defaults (terrain plain); regions never select ground colours. Same
+## rule as mapkit-core EnvironmentProfile::ground_design (distant products).
+static func ground_design(profile: Variant) -> Dictionary:
+	if not profile is Dictionary: return {"climate": "temperate", "terrain": "plain"}
+	var climate := str(profile.get("climate", ""))
+	var terrain := str(profile.get("terrain", ""))
+	return {"climate": climate if not climate.is_empty() else str(design_defaults(str(profile.get("concept", "metropolis"))).climate),
+		"terrain": terrain if not terrain.is_empty() else "plain"}
+
 static func design_at(profile: Dictionary, point: Vector2) -> Dictionary:
 	var design := design_defaults(str(profile.get("concept","metropolis")))
 	for key: String in profile:

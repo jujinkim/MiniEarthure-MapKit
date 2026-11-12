@@ -954,8 +954,18 @@ static func facade_palette(key: String) -> Dictionary:
 	_facade_palettes[key] = palette
 	return palette
 
+## Map-wide resolved climate and terrain of the cell's ground palette.
+static func ground_design(presentation: Dictionary) -> Dictionary:
+	var text := str(presentation.get("environment_json", ""))
+	return preload("./environment_profile.gd").ground_design(JSON.parse_string(text) if not text.is_empty() else null)
+
 ## Authored climate changes static ground colour only, never surface traction.
+## Ground and road styles take the climate/terrain palette (distant uses the
+## same catalogue rule); unstyled grass keeps the authored ground_color or
+## the authored climate's tint.
 static func ground_color(key: String, presentation: Dictionary) -> Color:
+	if (key.begins_with("ground/") or key.begins_with("road/")) and not APPEARANCE.entry(key).is_empty():
+		return APPEARANCE.color(key,ground_design(presentation))
 	if key != "grass": return material_color(key)
 	var profile: Variant = JSON.parse_string(str(presentation.get("environment_json", "{}")))
 	if not profile is Dictionary: return material_color(key)
@@ -1009,7 +1019,7 @@ static func _generated_material(job: Dictionary, key: String, presentation: Dict
 	var context: RefCounted = job.resources.material_context() if job.get("resources") != null else null
 	if context != null and not key.begins_with("rc:") and not _urban_surface(key,presentation):
 		var generated: ShaderMaterial = context.generated_material(ground_color(key,presentation),detail_kind(key),0.8 if key == "safety:metal" else 0.0,0.9,defer_quality)
-		if not APPEARANCE.entry(key).is_empty(): APPEARANCE.bind(generated,key)
+		if not APPEARANCE.entry(key).is_empty(): APPEARANCE.bind(generated,key,ground_design(presentation))
 		generated.set_shader_parameter("regional_scale",300.0/float(presentation.get("facade_floor_cm",300)))
 		bind_facade(generated,key,presentation)
 		if facade_kind(key) == 3: context.bind_signs(generated)
@@ -1049,7 +1059,7 @@ static func surface_material(key: String, presentation: Dictionary, shader: Shad
 		if name not in ["surface","detail_kind"]: material.set_shader_parameter(name, style[name])
 	if style.has("detail_kind"): material.set_meta("regional_detail",style.detail_kind)
 	if key.begins_with("ground/"):
-		material.set_shader_parameter("base_color",APPEARANCE.color(key))
+		material.set_shader_parameter("base_color",APPEARANCE.color(key,ground_design(presentation)))
 		material.set_shader_parameter("appearance_mode",1 if key == "ground/asphalt" else 2)
 		material.set_shader_parameter("paving",key != "ground/asphalt")
 		material.set_shader_parameter("slabs",key == "ground/concrete")

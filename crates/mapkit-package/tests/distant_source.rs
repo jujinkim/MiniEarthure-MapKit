@@ -28,7 +28,12 @@ fn scenarios() -> Vec<(&'static str, MapDocument, BTreeMap<String, Vec<u8>>)> {
         {"id":"fences", "asset_id":"builtin:fence", "points":[[2000,0,24000],[24000,0,24000]],"spacing_cm":200}
     ])).unwrap();
     let mut open = dense.clone(); open.buildings.clear();
-    let mut result=vec![("dense",dense,BTreeMap::new()),("repeated",repeated,files),("open",open,BTreeMap::new())];
+    // Coarse distant heightmap ground under an arid canyon palette, rock base terrain.
+    let (mut canyon, terrain) = support::heightmap_terrain();
+    canyon.ground_style_id = "ground/rock".into();
+    canyon.environment = Some(serde_json::from_value(serde_json::json!({"version":1,"concept":"desert","climate":"arid","terrain":"canyon",
+        "latitude_mdeg":36000,"longitude_mdeg":-112000,"utc_offset_minutes":-420,"sunrise_minutes":360,"sunset_minutes":1080,"regions":[],"lights":[]})).unwrap());
+    let mut result=vec![("dense",dense,BTreeMap::new()),("repeated",repeated,files),("open",open,BTreeMap::new()),("canyon",canyon,terrain)];
     for name in ["minimal","roads","courtyard","placement","assets"] {
         let path=std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(name);
         let (d,f)=read_project(&path).unwrap(); result.push((name,d,f));

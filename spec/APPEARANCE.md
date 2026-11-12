@@ -42,6 +42,12 @@ data or the profile. Source roof facts survive regional profile edits.
 Ground types include asphalt, concrete, pavers, stone paving, gravel, compacted
 earth, sand, rock, managed lawn, grassland, scrub, forest floor, cropland, orchard,
 wetland, snow and ice. Snow/ice here are appearances, independent of weather grip.
+Optional renderer-only catalogue tables recolour ground and road styles by the
+map-wide resolved climate and terrain: `terrain_ground.<terrain>.<ground>` wins
+over `climate_ground.<climate>.<ground>` (sRGB), and `terrain_slope_rock.<terrain>`
+(`color`, `weight_per_mille`) shows bare rock on steep vegetated cover. The
+catalogue `version` stays 1; producers ignore these tables and stored styles are
+unchanged. The current tables cover arid natural cover and canyon rock.
 Building uses keep homes, apartments/towers, retail/mixed use, office, hotel,
 shopping, school, university, hospital, civic/religious facilities, stations,
 industrial/storage, farming, utility and research distinct.

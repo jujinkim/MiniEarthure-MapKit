@@ -59,7 +59,29 @@ pub struct EnvironmentProfile {
     pub lights: Vec<LightBinding>,
 }
 
+/// Concept defaults of the empty design dimensions (architecture, climate,
+/// settlement), mirroring map-kit godot/environment_profile.gd `design_defaults`.
+/// An empty terrain is `plain`.
+pub fn design_defaults(concept: &str) -> [&'static str; 3] {
+    match concept {
+        "polar" => ["timber", "polar", "sparse"],
+        "countryside" => ["rural", "temperate", "village"],
+        "middle-eastern" => ["adobe", "arid", "urban"],
+        "desert" => ["adobe", "arid", "wilderness"],
+        "jungle" => ["tropical", "tropical", "wilderness"],
+        "southeast-asian" => ["tropical", "tropical", "village"],
+        _ => ["modern", "temperate", "urban"],
+    }
+}
+
 impl EnvironmentProfile {
+    /// Map-wide resolved (climate, terrain) of the ground palette: authored values,
+    /// else the concept defaults. Regions do not select ground colours. Same rule
+    /// as environment_profile.gd `ground_design`.
+    pub fn ground_design(&self) -> (&str, &str) {
+        let climate = if self.climate.is_empty() { design_defaults(&self.concept)[1] } else { self.climate.as_str() };
+        (climate, if self.terrain.is_empty() { "plain" } else { self.terrain.as_str() })
+    }
     pub fn validate(&self, bounds: &Bounds, assets: &[crate::Asset]) -> Result<()> {
         let bad = || error("E_ENVIRONMENT", "Invalid or excessive environment profile");
         if self.start_minutes.is_some_and(|v|v>=1440) || !dimensions(&self.architecture, &self.climate, &self.settlement, &self.terrain) || self.version != 1 || !CONCEPTS.contains(&self.concept.as_str())

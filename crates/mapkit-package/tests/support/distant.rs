@@ -38,3 +38,37 @@ pub fn fixture() -> (MapDocument,BTreeMap<String,Vec<u8>>) {
     d.placements.push(Placement{id:"gate".into(),asset_id:"portal".into(),position:[10000,100,10000],quarter_turns:1,yaw_offset_mdeg:30000});
     (d,BTreeMap::from([("near.glb".into(),portal(false)),("far.glb".into(),portal(false))]))
 }
+
+/// Two by two 32 m heightmap cells (2 m samples) of rough terrain, a
+/// block-aligned grassland paint in cell (0, 0) and one road in cell (1, 1):
+/// coarse distant ground blocks next to full-detail tiles and cell borders.
+#[allow(dead_code)]
+pub fn heightmap_terrain() -> (MapDocument,BTreeMap<String,Vec<u8>>) {
+    let mut d: MapDocument = serde_json::from_str(include_str!("../../../../examples/minimal/document.json")).unwrap();
+    d.nodes.clear(); d.roads.clear(); d.buildings.clear(); d.zones.clear(); d.free_roam = true;
+    d.bounds = Bounds { min: [0, 0], max: [6400, 6400] };
+    d.cell_size_cm = 3200;
+    let mut files = BTreeMap::new();
+    for cell in d.cells() {
+        let samples: Vec<u16> = (0..17 * 17).map(|i| {
+            let (x, y) = (cell.x as i64 * 16 + i % 17, cell.y as i64 * 16 + i / 17);
+            (2000 + x * 20 + (x * 37 + y * 53 + x * y * 11) % 41 * 9) as u16
+        }).collect();
+        let mut bytes = Vec::new();
+        {
+            let mut e = png::Encoder::new(&mut bytes, 17, 17);
+            e.set_color(png::ColorType::Grayscale);
+            e.set_depth(png::BitDepth::Sixteen);
+            e.write_header().unwrap().write_image_data(&samples.iter().flat_map(|v| v.to_be_bytes()).collect::<Vec<_>>()).unwrap();
+        }
+        let path = format!("terrain/{}-{}.png", cell.x, cell.y);
+        files.insert(path.clone(), bytes);
+        d.heightmaps.push(Heightmap { cell, path, spacing_cm: 200, offset_cm: 0, step_cm: 1, source_accuracy_cm: None });
+    }
+    d.surface_areas.push(SurfaceArea { id: "meadow".into(), polygon: vec![[800, 800], [2400, 800], [2400, 2400], [800, 2400]],
+        surface: Surface::Grass, style_id: "ground/grassland".into() });
+    d.nodes = serde_json::from_value(json!([{"id":"a","position":[3600,2200,6000],"level":0},{"id":"b","position":[6000,2200,6000],"level":0}])).unwrap();
+    d.roads = serde_json::from_value(json!([{"id":"lane","from":"a","to":"b","points":[[3600,2200,6000],[6000,2200,6000]],
+        "widths_cm":[400],"surfaces":["asphalt"],"kind":"ground","clearance_cm":null,"sidewalk_cm":0}])).unwrap();
+    (d, files)
+}

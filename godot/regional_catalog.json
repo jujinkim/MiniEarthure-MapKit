@@ -770,5 +770,63 @@
     "skillion",
     "dome",
     "vault"
-  ]
+  ],
+  "climate_ground": {
+    "arid": {
+      "managed_lawn": [
+        146,
+        142,
+        98
+      ],
+      "grassland": [
+        182,
+        160,
+        114
+      ],
+      "scrub": [
+        150,
+        134,
+        100
+      ],
+      "forest_floor": [
+        120,
+        102,
+        76
+      ],
+      "cropland": [
+        176,
+        150,
+        106
+      ],
+      "orchard": [
+        140,
+        130,
+        90
+      ],
+      "wetland": [
+        118,
+        116,
+        90
+      ]
+    }
+  },
+  "terrain_ground": {
+    "canyon": {
+      "rock": [
+        176,
+        116,
+        82
+      ]
+    }
+  },
+  "terrain_slope_rock": {
+    "canyon": {
+      "color": [
+        170,
+        104,
+        72
+      ],
+      "weight_per_mille": 850
+    }
+  }
 }

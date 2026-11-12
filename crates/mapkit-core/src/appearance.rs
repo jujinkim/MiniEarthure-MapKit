@@ -20,6 +20,12 @@ pub struct Catalog {
     pub building_types: BTreeMap<String, BuildingType>,
     pub road_types: Vec<String>, pub vegetation_types: Vec<String>, pub barrier_types: Vec<String>,
     pub climates: Vec<String>, pub settlements: Vec<String>, pub terrains: Vec<String>, pub roof_shapes: Vec<String>,
+    /// Optional display-only ground palettes by climate, then by terrain (which
+    /// wins), keyed by ground name. Absent entries keep the `ground` colour.
+    #[serde(default)]
+    pub climate_ground: BTreeMap<String, BTreeMap<String, [u8; 3]>>,
+    #[serde(default)]
+    pub terrain_ground: BTreeMap<String, BTreeMap<String, [u8; 3]>>,
 }
 pub fn catalog() -> &'static Catalog {
     static DATA: OnceLock<Catalog> = OnceLock::new();
@@ -80,6 +86,26 @@ pub fn color(id: &str, roof: bool) -> Option<[u8; 4]> {
         _ => return None,
     };
     Some([rgb[0], rgb[1], rgb[2], 255])
+}
+
+/// [`color`] of a ground or road style under the map's resolved climate and
+/// terrain ([`crate::environment::EnvironmentProfile::ground_design`]):
+/// `terrain_ground`, then `climate_ground`, then the catalogue colour. Other
+/// styles keep [`color`]. Display only; contact surfaces never change.
+pub fn ground_color_for(id: &str, climate: &str, terrain: &str) -> Option<[u8; 4]> {
+    let c = catalog();
+    let p: Vec<_> = id.split('/').collect();
+    let (["ground", kind] | ["road", _, kind]) = p.as_slice() else { return color(id, false) };
+    c.ground.get(*kind)?;
+    let rgb = c.terrain_ground.get(terrain).and_then(|t| t.get(*kind))
+        .or_else(|| c.climate_ground.get(climate).and_then(|t| t.get(*kind)))
+        .map_or_else(|| c.ground[*kind].color, |rgb| *rgb);
+    Some([rgb[0], rgb[1], rgb[2], 255])
+}
+
+/// Natural cover whose steep faces may show bare rock at display time.
+pub fn vegetated_ground(kind: &str) -> bool {
+    matches!(kind, "managed_lawn" | "grassland" | "scrub" | "forest_floor" | "cropland" | "orchard" | "wetland")
 }
 
 /// Resolved optional roof components; four-component IDs retain catalogue defaults.
