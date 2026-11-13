@@ -117,7 +117,9 @@ fn solid(out:&mut Builder, b:&Building, style:&appearance::BuildingStyle, scale:
     let native_rise=crate::placement::roof_rise(b) as f64;
     let top=b.base_cm as f64+b.height_cm as f64+native_rise;
     let shape=if b.holes.is_empty(){style.roof}else{"flat"};
-    let rise=if shape=="flat"{0.}else if native_rise>0.{native_rise}else{(width*0.25).min(250.*scale).min(b.height_cm as f64*0.25)};
+    // At most 26.6° across the narrow side, 2.5 source m and 40 % of a low envelope
+    // (a one-storey house keeps a visible roof above its storey).
+    let rise=if shape=="flat"{0.}else if native_rise>0.{native_rise}else{(width*0.25).min(250.*scale).min(b.height_cm as f64*0.4)};
     let eaves=top-rise;
     out.eaves=eaves as f32; out.base=b.base_cm as f32; out.ceiling=top;
     let height=|p:[f64;2]| {
@@ -151,7 +153,7 @@ fn solid(out:&mut Builder, b:&Building, style:&appearance::BuildingStyle, scale:
     out.module=true;
     let architecture=&appearance::catalog().architectures[style.architecture];
     let kind=&appearance::catalog().building_types[style.kind];
-    let modules:BTreeSet<&str>=architecture.modules.iter().chain(kind.modules.iter()).map(String::as_str).collect();
+    let modules:BTreeSet<&str>=architecture.modules_for(style.kind).iter().chain(kind.modules.iter()).map(String::as_str).collect();
     let mut edges:Vec<_>=(0..b.footprint.len()).map(|i| {
         let a=b.footprint[i];let z=b.footprint[(i+1)%b.footprint.len()];
         let length=libm::hypot((z[0]-a[0]) as f64,(z[1]-a[1]) as f64);(i,length)

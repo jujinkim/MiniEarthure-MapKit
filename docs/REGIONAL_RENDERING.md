@@ -15,7 +15,10 @@ are hidden only in display when their regional replacement is present.
 Flat, gabled, hipped, pyramidal, skillion, dome and barrel-vault roofs are sampled
 within the original footprint. Courtyard buildings retain their open roof rings.
 The physical source envelope bounds roof heights: a native gable retains its rise;
-a regional roof over a flat source fits inside the declared height. Body and roof
+a regional roof over a flat source fits inside the declared height, rising at most
+a quarter of the narrow side, 2.5 source m and 40 % of the envelope. Roof shape,
+roof material and architecture modules resolve per building type through the
+catalogue's optional `uses`, so a house does not take a shop canopy. Body and roof
 faces use the same cell clipping planes on both sides of a seam. Decorative edge
 pieces participate in neighbouring cells within their bounded reach. Clipping
 contacts and height-clamped decoration with zero area produce no display face.

@@ -33,7 +33,12 @@ concept defaults. Regions retain first-match precedence. Weather remains map-wid
 Object source facts and explicit author selection take precedence over defaults.
 
 The two optional building roof components are supplied together. Omitted roof
-components use the architecture catalogue. Shapes are flat, gabled, hipped,
+components use the architecture catalogue: an architecture's optional `uses` map
+gives per-building-type `material`, `roof`, `roof_material` and `modules`, each
+present field replacing the architecture default for that type (`modules` replaces
+the whole set). Producers take the wall-material default from the same entry.
+Korean modern houses and farmhouses default to hipped dark-tile roofs over plaster
+with tiled eaves; its warehouses and barns to gabled metal. Shapes are flat, gabled, hipped,
 pyramidal, skillion, dome and vault. `blue_tile` roofs require a Cycladic
 religious building with explicit `dome`; other uses cannot select that combination.
 The Editor records whether roof selections came from author, source, auxiliary

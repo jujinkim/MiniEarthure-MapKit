@@ -8,7 +8,24 @@ pub struct Ground { pub surface: String, pub color: [u8; 3], pub detail: String 
 #[derive(Debug, Deserialize)]
 pub struct Material { pub color: [u8; 3], pub roof_color: [u8; 3], pub roughness_per_mille: u16, pub metallic_per_mille: u16, pub detail: String }
 #[derive(Debug, Deserialize)]
-pub struct Architecture { pub material: String, pub roof: String, pub roof_material: String, pub modules: Vec<String> }
+pub struct Architecture {
+    pub material: String, pub roof: String, pub roof_material: String, pub modules: Vec<String>,
+    /// Optional per-building-type defaults of this architecture. A present field
+    /// replaces the architecture default for that use (`modules` replaces the set).
+    #[serde(default)]
+    pub uses: BTreeMap<String, UseStyle>,
+}
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UseStyle { pub material: Option<String>, pub roof: Option<String>, pub roof_material: Option<String>, pub modules: Option<Vec<String>> }
+impl Architecture {
+    fn use_style(&self, kind: &str) -> Option<&UseStyle> { self.uses.get(kind) }
+    /// Producer default wall material for a building of `kind`.
+    pub fn material_for(&self, kind: &str) -> &str { self.use_style(kind).and_then(|u| u.material.as_deref()).unwrap_or(&self.material) }
+    pub fn roof_for(&self, kind: &str) -> &str { self.use_style(kind).and_then(|u| u.roof.as_deref()).unwrap_or(&self.roof) }
+    pub fn roof_material_for(&self, kind: &str) -> &str { self.use_style(kind).and_then(|u| u.roof_material.as_deref()).unwrap_or(&self.roof_material) }
+    pub fn modules_for(&self, kind: &str) -> &[String] { self.use_style(kind).and_then(|u| u.modules.as_deref()).unwrap_or(&self.modules) }
+}
 #[derive(Debug, Deserialize)]
 pub struct BuildingType { pub facade_kind: u8, pub modules: Vec<String> }
 #[derive(Debug, Deserialize)]
@@ -108,13 +125,14 @@ pub fn vegetated_ground(kind: &str) -> bool {
     matches!(kind, "managed_lawn" | "grassland" | "scrub" | "forest_floor" | "cropland" | "orchard" | "wetland")
 }
 
-/// Resolved optional roof components; four-component IDs retain catalogue defaults.
+/// Resolved optional roof components; four-component IDs take the architecture's
+/// catalogue default for the building type.
 pub struct BuildingStyle<'a> { pub architecture: &'a str, pub kind: &'a str, pub material: &'a str, pub roof: &'a str, pub roof_material: &'a str }
 pub fn building(id: &str) -> Option<BuildingStyle<'_>> {
     let p: Vec<_> = id.split('/').collect();
     if !matches!(p.len(), 4 | 6) || p[0] != "building" { return None; }
     let a = catalog().architectures.get(p[1])?;
-    Some(BuildingStyle { architecture: p[1], kind: p[2], material: p[3], roof: p.get(4).copied().unwrap_or(&a.roof), roof_material: p.get(5).copied().unwrap_or(&a.roof_material) })
+    Some(BuildingStyle { architecture: p[1], kind: p[2], material: p[3], roof: p.get(4).copied().unwrap_or(a.roof_for(p[2])), roof_material: p.get(5).copied().unwrap_or(a.roof_material_for(p[2])) })
 }
 
 /// Find appearance from semantic ownership, never from low-resolution cover over a road.

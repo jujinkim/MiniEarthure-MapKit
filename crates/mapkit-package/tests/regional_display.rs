@@ -148,3 +148,19 @@ fn arid_and_canyon_palettes_recolour_natural_ground_only_where_authored() {
     assert_eq!(appearance::ground_color_for("road/street/scrub","arid","plain"),Some(rgb(c.climate_ground["arid"]["scrub"])));
     assert_eq!(appearance::ground_color_for("building/modern/hotel/concrete","arid","canyon"),appearance::color("building/modern/hotel/concrete",false));
 }
+#[test]
+fn korean_houses_take_their_use_roof_without_shop_modules() {
+    // A one-storey envelope: the hipped tile roof sits above a full storey inside the source height.
+    let mut d=document();let b=&mut d.buildings[0];b.height_cm=500;b.style_id="building/korean_modern/detached/plaster".into();
+    d.normalize();d.validate().unwrap();
+    let mesh=display::generate(&d,Cell{x:0,y:0}).unwrap();
+    let roof:Vec<f64>=mesh.faces.iter().filter(|f|f.key=="roof/dark_tile").flat_map(|f|f.vertices).map(|p|p[1]).collect();
+    assert!(!roof.is_empty());
+    let (low,high)=roof.iter().fold((f64::MAX,f64::MIN),|(l,h),y|(l.min(*y),h.max(*y)));
+    assert!((high-600.).abs()<1e-6 && (low-400.).abs()<1e-6,"eaves {low} ridge {high}");
+    // Shop canopies, balconies and parapets of the architecture default are metal/stone/concrete; the house has none.
+    assert!(mesh.faces.iter().all(|f|!matches!(f.key.as_str(),"material/metal"|"material/stone"|"material/concrete")));
+    let mut shop=document();shop.buildings[0].style_id="building/korean_modern/shop/concrete".into();
+    shop.normalize();shop.validate().unwrap();
+    assert!(display::generate(&shop,Cell{x:0,y:0}).unwrap().faces.iter().any(|f|f.key=="material/metal"),"shops keep the canopy");
+}

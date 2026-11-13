@@ -50,6 +50,17 @@ fn catalogue_compositions_are_strict_and_omissions_are_unchanged() {
         assert!(appearance::valid(&format!("building/{a}/{k}/{}", c.architectures[a].material), Domain::Building));
     }}
     for k in c.ground.keys() { assert!(appearance::valid(&format!("ground/{k}"), Domain::Ground)); }
+    // Per-use architecture defaults name catalogue types, materials, roofs and known modules.
+    let modules: std::collections::BTreeSet<&String> = c.architectures.values().flat_map(|a| &a.modules).chain(c.building_types.values().flat_map(|k| &k.modules)).collect();
+    for (a, arch) in &c.architectures { for kind in arch.uses.keys() {
+        assert!(c.building_types.contains_key(kind), "{a} use {kind}");
+        assert!(appearance::valid(&format!("building/{a}/{kind}/{}/{}/{}", arch.material_for(kind), arch.roof_for(kind), arch.roof_material_for(kind)), Domain::Building), "{a} use {kind}");
+        assert!(arch.modules_for(kind).iter().all(|m| modules.contains(m)), "{a} use {kind} modules");
+    }}
+    let house = appearance::building("building/korean_modern/detached/plaster").unwrap();
+    assert_eq!((house.roof, house.roof_material), ("hipped", "dark_tile"));
+    let flats = appearance::building("building/korean_modern/apartment/concrete").unwrap();
+    assert_eq!((flats.roof, flats.roof_material), ("flat", "concrete"));
     // Display palettes name catalogue climates, terrains and grounds only.
     for (climate, table) in &c.climate_ground {
         assert!(c.climates.contains(climate));
