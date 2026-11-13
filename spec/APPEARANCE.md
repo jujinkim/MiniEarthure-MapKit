@@ -42,7 +42,8 @@ roof comes from the catalogue (no explicit components) shows the entry chosen by
 a hash of its record ID and solid index, near and far; explicit roofs never vary.
 Korean modern houses and farmhouses default to hipped roofs over plaster with
 tiled eaves, varying over dark, red, blue and clay tile; Japanese modern ones to
-gabled dark-tile roofs; their warehouses and barns to gabled metal. Shapes are flat, gabled, hipped,
+gabled roofs, half dark tile and a quarter each brown and navy tile; their
+warehouses and barns to gabled metal. Shapes are flat, gabled, hipped,
 pyramidal, skillion, dome and vault. `blue_tile` roofs require a Cycladic
 religious building with explicit `dome`; other uses cannot select that combination
 (a roof palette may still display the colour).

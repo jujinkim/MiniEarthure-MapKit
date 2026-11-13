@@ -167,8 +167,9 @@ fn korean_and_japanese_houses_take_their_use_roof_without_shop_modules() {
     }
 }
 #[test]
-fn korean_house_roofs_vary_per_solid_but_explicit_roofs_do_not() {
-    let palette=&appearance::catalog().architectures["korean_modern"].uses["detached"].roof_palette.clone().unwrap();
+fn korean_and_japanese_house_roofs_vary_per_solid_but_explicit_roofs_do_not() {
+    for (architecture,material) in [("korean_modern","plaster"),("japanese_modern","plaster")] {
+    let palette=&appearance::catalog().architectures[architecture].uses["detached"].roof_palette.clone().unwrap();
     let grouped=|style:&str| {
         let mut d=document();let b=&mut d.buildings[0];b.style_id=style.into();b.height_cm=500;
         // One grouped record of 24 separate houses, as city imports group a site's buildings.
@@ -178,17 +179,18 @@ fn korean_house_roofs_vary_per_solid_but_explicit_roofs_do_not() {
     };
     let roofs=|d:&MapDocument| {let mesh=display::generate(d,Cell{x:0,y:0}).unwrap();
         mesh.faces.iter().filter(|f|f.key.starts_with("roof/")).map(|f|(f.key.clone(),f.color)).collect::<std::collections::BTreeSet<_>>()};
-    let d=grouped("building/korean_modern/detached/plaster");
+    let d=grouped(&format!("building/{architecture}/detached/{material}"));
     let seen=roofs(&d);
-    assert!(seen.len()>=3,"palette roofs vary across one record: {seen:?}");
+    assert!(seen.len()>=3,"{architecture} palette roofs vary across one record: {seen:?}");
     for (key,color) in &seen {
         let material=key.strip_prefix("roof/").unwrap();
         assert!(palette.iter().any(|m|m==material),"{key} from the palette");
         let c=appearance::catalog().materials[material].roof_color;assert_eq!(*color,[c[0],c[1],c[2],255]);
     }
     assert_eq!(seen,roofs(&d),"stable per solid");
-    let explicit=roofs(&grouped("building/korean_modern/detached/plaster/hipped/dark_tile"));
+    let explicit=roofs(&grouped(&format!("building/{architecture}/detached/{material}/hipped/dark_tile")));
     assert_eq!(explicit.len(),1);assert!(explicit.iter().all(|(k,_)|k=="roof/dark_tile"));
     // Uses without a palette keep their single catalogue roof.
-    assert_eq!(roofs(&grouped("building/korean_modern/warehouse/metal")).len(),1);
+    assert_eq!(roofs(&grouped(&format!("building/{architecture}/warehouse/metal"))).len(),1);
+    }
 }

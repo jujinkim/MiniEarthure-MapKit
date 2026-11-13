@@ -335,6 +335,36 @@
       "roughness_per_mille": 800,
       "metallic_per_mille": 0,
       "detail": "tile"
+    },
+    "brown_tile": {
+      "color": [
+        128,
+        90,
+        66
+      ],
+      "roof_color": [
+        104,
+        72,
+        54
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "tile"
+    },
+    "navy_tile": {
+      "color": [
+        66,
+        80,
+        108
+      ],
+      "roof_color": [
+        50,
+        64,
+        92
+      ],
+      "roughness_per_mille": 780,
+      "metallic_per_mille": 0,
+      "detail": "tile"
     }
   },
   "architectures": {
@@ -420,6 +450,12 @@
           "roof_material": "dark_tile",
           "modules": [
             "tiled_eaves"
+          ],
+          "roof_palette": [
+            "dark_tile",
+            "dark_tile",
+            "brown_tile",
+            "navy_tile"
           ]
         },
         "farmhouse": {
@@ -428,6 +464,12 @@
           "roof_material": "dark_tile",
           "modules": [
             "tiled_eaves"
+          ],
+          "roof_palette": [
+            "dark_tile",
+            "dark_tile",
+            "brown_tile",
+            "navy_tile"
           ]
         },
         "warehouse": {
