@@ -385,7 +385,41 @@
         "shop_canopy",
         "rail"
       ],
-      "roof_material": "concrete"
+      "roof_material": "concrete",
+      "uses": {
+        "detached": {
+          "material": "plaster",
+          "roof": "gabled",
+          "roof_material": "dark_tile",
+          "modules": [
+            "tiled_eaves"
+          ]
+        },
+        "farmhouse": {
+          "material": "plaster",
+          "roof": "gabled",
+          "roof_material": "dark_tile",
+          "modules": [
+            "tiled_eaves"
+          ]
+        },
+        "warehouse": {
+          "material": "metal",
+          "roof": "gabled",
+          "roof_material": "metal",
+          "modules": [
+            "deep_eaves"
+          ]
+        },
+        "barn": {
+          "material": "metal",
+          "roof": "gabled",
+          "roof_material": "metal",
+          "modules": [
+            "deep_eaves"
+          ]
+        }
+      }
     },
     "korean_traditional": {
       "material": "wood",

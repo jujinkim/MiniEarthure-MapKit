@@ -37,8 +37,9 @@ components use the architecture catalogue: an architecture's optional `uses` map
 gives per-building-type `material`, `roof`, `roof_material` and `modules`, each
 present field replacing the architecture default for that type (`modules` replaces
 the whole set). Producers take the wall-material default from the same entry.
-Korean modern houses and farmhouses default to hipped dark-tile roofs over plaster
-with tiled eaves; its warehouses and barns to gabled metal. Shapes are flat, gabled, hipped,
+Korean modern houses and farmhouses default to hipped, Japanese modern ones to
+gabled dark-tile roofs over plaster with tiled eaves; their warehouses and barns
+to gabled metal. Shapes are flat, gabled, hipped,
 pyramidal, skillion, dome and vault. `blue_tile` roofs require a Cycladic
 religious building with explicit `dome`; other uses cannot select that combination.
 The Editor records whether roof selections came from author, source, auxiliary

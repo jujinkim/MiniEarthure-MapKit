@@ -59,6 +59,10 @@ fn catalogue_compositions_are_strict_and_omissions_are_unchanged() {
     }}
     let house = appearance::building("building/korean_modern/detached/plaster").unwrap();
     assert_eq!((house.roof, house.roof_material), ("hipped", "dark_tile"));
+    let house = appearance::building("building/japanese_modern/detached/plaster").unwrap();
+    assert_eq!((house.roof, house.roof_material), ("gabled", "dark_tile"));
+    let shed = appearance::building("building/japanese_modern/warehouse/plaster").unwrap();
+    assert_eq!((shed.roof, shed.roof_material), ("gabled", "metal"));
     let flats = appearance::building("building/korean_modern/apartment/concrete").unwrap();
     assert_eq!((flats.roof, flats.roof_material), ("flat", "concrete"));
     // Display palettes name catalogue climates, terrains and grounds only.
