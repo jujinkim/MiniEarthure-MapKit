@@ -56,6 +56,7 @@ fn catalogue_compositions_are_strict_and_omissions_are_unchanged() {
         assert!(c.building_types.contains_key(kind), "{a} use {kind}");
         assert!(appearance::valid(&format!("building/{a}/{kind}/{}/{}/{}", arch.material_for(kind), arch.roof_for(kind), arch.roof_material_for(kind)), Domain::Building), "{a} use {kind}");
         assert!(arch.modules_for(kind).iter().all(|m| modules.contains(m)), "{a} use {kind} modules");
+        assert!(arch.roof_palette_for(kind).iter().all(|m| c.materials.contains_key(m)), "{a} use {kind} roof palette");
     }}
     let house = appearance::building("building/korean_modern/detached/plaster").unwrap();
     assert_eq!((house.roof, house.roof_material), ("hipped", "dark_tile"));

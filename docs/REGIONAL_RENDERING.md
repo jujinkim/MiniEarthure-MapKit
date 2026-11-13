@@ -18,7 +18,9 @@ The physical source envelope bounds roof heights: a native gable retains its ris
 a regional roof over a flat source fits inside the declared height, rising at most
 a quarter of the narrow side, 2.5 source m and 40 % of the envelope. Roof shape,
 roof material and architecture modules resolve per building type through the
-catalogue's optional `uses`, so a house does not take a shop canopy. Body and roof
+catalogue's optional `uses`, so a house does not take a shop canopy. A use's
+`roof_palette` varies a catalogue-default roof per solid (record ID and solid
+index), so grouped houses differ while every cell and the distant mesh agree. Body and roof
 faces use the same cell clipping planes on both sides of a seam. Decorative edge
 pieces participate in neighbouring cells within their bounded reach. Clipping
 contacts and height-clamped decoration with zero area produce no display face.
@@ -32,7 +34,7 @@ industrial, farm, utility and research uses remain distinguishable inputs.
 Venetian compositions use stone waterfront bases and arches; Cycladic compositions
 use whitewash, blue shutters and explicit vault/dome forms. A blue dome requires
 the appropriate building and roof selection. Seeded variation never chooses a use
-or wall material for a classified building.
+or wall material for a classified building; only a catalogue roof palette varies.
 
 Source wall/roof materials use catalogue colours and physical-looking roughness
 and metallic response. Existing window and night-lighting patterns retain scaled

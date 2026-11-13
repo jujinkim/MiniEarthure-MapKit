@@ -155,7 +155,7 @@ fn korean_and_japanese_houses_take_their_use_roof_without_shop_modules() {
         let mut d=document();let b=&mut d.buildings[0];b.height_cm=500;b.style_id=house.into();
         d.normalize();d.validate().unwrap();
         let mesh=display::generate(&d,Cell{x:0,y:0}).unwrap();
-        let roof:Vec<f64>=mesh.faces.iter().filter(|f|f.key=="roof/dark_tile").flat_map(|f|f.vertices).map(|p|p[1]).collect();
+        let roof:Vec<f64>=mesh.faces.iter().filter(|f|f.key.starts_with("roof/") && f.key.ends_with("_tile")).flat_map(|f|f.vertices).map(|p|p[1]).collect();
         assert!(!roof.is_empty(),"{house}");
         let (low,high)=roof.iter().fold((f64::MAX,f64::MIN),|(l,h),y|(l.min(*y),h.max(*y)));
         assert!((high-600.).abs()<1e-6 && (low-400.).abs()<1e-6,"{house} eaves {low} ridge {high}");
@@ -165,4 +165,30 @@ fn korean_and_japanese_houses_take_their_use_roof_without_shop_modules() {
         d.normalize();d.validate().unwrap();
         assert!(display::generate(&d,Cell{x:0,y:0}).unwrap().faces.iter().any(|f|f.key=="material/metal"),"{shop} keeps the canopy");
     }
+}
+#[test]
+fn korean_house_roofs_vary_per_solid_but_explicit_roofs_do_not() {
+    let palette=&appearance::catalog().architectures["korean_modern"].uses["detached"].roof_palette.clone().unwrap();
+    let grouped=|style:&str| {
+        let mut d=document();let b=&mut d.buildings[0];b.style_id=style.into();b.height_cm=500;
+        // One grouped record of 24 separate houses, as city imports group a site's buildings.
+        b.parts=(1..24).map(|i|{let (x,z)=(30000+(i%6)*200,30000+(i/6)*200);BuildingPart{footprint:vec![[x,z],[x+120,z],[x+120,z+100],[x,z+100]],base_cm:Some(100),height_cm:Some(500),holes:vec![]}}).collect();
+        b.footprint=vec![[30000,30000],[30120,30000],[30120,30100],[30000,30100]];
+        d.normalize();d.validate().unwrap();d
+    };
+    let roofs=|d:&MapDocument| {let mesh=display::generate(d,Cell{x:0,y:0}).unwrap();
+        mesh.faces.iter().filter(|f|f.key.starts_with("roof/")).map(|f|(f.key.clone(),f.color)).collect::<std::collections::BTreeSet<_>>()};
+    let d=grouped("building/korean_modern/detached/plaster");
+    let seen=roofs(&d);
+    assert!(seen.len()>=3,"palette roofs vary across one record: {seen:?}");
+    for (key,color) in &seen {
+        let material=key.strip_prefix("roof/").unwrap();
+        assert!(palette.iter().any(|m|m==material),"{key} from the palette");
+        let c=appearance::catalog().materials[material].roof_color;assert_eq!(*color,[c[0],c[1],c[2],255]);
+    }
+    assert_eq!(seen,roofs(&d),"stable per solid");
+    let explicit=roofs(&grouped("building/korean_modern/detached/plaster/hipped/dark_tile"));
+    assert_eq!(explicit.len(),1);assert!(explicit.iter().all(|(k,_)|k=="roof/dark_tile"));
+    // Uses without a palette keep their single catalogue roof.
+    assert_eq!(roofs(&grouped("building/korean_modern/warehouse/metal")).len(),1);
 }

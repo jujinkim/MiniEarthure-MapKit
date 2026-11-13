@@ -98,10 +98,12 @@ pub fn generate(d:&MapDocument, cell:Cell) -> Result<Display> {
     for record in &d.buildings {
         checkpoint()?;
         let Some(style)=appearance::building(&record.style_id) else {continue;};
-        for b in record.solids().filter(|b|overlaps(b,&bounds)) {
+        for (index,b) in record.solids().enumerate().filter(|(_,b)|overlaps(b,&bounds)) {
             out.out.objects.insert(record.id.clone());
             let hash=crate::sha256(record.id.as_bytes());
             out.seed=u32::from_str_radix(&hash[..6],16).unwrap() as f32 / 16777215.;
+            // Grouped records hold many houses; each solid keeps its own palette roof in every cell.
+            let style=appearance::BuildingStyle{roof_material:style.roof_material_of(&format!("{}#{index}",record.id)),..style};
             solid(&mut out,&b,&style,scale)?;
         }
     }
@@ -146,7 +148,8 @@ fn solid(out:&mut Builder, b:&Building, style:&appearance::BuildingStyle, scale:
     }
     out.material(style.roof_material);
     out.key=format!("roof/{}",style.roof_material);
-    out.color=appearance::color(&b.style_id,true).unwrap();
+    let rgb=appearance::catalog().materials[style.roof_material].roof_color;
+    out.color=[rgb[0],rgb[1],rgb[2],255];
     for t in crate::courtyard::triangulate(b,&mut 0)? {
         roof(out,t.map(|p|p.map(|v|v as f64)),if rise>0.{2}else{0},&height)?;
     }

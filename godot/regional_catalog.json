@@ -320,6 +320,21 @@
       "roughness_per_mille": 750,
       "metallic_per_mille": 0,
       "detail": "tile"
+    },
+    "red_tile": {
+      "color": [
+        176,
+        64,
+        52
+      ],
+      "roof_color": [
+        152,
+        50,
+        42
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "tile"
     }
   },
   "architectures": {
@@ -349,6 +364,12 @@
           "roof_material": "dark_tile",
           "modules": [
             "tiled_eaves"
+          ],
+          "roof_palette": [
+            "dark_tile",
+            "red_tile",
+            "blue_tile",
+            "clay_tile"
           ]
         },
         "farmhouse": {
@@ -357,6 +378,12 @@
           "roof_material": "dark_tile",
           "modules": [
             "tiled_eaves"
+          ],
+          "roof_palette": [
+            "dark_tile",
+            "red_tile",
+            "blue_tile",
+            "clay_tile"
           ]
         },
         "warehouse": {

@@ -17,7 +17,12 @@ pub struct Architecture {
 }
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UseStyle { pub material: Option<String>, pub roof: Option<String>, pub roof_material: Option<String>, pub modules: Option<Vec<String>> }
+pub struct UseStyle {
+    pub material: Option<String>, pub roof: Option<String>, pub roof_material: Option<String>, pub modules: Option<Vec<String>>,
+    /// Display-only roof materials a default (catalogue) roof varies over, one per
+    /// solid by its stable identity. Explicit roof selections never vary.
+    pub roof_palette: Option<Vec<String>>,
+}
 impl Architecture {
     fn use_style(&self, kind: &str) -> Option<&UseStyle> { self.uses.get(kind) }
     /// Producer default wall material for a building of `kind`.
@@ -25,6 +30,7 @@ impl Architecture {
     pub fn roof_for(&self, kind: &str) -> &str { self.use_style(kind).and_then(|u| u.roof.as_deref()).unwrap_or(&self.roof) }
     pub fn roof_material_for(&self, kind: &str) -> &str { self.use_style(kind).and_then(|u| u.roof_material.as_deref()).unwrap_or(&self.roof_material) }
     pub fn modules_for(&self, kind: &str) -> &[String] { self.use_style(kind).and_then(|u| u.modules.as_deref()).unwrap_or(&self.modules) }
+    pub fn roof_palette_for(&self, kind: &str) -> &[String] { self.use_style(kind).and_then(|u| u.roof_palette.as_deref()).unwrap_or(&[]) }
 }
 #[derive(Debug, Deserialize)]
 pub struct BuildingType { pub facade_kind: u8, pub modules: Vec<String> }
@@ -127,12 +133,23 @@ pub fn vegetated_ground(kind: &str) -> bool {
 
 /// Resolved optional roof components; four-component IDs take the architecture's
 /// catalogue default for the building type.
-pub struct BuildingStyle<'a> { pub architecture: &'a str, pub kind: &'a str, pub material: &'a str, pub roof: &'a str, pub roof_material: &'a str }
+#[derive(Clone, Copy)]
+pub struct BuildingStyle<'a> { pub architecture: &'a str, pub kind: &'a str, pub material: &'a str, pub roof: &'a str, pub roof_material: &'a str, pub explicit_roof: bool }
+impl<'a> BuildingStyle<'a> {
+    /// The roof material one solid displays: a catalogue-default roof takes the
+    /// use's palette entry chosen by `identity` (stable per record and solid).
+    pub fn roof_material_of(&self, identity: &str) -> &'a str {
+        let palette = catalog().architectures[self.architecture].roof_palette_for(self.kind);
+        if self.explicit_roof || palette.is_empty() { return self.roof_material; }
+        let hash = crate::sha256(identity.as_bytes());
+        &palette[u32::from_str_radix(&hash[..8], 16).unwrap() as usize % palette.len()]
+    }
+}
 pub fn building(id: &str) -> Option<BuildingStyle<'_>> {
     let p: Vec<_> = id.split('/').collect();
     if !matches!(p.len(), 4 | 6) || p[0] != "building" { return None; }
     let a = catalog().architectures.get(p[1])?;
-    Some(BuildingStyle { architecture: p[1], kind: p[2], material: p[3], roof: p.get(4).copied().unwrap_or(a.roof_for(p[2])), roof_material: p.get(5).copied().unwrap_or(a.roof_material_for(p[2])) })
+    Some(BuildingStyle { architecture: p[1], kind: p[2], material: p[3], roof: p.get(4).copied().unwrap_or(a.roof_for(p[2])), roof_material: p.get(5).copied().unwrap_or(a.roof_material_for(p[2])), explicit_roof: p.len() == 6 })
 }
 
 /// Find appearance from semantic ownership, never from low-resolution cover over a road.
