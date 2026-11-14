@@ -173,6 +173,13 @@ func run() -> void:
 	use(two_lane.merged({"road_borders":PackedVector4Array([Vector4(0,1.5,50,1.5),Vector4(50,-1.5,0,-1.5)]),"edge_count":2,"edge_lines":true}))
 	await capture("two-lane-edged")
 	two_lane_checks(false)
+	# traffic.centre_line white: the same double centre, white instead of yellow.
+	use(two_lane.merged({"road_borders":PackedVector4Array([Vector4(0,1.5,50,1.5),Vector4(50,-1.5,0,-1.5)]),"edge_count":2,"edge_lines":true,"white_centre":true}))
+	await capture("two-lane-white")
+	for x in [21.0,26.0,30.5]:
+		check(not yellow_at(x,0.07) and not yellow_at(x,-0.07) and lum(x,0.07) > 0.6 and lum(x,-0.07) > 0.6,"white double centre at x=%.1f"%x)
+		check(lum(x,0.0) < 0.4,"bare axis between the white centre lines at x=%.1f"%x)
+	use({"white_centre":false})
 	ppm = PPM; camera.size = H/PPM
 	# Five 1 m lanes, three forward and two backward, separated by a 1 m median.
 	# The split is z=-0.5; the median spans -1..0 and never carries paint.
