@@ -138,8 +138,8 @@ fn arid_and_canyon_palettes_recolour_natural_ground_only_where_authored() {
     }
     // An empty climate resolves through the concept default, as near.
     assert!(cover("grassland",environment("desert","","")).colors.iter().all(|v|*v==rgb(c.climate_ground["arid"]["grassland"])));
-    // Other climates and terrains keep the catalogue colour; unlisted kinds keep it under arid too.
-    for (concept,climate,terrain) in [("metropolis","temperate","plain"),("countryside","","mountain"),("polar","polar","coast"),("jungle","","river")] {
+    // Temperate plains and river landscapes keep the catalogue colour; unlisted kinds keep it under arid too.
+    for (concept,climate,terrain) in [("metropolis","temperate","plain"),("countryside","temperate","river")] {
         for ground in ["grassland","rock","forest_floor"] {
             assert!(cover(ground,environment(concept,climate,terrain)).colors.iter().all(|v|*v==rgb(c.ground[ground].color)),"{concept} {climate} {terrain} {ground}");
         }
@@ -252,4 +252,27 @@ fn new_regional_compositions_show_their_modules_and_roofs_inside_the_envelope() 
     let levels=roof(&mesh("building/farm/barn/wood",700));
     let (eaves,ridge)=(levels[0] as f64,*levels.last().unwrap() as f64);
     assert!(levels.iter().any(|y|(0.65..0.9).contains(&((*y as f64-eaves)/(ridge-eaves)))),"gambrel break {levels:?}");
+}
+#[test]
+fn regional_ground_kinds_and_climate_terrain_palettes_agree_near_and_far() {
+    let c=appearance::catalog();
+    let rgb=|v:[u8;3]|[v[0],v[1],v[2],255];
+    // New cover keeps its own palette; paddies and vineyards are vegetated (role -3).
+    for ground in ["paddy","vineyard","brick_paving","red_earth","volcanic_sand"] {
+        let far=cover(ground,None);
+        assert!(far.colors.iter().all(|v|*v==rgb(c.ground[ground].color)),"{ground}");
+    }
+    assert!(appearance::vegetated_ground("paddy") && appearance::vegetated_ground("vineyard") && !appearance::vegetated_ground("red_earth"));
+    // Climate tables recolour natural cover, terrain tables win over them.
+    for (concept,climate,terrain,ground,expected) in [
+        ("jungle","tropical","plain","compacted_earth",c.climate_ground["tropical"]["compacted_earth"]),
+        ("polar","polar","plain","grassland",c.climate_ground["polar"]["grassland"]),
+        ("countryside","mediterranean","plain","grassland",c.climate_ground["mediterranean"]["grassland"]),
+        ("countryside","cold","mountain","rock",c.terrain_ground["mountain"]["rock"]),
+        ("countryside","tropical","coast","sand",c.terrain_ground["coast"]["sand"])] {
+        assert!(cover(ground,environment(concept,climate,terrain)).colors.iter().all(|v|*v==rgb(expected)),"{climate} {terrain} {ground}");
+        assert_eq!(appearance::ground_color_for(&format!("ground/{ground}"),climate,terrain),Some(rgb(expected)));
+        assert_ne!(expected,c.ground[ground].color,"{climate} {terrain} {ground} differs from the catalogue");
+    }
+    for terrain in ["mountain","coast"] { assert!(c.terrains.iter().any(|t|t==terrain)); }
 }

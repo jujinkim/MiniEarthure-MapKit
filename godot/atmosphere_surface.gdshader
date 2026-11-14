@@ -32,7 +32,7 @@ uniform bool terrain_surface = false;
 uniform float shore_level_m = -100000.0;
 // Grass ground: broad lush/dry patches, mown clumps and fine blades in world space.
 uniform bool lawn = false;
-// Bare rock on steep vegetated cover (near regional_ground 9..15, distant role
+// Bare rock on steep vegetated cover (near regional_ground 9..15, 18, 19, distant role
 // -3), bound per map terrain from the catalogue's terrain_slope_rock
 // (regional_appearance.gd bind_slope_rock); weight 0 keeps the cover colour.
 uniform vec3 slope_rock_color : source_color = vec3(0.67,0.41,0.28);
@@ -503,7 +503,14 @@ void fragment() {
             float rows=sin(p.x*7.85398);
             modulation=rows*(regional_ground==13 ? 0.13 : 0.055);
             surface_roughness=clamp(surface_roughness+rows*0.035,0.0,1.0);
-        } else if(regional_ground==5) modulation=grain*0.12;
+        } else if(regional_ground==18) {
+            // Paddy: transplanted rows 30 cm apart over patches of standing water.
+            modulation=sin(p.x*20.944)*0.06+patch*0.05;
+            surface_roughness=clamp(surface_roughness-0.25*(0.5+0.5*patch),0.0,1.0);
+        } else if(regional_ground==19) {
+            // Vineyard: vine rows 2 m apart over bare soil.
+            modulation=(smoothstep(0.3,0.7,0.5+0.5*sin(p.x*3.14159))-0.5)*0.22;
+        } else if(regional_ground==5 || regional_ground==21 || regional_ground==22) modulation=grain*(regional_ground==5 ? 0.12 : 0.10);
         else if(regional_ground==10 || regional_ground==11 || regional_ground==12 || regional_ground==15) modulation=patch*0.065+grain*0.035;
         else if(regional_ground==9) modulation=sin(p.x*0.9)*0.018;
         color*=1.0+modulation*detail*effect_weight;
@@ -995,7 +1002,7 @@ void fragment() {
         // steep faces; other classified cover owns its colour, including
         // snow/ice at local zero (distant role -2 carries the same choice).
         // Neither takes the shore blend.
-        if((regional_ground>=9 && regional_ground<=15) || (distant && UV.y < -2.5)) {
+        if((regional_ground>=9 && regional_ground<=15) || regional_ground==18 || regional_ground==19 || (distant && UV.y < -2.5)) {
             if(cover_slope_weight>0.0) {
                 float steep=1.0-smoothstep(COVER_SLOPE_NORMAL.x,COVER_SLOPE_NORMAL.y,world_normal.y);
                 float band_footprint=(abs(position_dx.y)+abs(position_dy.y))/COVER_STRATA_M;

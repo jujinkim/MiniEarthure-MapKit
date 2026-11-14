@@ -187,8 +187,8 @@ pub fn decorate(
                     style.set("base_color",Color::from_rgb(c[0] as f32/255.,c[1] as f32/255.,c[2] as f32/255.));
                     style.set("detail_kind",ground.detail.as_str());
                     let name=r.style_id.split('/').nth(2).unwrap();
-                    style.set("appearance_mode",match name {"asphalt"=>1,"concrete"=>2,"pavers"=>3,"stone_paving"=>4,_=>5});
-                    style.set("paving",matches!(name,"concrete"|"pavers"|"stone_paving"));
+                    style.set("appearance_mode",match name {"asphalt"=>1,"concrete"=>2,"pavers"|"brick_paving"=>3,"stone_paving"=>4,_=>5});
+                    style.set("paving",matches!(name,"concrete"|"pavers"|"brick_paving"|"stone_paving"));
                     style.set("slabs",name=="concrete");
                 }
                 styles.set(key.as_str(),&style);

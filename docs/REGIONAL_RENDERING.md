@@ -58,20 +58,23 @@ on their existing paths. Concrete, paving, stone and natural ground use their ow
 material detail rather than the physical surface's default visual.
 
 Ground materials include aggregate, joints, ripples, strata, lawn grain, crop and
-orchard rows, forest/scrub patches, wetland, snow and ice. Their fine variation fades
+orchard rows, 30 cm paddy rows over wet patches, 2 m vineyard rows, forest/scrub
+patches, wetland, snow and ice; brick paving takes the paver pattern. Their fine variation fades
 to the shared distant mean colour. Ground and road styles take the catalogue's
 optional climate and terrain palettes for the map-wide resolved climate/terrain
 (authored values, else concept defaults; regions do not select ground colours):
 `terrain_ground` wins over `climate_ground`, absent entries keep the `ground`
 colour. Arid natural cover reads as dry tan ground (no green lawn patches or
-clover), canyon bare rock red-buff; other climates and terrains keep the catalogue
-colours. Explicit cover keeps its palette at the local height origin and receives
+clover), tropical cover lush over laterite earth, Mediterranean grass dry gold,
+polar cover as tundra, canyon bare rock red-buff and mountain rock grey; temperate
+plains and river or canal landscapes keep the catalogue colours. Explicit cover keeps its palette at the local height origin and receives
 no shore blend. Non-vegetated natural cover (gravel, compacted earth, sand, rock,
 snow, ice; distant role -2) also keeps it on slopes; paved styles keep their
 colour outside the terrain shading (distant role 0). Vegetated cover (managed lawn, grassland, scrub, forest floor,
-cropland, orchard, wetland; distant role -3) shows the terrain's
+cropland, paddy, orchard, vineyard, wetland; distant role -3) shows the terrain's
 `terrain_slope_rock` colour on faces steeper than about 32°, fully from about 57°,
-with faint horizontal strata, at the bound weight (canyon 0.85); terrains without
+with faint horizontal strata, at the bound weight (canyon 0.85, mountain 0.7,
+coast 0.6); terrains without
 an entry bind weight 0 and keep the cover colour. Vegetation objects keep their
 own colours. Appearance alone does not change traction.
 
@@ -114,13 +117,11 @@ checks cancellation; normal renderer cancellation and retirement own all meshes.
 
 ## Focused checks
 
-Package `regional_display` checks catalogue compositions, repeatability, heights,
-courtyards, seam geometry, native/distant vertex and colour agreement, bounds and
-cancellation. `appearance_contract` checks strict identifiers and unchanged physics.
-The rendered `regional_appearance_validator` covers selective texture tiers, append
-and denied admission, last-borrower retirement, all architecture sets and separate
-Venetian, Cycladic, polar, farm and urban compositions. `MAPKIT_REGIONAL_CAPTURE`
-selects its local capture directory. `MAPKIT_REGIONAL_SCENE` filters comma-separated
-scene names and `MAPKIT_REGIONAL_FAR=1` captures the matching distant products. Generated-material and barrier validators cover
-the related established render paths. Detailed driving and device acceptance remain
+Package `regional_display` checks compositions, palettes, roofs, modules, seams,
+near/distant agreement, bounds and cancellation; `appearance_contract` strict
+identifiers and unchanged physics. The rendered `regional_appearance_validator`
+covers texture tiers, admission, retirement and a gallery of every architecture
+plus Venetian, Cycladic, polar, farm and urban compositions
+(`MAPKIT_REGIONAL_CAPTURE` directory, `MAPKIT_REGIONAL_SCENE` filter,
+`MAPKIT_REGIONAL_FAR=1` distant captures). Driving and device acceptance remain
 user checks.

@@ -136,7 +136,7 @@ pub fn ground_color_for(id: &str, climate: &str, terrain: &str) -> Option<[u8; 4
 
 /// Natural cover whose steep faces may show bare rock at display time.
 pub fn vegetated_ground(kind: &str) -> bool {
-    matches!(kind, "managed_lawn" | "grassland" | "scrub" | "forest_floor" | "cropland" | "orchard" | "wetland")
+    matches!(kind, "managed_lawn" | "grassland" | "scrub" | "forest_floor" | "cropland" | "orchard" | "wetland" | "paddy" | "vineyard")
 }
 
 /// Resolved optional roof components; four-component IDs take the architecture's

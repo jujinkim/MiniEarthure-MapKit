@@ -153,6 +153,51 @@
         218
       ],
       "detail": "ice"
+    },
+    "paddy": {
+      "surface": "dirt",
+      "color": [
+        104,
+        128,
+        86
+      ],
+      "detail": "earth"
+    },
+    "vineyard": {
+      "surface": "dirt",
+      "color": [
+        128,
+        124,
+        82
+      ],
+      "detail": "earth"
+    },
+    "brick_paving": {
+      "surface": "concrete",
+      "color": [
+        164,
+        98,
+        74
+      ],
+      "detail": "pavers"
+    },
+    "red_earth": {
+      "surface": "dirt",
+      "color": [
+        168,
+        96,
+        62
+      ],
+      "detail": "earth"
+    },
+    "volcanic_sand": {
+      "surface": "dirt",
+      "color": [
+        70,
+        66,
+        64
+      ],
+      "detail": "sand"
     }
   },
   "materials": {
@@ -1081,7 +1126,7 @@
           "brick_buff"
         ]
       },
-      "sidewalk": "pavers"
+      "sidewalk": "brick_paving"
     },
     "nordic_timber": {
       "material": "wood",
@@ -1855,6 +1900,176 @@
         116,
         90
       ]
+    },
+    "tropical": {
+      "managed_lawn": [
+        96,
+        138,
+        82
+      ],
+      "grassland": [
+        104,
+        142,
+        78
+      ],
+      "scrub": [
+        100,
+        126,
+        74
+      ],
+      "forest_floor": [
+        72,
+        92,
+        56
+      ],
+      "cropland": [
+        150,
+        108,
+        72
+      ],
+      "orchard": [
+        92,
+        128,
+        70
+      ],
+      "wetland": [
+        80,
+        112,
+        80
+      ],
+      "compacted_earth": [
+        164,
+        98,
+        64
+      ],
+      "paddy": [
+        96,
+        136,
+        82
+      ]
+    },
+    "humid": {
+      "managed_lawn": [
+        104,
+        138,
+        92
+      ],
+      "grassland": [
+        118,
+        142,
+        90
+      ],
+      "forest_floor": [
+        84,
+        98,
+        64
+      ],
+      "wetland": [
+        86,
+        116,
+        88
+      ],
+      "paddy": [
+        100,
+        132,
+        86
+      ]
+    },
+    "mediterranean": {
+      "managed_lawn": [
+        140,
+        142,
+        96
+      ],
+      "grassland": [
+        176,
+        162,
+        112
+      ],
+      "scrub": [
+        138,
+        132,
+        92
+      ],
+      "forest_floor": [
+        118,
+        108,
+        80
+      ],
+      "cropland": [
+        168,
+        140,
+        98
+      ],
+      "orchard": [
+        128,
+        132,
+        88
+      ],
+      "vineyard": [
+        150,
+        136,
+        92
+      ]
+    },
+    "cold": {
+      "managed_lawn": [
+        110,
+        128,
+        98
+      ],
+      "grassland": [
+        124,
+        134,
+        100
+      ],
+      "scrub": [
+        116,
+        120,
+        92
+      ],
+      "forest_floor": [
+        84,
+        90,
+        70
+      ],
+      "wetland": [
+        92,
+        106,
+        88
+      ]
+    },
+    "polar": {
+      "managed_lawn": [
+        126,
+        128,
+        104
+      ],
+      "grassland": [
+        138,
+        136,
+        108
+      ],
+      "scrub": [
+        120,
+        116,
+        92
+      ],
+      "forest_floor": [
+        104,
+        100,
+        82
+      ],
+      "wetland": [
+        110,
+        114,
+        98
+      ],
+      "compacted_earth": [
+        120,
+        110,
+        96
+      ]
     }
   },
   "terrain_ground": {
@@ -1863,6 +2078,30 @@
         176,
         116,
         82
+      ]
+    },
+    "mountain": {
+      "rock": [
+        138,
+        134,
+        128
+      ],
+      "gravel": [
+        128,
+        126,
+        120
+      ]
+    },
+    "coast": {
+      "sand": [
+        214,
+        196,
+        150
+      ],
+      "rock": [
+        146,
+        138,
+        126
       ]
     }
   },
@@ -1874,6 +2113,22 @@
         72
       ],
       "weight_per_mille": 850
+    },
+    "mountain": {
+      "color": [
+        128,
+        124,
+        118
+      ],
+      "weight_per_mille": 700
+    },
+    "coast": {
+      "color": [
+        150,
+        140,
+        124
+      ],
+      "weight_per_mille": 600
     }
   }
 }

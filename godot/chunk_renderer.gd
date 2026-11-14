@@ -1037,7 +1037,7 @@ static func _generated_material(job: Dictionary, key: String, presentation: Dict
 	return bound
 
 static func _urban_surface(key: String, presentation: Dictionary) -> bool:
-	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete","ground/asphalt","ground/concrete","ground/pavers","ground/stone_paving"])
+	return presentation.get("urban_surfaces",false) and (key.begins_with("road:") or key in ["asphalt","concrete","ground/asphalt","ground/concrete","ground/pavers","ground/brick_paving","ground/stone_paving"])
 
 static func surface_material(key: String, presentation: Dictionary, shader: Shader) -> Material:
 	if key.begins_with("rc:"): return preload("./rc_venue.gd").material(key, int(presentation.track_seed))

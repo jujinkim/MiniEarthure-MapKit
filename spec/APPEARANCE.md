@@ -58,15 +58,17 @@ religious building with explicit `dome`; other uses cannot select that combinati
 The Editor records whether roof selections came from author, source, auxiliary
 data or the profile. Source roof facts survive regional profile edits.
 
-Ground types include asphalt, concrete, pavers, stone paving, gravel, compacted
-earth, sand, rock, managed lawn, grassland, scrub, forest floor, cropland, orchard,
-wetland, snow and ice. Snow/ice here are appearances, independent of weather grip.
+Ground types include asphalt, concrete, pavers, brick paving, stone paving, gravel,
+compacted earth, red earth, sand, volcanic sand, rock, managed lawn, grassland,
+scrub, forest floor, cropland, paddy, orchard, vineyard, wetland, snow and ice. Snow/ice here are appearances, independent of weather grip.
 Optional renderer-only catalogue tables recolour ground and road styles by the
 map-wide resolved climate and terrain: `terrain_ground.<terrain>.<ground>` wins
 over `climate_ground.<climate>.<ground>` (sRGB), and `terrain_slope_rock.<terrain>`
 (`color`, `weight_per_mille`) shows bare rock on steep vegetated cover. The
 catalogue `version` stays 1; producers ignore these tables and stored styles are
-unchanged. The current tables cover arid natural cover and canyon rock.
+unchanged. The tables cover natural cover in arid, tropical (laterite earth),
+humid, Mediterranean (dry gold grass), cold and polar (tundra) climates, mountain
+and coast ground, and bare slope rock for canyon, mountain and coast terrains.
 Building uses keep homes, apartments/towers, retail/mixed use, office, hotel,
 shopping, school, university, hospital, civic/religious facilities, stations,
 industrial/storage, farming, utility and research distinct.

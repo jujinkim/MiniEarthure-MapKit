@@ -1,7 +1,7 @@
 extends RefCounted
 ## Shared catalogue lookup and display-only native regional batches.
 const CATALOG := preload("./regional_catalog.json")
-const GROUNDS := ["asphalt","concrete","pavers","stone_paving","gravel","compacted_earth","sand","rock","managed_lawn","grassland","scrub","forest_floor","cropland","orchard","wetland","snow","ice"]
+const GROUNDS := ["asphalt","concrete","pavers","stone_paving","gravel","compacted_earth","sand","rock","managed_lawn","grassland","scrub","forest_floor","cropland","orchard","wetland","snow","ice","paddy","vineyard","brick_paving","red_earth","volcanic_sand"]
 static func entry(key: String) -> Dictionary:
 	var p := key.split("/")
 	if p[0] == "ground" and p.size() == 2: return CATALOG.data.ground.get(p[1], {})
@@ -11,7 +11,7 @@ static func entry(key: String) -> Dictionary:
 	if p[0] in ["material","roof"] and p.size() == 2: return CATALOG.data.materials.get(p[1], {})
 	return {}
 ## Natural cover whose steep faces may show bare rock (mapkit-core appearance::vegetated_ground).
-const VEGETATED := ["managed_lawn","grassland","scrub","forest_floor","cropland","orchard","wetland"]
+const VEGETATED := ["managed_lawn","grassland","scrub","forest_floor","cropland","orchard","wetland","paddy","vineyard"]
 ## Mean sRGB of a style. `design` (environment_profile.gd ground_design) selects
 ## the catalogue's terrain_ground, then climate_ground palette for ground and
 ## road styles, as mapkit-core appearance::ground_color_for does at distance.
@@ -48,6 +48,7 @@ static func bind(material: ShaderMaterial, key: String, design: Dictionary = {})
 		material.set_shader_parameter("regional_ground",GROUNDS.find(key.get_slice("/",1))+1)
 		if key == "ground/ice": material.set_shader_parameter("roughness",0.22)
 		elif key == "ground/wetland": material.set_shader_parameter("roughness",0.7)
+		elif key == "ground/paddy": material.set_shader_parameter("roughness",0.55)
 		if key.get_slice("/",1) in VEGETATED:
 			bind_slope_rock(material,design)
 			# Arid cover is dry ground: no green lawn patches or clover.
