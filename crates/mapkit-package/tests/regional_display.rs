@@ -194,3 +194,30 @@ fn korean_and_japanese_house_roofs_vary_per_solid_but_explicit_roofs_do_not() {
     assert_eq!(roofs(&grouped(&format!("building/{architecture}/warehouse/metal"))).len(),1);
     }
 }
+#[test]
+fn wall_shades_vary_per_solid_within_the_material_family() {
+    let grouped=|style:&str| {
+        let mut d=document();let b=&mut d.buildings[0];b.style_id=style.into();b.height_cm=500;
+        b.parts=(1..24).map(|i|{let (x,z)=(30000+(i%6)*200,30000+(i/6)*200);BuildingPart{footprint:vec![[x,z],[x+120,z],[x+120,z+100],[x,z+100]],base_cm:Some(100),height_cm:Some(500),holes:vec![]}}).collect();
+        b.footprint=vec![[30000,30000],[30120,30000],[30120,30100],[30000,30100]];
+        d.normalize();d.validate().unwrap();d
+    };
+    let walls=|d:&MapDocument| display::generate(d,Cell{x:0,y:0}).unwrap().faces.into_iter().filter(|f|f.key.starts_with("building/")).map(|f|(f.key,f.color)).collect::<std::collections::BTreeSet<_>>();
+    let c=appearance::catalog();
+    for (style,material) in [("building/mediterranean/detached/plaster","plaster"),("building/nordic_timber/detached/wood/gabled/dark_tile","wood")] {
+        let d=grouped(style);let seen=walls(&d);
+        assert!(seen.len()>=3,"{style} shades vary across one record: {seen:?}");
+        let palette=c.architectures[style.split('/').nth(1).unwrap()].wall_palette_for(material);
+        for (key,color) in &seen {
+            let parts:Vec<_>=key.split('/').collect();let shade=parts[3];
+            assert!(palette.iter().any(|m|m==shade),"{key} from the palette");
+            // Only the material component changes; the roof components and detail family stay.
+            let mut expected:Vec<_>=style.split('/').collect();expected[3]=shade;assert_eq!(*key,expected.join("/"));
+            assert_eq!(c.materials[shade].detail,c.materials[material].detail);
+            let rgb=c.materials[shade].color;assert_eq!(*color,[rgb[0],rgb[1],rgb[2],255]);
+        }
+        assert_eq!(seen,walls(&d),"stable per solid");
+    }
+    // A material without shades keeps its single catalogue wall and style key.
+    assert_eq!(walls(&grouped("building/cycladic/detached/whitewash")).into_iter().map(|(k,_)|k).collect::<Vec<_>>(),["building/cycladic/detached/whitewash"]);
+}

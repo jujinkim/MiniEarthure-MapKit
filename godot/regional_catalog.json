@@ -365,6 +365,366 @@
       "roughness_per_mille": 780,
       "metallic_per_mille": 0,
       "detail": "tile"
+    },
+    "plaster_cream": {
+      "color": [
+        232,
+        221,
+        194
+      ],
+      "roof_color": [
+        167,
+        159,
+        140
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_ochre": {
+      "color": [
+        214,
+        178,
+        122
+      ],
+      "roof_color": [
+        154,
+        128,
+        88
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_rose": {
+      "color": [
+        218,
+        172,
+        152
+      ],
+      "roof_color": [
+        157,
+        124,
+        109
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_terracotta": {
+      "color": [
+        196,
+        130,
+        94
+      ],
+      "roof_color": [
+        141,
+        94,
+        68
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_sky": {
+      "color": [
+        178,
+        198,
+        206
+      ],
+      "roof_color": [
+        128,
+        143,
+        148
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_mint": {
+      "color": [
+        180,
+        204,
+        182
+      ],
+      "roof_color": [
+        130,
+        147,
+        131
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_grey": {
+      "color": [
+        194,
+        192,
+        184
+      ],
+      "roof_color": [
+        140,
+        138,
+        132
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "plaster_yellow": {
+      "color": [
+        228,
+        200,
+        124
+      ],
+      "roof_color": [
+        164,
+        144,
+        89
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "plaster"
+    },
+    "brick_brown": {
+      "color": [
+        124,
+        86,
+        66
+      ],
+      "roof_color": [
+        89,
+        62,
+        48
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "brick"
+    },
+    "brick_dark": {
+      "color": [
+        96,
+        68,
+        58
+      ],
+      "roof_color": [
+        69,
+        49,
+        42
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "brick"
+    },
+    "brick_buff": {
+      "color": [
+        194,
+        162,
+        120
+      ],
+      "roof_color": [
+        140,
+        117,
+        86
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "brick"
+    },
+    "brick_grey": {
+      "color": [
+        128,
+        128,
+        124
+      ],
+      "roof_color": [
+        92,
+        92,
+        89
+      ],
+      "roughness_per_mille": 800,
+      "metallic_per_mille": 0,
+      "detail": "brick"
+    },
+    "wood_dark": {
+      "color": [
+        94,
+        70,
+        52
+      ],
+      "roof_color": [
+        68,
+        50,
+        37
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "wood_falu": {
+      "color": [
+        138,
+        54,
+        42
+      ],
+      "roof_color": [
+        99,
+        39,
+        30
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "wood_white": {
+      "color": [
+        222,
+        220,
+        210
+      ],
+      "roof_color": [
+        160,
+        158,
+        151
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "wood_grey": {
+      "color": [
+        150,
+        146,
+        138
+      ],
+      "roof_color": [
+        108,
+        105,
+        99
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "wood_ochre": {
+      "color": [
+        196,
+        150,
+        74
+      ],
+      "roof_color": [
+        141,
+        108,
+        53
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "wood_blue": {
+      "color": [
+        122,
+        146,
+        166
+      ],
+      "roof_color": [
+        88,
+        105,
+        120
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
+    },
+    "concrete_light": {
+      "color": [
+        212,
+        210,
+        202
+      ],
+      "roof_color": [
+        153,
+        151,
+        145
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "concrete"
+    },
+    "concrete_warm": {
+      "color": [
+        198,
+        186,
+        168
+      ],
+      "roof_color": [
+        143,
+        134,
+        121
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "concrete"
+    },
+    "concrete_dark": {
+      "color": [
+        150,
+        150,
+        146
+      ],
+      "roof_color": [
+        108,
+        108,
+        105
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "concrete"
+    },
+    "stone_light": {
+      "color": [
+        206,
+        198,
+        180
+      ],
+      "roof_color": [
+        148,
+        143,
+        130
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "stone"
+    },
+    "stone_honey": {
+      "color": [
+        196,
+        168,
+        120
+      ],
+      "roof_color": [
+        141,
+        121,
+        86
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "stone"
+    },
+    "stone_grey": {
+      "color": [
+        150,
+        148,
+        142
+      ],
+      "roof_color": [
+        108,
+        107,
+        102
+      ],
+      "roughness_per_mille": 900,
+      "metallic_per_mille": 0,
+      "detail": "stone"
     }
   },
   "architectures": {
@@ -376,7 +736,20 @@
         "window_band",
         "balcony"
       ],
-      "roof_material": "concrete"
+      "roof_material": "concrete",
+      "wall_palette": {
+        "concrete": [
+          "concrete",
+          "concrete_light",
+          "concrete_warm",
+          "concrete_dark"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_grey"
+        ]
+      }
     },
     "korean_modern": {
       "material": "concrete",
@@ -432,6 +805,23 @@
             "deep_eaves"
           ]
         }
+      },
+      "wall_palette": {
+        "concrete": [
+          "concrete",
+          "concrete_light",
+          "concrete_warm"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_grey"
+        ],
+        "brick": [
+          "brick",
+          "brick_brown",
+          "brick_dark"
+        ]
       }
     },
     "japanese_modern": {
@@ -488,6 +878,19 @@
             "deep_eaves"
           ]
         }
+      },
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster",
+          "plaster_cream",
+          "plaster_grey"
+        ],
+        "concrete": [
+          "concrete",
+          "concrete_light",
+          "concrete_dark"
+        ]
       }
     },
     "korean_traditional": {
@@ -498,7 +901,17 @@
         "ridge",
         "timber_frame"
       ],
-      "roof_material": "dark_tile"
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_dark"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream"
+        ]
+      }
     },
     "japanese_traditional": {
       "material": "wood",
@@ -508,7 +921,17 @@
         "timber_frame",
         "veranda"
       ],
-      "roof_material": "dark_tile"
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_dark"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream"
+        ]
+      }
     },
     "chinese_courtyard": {
       "material": "plaster",
@@ -518,7 +941,18 @@
         "ridge",
         "courtyard_gate"
       ],
-      "roof_material": "dark_tile"
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_grey"
+        ],
+        "brick": [
+          "brick_grey",
+          "brick_grey",
+          "brick"
+        ]
+      }
     },
     "south_asian": {
       "material": "plaster",
@@ -528,7 +962,17 @@
         "shop_canopy",
         "shade_arcade"
       ],
-      "roof_material": "concrete"
+      "roof_material": "concrete",
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_ochre",
+          "plaster_rose",
+          "plaster_sky",
+          "plaster_mint"
+        ]
+      }
     },
     "southeast_asian": {
       "material": "plaster",
@@ -538,7 +982,16 @@
         "veranda",
         "stilts"
       ],
-      "roof_material": "clay_tile"
+      "roof_material": "clay_tile",
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_yellow",
+          "plaster_mint",
+          "plaster_sky"
+        ]
+      }
     },
     "middle_eastern": {
       "material": "stone",
@@ -548,7 +1001,19 @@
         "courtyard_gate",
         "parapet"
       ],
-      "roof_material": "concrete"
+      "roof_material": "concrete",
+      "wall_palette": {
+        "stone": [
+          "stone",
+          "stone_light",
+          "stone_honey"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_ochre"
+        ]
+      }
     },
     "european_stone": {
       "material": "stone",
@@ -558,7 +1023,21 @@
         "cornice",
         "arch"
       ],
-      "roof_material": "clay_tile"
+      "roof_material": "clay_tile",
+      "wall_palette": {
+        "stone": [
+          "stone",
+          "stone_light",
+          "stone_honey",
+          "stone_grey"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_ochre",
+          "plaster_grey"
+        ]
+      }
     },
     "european_brick": {
       "material": "brick",
@@ -568,7 +1047,15 @@
         "cornice",
         "chimney"
       ],
-      "roof_material": "clay_tile"
+      "roof_material": "clay_tile",
+      "wall_palette": {
+        "brick": [
+          "brick",
+          "brick_brown",
+          "brick_dark",
+          "brick_buff"
+        ]
+      }
     },
     "nordic_timber": {
       "material": "wood",
@@ -578,7 +1065,17 @@
         "timber_frame",
         "chimney"
       ],
-      "roof_material": "dark_tile"
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "wood": [
+          "wood_falu",
+          "wood_falu",
+          "wood_white",
+          "wood_ochre",
+          "wood",
+          "wood_grey"
+        ]
+      }
     },
     "mediterranean": {
       "material": "plaster",
@@ -588,7 +1085,17 @@
         "balcony",
         "arch"
       ],
-      "roof_material": "clay_tile"
+      "roof_material": "clay_tile",
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_ochre",
+          "plaster_rose",
+          "plaster_terracotta",
+          "plaster_yellow"
+        ]
+      }
     },
     "north_american_suburb": {
       "material": "wood",
@@ -598,7 +1105,22 @@
         "deep_eaves",
         "chimney"
       ],
-      "roof_material": "dark_tile"
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "wood": [
+          "wood_white",
+          "wood_white",
+          "wood_grey",
+          "wood_blue",
+          "wood_ochre",
+          "wood"
+        ],
+        "brick": [
+          "brick",
+          "brick_brown",
+          "brick_buff"
+        ]
+      }
     },
     "farm": {
       "material": "wood",
@@ -608,7 +1130,15 @@
         "deep_eaves",
         "vent"
       ],
-      "roof_material": "metal"
+      "roof_material": "metal",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_falu",
+          "wood_white",
+          "wood_grey"
+        ]
+      }
     },
     "polar_station": {
       "material": "metal",
@@ -629,7 +1159,16 @@
         "balcony",
         "cornice"
       ],
-      "roof_material": "clay_tile"
+      "roof_material": "clay_tile",
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_ochre",
+          "plaster_rose",
+          "plaster_terracotta",
+          "plaster_cream"
+        ]
+      }
     },
     "cycladic": {
       "material": "whitewash",
@@ -648,7 +1187,14 @@
         "porch",
         "deep_eaves"
       ],
-      "roof_material": "metal"
+      "roof_material": "metal",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_dark",
+          "wood_grey"
+        ]
+      }
     },
     "adobe": {
       "material": "plaster",
@@ -657,7 +1203,14 @@
         "shade_arcade",
         "parapet"
       ],
-      "roof_material": "concrete"
+      "roof_material": "concrete",
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_ochre",
+          "plaster_terracotta"
+        ]
+      }
     },
     "timber": {
       "material": "wood",
@@ -666,7 +1219,13 @@
         "timber_frame",
         "deep_eaves"
       ],
-      "roof_material": "dark_tile"
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_dark"
+        ]
+      }
     },
     "tropical": {
       "material": "wood",
@@ -675,7 +1234,15 @@
         "veranda",
         "stilts"
       ],
-      "roof_material": "metal"
+      "roof_material": "metal",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_white",
+          "wood_blue",
+          "wood_grey"
+        ]
+      }
     }
   },
   "building_types": {

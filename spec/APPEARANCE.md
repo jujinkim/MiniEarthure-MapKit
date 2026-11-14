@@ -40,6 +40,11 @@ the whole set). Producers take the wall-material default from the same entry.
 A use's optional `roof_palette` lists display-only roof materials: a solid whose
 roof comes from the catalogue (no explicit components) shows the entry chosen by
 a hash of its record ID and solid index, near and far; explicit roofs never vary.
+An architecture's optional `wall_palette` maps a wall material to display-only
+shades of the same detail family (for example plaster to cream, ochre and rose):
+each solid with that wall material shows one shade by a separate hash of the same
+identity, and its display key keeps the style ID with only the material replaced.
+Shade materials are ordinary catalogue materials; stored styles are unchanged.
 Korean modern houses and farmhouses default to hipped roofs over plaster with
 tiled eaves, varying over dark, red, blue and clay tile; Japanese modern ones to
 gabled roofs, half dark tile and a quarter each brown and navy tile; their

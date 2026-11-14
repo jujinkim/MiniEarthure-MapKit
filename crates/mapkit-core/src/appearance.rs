@@ -14,6 +14,10 @@ pub struct Architecture {
     /// replaces the architecture default for that use (`modules` replaces the set).
     #[serde(default)]
     pub uses: BTreeMap<String, UseStyle>,
+    /// Optional display-only wall shades by wall material: a solid whose wall
+    /// material is a key shows one entry, chosen by its stable identity.
+    #[serde(default)]
+    pub wall_palette: BTreeMap<String, Vec<String>>,
 }
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,6 +35,7 @@ impl Architecture {
     pub fn roof_material_for(&self, kind: &str) -> &str { self.use_style(kind).and_then(|u| u.roof_material.as_deref()).unwrap_or(&self.roof_material) }
     pub fn modules_for(&self, kind: &str) -> &[String] { self.use_style(kind).and_then(|u| u.modules.as_deref()).unwrap_or(&self.modules) }
     pub fn roof_palette_for(&self, kind: &str) -> &[String] { self.use_style(kind).and_then(|u| u.roof_palette.as_deref()).unwrap_or(&[]) }
+    pub fn wall_palette_for(&self, material: &str) -> &[String] { self.wall_palette.get(material).map_or(&[], Vec::as_slice) }
 }
 #[derive(Debug, Deserialize)]
 pub struct BuildingType { pub facade_kind: u8, pub modules: Vec<String> }
@@ -135,14 +140,24 @@ pub fn vegetated_ground(kind: &str) -> bool {
 /// catalogue default for the building type.
 #[derive(Clone, Copy)]
 pub struct BuildingStyle<'a> { pub architecture: &'a str, pub kind: &'a str, pub material: &'a str, pub roof: &'a str, pub roof_material: &'a str, pub explicit_roof: bool }
+fn pick<'a>(palette: &'a [String], identity: &str) -> &'a str {
+    let hash = crate::sha256(identity.as_bytes());
+    &palette[u32::from_str_radix(&hash[..8], 16).unwrap() as usize % palette.len()]
+}
 impl<'a> BuildingStyle<'a> {
     /// The roof material one solid displays: a catalogue-default roof takes the
     /// use's palette entry chosen by `identity` (stable per record and solid).
     pub fn roof_material_of(&self, identity: &str) -> &'a str {
         let palette = catalog().architectures[self.architecture].roof_palette_for(self.kind);
         if self.explicit_roof || palette.is_empty() { return self.roof_material; }
-        let hash = crate::sha256(identity.as_bytes());
-        &palette[u32::from_str_radix(&hash[..8], 16).unwrap() as usize % palette.len()]
+        pick(palette, identity)
+    }
+    /// The wall shade one solid displays from the architecture's `wall_palette`
+    /// for its wall material (independent of the roof choice); else the material.
+    pub fn wall_material_of(&self, identity: &str) -> &'a str {
+        let palette = catalog().architectures[self.architecture].wall_palette_for(self.material);
+        if palette.is_empty() { return self.material; }
+        pick(palette, &format!("{identity}/wall"))
     }
 }
 pub fn building(id: &str) -> Option<BuildingStyle<'_>> {

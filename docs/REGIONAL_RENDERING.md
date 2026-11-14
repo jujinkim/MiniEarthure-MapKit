@@ -20,7 +20,8 @@ a quarter of the narrow side, 2.5 source m and 40 % of the envelope. Roof shape,
 roof material and architecture modules resolve per building type through the
 catalogue's optional `uses`, so a house does not take a shop canopy. A use's
 `roof_palette` varies a catalogue-default roof per solid (record ID and solid
-index), so grouped houses differ while every cell and the distant mesh agree. Body and roof
+index), and its `wall_palette` shades the walls the same way, so grouped houses
+differ while every cell and the distant mesh agree. Body and roof
 faces use the same cell clipping planes on both sides of a seam. Decorative edge
 pieces participate in neighbouring cells within their bounded reach. Clipping
 contacts and height-clamped decoration with zero area produce no display face.
@@ -34,7 +35,9 @@ industrial, farm, utility and research uses remain distinguishable inputs.
 Venetian compositions use stone waterfront bases and arches; Cycladic compositions
 use whitewash, blue shutters and explicit vault/dome forms. A blue dome requires
 the appropriate building and roof selection. Seeded variation never chooses a use
-or wall material for a classified building; only a catalogue roof palette varies.
+or wall material family for a classified building; only the catalogue roof palette
+and the architecture's wall shades of the source material family vary per solid
+(Mediterranean pastels, Nordic falu red and white, brick browns, Cycladic stays white).
 
 Source wall/roof materials use catalogue colours and physical-looking roughness
 and metallic response. Existing window and night-lighting patterns retain scaled

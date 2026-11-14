@@ -103,7 +103,8 @@ pub fn generate(d:&MapDocument, cell:Cell) -> Result<Display> {
             let hash=crate::sha256(record.id.as_bytes());
             out.seed=u32::from_str_radix(&hash[..6],16).unwrap() as f32 / 16777215.;
             // Grouped records hold many houses; each solid keeps its own palette roof in every cell.
-            let style=appearance::BuildingStyle{roof_material:style.roof_material_of(&format!("{}#{index}",record.id)),..style};
+            let identity=format!("{}#{index}",record.id);
+            let style=appearance::BuildingStyle{roof_material:style.roof_material_of(&identity),material:style.wall_material_of(&identity),..style};
             solid(&mut out,&b,&style,scale)?;
         }
     }
@@ -135,7 +136,10 @@ fn solid(out:&mut Builder, b:&Building, style:&appearance::BuildingStyle, scale:
         eaves+rise*weight
     };
     out.module=false;
-    out.key=b.style_id.clone(); out.color=appearance::color(&b.style_id,false).unwrap();
+    // A wall shade keeps the record's style key with its material component replaced.
+    let mut key:Vec<&str>=b.style_id.split('/').collect();
+    key[3]=style.material;
+    out.key=key.join("/"); out.color=appearance::color(&out.key,false).unwrap();
     for ring in std::iter::once(&b.footprint).chain(b.holes.iter()) {
         for i in 0..ring.len() {
             let (a,z)=(ring[i].map(|v|v as f64),ring[(i+1)%ring.len()].map(|v|v as f64));
