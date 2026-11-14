@@ -36,6 +36,10 @@ static func bind_slope_rock(material: ShaderMaterial, design: Dictionary) -> voi
 static func facade_kind(key: String) -> int:
 	var p := key.split("/")
 	return int(CATALOG.data.building_types[p[2]].facade_kind) if p[0] == "building" and p.size() in [4,6] else 0
+## Shader window families (atmosphere_surface.gdshader regional_arch): 1-3 arched,
+## 4-6 latticed, 7 framed by regional_trim (blue Cycladic, white colonial/shophouse), 8 polar.
+const ARCH_WINDOWS := {"venetian":1,"middle_eastern":2,"european_stone":3,"parisian":3,"korean_traditional":4,"japanese_traditional":5,
+	"chinese_courtyard":6,"cycladic":7,"latin_colonial":7,"shophouse":7,"polar_station":8}
 static func bind(material: ShaderMaterial, key: String, design: Dictionary = {}) -> void:
 	var record := entry(key)
 	material.set_shader_parameter("roughness",float(record.get("roughness_per_mille",900))/1000.0)
@@ -50,8 +54,8 @@ static func bind(material: ShaderMaterial, key: String, design: Dictionary = {})
 			if str(design.get("climate","")) == "arid": material.set_shader_parameter("lawn",false)
 	if not key.begins_with("building/"): return
 	var architecture := key.get_slice("/",1)
-	material.set_shader_parameter("regional_arch",["venetian","middle_eastern","european_stone","korean_traditional","japanese_traditional","chinese_courtyard","cycladic","polar_station"].find(architecture)+1)
-	material.set_shader_parameter("regional_trim",color("material/blue_tile"))
+	material.set_shader_parameter("regional_arch",ARCH_WINDOWS.get(architecture,0))
+	material.set_shader_parameter("regional_trim",color("material/whitewash" if architecture in ["latin_colonial","shophouse"] else "material/blue_tile"))
 	material.set_shader_parameter("facade_palette",false)
 	material.set_shader_parameter("facade_finish_count",0)
 static func batches(p: Dictionary, cancelled: Callable = Callable()) -> Array:

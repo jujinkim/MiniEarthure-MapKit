@@ -725,6 +725,21 @@
       "roughness_per_mille": 900,
       "metallic_per_mille": 0,
       "detail": "stone"
+    },
+    "wood_green": {
+      "color": [
+        74,
+        104,
+        78
+      ],
+      "roof_color": [
+        53,
+        75,
+        56
+      ],
+      "roughness_per_mille": 850,
+      "metallic_per_mille": 0,
+      "detail": "wood"
     }
   },
   "architectures": {
@@ -1138,6 +1153,11 @@
           "wood_white",
           "wood_grey"
         ]
+      },
+      "uses": {
+        "barn": {
+          "roof": "gambrel"
+        }
       }
     },
     "polar_station": {
@@ -1241,6 +1261,297 @@
           "wood_white",
           "wood_blue",
           "wood_grey"
+        ]
+      }
+    },
+    "east_european_panel": {
+      "material": "concrete",
+      "roof": "flat",
+      "modules": [
+        "panel_grid",
+        "stacked_balconies",
+        "parapet"
+      ],
+      "roof_material": "concrete",
+      "uses": {
+        "detached": {
+          "material": "plaster",
+          "roof": "hipped",
+          "roof_material": "metal",
+          "modules": [
+            "deep_eaves"
+          ]
+        },
+        "farmhouse": {
+          "material": "wood",
+          "roof": "gabled",
+          "roof_material": "metal",
+          "modules": [
+            "deep_eaves",
+            "porch"
+          ]
+        }
+      },
+      "wall_palette": {
+        "concrete": [
+          "concrete",
+          "concrete_light",
+          "concrete_warm",
+          "concrete_dark"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_sky",
+          "plaster_mint"
+        ],
+        "wood": [
+          "wood",
+          "wood_grey",
+          "wood_blue",
+          "wood_green"
+        ]
+      }
+    },
+    "british_terrace": {
+      "material": "brick",
+      "roof": "gabled",
+      "modules": [
+        "bay_window",
+        "chimney",
+        "cornice"
+      ],
+      "roof_material": "dark_tile",
+      "uses": {
+        "shop": {
+          "modules": [
+            "shop_canopy",
+            "cornice",
+            "chimney"
+          ]
+        },
+        "mixed_use": {
+          "modules": [
+            "shop_canopy",
+            "cornice",
+            "chimney"
+          ]
+        }
+      },
+      "wall_palette": {
+        "brick": [
+          "brick",
+          "brick_brown",
+          "brick_buff",
+          "brick_dark"
+        ],
+        "plaster": [
+          "plaster_cream",
+          "whitewash",
+          "plaster_sky",
+          "plaster_mint",
+          "plaster_rose"
+        ]
+      }
+    },
+    "half_timbered": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "half_timber",
+        "deep_eaves",
+        "stone_plinth"
+      ],
+      "roof_material": "red_tile",
+      "uses": {
+        "detached": {
+          "roof_palette": [
+            "red_tile",
+            "red_tile",
+            "clay_tile",
+            "dark_tile"
+          ]
+        },
+        "terraced": {
+          "roof_palette": [
+            "red_tile",
+            "clay_tile",
+            "dark_tile"
+          ]
+        }
+      },
+      "wall_palette": {
+        "plaster": [
+          "plaster",
+          "plaster_cream",
+          "plaster_cream",
+          "plaster_ochre",
+          "plaster_rose"
+        ]
+      }
+    },
+    "alpine_chalet": {
+      "material": "wood",
+      "roof": "gabled",
+      "modules": [
+        "deep_eaves",
+        "stone_plinth",
+        "timber_balcony"
+      ],
+      "roof_material": "dark_tile",
+      "wall_palette": {
+        "wood": [
+          "wood",
+          "wood_dark",
+          "wood_dark"
+        ],
+        "plaster": [
+          "plaster",
+          "plaster_cream"
+        ]
+      }
+    },
+    "parisian": {
+      "material": "stone",
+      "roof": "mansard",
+      "modules": [
+        "cornice",
+        "stacked_balconies",
+        "shutters"
+      ],
+      "roof_material": "metal",
+      "uses": {
+        "detached": {
+          "roof": "hipped",
+          "roof_material": "dark_tile",
+          "modules": [
+            "cornice",
+            "shutters",
+            "chimney"
+          ]
+        },
+        "warehouse": {
+          "roof": "gabled",
+          "modules": [
+            "loading_bay"
+          ]
+        },
+        "factory": {
+          "roof": "gabled",
+          "modules": [
+            "vent"
+          ]
+        }
+      },
+      "wall_palette": {
+        "stone": [
+          "stone_light",
+          "stone_light",
+          "stone",
+          "stone_honey"
+        ],
+        "plaster": [
+          "plaster_cream",
+          "plaster",
+          "plaster_grey"
+        ]
+      }
+    },
+    "latin_colonial": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "timber_balcony",
+        "shutters",
+        "arch"
+      ],
+      "roof_material": "clay_tile",
+      "uses": {
+        "shop": {
+          "roof": "flat",
+          "roof_material": "concrete",
+          "modules": [
+            "shop_canopy",
+            "parapet"
+          ]
+        },
+        "mixed_use": {
+          "modules": [
+            "timber_balcony",
+            "shop_canopy"
+          ]
+        }
+      },
+      "wall_palette": {
+        "plaster": [
+          "plaster_yellow",
+          "plaster_sky",
+          "plaster_rose",
+          "plaster_mint",
+          "plaster_terracotta",
+          "plaster_cream",
+          "plaster_ochre"
+        ]
+      }
+    },
+    "chinese_modern": {
+      "material": "concrete",
+      "roof": "flat",
+      "modules": [
+        "stacked_balconies",
+        "window_band",
+        "rail"
+      ],
+      "roof_material": "concrete",
+      "uses": {
+        "detached": {
+          "material": "brick",
+          "roof": "gabled",
+          "roof_material": "dark_tile",
+          "modules": [
+            "door"
+          ]
+        },
+        "farmhouse": {
+          "material": "brick",
+          "roof": "gabled",
+          "roof_material": "dark_tile",
+          "modules": [
+            "door"
+          ]
+        }
+      },
+      "wall_palette": {
+        "concrete": [
+          "concrete_light",
+          "concrete_light",
+          "concrete",
+          "concrete_warm"
+        ],
+        "brick": [
+          "brick_grey",
+          "brick_grey",
+          "brick"
+        ]
+      }
+    },
+    "shophouse": {
+      "material": "plaster",
+      "roof": "gabled",
+      "modules": [
+        "colonnade",
+        "shutters",
+        "cornice"
+      ],
+      "roof_material": "clay_tile",
+      "wall_palette": {
+        "plaster": [
+          "plaster_cream",
+          "plaster_yellow",
+          "plaster_mint",
+          "plaster_sky",
+          "plaster_rose",
+          "plaster_ochre"
         ]
       }
     }
@@ -1473,7 +1784,9 @@
     "pyramidal",
     "skillion",
     "dome",
-    "vault"
+    "vault",
+    "mansard",
+    "gambrel"
   ],
   "climate_ground": {
     "arid": {

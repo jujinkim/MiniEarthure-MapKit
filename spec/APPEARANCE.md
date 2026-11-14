@@ -48,8 +48,8 @@ Shade materials are ordinary catalogue materials; stored styles are unchanged.
 Korean modern houses and farmhouses default to hipped roofs over plaster with
 tiled eaves, varying over dark, red, blue and clay tile; Japanese modern ones to
 gabled roofs, half dark tile and a quarter each brown and navy tile; their
-warehouses and barns to gabled metal. Shapes are flat, gabled, hipped,
-pyramidal, skillion, dome and vault. `blue_tile` roofs require a Cycladic
+warehouses and barns to gabled metal; farm barns to gambrel roofs. Shapes are
+flat, gabled, hipped, pyramidal, skillion, dome, vault, mansard and gambrel. `blue_tile` roofs require a Cycladic
 religious building with explicit `dome`; other uses cannot select that combination
 (a roof palette may still display the colour).
 The Editor records whether roof selections came from author, source, auxiliary
@@ -71,7 +71,9 @@ industrial/storage, farming, utility and research distinct.
 Architecture compositions cover shared modern, Korean/Japanese modern and
 traditional, Chinese courtyard, South/Southeast Asian, Middle Eastern, European
 stone/brick, Nordic timber, Mediterranean, North American suburb, farm, polar
-station, Venetian and Cycladic sets. Existing generic axes remain valid current
+station, Venetian and Cycladic sets, plus East European panel blocks, British
+terraces, half-timbered, Alpine chalet, Parisian (mansard), Latin colonial,
+Chinese modern and shophouse sets. Existing generic axes remain valid current
 catalogue entries. Module declarations describe reusable parts, never permission
 to replace source footprints or add religious domes without source support.
 

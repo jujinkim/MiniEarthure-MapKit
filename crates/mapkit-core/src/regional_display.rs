@@ -131,7 +131,12 @@ fn solid(out:&mut Builder, b:&Building, style:&appearance::BuildingStyle, scale:
         let weight=match shape {
             "gabled"=>1.-x.abs(), "hipped"|"pyramidal"=>1.-x.abs().max(z.abs()),
             "dome"=>libm::sqrt((1.-x*x-z*z).max(0.)), "vault"=>libm::sqrt((1.-x*x).max(0.)),
-            "skillion"=>(x+1.)/2., _=>0.,
+            "skillion"=>(x+1.)/2.,
+            // Steep lower slopes to a flat top a quarter of the way in.
+            "mansard"=>((1.-x.abs().max(z.abs()))*4.).min(1.),
+            // Steep lower 40 % of the half-span, then a shallow upper pitch.
+            "gambrel"=>{let t=1.-x.abs(); if t<0.4 {t*1.75} else {0.7+(t-0.4)*0.5}},
+            _=>0.,
         };
         eaves+rise*weight
     };
@@ -191,6 +196,23 @@ fn edge_modules(out:&mut Builder,a:V,u:V,n:V,length:f64,base:f64,eaves:f64,s:f64
         out.panel(a,u,n,[mid,top,6.*s],[length,12.*s,if has(&["deep_eaves","tiled_eaves"]){50.*s}else{20.*s}])?;
     }
     if modules.contains("stone_plinth") {out.material("stone");out.panel(a,u,n,[mid,base+25.*s,3.*s],[length,50.*s,10.*s])?;}
+    // Half-timbering: dark beams at the sill and each floor (at most four),
+    // posts every 1.6 source m (at most ten per edge), proud of the infill.
+    if modules.contains("half_timber") {
+        out.material("wood_dark");
+        let floors=((h/pitch).floor() as usize).min(4);
+        for k in 0..=floors {let y=(base+k as f64*pitch).min(top);out.panel(a,u,n,[mid,y+6.*s,3.*s],[length,12.*s,6.*s])?;}
+        let posts=((length/(160.*s)).floor() as usize).clamp(1,10);
+        for k in 0..=posts {out.panel(a,u,n,[length*k as f64/posts as f64,(base+eaves)/2.,3.*s],[10.*s,h,6.*s])?;}
+    }
+    // Precast panel seams: a joint at every floor and every 3.6 source m.
+    if modules.contains("panel_grid") {
+        out.material("concrete_dark");
+        let floors=((h/pitch).floor() as usize).min(12);
+        for k in 1..=floors {let y=base+k as f64*pitch;if y<top {out.panel(a,u,n,[mid,y,1.5*s],[length,5.*s,3.*s])?;}}
+        let joints=((length/(360.*s)).floor() as usize).min(6);
+        for k in 1..joints {out.panel(a,u,n,[length*k as f64/joints as f64,(base+eaves)/2.,1.5*s],[5.*s,h,3.*s])?;}
+    }
     if has(&["timber_frame","stilts"]) {
         out.material(if style.architecture=="polar_station"{"metal"}else{"wood"});
         for x in [20.*s,length-20.*s] {out.panel(a,u,n,[x,(base+eaves)/2.,3.*s],[12.*s,h,12.*s])?;}
@@ -200,11 +222,31 @@ fn edge_modules(out:&mut Builder,a:V,u:V,n:V,length:f64,base:f64,eaves:f64,s:f64
         out.material("blue_tile");
         for x in [mid-65.*s,mid+65.*s] {out.panel(a,u,n,[x,base+(pitch*0.55).min(h*0.55),4.*s],[32.*s,(100.*s).min(h*0.5),8.*s])?;}
     }
-    if has(&["balcony","veranda","porch","rail"]) && h>pitch*1.2 {
+    // Window shutters beside each floor's centre window (at most six floors).
+    if modules.contains("shutters") {
+        out.material(if style.architecture=="parisian"{"metal"}else{"wood_green"});
+        let floors=((h/pitch).floor() as usize).clamp(1,6);
+        for k in 0..floors {
+            let y=base+k as f64*pitch+(pitch*0.55).min(h*0.55);
+            if y+(50.*s).min(h*0.25)>top {break;}
+            for x in [mid-65.*s,mid+65.*s] {out.panel(a,u,n,[x,y,4.*s],[28.*s,(100.*s).min(h*0.5),6.*s])?;}
+        }
+    }
+    // Apartment balconies on every upper floor of the two longest edges (at most eight).
+    if modules.contains("stacked_balconies") && h>pitch*1.2 {
+        let width=(length*0.6).min(320.*s);
+        let floors=((h/pitch).floor() as usize).min(9);
+        for k in 1..floors {
+            let y=base+k as f64*pitch;if y+90.*s>top {break;}
+            out.material(style.material);out.panel(a,u,n,[mid,y,30.*s],[width,10.*s,60.*s])?;
+            out.material("metal");out.panel(a,u,n,[mid,y+50.*s,58.*s],[width,90.*s,4.*s])?;
+        }
+    }
+    if has(&["balcony","veranda","porch","rail","timber_balcony"]) && h>pitch*1.2 {
         let y=base+pitch;let width=(length*0.7).min(350.*s);
-        out.material(if modules.contains("veranda"){"wood"}else{"stone"});
+        out.material(if has(&["veranda","timber_balcony"]){"wood"}else{"stone"});
         out.panel(a,u,n,[mid,y,20.*s],[width,12.*s,65.*s])?;
-        out.material("metal");
+        out.material(if modules.contains("timber_balcony"){"wood_dark"}else{"metal"});
         out.panel(a,u,n,[mid,y+80.*s,50.*s],[width,5.*s,6.*s])?;
         for x in [mid-width/2.,mid,mid+width/2.] {out.panel(a,u,n,[x,y+40.*s,50.*s],[5.*s,80.*s,6.*s])?;}
     }
@@ -232,6 +274,13 @@ fn edge_modules(out:&mut Builder,a:V,u:V,n:V,length:f64,base:f64,eaves:f64,s:f64
     }
     if has(&["vent","service_door","loading_bay","barn_door"]) {
         out.material("metal");for k in 0..3 {out.panel(a,u,n,[length*0.2,base+h*0.75+k as f64*8.*s,4.*s],[(60.*s).min(length*0.2),4.*s,10.*s])?;}
+    }
+    // A two-storey bay beside the door: a masonry box with a glazed front.
+    if modules.contains("bay_window") && length>=360.*s && h>pitch*0.9 {
+        let x=mid-door/2.-110.*s;let bay=(pitch*2.).min(h-10.*s);
+        out.material(style.material);out.panel(a,u,n,[x,base+bay/2.,30.*s],[180.*s,bay,60.*s])?;
+        out.material("glass");
+        for k in 0..((bay/pitch).ceil() as usize).min(2) {out.panel(a,u,n,[x,base+k as f64*pitch+pitch*0.55,61.*s],[140.*s,(120.*s).min(pitch*0.5),2.*s])?;}
     }
     if modules.contains("steps") {out.material("stone");for k in 0..3 {out.panel(a,u,n,[mid,base+(3-k) as f64*5.*s,(k as f64+0.5)*20.*s],[door*1.5,10.*s,20.*s])?;}}
     if modules.contains("chimney") {out.material("brick");out.panel(a,u,n,[length*0.25,eaves-30.*s,-25.*s],[40.*s,60.*s,40.*s])?;}

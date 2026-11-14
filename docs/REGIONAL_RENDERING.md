@@ -12,8 +12,9 @@ and package distant products. Physical prisms, source footprints, courtyards, pa
 heights and generated collision archives remain independent. Source building faces
 are hidden only in display when their regional replacement is present.
 
-Flat, gabled, hipped, pyramidal, skillion, dome and barrel-vault roofs are sampled
-within the original footprint. Courtyard buildings retain their open roof rings.
+Flat, gabled, hipped, pyramidal, skillion, dome, barrel-vault, mansard (steep
+sides to a flat top a quarter in) and gambrel (steep lower 40 %, shallow upper)
+roofs are sampled within the original footprint. Courtyard buildings retain their open roof rings.
 The physical source envelope bounds roof heights: a native gable retains its rise;
 a regional roof over a flat source fits inside the declared height, rising at most
 a quarter of the narrow side, 2.5 source m and 40 % of the envelope. Roof shape,
@@ -29,7 +30,10 @@ Normals use source precision before positions are converted for the renderer.
 
 Architecture and use combine reusable eaves, cornices, plinths, timber framing,
 arches, shutters, balconies, rails, entrance panels, canopies, columns, vents and
-steps. Buildings keep their detailed style in every batch. Residential, retail,
+steps, plus half-timber beams, precast panel joints, stacked balconies, two-storey
+bay windows, per-floor shutters and timber balconies, each with fixed per-edge
+counts inside the decoration allowance. Parisian walls take the arched European
+panes; Latin colonial and shophouse walls framed panes with white trim. Buildings keep their detailed style in every batch. Residential, retail,
 office, hospitality, school, university, hospital, civic, religious, station,
 industrial, farm, utility and research uses remain distinguishable inputs.
 Venetian compositions use stone waterfront bases and arches; Cycladic compositions

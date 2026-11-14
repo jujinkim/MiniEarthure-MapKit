@@ -221,3 +221,35 @@ fn wall_shades_vary_per_solid_within_the_material_family() {
     // A material without shades keeps its single catalogue wall and style key.
     assert_eq!(walls(&grouped("building/cycladic/detached/whitewash")).into_iter().map(|(k,_)|k).collect::<Vec<_>>(),["building/cycladic/detached/whitewash"]);
 }
+#[test]
+fn new_regional_compositions_show_their_modules_and_roofs_inside_the_envelope() {
+    let mesh=|style:&str,height:u32| {
+        let mut d=document();let b=&mut d.buildings[0];b.style_id=style.into();b.height_cm=height;
+        d.normalize();d.validate().unwrap();
+        let m=display::generate(&d,Cell{x:0,y:0}).unwrap();
+        assert_eq!(m.omitted_modules,0,"{style}");
+        assert!(m.faces.iter().flat_map(|f|f.vertices).all(|p|p[1]>=100. && p[1]<=100.+height as f64+1e-6),"{style} envelope");
+        m
+    };
+    let heights=|m:&display::Display,key:&str| {let mut v:Vec<i64>=m.faces.iter().filter(|f|f.key==key).flat_map(|f|f.vertices).map(|p|p[1].round() as i64).collect();v.sort();v.dedup();v};
+    // Half-timbering: dark beams and posts over every wall edge.
+    assert!(!heights(&mesh("building/half_timbered/detached/plaster",700),"material/wood_dark").is_empty());
+    // Panel blocks: floor joints at every storey and balconies on each upper floor.
+    let panel=mesh("building/east_european_panel/apartment/concrete",1500);
+    assert!(heights(&panel,"material/concrete_dark").len()>=8,"panel joints");
+    assert!(panel.faces.iter().filter(|f|f.key=="material/metal").count()>=3*24,"stacked balcony rails");
+    // British terrace bay window and Latin colonial shutters and timber balcony.
+    assert!(mesh("building/british_terrace/terraced/brick",700).faces.iter().any(|f|f.key=="material/glass"));
+    let colonial=mesh("building/latin_colonial/detached/plaster",700);
+    assert!(colonial.faces.iter().any(|f|f.key=="material/wood_green") && colonial.faces.iter().any(|f|f.key=="material/wood_dark"));
+    // Mansard: a flat top over steep sides; gambrel: two pitches per side.
+    let roof=|m:&display::Display| {let mut v:Vec<i64>=m.faces.iter().filter(|f|f.key.starts_with("roof/")).flat_map(|f|f.vertices).map(|p|p[1].round() as i64).collect();v.sort();v.dedup();v};
+    let mansard=mesh("building/parisian/apartment/stone",900);
+    let top=*roof(&mansard).last().unwrap();
+    let flat=mansard.faces.iter().filter(|f|f.key.starts_with("roof/") && f.vertices.iter().all(|p|(p[1]-top as f64).abs()<1e-6)).count();
+    assert!(flat>=8,"mansard flat top {flat}");
+    // A gable's mid-span sample sits at half the rise; a gambrel's above it.
+    let levels=roof(&mesh("building/farm/barn/wood",700));
+    let (eaves,ridge)=(levels[0] as f64,*levels.last().unwrap() as f64);
+    assert!(levels.iter().any(|y|(0.65..0.9).contains(&((*y as f64-eaves)/(ridge-eaves)))),"gambrel break {levels:?}");
+}

@@ -73,7 +73,7 @@ func document(arch: String) -> Dictionary:
 	if arch == "polar_station": d.ground_style_id = "ground/snow"
 	if arch in ["farm","rural"]: d.ground_style_id = "ground/compacted_earth"
 	d.buildings = [building("a",400,400,arch,"detached"),building("b",1500,500,arch,"shop",1100),building("c",700,1650,arch,"religious" if arch == "cycladic" else "research" if arch == "polar_station" else "barn" if arch == "farm" else "civic",800)]
-	d.buildings[0].style_id = "building/%s/%s/%s" % [arch,APPEARANCE.CATALOG.data.building_types.keys()[set_index],APPEARANCE.CATALOG.data.architectures[arch].material]
+	d.buildings[0].style_id = "building/%s/%s/%s" % [arch,APPEARANCE.CATALOG.data.building_types.keys()[set_index%APPEARANCE.CATALOG.data.building_types.size()],APPEARANCE.CATALOG.data.architectures[arch].material]
 	if arch == "chinese_courtyard":
 		d.buildings[2].holes = [[[850,1800],[850,2000],[1150,2000],[1150,1800]]]
 	if arch == "cycladic": d.buildings[2].style_id += "/dome/blue_tile"
@@ -93,10 +93,10 @@ func render_sets() -> void:
 	var native: RefCounted = ClassDB.instantiate("MapKitBridge")
 	var viewport := SubViewport.new();viewport.size = Vector2i(768,512);viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS;root.add_child(viewport)
-	var gallery := Image.create(1536,2016,false,Image.FORMAT_RGBA8)
 	var index := 0
 	var scenes: Array = APPEARANCE.CATALOG.data.architectures.keys()
 	scenes.append_array(["venetian-composition","cycladic-composition","polar_station-composition","farm-composition","modern-composition"])
+	var gallery := Image.create(1536,288*ceili(scenes.size()/4.0),false,Image.FORMAT_RGBA8)
 	for scene_name: String in scenes:
 		if not OS.get_environment("MAPKIT_REGIONAL_SCENE").is_empty() and not scene_name in OS.get_environment("MAPKIT_REGIONAL_SCENE").split(","): continue
 		var arch := scene_name.trim_suffix("-composition")
