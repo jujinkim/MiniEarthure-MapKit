@@ -764,7 +764,8 @@
           "plaster_cream",
           "plaster_grey"
         ]
-      }
+      },
+      "sidewalk": "pavers"
     },
     "korean_modern": {
       "material": "concrete",
@@ -837,7 +838,8 @@
           "brick_brown",
           "brick_dark"
         ]
-      }
+      },
+      "sidewalk": "pavers"
     },
     "japanese_modern": {
       "material": "plaster",
@@ -906,7 +908,8 @@
           "concrete_light",
           "concrete_dark"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     },
     "korean_traditional": {
       "material": "wood",
@@ -926,7 +929,8 @@
           "plaster",
           "plaster_cream"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "japanese_traditional": {
       "material": "wood",
@@ -946,7 +950,8 @@
           "plaster",
           "plaster_cream"
         ]
-      }
+      },
+      "sidewalk": "gravel"
     },
     "chinese_courtyard": {
       "material": "plaster",
@@ -967,7 +972,8 @@
           "brick_grey",
           "brick"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "south_asian": {
       "material": "plaster",
@@ -987,7 +993,8 @@
           "plaster_sky",
           "plaster_mint"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     },
     "southeast_asian": {
       "material": "plaster",
@@ -1006,7 +1013,8 @@
           "plaster_mint",
           "plaster_sky"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     },
     "middle_eastern": {
       "material": "stone",
@@ -1028,7 +1036,8 @@
           "plaster_cream",
           "plaster_ochre"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "european_stone": {
       "material": "stone",
@@ -1052,7 +1061,8 @@
           "plaster_ochre",
           "plaster_grey"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "european_brick": {
       "material": "brick",
@@ -1070,7 +1080,8 @@
           "brick_dark",
           "brick_buff"
         ]
-      }
+      },
+      "sidewalk": "pavers"
     },
     "nordic_timber": {
       "material": "wood",
@@ -1090,7 +1101,8 @@
           "wood",
           "wood_grey"
         ]
-      }
+      },
+      "sidewalk": "asphalt"
     },
     "mediterranean": {
       "material": "plaster",
@@ -1110,7 +1122,8 @@
           "plaster_terracotta",
           "plaster_yellow"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "north_american_suburb": {
       "material": "wood",
@@ -1135,7 +1148,8 @@
           "brick_brown",
           "brick_buff"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     },
     "farm": {
       "material": "wood",
@@ -1158,7 +1172,8 @@
         "barn": {
           "roof": "gambrel"
         }
-      }
+      },
+      "sidewalk": "compacted_earth"
     },
     "polar_station": {
       "material": "metal",
@@ -1168,7 +1183,8 @@
         "service_door",
         "vent"
       ],
-      "roof_material": "metal"
+      "roof_material": "metal",
+      "sidewalk": "gravel"
     },
     "venetian": {
       "material": "plaster",
@@ -1188,7 +1204,8 @@
           "plaster_terracotta",
           "plaster_cream"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "cycladic": {
       "material": "whitewash",
@@ -1198,7 +1215,8 @@
         "rounded_parapet",
         "vault"
       ],
-      "roof_material": "whitewash"
+      "roof_material": "whitewash",
+      "sidewalk": "stone_paving"
     },
     "rural": {
       "material": "wood",
@@ -1214,7 +1232,8 @@
           "wood_dark",
           "wood_grey"
         ]
-      }
+      },
+      "sidewalk": "compacted_earth"
     },
     "adobe": {
       "material": "plaster",
@@ -1230,7 +1249,8 @@
           "plaster_ochre",
           "plaster_terracotta"
         ]
-      }
+      },
+      "sidewalk": "compacted_earth"
     },
     "timber": {
       "material": "wood",
@@ -1245,7 +1265,8 @@
           "wood",
           "wood_dark"
         ]
-      }
+      },
+      "sidewalk": "gravel"
     },
     "tropical": {
       "material": "wood",
@@ -1262,7 +1283,8 @@
           "wood_blue",
           "wood_grey"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     },
     "east_european_panel": {
       "material": "concrete",
@@ -1311,7 +1333,8 @@
           "wood_blue",
           "wood_green"
         ]
-      }
+      },
+      "sidewalk": "asphalt"
     },
     "british_terrace": {
       "material": "brick",
@@ -1352,7 +1375,8 @@
           "plaster_mint",
           "plaster_rose"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     },
     "half_timbered": {
       "material": "plaster",
@@ -1388,7 +1412,8 @@
           "plaster_ochre",
           "plaster_rose"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "alpine_chalet": {
       "material": "wood",
@@ -1409,7 +1434,8 @@
           "plaster",
           "plaster_cream"
         ]
-      }
+      },
+      "sidewalk": "asphalt"
     },
     "parisian": {
       "material": "stone",
@@ -1455,7 +1481,8 @@
           "plaster",
           "plaster_grey"
         ]
-      }
+      },
+      "sidewalk": "asphalt"
     },
     "latin_colonial": {
       "material": "plaster",
@@ -1492,7 +1519,8 @@
           "plaster_cream",
           "plaster_ochre"
         ]
-      }
+      },
+      "sidewalk": "stone_paving"
     },
     "chinese_modern": {
       "material": "concrete",
@@ -1533,7 +1561,8 @@
           "brick_grey",
           "brick"
         ]
-      }
+      },
+      "sidewalk": "pavers"
     },
     "shophouse": {
       "material": "plaster",
@@ -1553,7 +1582,8 @@
           "plaster_rose",
           "plaster_ochre"
         ]
-      }
+      },
+      "sidewalk": "concrete"
     }
   },
   "building_types": {

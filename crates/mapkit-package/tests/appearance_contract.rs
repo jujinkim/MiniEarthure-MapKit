@@ -58,6 +58,7 @@ fn catalogue_compositions_are_strict_and_omissions_are_unchanged() {
         assert!(arch.modules_for(kind).iter().all(|m| modules.contains(m)), "{a} use {kind} modules");
         assert!(arch.roof_palette_for(kind).iter().all(|m| c.materials.contains_key(m)), "{a} use {kind} roof palette");
     }}
+    for (a, arch) in &c.architectures { if let Some(g) = &arch.sidewalk { assert!(c.ground.contains_key(g), "{a} sidewalk {g}"); } }
     // Wall shades stay inside the keyed material's detail family.
     for (a, arch) in &c.architectures { for (base, shades) in &arch.wall_palette {
         assert!(c.materials.contains_key(base) && !shades.is_empty(), "{a} wall palette {base}");

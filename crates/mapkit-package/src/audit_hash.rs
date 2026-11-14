@@ -542,7 +542,7 @@ mod tests {
     fn borrowed_stream_matches_a_traffic_convention() {
         let files = payloads();
         let mut d = minimal();
-        d.traffic = Some(mapkit_core::Traffic { driving_side: mapkit_core::DrivingSide::Left, signal_style: mapkit_core::SignalStyle::Vertical });
+        d.traffic = Some(mapkit_core::Traffic { driving_side: mapkit_core::DrivingSide::Left, signal_style: mapkit_core::SignalStyle::Vertical, centre_line: mapkit_core::CentreLine::White });
         compare(&d, &files);
     }
 

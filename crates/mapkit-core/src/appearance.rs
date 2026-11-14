@@ -18,6 +18,9 @@ pub struct Architecture {
     /// material is a key shows one entry, chosen by its stable identity.
     #[serde(default)]
     pub wall_palette: BTreeMap<String, Vec<String>>,
+    /// Optional producer default ground for sidewalks of roads in this architecture.
+    #[serde(default)]
+    pub sidewalk: Option<String>,
 }
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]

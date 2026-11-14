@@ -542,9 +542,18 @@ pub enum DrivingSide { #[default] Right, Left }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SignalStyle { #[default] Horizontal, Vertical }
+/// Centre line paint between opposing lanes; absent means yellow.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CentreLine { #[default] Yellow, White }
+impl CentreLine { fn is_yellow(&self) -> bool { *self == CentreLine::Yellow } }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Traffic {
+    /// Optional; yellow is omitted so existing documents keep their identity.
+    /// Fields stay in canonical (sorted) order for the streamed audit hash.
+    #[serde(default, skip_serializing_if = "CentreLine::is_yellow")]
+    pub centre_line: CentreLine,
     pub driving_side: DrivingSide,
     pub signal_style: SignalStyle,
 }

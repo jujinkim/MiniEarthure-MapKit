@@ -30,7 +30,7 @@ fn city_street_furniture_is_builtin_with_solid_and_display_only_parts() {
         place("bench", "builtin:bench", 400, 1600, 0),
         place("shrub", "builtin:shrub", 900, 1600, 0),
     ];
-    d.traffic = Some(Traffic { driving_side: DrivingSide::Left, signal_style: SignalStyle::Vertical });
+    d.traffic = Some(Traffic { driving_side: DrivingSide::Left, signal_style: SignalStyle::Vertical, ..Default::default() });
     d.validate().unwrap();
     let chunk = generate(GenerationInput { document: &d, cell: Cell { x: 0, y: 0 }, heightgrid: None, max_triangles: 200_000 }).unwrap();
     let ids: std::collections::BTreeSet<_> = chunk.objects.iter().map(|o| o.asset_id.as_str()).collect();
@@ -344,4 +344,18 @@ fn city_streetlight_poles_stand_behind_the_sidewalk_turned_with_the_road() {
     assert!(chunk.asset_convexes.iter().any(|c| c.object_id == "pit"), "a yawed pole convex");
     let distant = prepared.generate_distant_source(cell, None, 500_000).unwrap();
     assert!(distant.triangles.iter().any(|t| t.object_id == "pit"), "lamp poles keep their distant proxy faces");
+}
+
+#[test]
+fn centre_line_paint_is_optional_and_white_survives_canonical_form() {
+    let mut d = doc();
+    d.traffic = Some(Traffic { driving_side: DrivingSide::Left, signal_style: SignalStyle::Horizontal, ..Default::default() });
+    let yellow = String::from_utf8(canonical(&d).unwrap()).unwrap();
+    assert!(!yellow.contains("centre_line"), "yellow is omitted");
+    d.traffic.as_mut().unwrap().centre_line = CentreLine::White;
+    let white = canonical(&d).unwrap();
+    assert!(String::from_utf8(white.clone()).unwrap().contains(r#""centre_line":"white""#));
+    let back: MapDocument = serde_json::from_slice(&white).unwrap();
+    assert_eq!(back.traffic.unwrap().centre_line, CentreLine::White);
+    assert!(serde_json::from_str::<Traffic>(r#"{"driving_side":"left","signal_style":"horizontal","centre_line":"blue"}"#).is_err());
 }

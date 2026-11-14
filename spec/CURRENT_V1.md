@@ -217,7 +217,8 @@ earlier documents keep their bytes, world hashes and generated geometry.
   implicit sidewalk widths, regional retention, overview (one entry per solid
   under the record ID), distant faces, shortcut clearance and surface probes.
 - `MapDocument.traffic` (optional): `{driving_side: right|left, signal_style:
-  horizontal|vertical}`, absent = right/horizontal; display convention for road
+  horizontal|vertical, centre_line?: yellow|white}`, absent = right/horizontal,
+  yellow centre (omitted when yellow); display convention for road
   markings ([ROAD_SAFETY](../docs/ROAD_SAFETY.md)) and street furniture authoring.
   `RoadMarkings.one_way` (-1..1, 0 omitted), `stop_lines` (false omitted) and
   `lane_width_cm` (0 omitted, else 1..1000) are display-only markings fields.

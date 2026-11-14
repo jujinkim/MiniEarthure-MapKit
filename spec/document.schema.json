@@ -878,6 +878,14 @@
       },
       "additionalProperties": false
     },
+    "CentreLine": {
+      "description": "Centre line paint between opposing lanes; absent means yellow.",
+      "type": "string",
+      "enum": [
+        "yellow",
+        "white"
+      ]
+    },
     "Checkpoint": {
       "type": "object",
       "required": [
@@ -3075,6 +3083,14 @@
         "signal_style"
       ],
       "properties": {
+        "centre_line": {
+          "description": "Optional; yellow is omitted so existing documents keep their identity. Fields stay in canonical (sorted) order for the streamed audit hash.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CentreLine"
+            }
+          ]
+        },
         "driving_side": {
           "$ref": "#/definitions/DrivingSide"
         },

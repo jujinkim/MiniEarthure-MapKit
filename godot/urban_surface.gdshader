@@ -30,6 +30,8 @@ uniform int stop_start = 0;
 uniform int stop_end = 0;
 uniform int one_way = 0;
 uniform bool left_hand = false;
+// Centre line paint between opposing lanes (MapDocument.traffic.centre_line): yellow unless white.
+uniform bool white_centre = false;
 // Concrete carriageways keep cast slabs; other paving lays blocks. Kerbed marked
 // roads draw a concrete gutter along their carriageway edges.
 uniform bool slabs = false;
@@ -580,7 +582,8 @@ void fragment() {
                 float x=-lane_half+2.0*lane_half*float(lane)/float(lanes);
                 if(center_line && (forward_lanes>0 ? lane==left_count : lane*2==lanes)) {
                     float centre_paint=single_yellow ? box_cover(across-centre_x,-0.025,0.025,fa) : box_cover(across-centre_x,0.045,0.095,fa)+box_cover(across-centre_x,-0.095,-0.045,fa);
-                    yellow=max(yellow,centre_paint*keep);
+                    if(white_centre) white=max(white,centre_paint*keep);
+                    else yellow=max(yellow,centre_paint*keep);
                 } else {
                     float pattern=dash;
                     for(int s=0;s<2;s++) {

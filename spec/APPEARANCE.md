@@ -45,6 +45,9 @@ shades of the same detail family (for example plaster to cream, ochre and rose):
 each solid with that wall material shows one shade by a separate hash of the same
 identity, and its display key keeps the style ID with only the material replaced.
 Shade materials are ordinary catalogue materials; stored styles are unchanged.
+An architecture's optional `sidewalk` names the ground a producer gives sidewalks
+of roads in that architecture (European stone paving, Japanese concrete, Parisian
+asphalt); renderers ignore it and read each road's `sidewalk_style_id`.
 Korean modern houses and farmhouses default to hipped roofs over plaster with
 tiled eaves, varying over dark, red, blue and clay tile; Japanese modern ones to
 gabled roofs, half dark tile and a quarter each brown and navy tile; their

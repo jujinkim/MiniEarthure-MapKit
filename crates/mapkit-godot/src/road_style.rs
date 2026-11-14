@@ -167,6 +167,7 @@ pub fn decorate(
                     mask
                 };
                 let left_hand = d.traffic.is_some_and(|t| t.driving_side == mapkit_core::DrivingSide::Left);
+                let white_centre = d.traffic.is_some_and(|t| t.centre_line == mapkit_core::CentreLine::White);
                 let tint = m.color.map(|c|Color::from_rgba(c[0] as f32/255.,c[1] as f32/255.,c[2] as f32/255.,1.));
                 let mut style=vdict!{
                     "snow_retention_percent"=>r.snow_retention_percent as f64,
@@ -175,7 +176,7 @@ pub fn decorate(
                     "path_count"=>path_count as i64,"edge_count"=>edge_count as i64,
                     "lanes"=>m.lanes as i64,"center_line"=>m.center_line,
                     "edge_lines"=>m.edge_lines,"crosswalk_start"=>m.crosswalk_start,"crosswalk_end"=>m.crosswalk_end,"surface"=>surface as i64,
-                    "stop_start"=>turns(&r.from, false),"stop_end"=>turns(&r.to, true),"one_way"=>m.one_way as i64,"left_hand"=>left_hand,
+                    "stop_start"=>turns(&r.from, false),"stop_end"=>turns(&r.to, true),"one_way"=>m.one_way as i64,"left_hand"=>left_hand,"white_centre"=>white_centre,
                     "lane_width"=>m.lane_width_cm as f64 / 100.0,
                     "median_width"=>m.median_width_cm as f64 / 100.0, "forward_lanes"=>m.forward_lanes as i64,
                     // Concrete carriageways keep cast slabs; kerbed marked roads draw a gutter.

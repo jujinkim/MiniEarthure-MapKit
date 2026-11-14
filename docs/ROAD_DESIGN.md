@@ -176,8 +176,9 @@ sizes at the cards' 1:3 in parentheses; stations count from the path end.
   (about 0.9 m line, 1.5 m gap: Korean urban 3:5). On the inbound half the last
   10 m (30 m) before a stop line, at most 45% of the road, is solid. Even lane
   counts with `center_line` paint a double yellow centre (5 cm lines 9 cm apart);
-  two-lane roads without `edge_lines` paint a single 5 cm (15 cm) yellow instead,
-  on every map. A reflective stud sits on the centre every two dash periods;
+  two-lane roads without `edge_lines` paint a single 5 cm (15 cm) yellow instead.
+  A document whose `traffic.centre_line` is `white` paints the same centre lines
+  white (Japan, most of Europe, the UK, Oceania). A reflective stud sits on the centre every two dash periods;
   studs glow faint amber while the sun is below the horizon. Lines end at the
   stop line, or at the crosswalk on a departure end.
 - Crosswalks lie 0.3–1.7 m from the end: whole 16.7 cm (50 cm) bars along traffic
